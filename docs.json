@@ -1,0 +1,323 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "FireFlo",
+  "description": "Open-source high-throughput SMS gateway, control panel and customer portal.",
+  "colors": {
+    "primary": "#E2571E",
+    "light": "#FF8A4C",
+    "dark": "#B23A0F"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Platform",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": [
+              "index",
+              "platform/concepts",
+              "platform/architecture",
+              "platform/quickstart"
+            ]
+          },
+          {
+            "group": "Install and run",
+            "pages": [
+              "platform/install/one-command",
+              "platform/install/by-hand",
+              "platform/install/database",
+              "platform/install/configuration-source",
+              "platform/install/first-configuration",
+              "platform/install/control-panel",
+              "platform/install/upgrading",
+              "platform/install/multiple-instances",
+              "platform/install/clustering",
+              "platform/install/faq"
+            ]
+          },
+          {
+            "group": "Connections",
+            "pages": [
+              "platform/connections/servers",
+              "platform/connections/vendors",
+              "platform/connections/credentials",
+              "platform/connections/tlvs",
+              "platform/connections/concatenation",
+              "platform/connections/faq"
+            ]
+          },
+          {
+            "group": "Routing",
+            "pages": [
+              "platform/routing/how-it-works",
+              "platform/routing/writing-rules",
+              "platform/routing/least-cost",
+              "platform/routing/filters",
+              "platform/routing/queues-and-retries",
+              "platform/routing/faq"
+            ]
+          },
+          {
+            "group": "Customers and approvals",
+            "pages": [
+              "platform/customers/accounts",
+              "platform/customers/products",
+              "platform/customers/sender-ids",
+              "platform/customers/templates",
+              "platform/customers/whitelisting-rollout",
+              "platform/customers/portal-access",
+              "platform/customers/faq"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "platform/billing/how-pricing-works",
+              "platform/billing/tariffs",
+              "platform/billing/prepaid-credit",
+              "platform/billing/postpaid",
+              "platform/billing/statements",
+              "platform/billing/cdrs",
+              "platform/billing/usage-and-retention",
+              "platform/billing/revenue",
+              "platform/billing/faq"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "platform/operations/dashboard",
+              "platform/operations/live-health",
+              "platform/operations/runtime-metrics",
+              "platform/operations/prometheus-grafana",
+              "platform/operations/worker-control",
+              "platform/operations/queues",
+              "platform/operations/receipt-quality",
+              "platform/operations/capture",
+              "platform/operations/diagnostics",
+              "platform/operations/reload",
+              "platform/operations/tokens-and-access",
+              "platform/operations/generating-traffic",
+              "platform/operations/throughput",
+              "platform/operations/faq"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "platform/troubleshooting/first-checks",
+              "platform/troubleshooting/nothing-is-delivered",
+              "platform/troubleshooting/refusals",
+              "platform/troubleshooting/vendor-rejections",
+              "platform/troubleshooting/binds-and-listeners",
+              "platform/troubleshooting/callbacks"
+            ]
+          },
+          {
+            "group": "Migrating",
+            "pages": [
+              "platform/migrating/from-jasmin-or-kannel",
+              "platform/migrating/customer-notices"
+            ]
+          },
+          {
+            "group": "Project",
+            "pages": [
+              "platform/project/releases",
+              "platform/project/roadmap",
+              "platform/project/contributing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "developers/index",
+              "developers/quickstart",
+              "developers/authentication",
+              "developers/errors",
+              "developers/faq"
+            ]
+          },
+          {
+            "group": "Sending",
+            "pages": [
+              "developers/send/one-message",
+              "developers/send/batches",
+              "developers/send/sender-ids",
+              "developers/send/encoding-and-segments",
+              "developers/send/custom-tlvs",
+              "developers/send/faq"
+            ]
+          },
+          {
+            "group": "Receiving",
+            "pages": [
+              "developers/receive/delivery-receipts",
+              "developers/receive/batch-callbacks",
+              "developers/receive/mobile-originated",
+              "developers/receive/faq"
+            ]
+          },
+          {
+            "group": "SMPP",
+            "pages": [
+              "developers/smpp/binding",
+              "developers/smpp/submitting",
+              "developers/smpp/receipts-and-mo",
+              "developers/smpp/faq"
+            ]
+          },
+          {
+            "group": "Billing and credit",
+            "pages": [
+              "developers/billing/balance-and-quotes",
+              "developers/billing/statements-and-limits",
+              "developers/billing/faq"
+            ]
+          },
+          {
+            "group": "The portal",
+            "pages": [
+              "developers/portal/signing-in",
+              "developers/portal/messages-and-statement",
+              "developers/portal/registrations",
+              "developers/portal/playground"
+            ]
+          },
+          {
+            "group": "Migrating",
+            "pages": ["developers/migrating/from-jasmin"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "REST API",
+            "pages": [
+              "reference/api/overview",
+              "reference/api/send",
+              "reference/api/sendbatch",
+              "reference/api/balance",
+              "reference/api/rate",
+              "reference/api/ping",
+              "reference/api/dlr-webhook",
+              "reference/api/errors"
+            ]
+          },
+          {
+            "group": "Configuration keys",
+            "pages": [
+              "reference/config/paths",
+              "reference/config/database",
+              "reference/config/rating",
+              "reference/config/whitelisting",
+              "reference/config/limits",
+              "reference/config/webhooks",
+              "reference/config/logging",
+              "reference/config/operational-endpoint",
+              "reference/config/control-panel",
+              "reference/config/docker"
+            ]
+          },
+          {
+            "group": "File formats",
+            "pages": [
+              "reference/files/credentials-yml",
+              "reference/files/smsg-properties",
+              "reference/files/routing-table",
+              "reference/files/rates-conf"
+            ]
+          },
+          {
+            "group": "SMPP settings",
+            "pages": [
+              "reference/smpp/server",
+              "reference/smpp/worker-base",
+              "reference/smpp/client",
+              "reference/smpp/tlvs",
+              "reference/smpp/status-codes"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "reference/cli/fireflo",
+              "reference/cli/fireflo-install",
+              "reference/cli/fireflo-panel-install",
+              "reference/cli/environment"
+            ]
+          },
+          {
+            "group": "Management API",
+            "pages": ["reference/management/endpoints"]
+          },
+          {
+            "group": "Data model",
+            "pages": [
+              "reference/data/cdr-tables",
+              "reference/data/config-tables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Kannel converter",
+        "href": "https://edgeservers.github.io/fireflo-sms-gateway/"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/EdgeServers/fireflo-sms-gateway"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Discussions",
+      "href": "https://github.com/EdgeServers/fireflo-sms-gateway/discussions"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/EdgeServers/fireflo-sms-gateway"
+    }
+  },
+  "redirects": [
+    { "source": "/docs/01-architecture", "destination": "/platform/architecture" },
+    { "source": "/docs/02-docker-deployment", "destination": "/platform/quickstart" },
+    { "source": "/docs/03-auth-security", "destination": "/platform/connections/credentials" },
+    { "source": "/docs/04-smpp-configuration", "destination": "/reference/smpp/server" },
+    { "source": "/docs/05-routing-engine", "destination": "/platform/routing/how-it-works" },
+    { "source": "/docs/06-http-api", "destination": "/reference/api/overview" },
+    { "source": "/docs/07-webhooks", "destination": "/developers/receive/delivery-receipts" },
+    { "source": "/docs/08-monitoring-observability", "destination": "/platform/operations/prometheus-grafana" },
+    { "source": "/docs/09-configuration-reference", "destination": "/reference/config/paths" },
+    { "source": "/docs/10-troubleshooting", "destination": "/platform/troubleshooting/first-checks" },
+    { "source": "/docs/11-release-process", "destination": "/platform/project/releases" },
+    { "source": "/docs/12-features-roadmap", "destination": "/platform/project/roadmap" },
+    { "source": "/docs/13-rating-and-cdr", "destination": "/platform/billing/how-pricing-works" },
+    { "source": "/docs/14-migrating-from-jasmin", "destination": "/platform/migrating/from-jasmin-or-kannel" },
+    { "source": "/docs/15-message-queueing", "destination": "/platform/routing/queues-and-retries" },
+    { "source": "/docs/16-sending-sms", "destination": "/developers/send/one-message" },
+    { "source": "/docs/17-whitelisting", "destination": "/platform/customers/sender-ids" },
+    { "source": "/docs/18-deploying-on-a-server", "destination": "/platform/install/by-hand" },
+    { "source": "/docs/19-generating-traffic", "destination": "/platform/operations/generating-traffic" },
+    { "source": "/docs/20-installing", "destination": "/platform/install/one-command" },
+    { "source": "/docs/21-clustering", "destination": "/platform/install/clustering" },
+    { "source": "/docs/22-throughput-baseline", "destination": "/platform/operations/throughput" },
+    { "source": "/docs/23-customer-notices", "destination": "/platform/migrating/customer-notices" },
+    { "source": "/docs/DocumentationMap", "destination": "/" }
+  ]
+}

@@ -1,0 +1,15 @@
+export const VendorServerNote = () => (
+  <Note>
+    **Vendor** is a connection out to whoever carries your traffic. **Server** is a listener your
+    customers bind in to. The configuration calls them `smppclient` and `smppserver`; this site and the
+    control panel never do. See [Concepts](/platform/concepts).
+  </Note>
+);
+
+export const RefusalNote = () => (
+  <Warning>
+    FireFlo refuses rather than guesses in more places than most gateways. Where a page says something
+    is refused, that is deliberate and the refusal is the documented behaviour — not a limitation
+    waiting to be lifted.
+  </Warning>
+);

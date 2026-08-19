@@ -1,0 +1,71 @@
+---
+title: "FireFlo"
+sidebarTitle: "What FireFlo is"
+description: "An open-source, headless SMS gateway, with a control panel for you and a portal for your customers."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+FireFlo sits between applications that want to send SMS and the carriers that actually deliver it. It
+speaks HTTP to your applications and SMPP to your vendors, in both directions, and it keeps the
+routing, the pricing and the record of every message on your own infrastructure.
+
+It is three things that ship together:
+
+<CardGroup cols={3}>
+  <Card title="The gateway" icon="server">
+    A Java/Quarkus service. Accepts SMPP binds and HTTP submissions, routes, rates and records every
+    message, and dials out to your vendors.
+  </Card>
+  <Card title="The control panel" icon="sliders">
+    Your operators' screens. Vendors, listeners, routing, customers, tariffs, statements and live
+    health — configuration and diagnosis in one place.
+  </Card>
+  <Card title="The customer portal" icon="users">
+    Your customers' own half of that application: their messages, their statement, their sender-ID
+    registrations, credential rotation and an API playground.
+  </Card>
+</CardGroup>
+
+Current release: <Versions />.
+
+## Which part of this site do you want
+
+<CardGroup cols={3}>
+  <Card title="Platform" icon="wrench" href="/platform/concepts">
+    **You run FireFlo.** Installing it, connecting vendors, writing routing rules, onboarding
+    customers, pricing their traffic, and knowing when something is wrong.
+  </Card>
+  <Card title="Developers" icon="code" href="/developers">
+    **You send messages through someone's FireFlo.** Getting a message out over HTTP or SMPP, handling
+    delivery receipts, and reading what you have been charged.
+  </Card>
+  <Card title="Reference" icon="book" href="/reference/api/overview">
+    **You are looking something up.** Every request field, configuration key, worker setting, CLI verb
+    and status code, with its default and what happens when it is wrong.
+  </Card>
+</CardGroup>
+
+## If you have ten minutes
+
+<Steps>
+  <Step title="Read the vocabulary">
+    [Concepts](/platform/concepts) fixes the handful of words the rest of the site leans on — **vendor**,
+    **server**, **product**, **account**, **scope**. Two of them mean the opposite of what a Kannel or
+    Jasmin background suggests.
+  </Step>
+  <Step title="Start it">
+    [Quickstart](/platform/quickstart) runs a gateway in Docker with one command, and
+    [Install](/platform/install/one-command) puts it on a server properly.
+  </Step>
+  <Step title="Send something">
+    [Send one message](/developers/send/one-message) is a single `curl`. Everything after that is
+    routing it somewhere real.
+  </Step>
+</Steps>
+
+<Note>
+  FireFlo is GPL-3.0 and developed in the open at
+  [EdgeServers/fireflo-sms-gateway](https://github.com/EdgeServers/fireflo-sms-gateway). It is created
+  and maintained by [Remotiq](https://fireflo.au).
+</Note>
