@@ -1,0 +1,70 @@
+---
+title: "Diagnostics"
+description: "Logs and configuration read from the machine running the gateway — what it is actually reading, which is not always what you wrote."
+---
+
+**Read from the machine running the gateway. Secrets are blanked before they leave that process, so
+nothing on this page can show you a password or a token.**
+
+Everywhere else, the panel shows what has been *written* for the gateway. This page shows what the
+gateway is *reading*. In file mode those can differ indefinitely, with nothing anywhere to say so —
+an edit to the wrong copy of a file, a deployment that did not restart, a path that moved. This is
+the screen that settles it.
+
+## Logs
+
+Four logs are available — the main log, the vendor-connection log, the listener log, and the access
+log. Pick one, choose how many lines of the tail to read, and optionally filter to lines containing
+some text.
+
+Changing which log you are reading re-queries at once. Changing the line count or the filter does
+not, until you press **Refresh** — a filter that re-queried on every keystroke would re-read the
+file window on the gateway once per character typed.
+
+Above the output sits the state of the file, its path and its size:
+
+| State | Meaning |
+| :--- | :--- |
+| **In use** | Being written now |
+| **Nothing written yet** | Exists, empty |
+| **Not being written** | Configured off |
+| **Not read (database mode)** | The gateway takes this from the database instead |
+
+<Warning>
+**An empty result is not proof the thing you searched for never happened.** The filter is applied to
+the tail that was read, not to the whole file. Ask for more lines before concluding anything.
+
+Where this matters the gateway supplies a note of its own, and the panel renders it above the output
+rather than summarising it — because "nothing here" has at least three different meanings and only
+the gateway knows which one applies.
+</Warning>
+
+## Configuration in force
+
+The same treatment for configuration: properties, routing, rates and credentials, each shown as the
+gateway has it, with a badge saying **From database** or **From file** and the path it came from.
+
+Credentials render as a table rather than as text — type, system id, account, product, secret and
+allowed IP addresses. The secret column reports only **set** or **missing**.
+
+<Note>
+**There is no field on this page that could show you a password, and there is not going to be one.**
+Redaction happens on the gateway before the text is sent, not in the browser afterwards. A credential
+with no IP restrictions shows **any address**, which is a fact worth seeing plainly.
+</Note>
+
+## Files
+
+A rail listing every file the gateway knows about with its state, path and size, and a single
+control to **download the bundle** — all of it, redacted, in one archive, for attaching to a support
+request.
+
+## When to reach for this page
+
+- A configuration change that appears saved everywhere in the panel and has visibly not taken effect.
+- A vendor that will not bind, where you need the connection log rather than the summary.
+- Confirming which source a domain is actually being read from before you edit the wrong one.
+- Assembling evidence for **support@fireflo.au**, where the bundle saves a round trip.
+
+It answers "what is this machine doing", not "what happened to message X" — for that, use the call
+records.

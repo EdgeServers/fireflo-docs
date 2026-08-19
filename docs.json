@@ -293,7 +293,7 @@
     { "source": "/docs/09-configuration-reference", "destination": "/reference/config/paths" },
     { "source": "/docs/10-troubleshooting", "destination": "/platform/troubleshooting/first-checks" },
     { "source": "/docs/11-release-process", "destination": "/platform/project/releases" },
-    { "source": "/docs/12-features-roadmap", "destination": "/platform/project/roadmap" },
+    { "source": "/docs/12-features-roadmap", "destination": "/platform/project/releases" },
     { "source": "/docs/13-rating-and-cdr", "destination": "/platform/billing/how-pricing-works" },
     { "source": "/docs/14-migrating-from-jasmin", "destination": "/platform/migrating/from-jasmin-or-kannel" },
     { "source": "/docs/15-message-queueing", "destination": "/platform/routing/queues-and-retries" },

@@ -124,7 +124,7 @@ See [Whitelisting](/reference/config/whitelisting) and [Limits](/reference/confi
 | `srv.printStatsPeriod` | `300` | Seconds between statistics dumps. |
 | `srv.printRatePeriod` | `60` | Seconds between rate calculations. |
 | `srv.jmx.enabled` | `false` | Expose metrics via JMX. |
-| `srv.jmx.domain` | `au.remotiq.fireflo` | JMX domain. |
+| `srv.jmx.domain` | *(internal)* | JMX domain. Set it to something you choose before enabling JMX, or your MBean names depend on an internal default that is not part of the supported interface. |
 
 <Note>
 `message.trace.mode` appears in the per-instance table but is **global only** — an

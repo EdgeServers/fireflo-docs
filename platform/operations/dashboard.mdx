@@ -1,0 +1,91 @@
+---
+title: "The dashboard"
+description: "Four numbers, a traffic chart and a failure breakdown — what the Overview screen answers, and the two figures on it that are read wrong most often."
+---
+
+The Overview screen answers one question: **is the platform carrying what it should, and is it landing?**
+It is deliberately not a health screen. Whether the software has the memory and connections to keep
+working is a different question, asked on [Runtime](/platform/operations/runtime-metrics), and the
+two are kept apart because an operator staring at a delivery problem does not want to be reading
+about heap size.
+
+Everything on the page obeys one range control — **24 hours**, **7 days** or **30 days**, defaulting
+to 24 hours. Figures refresh every sixty seconds, and stop refreshing while the browser tab is in the
+background.
+
+## The four figures
+
+| Card | What it counts |
+| :--- | :--- |
+| **Messages** | Everything submitted in the period |
+| **Delivery rate** | Delivered against failed, with both counts beneath |
+| **In flight** | Submitted, no receipt yet |
+| **Margin** | Billed less vendor cost, in red when negative |
+
+<Note>
+**A blank card is still loading, not zero.** The cards show a placeholder until the figure arrives,
+and then show either the number or the error. They will never invent a `0` to fill the gap, because
+"no traffic" and "we could not ask" are different answers and only one of them is your problem.
+</Note>
+
+**In flight is not a backlog.** It is traffic that has been sent and billed and simply has not been
+reported on yet. A message that never gets a receipt is closed at its expiry deadline; until then it
+sits here, and on a busy platform it always will.
+
+## Traffic
+
+Three series — submitted, delivered, failed — over the chosen range. With nothing in the window the
+chart is replaced by **No traffic in this period**, which is a statement about the range you picked
+as much as about the platform.
+
+## Why messages failed
+
+A breakdown of every outcome that was not a delivery, each named in plain language rather than by its
+receipt code:
+
+- Failed at the vendor
+- Rejected on submission
+- Dropped before sending
+- No receipt within the deadline
+
+Beside each name, in smaller type, sits the numeric receipt state and the vendor's own error code.
+That looks like duplication and is not. `EXPIRED`, `REJECTD` and `UNDELIV` all bill identically and
+mean entirely different things, and when you go to a vendor to ask about a spike, **the number is
+what their documentation is indexed by**. The name is for you; the number is for them.
+
+### Dismissing a failure
+
+Each row can be dismissed, which hides it from the list without deleting anything. A footer counts
+what you have hidden and can show it again.
+
+<Tip>
+**A dismissed failure comes back on its own the next time it happens.** Dismissing hides what you
+have already dealt with, not what starts again.
+</Tip>
+
+Dismissals live in the browser you made them in. Another operator, or the same operator on another
+machine, sees the full list — which is deliberate, since one person's triage is not a platform-wide
+statement of fact.
+
+That distinction shows up in the two empty states. **No failures in this period** means nothing
+failed. **Every failure in this period has been dismissed** means something did, and you chose not to
+look at it. The screen will not report a clean period on the strength of your own filing.
+
+## Gateway health
+
+A strip of six tiles at the foot of the page — memory, processor, tasks running, API requests,
+internal tasks, uptime — each with a sparkline, and a link through to the detail. It is a glance, not
+an investigation.
+
+<Warning>
+**"Internal tasks" is not vendor connections.** It is the gateway's own background work: database
+writes, receipt handling. Everywhere else in the panel a *worker* means an SMPP connection, so this
+tile avoids the word entirely. Reading it as a stalled vendor sends you looking for a carrier problem
+that does not exist.
+</Warning>
+
+The **API requests** tile reports a mean since the process started. It answers "is this endpoint slow
+in general" and cannot answer "was it slow five minutes ago".
+
+If a refresh fails while older figures are still on screen, a footnote says the poll failed and the
+numbers stay put. The screen prefers a stale reading you are told about to a blank one you are not.

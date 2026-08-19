@@ -1,0 +1,94 @@
+---
+title: "Messages and statement"
+description: "Finding one message among thousands, exporting the result, and reading a bill that is charged on submission rather than on delivery."
+---
+
+Two screens answer two different questions. **Messages** is "what happened to this one". **Statement**
+is "what am I paying for". They disagree slightly on purpose, and the reason is at the bottom of this
+page.
+
+## Messages
+
+A filter bar over a table. Filters apply when you press **Search**, not as you type, and they are
+carried in the address bar — so a filtered view can be bookmarked, or pasted into a support request
+so that whoever reads it sees exactly what you saw.
+
+| Filter | Notes |
+| :--- | :--- |
+| **Period** | Last hour, 24 hours, 7 days, 30 days, or a custom range. Defaults to 24 hours |
+| **Outcome** | Any, or one specific outcome |
+| **To number** | Matches from the start of the number |
+| **Message id** | Exact |
+| **Message text** | Searches inside message bodies |
+
+**Awaiting a receipt** is listed first among the outcomes rather than alphabetically, because it is
+the one people come looking for.
+
+<Note>
+**Message text search finds nothing unless your provider records message content.** Storing bodies is
+a deployment choice with obvious privacy consequences, and plenty of operators switch it off. An
+empty result here may mean the content is not kept, not that no message matched.
+</Note>
+
+Resellers get one extra filter to narrow to a single account or search across all of them.
+
+### Columns
+
+Seven are shown by default: submitted, to, from, message id, account, billed and outcome. **Columns**
+opens a chooser grouped under Message, Route, Money and Outcome — around thirty in all, including
+part and retry counts, data coding, the TLVs you sent, message type, MCC and MNC, price rate, billed
+units, receipt state, error code and receipt time.
+
+Three cannot be turned off — **Submitted**, **To** and **Outcome** — since a row without them is not
+identifiable.
+
+Your choice is kept in that browser, and **the CSV carries whatever is ticked**. Set the columns you
+want before exporting.
+
+<Warning>
+**Cost, margin and vendor are not in the chooser and not in the data.** You see what you were billed.
+What your provider paid to carry it, and who carried it, are theirs — no column, no export, no API
+field.
+</Warning>
+
+**Download CSV** honours the current filters and the current columns. Times are shown in your
+browser's time zone, and the footer says which one, so a row discussed across time zones can be
+pinned down.
+
+Where some rows have no outcome yet, a line above the table says so:
+
+> *n* of these *total* are still awaiting a delivery receipt. That is normal — a message with no
+> receipt is closed at its expiry deadline.
+
+## Statement
+
+Choose a month — the last thirteen are offered, the current one marked **(so far)**. It opens on the
+*previous* complete month, because that is the one you are being asked to pay.
+
+The headline card shows the amount, messages sent, delivered, and then one of two figures, never
+both: a **credit limit** for accounts billed in arrears, or a **balance** for accounts on prepaid
+credit. Reading a credit limit as a balance is the misreading that costs money, so they are never
+given the same name.
+
+If some traffic went out unpriced, a note says how many messages and confirms they are not in the
+amount.
+
+Below: a per-product breakdown — sent, delivered, failed, pending, amount — and, where they exist, a
+list of **invoiced periods**.
+
+> A closed period is final. Anything landing against one afterwards appears as an adjustment on the
+> period that follows it.
+
+Each month exports as CSV.
+
+## Why the two screens disagree
+
+> Billed on messages **submitted**, not on delivery. Delivery figures keep moving as receipts arrive;
+> the amount does not.
+
+A message accepted on the 31st and reported on the 1st is billed in the earlier month and delivered
+in the later one. So the delivered count on Messages will drift after a statement is cut, and the
+statement amount will not.
+
+This is the alternative to a bill that changes for weeks after you receive it. Prices are fixed at
+submission, which is also why a tariff change does not restate history.
