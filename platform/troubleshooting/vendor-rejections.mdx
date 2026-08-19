@@ -1,0 +1,105 @@
+---
+title: "Vendor rejections"
+description: "A bound vendor refusing every submit_sm looks healthy from every angle routing cares about. The command_status is the only thing that says why."
+source: "fireflo-sms-gateway/docs/10-troubleshooting.md, SmppStatus.java @ 0.7.3"
+---
+
+This is the failure that wastes the most time, because **a vendor refusing every message looks
+perfectly healthy**: the sessions are up, the queue drains, `acceptsMessages()` is true.
+
+The message is accepted, routed, submitted, refused, requeued, and dropped at
+`outSms.routing.maxAttempts` — and the drop says `reason=maxAttempts`, which describes the symptom
+rather than the cause.
+
+## Where the cause actually is
+
+`message.submit.response`, which carries the vendor's `command_status`:
+
+```
+message.submit.response worker=smppclient.vendor1 status=196 (ESME_RINVOPTPARAMVAL: the vendor
+rejected a TLV value -- on an India DLT lane, usually a wrong or unstamped entity or template id)
+```
+
+The same value is on the vendor card in the panel and on `/ops/health` as `last_submit_error`, with
+`submit_rejected` counting them — so a lane refusing everything is visible without reading a log at
+all.
+
+## What the common codes mean
+
+| Status | Mnemonic | Meaning | Retry? |
+| ---: | :--- | :--- | :--- |
+| 10 | `ESME_RINVSRCADR` | Sender ID refused — unapproved, wrong length, or wrong TON/NPI | no |
+| 11 | `ESME_RINVDSTADR` | Destination refused — check format and country code | no |
+| 14 | `ESME_RINVPASWD` | Wrong password for this vendor account | no |
+| 20 | `ESME_RMSGQFUL` | Vendor's queue is full — slow down | yes |
+| 67 | `ESME_RINVESMCLASS` | Invalid `esm_class`, often the UDH or message-mode bits | no |
+| 69 | `ESME_RSUBMITFAIL` | Refused without a reason given | yes |
+| 88 | `ESME_RTHROTTLED` | Sending too fast — lower this vendor's `tps` | yes |
+| 100 | `ESME_RX_T_APPN` | Vendor application refused it temporarily | yes |
+| 192 | `ESME_RINVOPTPARSTREAM` | The TLV stream is malformed | no |
+| 193 | `ESME_ROPTPARNOTALLWD` | The vendor does not allow one of the TLVs sent | no |
+| 194 | `ESME_RINVPARLEN` | A TLV is the wrong length | no |
+| 195 | `ESME_RMISSINGOPTPARAM` | A required TLV was not sent — on DLT, the entity or template id | no |
+| 196 | `ESME_RINVOPTPARAMVAL` | A TLV value was rejected — on DLT, a wrong or unstamped id | no |
+
+The full table, with the plain-English sentence each carries into the log, is `SmppStatus.java`. A
+code outside it logs as **`vendor-specific`**, deliberately: vendors do use their own, and inventing
+a name would send you looking for a spec entry that does not exist.
+
+## The 192–196 block is always about TLVs
+
+If a lane starts refusing everything with one of those five, look at the message's TLVs, not at
+routing. Three things supply them, composing in this order:
+
+<Steps>
+  <Step title="The vendor's own default.tlvs.submit">
+    `outSms.instance.<name>.default.tlvs.submit`
+  </Step>
+  <Step title="The credential's defaultTlvs">
+    Per-customer values.
+  </Step>
+  <Step title="The whitelist stamp">
+    For an **approved** sender header or template.
+  </Step>
+</Steps>
+
+**The commonest cause is the third.** Nothing approved means nothing stamped, so a DLT lane receives
+a submit with no entity or template id and refuses it. `tlvCount=0` on the trace lines confirms it.
+
+**The second commonest is a malformed default.** The format is `<name>_<tag>=<value>` — writing
+`PEID=1101778070000018542` instead of `peid_0x1400=1101778070000018542` parses to nothing, and the
+TLV is dropped with only a `WARN`:
+
+```bash
+grep -i "default tlv" /var/log/fireflo/fireflo.log
+```
+
+<Warning>
+A malformed default is the hardest of these to see, because the setting **looks applied**. It is
+present in the configuration, the gateway started cleanly, and the only evidence it did nothing is
+one WARN at load time and a `tlvCount` that is lower than you expect.
+</Warning>
+
+## One vendor, many more submits than you configured
+
+If a vendor reports far more rejected submits than you sent messages, the two retry ceilings are
+compounding: a vendor's own retry budget is spent *within* one routing attempt, and a refusal returns
+the message to the router, which has its own attempt ceiling. With a single vendor configured,
+re-routing sends it straight back and spends a fresh budget.
+
+<Tip>
+Watch `submit_rejected` against `submitted` on the vendor card. A ratio well above one is this
+compounding, not a vendor problem — and it is worth catching, because every one of those PDUs is
+traffic your carrier sees.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="TLVs in practice" icon="tags" href="/platform/connections/tlvs">
+    Where a tag comes from and what overrides what.
+  </Card>
+  <Card title="Queues and retries" icon="rotate" href="/platform/routing/queues-and-retries">
+    Attempt ceilings, backoff and what a requeue costs.
+  </Card>
+</CardGroup>

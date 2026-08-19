@@ -1,0 +1,121 @@
+---
+title: "Callbacks not arriving"
+description: "Delivery receipts and MO forwards that never land — the success range, the retry budget, and the placeholder mistake that sends a request carrying nothing at all."
+source: "fireflo-sms-gateway/docs/07-webhooks.md, docs/10-troubleshooting.md @ 0.7.3"
+---
+
+Both directions — delivery receipts out to a `dlr_url`, and MO messages out to a `forward.mo.url` —
+share one delivery mechanism, so they share these rules.
+
+## The two rules that decide everything
+
+| Rule | Value |
+| :--- | :--- |
+| **Success** | HTTP **`200`–`399`**. Anything else is a failure. |
+| **Retries** | `smsg.webhook.retries`, default **10**, `smsg.webhook.retry.interval.ms` apart, default **120000** |
+| **Timeout** | `smsg.webhook.timeout.ms`, default **5000** — connect *and* request |
+
+<Warning>
+**At the default budget, one unreachable endpoint occupies a virtual thread for twenty minutes.**
+Ten attempts, two minutes apart. A customer whose endpoint is down for an hour is not merely missing
+receipts — they are holding threads for the whole hour, and so is every other customer in the same
+state.
+
+If you run many customers with unreliable endpoints, lower the retry count before you raise the
+thread ceiling.
+</Warning>
+
+## A receipt never arrives
+
+<Steps>
+  <Step title="Was a dlr_url supplied at all?">
+    Over HTTP it must be present and URL-encoded, and `dlr` must be `yes`. Setting one without the
+    other does nothing.
+  </Step>
+  <Step title="Is the endpoint reachable from the gateway host?">
+    Not from your laptop — from the host or container the gateway runs on. Egress policy, split DNS
+    and private subnets all bite here.
+  </Step>
+  <Step title="Does it return 200–399?">
+    A `401` behind an authenticating proxy is the commonest silent failure. So is a `302` to a login
+    page, which *does* count as success and swallows the receipt.
+  </Step>
+  <Step title="Did the gateway log the failure?">
+    Forwarding failures and retries are logged. Ten quiet attempts mean the endpoint answered.
+  </Step>
+</Steps>
+
+## The placeholder trap
+
+In `kannel` format, the callback is a **bare `GET` with placeholders substituted — nothing is
+appended**.
+
+| Placeholder | Value |
+| :--- | :--- |
+| `%s` | Gateway message id |
+| `%d` | `1` delivered, `2` failed, `4` buffered, `8` submitted to SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**A URL with no placeholders receives a request carrying nothing at all** — no body, no query, no
+identifier. The endpoint is hit on schedule, returns `200`, and the customer concludes receipts are
+"working but empty".
+
+This is the single most common receipt integration mistake, and nothing in the system flags it: an
+empty callback is indistinguishable from a correctly configured one that happens to carry no data.
+</Warning>
+
+## MO forwards never arrive
+
+MO callbacks are **`POST`**, and the same `200`–`399` and retry rules apply.
+
+- `forward.mo.url` is set on the SMPP client worker **receiving** the MO — not on the listener, and
+  not globally.
+- `forward.mo.format` is `JSON` or `FORM`.
+- The URL may carry placeholders, URL-encoded before replacement:
+
+| Placeholder | Value |
+| :--- | :--- |
+| `%p` | Originating address (`from`) |
+| `%P` | Destination address (`to`) |
+| `%a` | Message text |
+| `%t` | Timestamp |
+| `%i` | Inbound gateway identifier |
+| `%I` | Message centre |
+| `%o` | Data coding value |
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+```
+
+<Tip>
+Full inbound MO detail needs `print.mos = true` **temporarily**. Treat that output as sensitive — it
+contains message content and both addresses.
+</Tip>
+
+## Receipts that arrive but say the wrong thing
+
+Not a delivery problem, and worth ruling out before you go looking at the network:
+
+- **`request.dlrs` is off on the vendor.** Every message then settles as `EXPIRED` at the deadline,
+  because nothing ever reports an outcome. The delivery rate becomes *meaningless* rather than zero —
+  which is worse, since a zero looks like a problem and a meaningless number looks like data.
+- **A level 1 receipt is not the outcome.** `ACCEPTD` and `BUFFRED` both arrive as level 1 and another
+  receipt follows. A client that treats the first receipt as final will report the wrong thing
+  forever.
+- **Three segments, three receipts.** `conf.dlr.multipart` defaults to `all`, so a customer gets one
+  receipt per `submit_sm` they sent. `first` or `last` collapses that to one.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The payload, the levels and how to correlate.
+  </Card>
+  <Card title="Receipt quality" icon="chart-simple" href="/platform/operations/receipt-quality">
+    Reported rate against delivery rate.
+  </Card>
+</CardGroup>

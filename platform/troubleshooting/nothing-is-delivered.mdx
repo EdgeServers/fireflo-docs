@@ -1,0 +1,105 @@
+---
+title: "Nothing is delivered"
+description: "When cdr_rejected says maxAttempts — the five log lines that name the cause, the two queue numbers that matter, and the trace flag to use instead of the one that looks right."
+source: "fireflo-sms-gateway/docs/10-troubleshooting.md, docs/05-routing-engine.md @ 0.7.3"
+---
+
+You have been through [first checks](/platform/troubleshooting/first-checks) and the rejection reason
+is `maxAttempts`. That is the one value that genuinely means routing.
+
+## The log names the cause
+
+Each of these is at WARN or ERROR and needs no debug flag turned on.
+
+| Log line | Cause |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | The rule names something that is neither a routing table nor a worker. It sends nothing. |
+| `routing.rule.broken cause=target-not-accepting` | The target exists but is suspended or shutting down. Often temporary — check the vendor. |
+| `message.routing.miss.first action=requeue` | The message matched no enabled rule at all. Missing or misplaced catch-all, or a condition that cannot be true. |
+| `Error parsing new routing table` (ERROR) | The whole table was rejected. The gateway kept the **previous** one — or has none at all if this happened at startup. |
+| `message.dropped reason=maxAttempts attempts=… limit=…` | The message gave up. The reason above it says why. |
+
+<Warning>
+**`routing.rule.broken` is logged once per rule, not once per message**, and the counter resets only
+when a new routing table is published.
+
+So after fixing a rule, watch for the line to **reappear** rather than for it to stay absent — a
+quiet log proves nothing. `routing_rules_broken` on `/ops/health` is the same fact as a number, and
+is the reliable way to tell "fixed" from "already reported".
+</Warning>
+
+## Two things to rule out before editing any rule
+
+<AccordionGroup>
+
+<Accordion title="Is a vendor bound at all?">
+A perfect catch-all pointing at a disconnected vendor delivers nothing and looks exactly like a
+routing bug.
+
+```bash
+fireflo verify
+```
+
+Answers in words: *"N vendor(s) configured, none bound — nothing can be sent yet."*
+</Accordion>
+
+<Accordion title="Is a filter missing or disabled?">
+A rule referencing one is **skipped entirely** rather than loaded with fewer conditions — because
+dropping conditions would silently *widen* the rule.
+
+Look for `Skipping … filter '…' is missing or disabled`. If that emptied the `default` table, the
+whole routing configuration is refused and you are in the ERROR case above.
+</Accordion>
+
+</AccordionGroup>
+
+## Why a rule did not match
+
+Six causes, and the last two account for most of the surprises:
+
+- Rules are evaluated top to bottom; a NORMAL table stops at the first match.
+- The fallback must be at the **end**. A catch-all above other rules makes everything below it
+  unreachable — the panel's routing page warns about both cases.
+- Attribute names must match those in the routing reference.
+- String comparisons are case-sensitive unless `equalsIgnoreCase` is used.
+- **`startsWith` compares literal text.** A regular expression written into it can never be true —
+  use `matches`. The panel warns; a hand-edited file does not.
+- **An unset field matches no positive operator**, `isNull` excepted. `product:equals:premium` does
+  not match a message carrying no product at all — but `product:!equals:premium` does.
+
+## Tracing one message
+
+Set `outSms.routing.trace` to a single message serial or account id. Every rule that message is
+tested against then logs which condition failed and what the message actually held:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+It applies live — set it during the incident, clear it after. Left empty it costs one volatile read
+per rule.
+
+<Warning>
+**Do not reach for `outSms.routing.debug`.** It logs every rule of every message and renders the whole
+message object to do it — thirty chained `String.replace` calls per line — so it is unusable at the
+rates where routing questions actually get asked. It is useful only on an idle gateway reproducing a
+single send.
+</Warning>
+
+## The two queue numbers
+
+| On `/ops/health` | What a non-zero value means |
+| :--- | :--- |
+| **`routing_failed_queue`** | Messages parked by an *unexpected* routing failure. **No CDR and no receipt.** They drain only if `outSms.enqueueFailedRouting` is set, so in the ordinary configuration this is messages that are gone. **Alert on it.** |
+| **`routing_retry_queue`** | Messages waiting out `outSms.routing.retryBackoffMillis`. Small numbers are ordinary under retry; a number that stays high is a routing table that does not cover the traffic arriving. |
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="How routing works" icon="route" href="/platform/routing/how-it-works">
+    Tables, rules, and the order they resolve in.
+  </Card>
+  <Card title="Vendor rejections" icon="circle-xmark" href="/platform/troubleshooting/vendor-rejections">
+    When the vendor is bound and refusing every submit.
+  </Card>
+</CardGroup>

@@ -1,0 +1,130 @@
+---
+title: "Binds and listeners"
+description: "Three distinct failures that all present as 'nobody is connected' — an outbound bind refused, an inbound bind rejected, and a listener that never opened its port at all."
+source: "fireflo-sms-gateway/docs/10-troubleshooting.md, docs/04-smpp-configuration.md @ 0.7.3"
+---
+
+Three different problems wear the same face. Tell them apart first, because the fixes share nothing.
+
+| Symptom | What it is |
+| :--- | :--- |
+| A **vendor** shows no session | FireFlo could not bind *outwards* |
+| A **customer** cannot connect | FireFlo rejected their bind |
+| A customer cannot connect **and there is no rejection anywhere** | The listener never opened its port |
+
+## Telling "refused" from "never reached"
+
+`bound: 0` alone cannot distinguish "nobody connected right now" from "no socket was ever opened".
+**`last_error` is what separates them**, and it clears the moment a bind succeeds.
+
+| `last_error` | Meaning |
+| :--- | :--- |
+| A value | The socket opened and the bind was refused — credentials, system type, IP, or a bind limit |
+| Empty | The socket never opened — firewall, DNS, or the far end is down |
+
+```bash
+fireflo test-bind vendor1
+```
+
+Dials once and tells you which, without waiting for the reconnect cycle.
+
+<Warning>
+**`test-bind` is refused while the vendor is already bound**, deliberately. A second bind on the same
+`systemId` can cost you the live session, and many carriers allow only one. Use it before traffic
+depends on the vendor, or after suspending it.
+</Warning>
+
+## A vendor will not bind
+
+- `host`, `port`, `username` and `password` are correct.
+- `connections.transceivers`, `connections.transmitters` or `connections.receivers` is **greater than
+  zero** — a vendor with all three at zero binds nothing and reports no error.
+- TLS settings match what the provider requires.
+- Firewall allows outbound traffic to the provider.
+- The provider has allow-listed your source IP, if they require it.
+
+<Tip>
+**Bound but nothing going out?** Compare `bound` with `bound_transmittable`. A session carries traffic
+only if it is a **transceiver**, or a **transmitter** on a client session. A receiver-only vendor
+binds perfectly and sends nothing.
+</Tip>
+
+## A customer's bind is rejected
+
+- The credential is `type: SMPP`. An HTTP credential cannot bind, and the refusal does not say so.
+- The client is using the configured `systemId` and `password`.
+- No connection limit is exceeded: `srv.maxConnections`, `srv.maxConnectionsPerIP`,
+  `conf.maxConnectionsPerUser.default`, or the per-user limit.
+- If `allowedIps` is configured, the bind source IP is on it.
+
+## The listener never opened
+
+Different from every case above: not a rejected bind, but a socket that was never created. The
+gateway runs normally — routing, rating, billing and vendor connections all up, systemd reporting
+`active` — while no customer can connect.
+
+**The gateway does not exit when a listener cannot take its port.** That is deliberate: one busy port
+must not take a whole gateway off the air, and TLS or proxy listeners are often not configured at all.
+So the evidence is in three places rather than in the exit status.
+
+On `/ops/health`:
+
+```json
+{ "name": "smppserver.smpp", "bound": 0,
+  "last_error": "the listener could not take port 22775 because something already holds it -- ...",
+  "last_error_at": "2026-08-11T18:58:47Z" }
+```
+
+In the log:
+
+```
+ERROR [smsg.out.smppserver.smpp] listener.bind.failed listener=smppserver.smpp port=22775 --
+      the listener could not take port 22775 because something already holds it
+```
+
+And the port names its holder:
+
+```bash
+sudo ss -ltnp | grep 22775
+```
+
+### The usual cause is two gateways
+
+Either a second instance configured on the same port, or the same instance running twice under two
+unit names — which is what an `update` given the wrong `--service-name` used to produce.
+
+<Steps>
+  <Step title="List every unit">
+    `systemctl list-units 'fireflo*' --all`
+  </Step>
+  <Step title="Compare the managed PID against the one holding the port">
+    `systemctl show <unit> -p MainPID` — an orphan JVM holding the port is one systemd no longer
+    manages.
+  </Step>
+  <Step title="Stop the service, kill the orphan by PID, start it again">
+    **By PID, never by pattern.** Other JVMs may be on the host, and a pattern kill has taken out
+    unrelated services before.
+  </Step>
+</Steps>
+
+<Tip>
+A listener that failed to bind **retries on the next configuration poll or reload** — it does not need
+a restart once the port is free. (Before 0.3.4 it did: the failed server was retained, so every later
+attempt logged `not (re)starting` and returned.)
+</Tip>
+
+<Warning>
+**A clean start is not proof every listener is up.** Since the gateway logs and carries on, the
+absence of an error at boot means nothing. Check `/ops/health` instead.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Servers" icon="server" href="/platform/connections/servers">
+    Listener settings and what each one does.
+  </Card>
+  <Card title="Vendors" icon="tower-broadcast" href="/platform/connections/vendors">
+    Outbound connections, TPS and holding.
+  </Card>
+</CardGroup>
