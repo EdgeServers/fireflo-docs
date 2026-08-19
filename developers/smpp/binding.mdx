@@ -1,0 +1,110 @@
+---
+title: "Binding"
+description: "What to ask your provider for, which bind type to use, and the limits that decide how many sessions you may hold."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md @ 0.7.3"
+---
+
+SMPP is a persistent TCP session. You bind once, keep it open, and submit over it — which is why it
+outperforms one HTTPS call per message at sustained volume.
+
+## What you need
+
+Ask your provider for:
+
+| | Notes |
+| :--- | :--- |
+| **Host and port** | Plain and TLS ports are usually different |
+| **`system_id`** | Your login. Must be a credential of type **SMPP** |
+| **`password`** | |
+| **`system_type`** | Often blank; some providers require a specific value |
+| **Bind type** | See below |
+| **TON/NPI** | For your source address, if they specify one |
+
+<Warning>
+**An HTTP credential cannot bind, and an SMPP credential cannot use the REST API.** Credentials are
+typed, and the two are not interchangeable. Ask for one of each if you need both.
+</Warning>
+
+## Which bind type
+
+| Bind | You can | Use when |
+| :--- | :--- | :--- |
+| **Transceiver** | Send and receive on one session | Almost always — simplest and fewest sessions |
+| **Transmitter** | Send only | You have a separate receiver, or your library requires the split |
+| **Receiver** | Receive only | Paired with a transmitter |
+
+<Tip>
+**A receiver-only bind sends nothing and looks perfectly healthy.** If your session is up and no
+messages leave, check the bind type before anything else — this is the single most common "bound but
+nothing happens" cause.
+</Tip>
+
+## The limits that apply to you
+
+Your provider sets these; knowing they exist saves guessing at a refused bind.
+
+| Setting | Default | What it caps |
+| :--- | ---: | :--- |
+| `srv.maxConnections` | 1000 | Total concurrent sessions on the listener |
+| `srv.maxConnectionsPerIP` | 0 (unlimited) | Sessions from one IP |
+| `conf.maxConnectionsPerUser.default` | 0 (unlimited) | Concurrent binds per account |
+| `conf.maxPending.default` | 1000 | **Window size** — unacknowledged requests in flight |
+| `srv.bindTimeout` | 5000 ms | How long the server waits for your bind PDU |
+
+**Window size is the one that shapes your throughput.** It is how many `submit_sm` you may have
+outstanding without a response. A client that waits for each response before sending the next is
+limited by round-trip time no matter how large the window is.
+
+## If your bind is refused
+
+Four causes, and the refusal does not always distinguish them:
+
+<Steps>
+  <Step title="Wrong credential type">
+    An HTTP login. Refused as an authentication failure.
+  </Step>
+  <Step title="Wrong system_id or password">
+    Case-sensitive, both.
+  </Step>
+  <Step title="A limit already reached">
+    Another session of yours is still open — including a stale one the far end has not yet timed out.
+  </Step>
+  <Step title="Your IP is not allowed">
+    If an allow list is configured, everything else can be right and the bind still fails.
+  </Step>
+</Steps>
+
+<Tip>
+**A stale session is the surprising one.** If you reconnect faster than the server drops your previous
+session, you are competing with yourself for a per-user limit. Unbind cleanly on shutdown, and let
+`enquire_link` detect a dead peer rather than reconnecting aggressively.
+</Tip>
+
+## Keeping the session alive
+
+Send `enquire_link` on an interval — every 30 seconds is typical. It is how both ends notice a
+connection that has died without a `FIN`, which is the normal outcome of a NAT timeout or a
+firewall reaping an idle flow.
+
+Your library almost certainly does this for you. Confirm it, because a session that is dead but not
+closed accepts your `submit_sm` into a socket buffer and loses them.
+
+## No bind address on the listener
+
+Worth knowing if you are asking your provider to restrict access: **both listeners bind every
+interface**, and there is no bind-address setting — the underlying library has no such option.
+
+Restricting exposure is done with a firewall, a network namespace, or by binding the container to one
+interface. If your provider tells you a listener is "only on the internal interface", that is
+something they arranged around the gateway, not in it.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Submitting messages" icon="paper-plane" href="/developers/smpp/submitting">
+    `submit_sm`, encoding, and the fields that matter.
+  </Card>
+  <Card title="Listener settings" icon="sliders" href="/reference/smpp/server">
+    Every listener and vendor property.
+  </Card>
+</CardGroup>

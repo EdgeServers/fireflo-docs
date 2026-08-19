@@ -1,0 +1,99 @@
+---
+title: "Balance and quotes"
+description: "Checking what you have left and what a message will cost — and why a refusal can start while the balance is still positive."
+source: "fireflo-restapi RateResource, BalanceResource; BalanceService.java @ 0.7.3"
+---
+
+Two endpoints, neither of which sends anything.
+
+## What is left
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+`balance` is money on the account this login bills to. `sms_count` is `"ND"` — not determined —
+whenever the platform cannot convert money into a message count, which is the normal case as soon as
+you have more than one price.
+
+<Warning>
+**Do not poll this before every send.** It is a database read, it tells you nothing about whether
+*this* message will be accepted, and it doubles your request volume. Poll it on a schedule for
+alerting, and let a `402` be your per-message signal.
+</Warning>
+
+## What a message will cost
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**The cost is `unit_rate × submit_sm_count`.** `submit_sm_count` is the segment count, so this is
+also how you find out that a message you thought was one is actually three.
+
+`/secure/rate` **sends nothing, charges nothing, and counts against no rate limit.** That makes it
+safe to call on user-generated content before committing to a send — the one pre-flight check that is
+genuinely free.
+
+<Tip>
+Pricing can differ by country and network, which is why `to` is required rather than optional. A quote
+without a destination would be a guess.
+</Tip>
+
+## The block behaviour, which explains a confusing refusal
+
+Credit is **reserved in blocks, not per message**. A block is around twenty messages' worth by
+default, and a reservation only succeeds if the balance covers a whole block.
+
+The consequence:
+
+<Warning>
+**`402 Insufficient credit` begins while the balance is still positive** — at roughly one block's
+worth remaining.
+
+So a customer looking at a non-zero balance and a stream of refusals is not seeing a bug. Alert when
+the balance approaches one block, not when it approaches zero.
+</Warning>
+
+This also means a very small top-up may not restore service: adding less than one block's worth
+leaves every reservation failing exactly as before.
+
+## Product changes the price
+
+`product` on either endpoint prices against a different product — from an allow list your provider
+maintains per login, and **most logins are allowed none**.
+
+The same allow list governs both endpoints, deliberately: a quote and a send cannot disagree about
+what you are permitted to name.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Statements and limits" icon="file-invoice" href="/developers/billing/statements-and-limits">
+    Your usage history, and the ceilings that apply to you.
+  </Card>
+  <Card title="Price a message" icon="calculator" href="/reference/api/rate">
+    Every field on `/secure/rate`.
+  </Card>
+</CardGroup>

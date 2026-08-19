@@ -1,0 +1,136 @@
+---
+title: "Migrating from Jasmin"
+description: "One breaking change, two receipt differences, and a long list of things you do not have to touch."
+source: "fireflo-sms-gateway/docs/14-migrating-from-jasmin.md @ 0.7.3"
+---
+
+FireFlo's REST API is deliberately close to Jasmin's — same paths, same auth, same field spellings —
+so most integrations move with a one-line change.
+
+## The one breaking change
+
+Jasmin answers with a **string** you pull a UUID out of. FireFlo answers with an **object**.
+
+```json Jasmin
+{"data": "Success \"c723d42a-c3ee-452c-940b-3d8e8b944868\""}
+```
+
+```json FireFlo
+{"data": {"messageId": "c723d42a-c3ee-452c-940b-3d8e8b944868"}}
+```
+
+```python
+# Jasmin
+message_id = re.search(r'"(.+?)"', response["data"]).group(1)
+# FireFlo
+message_id = response["data"]["messageId"]
+```
+
+**Errors are unchanged** — `{"message": "…"}` at the same status codes.
+
+## Delivery receipts: close, not identical
+
+Field names follow Jasmin's, so a receiver reading `id` and `stat` works unchanged. Two differences:
+
+<AccordionGroup>
+
+<Accordion title="A JSON body, not form fields">
+FireFlo POSTs `application/json`. A receiver parsing `application/x-www-form-urlencoded` needs to
+read JSON instead.
+
+This is the change most likely to be missed, because the receiver keeps returning `200` while parsing
+nothing.
+</Accordion>
+
+<Accordion title="There is no `err` field">
+Jasmin sends one. FireFlo's resolver is handed only the delivery state and never an error code, so
+emitting one would mean inventing it.
+
+`stat` still distinguishes `UNDELIV`, `REJECTD` and `EXPIRED`, which is the information that actually
+exists.
+</Accordion>
+
+</AccordionGroup>
+
+`dlr-level` follows Jasmin's meaning — `1` the SMSC-level notification, `2` the terminal one, `3`
+both — and defaults to `2`. Anything outside `1`–`3` is a `400`.
+
+<Tip>
+`dlr-method` is **accepted but does not choose the format.** That is a gateway-side setting. If your
+Jasmin integration relied on it, ask your provider which format they forward, and note that the
+`kannel` format is a bare `GET` whose URL **must** carry `%s`/`%d` placeholders — without them the
+callback arrives completely empty.
+</Tip>
+
+## Two behaviours that differ
+
+| | Jasmin | FireFlo |
+| :--- | :--- | :--- |
+| `sms_count` on `/balance` | A prepaid message quota | Always `"ND"` |
+| Insufficient credit | No code for it | **`402 Payment Required`** |
+
+`sms_count` is `"ND"` because credit is money, and how many messages it buys depends on where they
+are going. Rather than invent a number, the field says it is not determined.
+
+`402` is a new status to handle. It is deliberately not folded into `403`, where it would be
+indistinguishable from a wrong password — but a client that treats every 4xx alike will retry it
+forever, which cannot help.
+
+## What you do not have to change
+
+- **Every path**: `/ping`, `/secure/send`, `/secure/sendbatch`, `/secure/balance`, `/secure/rate`. No
+  version prefix.
+- **HTTP Basic** on `/secure/*`.
+- **Underscore and hyphen** spellings are interchangeable — with `custom_tlvs` keeping its
+  underscore, as in Jasmin.
+- `to` may be a string or a number, and an array in a batch.
+- `globals` merged into every message, per-message values winning.
+- `schedule_at` in both `"3600s"` and `"YYYY-MM-DD HH:MM:SS"` forms.
+- `callback_url` / `errback_url` receiving `batchId`, `to`, `status`, `statusText`.
+- **There is no batch status endpoint** — in Jasmin or here.
+
+## Two things that are not carried over
+
+<Warning>
+**Scheduled batches are not durable by default.** Jasmin puts a Celery queue behind batches; FireFlo
+submits in process, and a broker is optional.
+
+If you rely on a scheduled batch surviving a gateway restart, confirm with your provider that they
+run RabbitMQ — and that they alert on `amqp.bridge.degraded`, because durability is silently lost
+while the broker connection is down.
+</Warning>
+
+**No Celery and no broker requirement**, which is a simplification everywhere except the line above.
+
+## A migration order that works
+
+<Steps>
+  <Step title="Change the messageId extraction">
+    The one breaking change. Do it first; everything else still works while you do.
+  </Step>
+  <Step title="Switch your receipt handler to JSON">
+    And confirm it by checking your own logs, not by checking that receipts return 200 — they will
+    either way.
+  </Step>
+  <Step title="Add a 402 branch">
+    Alert rather than retry.
+  </Step>
+  <Step title="Re-check anything reading sms_count">
+    It is now always `"ND"`.
+  </Step>
+  <Step title="Run both in parallel on a small share">
+    Compare delivery rates knowing FireFlo reports the **worst** segment of a long message, so its
+    numbers are legitimately lower than a gateway reporting the first.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="API overview" icon="book" href="/reference/api/overview">
+    The envelope, auth and field-name rules in full.
+  </Card>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The payload FireFlo sends, field by field.
+  </Card>
+</CardGroup>

@@ -1,0 +1,131 @@
+---
+title: "Delivery receipts"
+description: "The payload, the level that says whether it is the last word, and the field that is absent unless your provider turns it on."
+source: "fireflo-sms-gateway/docs/07-webhooks.md @ 0.7.3"
+---
+
+A delivery receipt is how you learn what happened to a message. **It is the only way** — the send
+response tells you the message was accepted, nothing more.
+
+Ask for one on the send:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+## What arrives
+
+A `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-05T08:58:59.672Z",
+  "done_date": "2026-08-05T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "FireFlo",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-1001",
+  "system_id": "acme-http",
+  "parts": 1
+}
+```
+
+`id` is the `messageId` your send returned. **That is how you correlate** — there is nothing else.
+
+Field names follow Jasmin's, so a receiver written for Jasmin reads this unchanged. Null fields are
+omitted rather than sent as nulls, so a receipt for a message that never reached a vendor does not
+arrive full of empty keys.
+
+Every call carries `User-Agent: FireFlo/<version>`.
+
+## `level` decides whether you are finished
+
+<Warning>
+**A level 1 receipt is not the outcome.** `ACCEPTD` and `BUFFRED` both arrive as level 1 and another
+receipt follows. A receiver that closes its record on the first receipt it sees will report the wrong
+thing, permanently.
+</Warning>
+
+| `level` | Means | States |
+| ---: | :--- | :--- |
+| `2` | The outcome. The message is finished and billed on this. | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `REJECTD`, `FAILED`, `SEEN`, `UNKNOWN` |
+| `1` | Progress. Another receipt follows. | `ACCEPTD`, `BUFFRED` |
+
+Choose with `dlr_level` on the send: `1` progress only, `2` the outcome (**default**), `3` both.
+
+Over SMPP the same choice is the `registered_delivery` octet — bits 1–0 pick none / all /
+failure-only / success-only, and bit 4 (`0x10`) adds the intermediate notification. `0x11` is the
+SMPP spelling of `dlr_level: 3`.
+
+<Tip>
+If you only want to know the final answer, the default is already right and you can ignore `level`
+entirely. Switch on it only if you asked for `1` or `3`.
+</Tip>
+
+## `stat` is the raw state, not a success flag
+
+`DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED`,
+`SEEN`.
+
+`EXPIRED`, `REJECTD` and `UNDELIV` all bill as failures but mean different things and are worth
+telling apart — expiry is a handset that was off for a day, rejection is usually a refusal you can
+act on.
+
+**There is no `err` field.** Jasmin sends one; FireFlo's resolver is handed only the delivery state
+and never an error code, so emitting one would mean inventing it.
+
+## The `vendor` field is absent unless your provider enables it
+
+It names which supplier carries your traffic. Providers withhold that from customers by construction
+elsewhere, so it is off by default and enabled per deployment.
+
+`operator_msg_id` is **not** the same disclosure and is always sent: it is the carrier's own handle
+for the message, which is what you quote when raising a delivery query. It identifies the message,
+not the supplier.
+
+## Delivery, retries and what counts as success
+
+| Rule | Value |
+| :--- | :--- |
+| Success | HTTP **`200`–`399`** |
+| Retries | 10 by default, 120 seconds apart |
+| Timeout | 5 seconds, connect and request |
+
+<Warning>
+**A `302` to a login page counts as success** and swallows the receipt. So does any `2xx` from a proxy
+that never reached your application. If receipts "arrive" but your handler never runs, check what is
+in front of it.
+</Warning>
+
+## Three segments, three receipts
+
+By default you get one receipt per `submit_sm` you sent, each quoting the id you were given. Your
+provider can collapse that to one with `first` or `last`.
+
+**Every receipt reports the same outcome** whichever they choose, because the outbound segments are
+aggregated before any receipt is built.
+
+<Tip>
+A partly-delivered long message is reported **FAILED**, not partly delivered — resolution waits for
+the last segment and reports the worst. It is the honest answer, and it makes delivery rates look
+lower than gateways that report the first segment.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Callbacks not arriving" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    The success range, the retry budget, and the placeholder trap.
+  </Card>
+  <Card title="Handling errors" icon="code-branch" href="/developers/errors">
+    Building for the receipt rather than the response.
+  </Card>
+</CardGroup>

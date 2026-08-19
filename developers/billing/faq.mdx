@@ -1,0 +1,95 @@
+---
+title: "Billing FAQ"
+description: "Reconciliation, refunds, disputed messages and the numbers that legitimately disagree."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md, BalanceService.java @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="I sent 1000 messages and was billed for 1240. Why?">
+Segments. You are billed per segment, not per message, and 240 of yours were longer than one.
+
+A message over 160 GSM-7 characters splits at 153 per segment. If anything in the text forces UCS-2 —
+a curly apostrophe is the usual culprit — the limits drop to 70 and 67, so a 150-character message
+becomes three segments.
+
+`/secure/rate` returns `submit_sm_count` for any body, free, before you send it.
+</Accordion>
+
+<Accordion title="I sent 1000 and was billed for 960. Is that a mistake?">
+No — refusals cost nothing. Unapproved sender IDs, unmatched templates, missing mandatory TLVs and
+insufficient credit all leave you charged nothing, or refunded if the charge was already taken.
+
+**The count you sent and the count you were billed for are legitimately different numbers.** Refusals
+are the gap, and your provider can list them.
+</Accordion>
+
+<Accordion title="Why am I being refused when I have money on the account?">
+Credit is reserved in **blocks**, around twenty messages' worth by default, and a reservation only
+succeeds if the balance covers a whole block.
+
+So refusals start at roughly one block remaining, not at zero. A very small top-up will not fix it
+either — anything under one block leaves every reservation failing exactly as before.
+
+Alert on the balance approaching one block's worth, not on zero.
+</Accordion>
+
+<Accordion title="Do I get refunded for a failed message?">
+It depends where it failed:
+
+| | Charged? |
+| :--- | :--- |
+| Refused at ingress | **No** — nothing was taken |
+| Accepted, then dropped before a vendor | **Refunded** |
+| Sent to a vendor and refused by them | **Refunded** |
+| Delivered | Charged |
+| `UNDELIV` or `EXPIRED` after a real attempt | **Charged** — the attempt was made |
+
+The last row is the one worth internalising: a handset that was switched off for a day costs you the
+message, because your provider paid to try.
+</Accordion>
+
+<Accordion title="A customer says they never got a message I was billed for">
+Look at the final state on the record. `DELIVRD` means the carrier reported delivery — beyond that is
+a query for the carrier, and `operator_msg_id` is the handle you quote when raising it.
+
+If the state is `UNKNOWN` or the message settled as `EXPIRED` with no receipt ever arriving, ask your
+provider whether receipts are requested at all on that route. **If every message on a route settles
+as `EXPIRED`, nothing is reporting outcomes** and the delivery rate is meaningless rather than zero.
+</Accordion>
+
+<Accordion title="Why is a partly-delivered long message billed in full?">
+Because every segment was submitted and paid for. Resolution reports the **worst** segment's outcome,
+so the message reads FAILED — but the segments that did go were still carried.
+
+Billing follows what was sent, and delivery reporting follows what the recipient could read. They are
+answering different questions.
+</Accordion>
+
+<Accordion title="Can a retry double-charge me?">
+Only if you retry something that actually succeeded. There is **no idempotency key** on
+`/secure/send`, so a retry after a timeout sends a second message and charges for it.
+
+Retry only on `429` and `500`. A `500` is explicitly safe — the charge is reversed before you get it —
+but a **timeout is not**, because the message may have been accepted and you simply never saw the
+response. Keep your own de-duplication key for anything user-visible.
+</Accordion>
+
+<Accordion title="Does a quote cost anything?">
+No. `/secure/rate` sends nothing, charges nothing, and counts against no rate limit. It is the only
+genuinely free pre-flight check on the API.
+</Accordion>
+
+<Accordion title="Why does the same message cost different amounts to different countries?">
+Pricing is per destination — country and often network. That is why `to` is required on a quote: a
+price without a destination would be a guess.
+
+`product` can change it again, if your provider has allowed your login more than one.
+</Accordion>
+
+<Accordion title="How far back does my history go?">
+Your provider's retention policy decides that, and records are purged on a schedule. If you need
+history beyond it, **export on a schedule of your own** rather than assuming it will be there.
+</Accordion>
+
+</AccordionGroup>

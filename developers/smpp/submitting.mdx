@@ -1,0 +1,108 @@
+---
+title: "Submitting messages"
+description: "submit_sm over an established bind — the fields that matter, how registered_delivery maps to receipt levels, and what happens to a tag you did not declare."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, docs/07-webhooks.md @ 0.7.3"
+---
+
+Once bound, you send `submit_sm`. The response carries a message id, and — as over REST — **that
+response means accepted, not delivered**.
+
+## The fields that decide an outcome
+
+| Field | Notes |
+| :--- | :--- |
+| `source_addr` | Your sender ID. Approval applies here exactly as it does to REST `from`. |
+| `destination_addr` | International format. |
+| `data_coding` | `0` GSM-7, `8` UCS-2. Decides your segment count and therefore your cost. |
+| `registered_delivery` | Which receipts you want — see below. |
+| `esm_class` | Message mode and UDH indication. Wrong bits here are a common `ESME_RINVESMCLASS`. |
+| Optional TLVs | Only extracted if the listener declares the tag. |
+
+## `registered_delivery` maps to receipt levels
+
+FireFlo honours the octet rather than treating it as a boolean:
+
+| Bits | Meaning |
+| :--- | :--- |
+| 1–0 | none / all / failure-only / success-only |
+| bit 4 (`0x10`) | Adds the intermediate notification |
+
+**`0x11` is the SMPP spelling of `dlr_level: 3`** — both progress and outcome. `0x01` gives you
+outcomes only, which is what most integrations want.
+
+<Warning>
+An intermediate notification is **not** the outcome. `ACCEPTD` and `BUFFRED` arrive as level 1 with
+another receipt to follow, so asking for `0x11` and closing your record on the first receipt reports
+the wrong state permanently.
+</Warning>
+
+## Long messages
+
+Two ways, and they cost the same:
+
+- **Split them yourself**, setting the UDH and the concatenation bits in `esm_class`. You send N
+  `submit_sm` and get N ids.
+- **Send one long body** and let the gateway split it.
+
+Segment sizes are the same as everywhere: **160 GSM-7** or **70 UCS-2** for a single message, **153**
+or **67** per segment once split. A message may be at most 255 segments.
+
+<Tip>
+If you split them yourself, the parts must reach the gateway close together — they are held for
+reassembly and a set that never completes is eventually dropped. Do not interleave a slow trickle of
+segments from one message across minutes.
+</Tip>
+
+## TLVs
+
+An optional parameter is extracted **only if the listener declares the tag** in
+`registered.tlvs.submit`. **Undeclared tags are discarded, not passed through** — silently, at
+ingress, before anything else runs.
+
+So if a tag you send never reaches the carrier, the first question is whether your provider has
+declared it, not whether you sent it correctly.
+
+Where a value ends up coming from, in precedence order: your `submit_sm` beats your credential's
+defaults, which beat the vendor's defaults. The exception is a whitelist stamp in `replace` mode,
+which is meant to win — that overwrite *is* the approval.
+
+## Content approval on a long message
+
+<Warning>
+**A concatenated message is checked against approved templates only after reassembly**, because at
+submit time the body is still a fragment.
+
+The consequence: every segment is acknowledged, and *then* the message can be dropped and refunded.
+There is no error on any `submit_sm_resp` you can catch — the receipt is the only signal.
+
+This is the normal shape for regional-language DLT templates, where UCS-2 puts 67 characters in a
+segment.
+</Warning>
+
+## Throughput
+
+Two ceilings, and they are different things:
+
+- **Window size** (`conf.maxPending.default`, 1000 by default) — how many `submit_sm` you may have
+  unacknowledged. Waiting for each response before sending the next makes round-trip time your limit
+  regardless.
+- **Your account's TPS** — exceeding it is throttled, not silently dropped.
+
+## Debugging is your provider's switch, not yours
+
+PDU and byte-level logging is off by default, deliberately: **bind PDUs contain passwords, and
+`submit_sm` PDUs contain phone numbers and message bodies.**
+
+`log.pdus` exists but is opt-in and temporary, and the output is sensitive. If you need it, ask —
+and expect it to be turned back off.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Status codes" icon="hashtag" href="/reference/smpp/status-codes">
+    What each `command_status` means and whether it is worth retrying.
+  </Card>
+  <Card title="Receipts and MO" icon="arrow-right-arrow-left" href="/developers/smpp/receipts-and-mo">
+    `deliver_sm` in both its roles.
+  </Card>
+</CardGroup>

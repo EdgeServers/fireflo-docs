@@ -1,0 +1,87 @@
+---
+title: "Statements and limits"
+description: "Where your usage history lives, what a call record contains, and the two ceilings that apply to your traffic."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md; panel /mis-panel @ 0.7.3"
+---
+
+## Your usage history
+
+Every message produces a **call record** — what you sent, when, what it cost, and how it finished.
+Your statement is that history rolled up by period.
+
+Both live in the customer portal rather than on the API. See
+[the portal](/developers/portal/messages-and-statement) for reading and exporting them.
+
+<Tip>
+There is **no REST endpoint for your message history**. `/secure/balance` gives you the current
+number; the portal gives you the history and a CSV export. If you need history in your own systems,
+export it rather than trying to reconstruct it from receipts — receipts you failed to receive are
+exactly the ones you would be missing.
+</Tip>
+
+## What a record holds
+
+| | |
+| :--- | :--- |
+| The message | Destination, sender ID, segments, encoding |
+| The money | Unit rate, segment count, total |
+| The outcome | Final state and when it was reached |
+| The TLVs | **The ones you sent** — not what a vendor added downstream |
+
+You see your own side of the message. What supplier carried it, and what they added to it, is not
+yours to see — that is the same rule the `vendor` field on a receipt follows.
+
+## Segments, not messages
+
+**You are billed per segment.** A record shows the segment count, and the total is the unit rate
+multiplied by it.
+
+This is where an unexpected bill usually resolves: a body that tipped over 160 GSM-7 characters, or a
+single curly apostrophe that forced the whole message to UCS-2 and dropped capacity to 70. See
+[Encoding and segments](/developers/send/encoding-and-segments).
+
+## The two ceilings
+
+They are different things and produce different failures:
+
+| Limit | Exceeded by | You get |
+| :--- | :--- | :--- |
+| **Messages per second** | Sending too fast | `429`, or `ESME_RTHROTTLED` over SMPP |
+| **Credit** | Sending more than you have funded | `402 Insufficient credit` |
+
+<Warning>
+**Neither has a header telling you when to try again.** There is no `Retry-After` on a `429` — back
+off exponentially with jitter, because a fixed interval across several workers re-synchronises them
+into the next burst.
+
+And a `402` should not be retried at all. Retrying cannot add credit; it just turns one alert into
+thousands.
+</Warning>
+
+## Refusals cost nothing
+
+Every refusal — unapproved sender, unmatched template, missing TLV, insufficient credit — leaves you
+charged nothing, or refunded if the charge had already been taken.
+
+That is worth knowing when reconciling: **the count of messages you sent and the count you were
+billed for are legitimately different numbers**, and refusals are the gap.
+
+The one case that surprises people is a multipart content refusal, where every segment was
+acknowledged before the message was dropped — you see acknowledgements for segments that were then
+refunded.
+
+## What a `500` means for your bill
+
+`500 Cannot send message` reverses any charge. That is why it is the one server error safe to retry:
+the retry costs one message, not two.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Balance and quotes" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Checking credit, and pricing a message before sending it.
+  </Card>
+  <Card title="Billing FAQ" icon="circle-question" href="/developers/billing/faq">
+    Reconciliation, refunds and disputed messages.
+  </Card>
+</CardGroup>

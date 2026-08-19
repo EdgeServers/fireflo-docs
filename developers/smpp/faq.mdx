@@ -1,0 +1,99 @@
+---
+title: "SMPP FAQ"
+description: "Windows, throttling, reconnects, stale sessions and the status codes that actually turn up."
+source: "fireflo-sms-gateway/docs/04, docs/10; SmppStatus.java @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="I am bound, and nothing is going out">
+Check the **bind type** first. A receiver-only session binds perfectly and sends nothing, and there
+is no error anywhere to tell you so.
+
+If it is a transceiver or transmitter and messages still are not moving, look at the window: a client
+that never receives responses fills its window and stops, which looks identical to being blocked.
+</Accordion>
+
+<Accordion title="What throughput should I expect?">
+It depends on your window size and your round-trip time, not on the gateway alone.
+
+**Window size** (`conf.maxPending.default`, 1000 by default) is how many `submit_sm` may be
+outstanding. If your client waits for each response before sending the next, your ceiling is
+`1 / RTT` — around 20 messages a second on a 50 ms link, regardless of how large the window is.
+
+Send asynchronously and match your in-flight count to the window.
+</Accordion>
+
+<Accordion title="I keep getting ESME_RTHROTTLED (88)">
+You are over your account's messages-per-second limit. Slow down — this one is genuinely transient
+and retrying after a pause is correct.
+
+Do not respond by opening more sessions. The limit is per account, not per session, so it costs you
+connection slots and changes nothing.
+</Accordion>
+
+<Accordion title="My bind is refused but the credentials are right">
+Usually a limit, and usually one of your own making: **a stale session still counted against your
+per-user cap**.
+
+If you reconnect faster than the server drops your previous session, you compete with yourself.
+Unbind cleanly on shutdown, and let `enquire_link` detect a dead peer rather than reconnecting
+aggressively.
+
+Also check whether an IP allow list applies — everything else can be correct and the bind still fails.
+</Accordion>
+
+<Accordion title="What does ESME_RSUBMITFAIL (69) mean?">
+"Refused, and no reason given." It is the least informative refusal in the protocol.
+
+It is classified as retryable, which is a genuinely debatable call — the same code is used by
+different SMSCs for transient overload and for permanent refusal. If you see it constantly on one
+route, treat it as permanent and ask your provider what the upstream is actually rejecting.
+</Accordion>
+
+<Accordion title="Everything fails with a status between 192 and 196">
+That block is **always about TLVs**:
+
+| | |
+| ---: | :--- |
+| 192 | The TLV stream is malformed |
+| 193 | A TLV the vendor does not allow |
+| 194 | A TLV of the wrong length |
+| 195 | A required TLV was not sent |
+| 196 | A TLV value was rejected |
+
+On a DLT lane, 195 and 196 almost always mean a missing or wrong entity or template id — which
+usually means nothing was approved, so nothing was stamped.
+</Accordion>
+
+<Accordion title="A tag I send never reaches the carrier">
+The listener does not declare it. **Undeclared tags are discarded at ingress**, before anything else
+runs, and nothing reports it.
+
+Ask your provider whether the tag is in `registered.tlvs.submit` for your listener.
+</Accordion>
+
+<Accordion title="Should I split long messages myself?">
+Either way costs the same. Splitting yourself gives you one id per segment and full control of the
+UDH; sending one long body is simpler and lets the gateway do it.
+
+If you split, **send the segments close together**. They are held for reassembly and an incomplete
+set is eventually dropped.
+</Accordion>
+
+<Accordion title="Can I see the raw PDUs?">
+Only your provider can, and only temporarily. PDU logging is off by default because **bind PDUs
+contain passwords** and `submit_sm` PDUs contain phone numbers and message bodies.
+
+There is also a capture facility that records recent PDUs into a ring buffer for exactly this, without
+leaving logging on permanently. Ask for it by name.
+</Accordion>
+
+<Accordion title="Can I use one login for both SMPP and the REST API?">
+No. Credentials are typed `HTTP` or `SMPP` and are not interchangeable. Ask for one of each.
+
+The refusal is unhelpfully generic in both directions — a `403 Authentication failure` on REST, and
+an authentication failure on bind — so check the type before you check the password.
+</Accordion>
+
+</AccordionGroup>

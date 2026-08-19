@@ -1,0 +1,96 @@
+---
+title: "Receipts and inbound messages"
+description: "deliver_sm carries two different things, and telling them apart is the first job of any SMPP receiver."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, docs/07-webhooks.md @ 0.7.3"
+---
+
+On a transceiver or receiver bind, `deliver_sm` arrives from the gateway. It carries **two different
+things**, and your handler has to separate them before anything else.
+
+| `esm_class` | It is | Contains |
+| :--- | :--- | :--- |
+| Delivery-receipt bits set | A **receipt** for a message you sent | The `id`, a state, and counts |
+| Otherwise | An **inbound message** from a handset | Someone's actual text |
+
+<Warning>
+**Do not treat a receipt as an inbound message.** A naive receiver that forwards every `deliver_sm`
+to an application inbox delivers `id:… sub:001 dlvrd:001 stat:DELIVRD` to a human, and — worse —
+usually also fails to close the record the receipt was there to close.
+</Warning>
+
+## Reading a receipt
+
+The body follows the conventional format:
+
+```
+id:7a2a5b6c-… sub:001 dlvrd:001 submit date:2608190859 done date:2608190859 stat:DELIVRD err:000
+```
+
+`id` is the message id from your `submit_sm_resp`. That is the correlation key, and the only one.
+
+`stat` is the raw state — `DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`,
+`REJECTD`, `FAILED`, `BUFFRED`, `SEEN`. `EXPIRED`, `REJECTD` and `UNDELIV` all bill as failures but
+mean different things.
+
+<Tip>
+**`ACCEPTD` and `BUFFRED` are not outcomes.** Another receipt follows. If you asked for intermediate
+notifications with `registered_delivery` bit 4, your handler must wait for a final state rather than
+closing on the first receipt.
+</Tip>
+
+## Three segments, three receipts
+
+By default you get one receipt per `submit_sm` you sent, each quoting the id you were given for it.
+Your provider can collapse that to one with `conf.dlr.multipart` set to `first` or `last`, which
+carries the real `sub:`/`dlvrd:` totals.
+
+**Every receipt reports the same outcome** whichever they choose, because the outbound segments are
+aggregated before any receipt is built. So there is nothing to reconcile between them — pick one and
+ignore the rest, or ask your provider to send one.
+
+## Inbound messages
+
+A `deliver_sm` without the receipt bits is a real message someone sent to your number.
+
+The gateway has to resolve **which account owns the destination number** before it can route it to
+you. If that mapping is missing, the message is recorded and delivered nowhere — and there is nothing
+observable on your side, because as far as routing is concerned it was never addressed to you.
+
+<Tip>
+When commissioning a new inbound number, send one message and have your provider confirm it resolved
+to your account rather than landing unmapped. It separates "my handler is broken" from "the number
+was never mine", which are otherwise indistinguishable.
+</Tip>
+
+## Responding
+
+Answer every `deliver_sm` with a `deliver_sm_resp`. An unanswered PDU consumes a window slot at the
+gateway end, and enough of them stall the session in a way that looks like the gateway has stopped
+sending.
+
+## If receipts never arrive
+
+<Steps>
+  <Step title="Is your bind able to receive?">
+    A transmitter-only bind cannot. This is the commonest cause and the easiest to miss, because
+    sending works perfectly.
+  </Step>
+  <Step title="Did you ask for them?">
+    `registered_delivery` at `0x00` means none. Some libraries default it to zero.
+  </Step>
+  <Step title="Does the vendor produce them?">
+    If your provider has `request.dlrs` off for the vendor carrying your traffic, nothing ever reports
+    an outcome and every message settles as `EXPIRED` at its deadline.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Submitting" icon="paper-plane" href="/developers/smpp/submitting">
+    `registered_delivery` and how it maps to receipt levels.
+  </Card>
+  <Card title="SMPP FAQ" icon="circle-question" href="/developers/smpp/faq">
+    Windows, throttling, reconnects and stale sessions.
+  </Card>
+</CardGroup>

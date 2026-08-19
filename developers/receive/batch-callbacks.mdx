@@ -1,0 +1,92 @@
+---
+title: "Batch callbacks"
+description: "Per-message results for a batch arrive here and nowhere else — a bare GET with four query parameters."
+source: "fireflo-restapi BatchRequestParser; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+The `sendbatch` response confirms **acceptance only**. It carries a `batchId`, a count, and no
+per-message ids at all.
+
+Per-message results arrive as callbacks.
+
+```json
+{
+  "messages": [ "…" ],
+  "batch_config": {
+    "callback_url": "https://yourapp.example.com/hooks/batch-done",
+    "errback_url":  "https://yourapp.example.com/hooks/batch-error"
+  }
+}
+```
+
+## What arrives
+
+**A bare `GET` with a query string. There is no body at all.**
+
+```
+GET /hooks/batch-error?batchId=c0ffee12-…&to=61491570006&status=0&statusText=…
+```
+
+| Parameter | Meaning |
+| :--- | :--- |
+| `batchId` | The `batchId` the `sendbatch` call returned |
+| `to` | The one destination this result is about |
+| `status` | `1` accepted, `0` refused |
+| `statusText` | The `messageId` on success; the refusal in words on failure |
+
+<Tip>
+**`statusText` carries the `messageId` on success.** That is the only place a batch gives you one, so
+if you need to correlate later receipts back to individual batch members, this callback is where you
+capture it.
+</Tip>
+
+## One result per message, not one per batch
+
+A batch of 500 produces up to 500 callbacks. Your endpoint should be cheap and idempotent — the same
+retry rules apply as for receipts, so a slow handler will be called again.
+
+## The silent failure
+
+<Warning>
+**Unknown keys in `batch_config` are ignored, not refused.**
+
+`errback_url` misspelled as `errBack_url` or `error_url` produces no `400`. The batch is accepted,
+the messages are sent, and every per-message result goes nowhere. From the outside it looks exactly
+like a batch where nothing failed.
+
+This is the one place on the API where a typo does not produce an error, so verify it deliberately:
+send a batch containing one message you know will be refused — an unapproved sender ID is easiest —
+and confirm the callback lands.
+</Warning>
+
+## Success, retries and timeouts
+
+Identical to delivery receipts:
+
+| Rule | Value |
+| :--- | :--- |
+| Success | HTTP **`200`–`399`** |
+| Retries | 10 by default, 120 seconds apart |
+| Timeout | 5 seconds |
+
+At the default budget an unreachable endpoint occupies a thread for twenty minutes per callback — so
+an endpoint that is down during a large batch is expensive for your provider as well as useless to
+you.
+
+## What this is not
+
+- **Not a delivery receipt.** A batch callback says the message was accepted or refused at ingress.
+  Whether it was *delivered* still comes from a `dlr_url`, which you set in `globals` so it applies
+  to every message in the batch.
+- **Not ordered.** Results arrive as messages are processed, not in the order you listed them.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Scheduling, globals, and the expansion cap.
+  </Card>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The outcome, as opposed to acceptance.
+  </Card>
+</CardGroup>

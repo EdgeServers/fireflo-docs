@@ -1,0 +1,88 @@
+---
+title: "Receiving FAQ"
+description: "Ordering, duplicates, missing receipts and the states that look like failures but are not."
+source: "fireflo-sms-gateway/docs/07-webhooks.md, docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="A receipt never arrived. Where do I start?">
+In this order, because each rules out more than the next:
+
+1. **Did you ask for one?** `dlr: "yes"` *and* `dlr_url`. Either alone does nothing.
+2. **Is your endpoint reachable from the gateway host** — not from your laptop?
+3. **Does it return 200–399?** A `401` behind an authenticating proxy is the commonest silent
+   failure, and a `302` to a login page *counts as success* and swallows the receipt.
+4. **Is the vendor asked to produce receipts at all?** If your provider has `request.dlrs` off for
+   that vendor, nothing ever reports an outcome and every message settles as `EXPIRED`.
+</Accordion>
+
+<Accordion title="Can I get the same receipt twice?">
+Yes. Delivery is at-least-once with 10 retries — if your endpoint is slow, times out, or returns a
+`5xx` after doing the work, you will be called again.
+
+**Make your handler idempotent on `id` plus `level`.** Not on `id` alone: a message can legitimately
+produce a level 1 and then a level 2 receipt, and de-duplicating on `id` would discard the outcome.
+</Accordion>
+
+<Accordion title="Are receipts ordered?">
+No. A level 1 and a level 2 receipt for the same message can arrive out of order under retry, and
+receipts for different messages have no ordering at all.
+
+Store the state you receive and let a level 2 win over a level 1 regardless of arrival order.
+</Accordion>
+
+<Accordion title="What does ACCEPTD mean? It sounds final.">
+It is not. `ACCEPTD` and `BUFFRED` are **level 1** — progress, with another receipt to follow.
+
+This one has bitten real integrations: `level` used to always read `2`, so a vendor's `ACCEPTD` was
+labelled as an outcome and receivers closed their records on it. If your integration predates that
+fix, switch on `level` — or simply ask for `dlr_level: 2`, the default, which sends outcomes only.
+</Accordion>
+
+<Accordion title="Why did I get EXPIRED rather than a failure?">
+The message reached its validity deadline without any outcome being reported. Usually a handset that
+was off or out of coverage for the whole period.
+
+But **if every message on a route settles as `EXPIRED`, that is not the handsets** — it means nothing
+is reporting outcomes at all, and your delivery rate is meaningless rather than zero.
+</Accordion>
+
+<Accordion title="Why three receipts for one message?">
+You sent three `submit_sm` — a long message is split into segments and, by default, each gets its own
+receipt quoting the id you were given for it.
+
+Your provider can collapse this to one. **Every receipt reports the same outcome** either way,
+because segments are aggregated before any receipt is built.
+</Accordion>
+
+<Accordion title="A long message says FAILED but the recipient got most of it">
+Resolution waits for the last segment and reports the **worst** outcome, not the first or the
+majority. A message the recipient could not read in full is not a delivery.
+
+It is deliberate and it makes FireFlo's delivery rates look lower than gateways that report the first
+segment — worth knowing before you compare two providers on that number.
+</Accordion>
+
+<Accordion title="Why is there no error code on a failed receipt?">
+Because there is none to give. Jasmin sends an `err` field; FireFlo's resolver is handed only the
+delivery state and never an error code, so emitting one would mean inventing it.
+
+`stat` distinguishes `UNDELIV`, `REJECTD` and `EXPIRED`, which is the information that actually
+exists.
+</Accordion>
+
+<Accordion title="Is a receipt recorded even if it is not sent to me?">
+Yes. **Suppressing a receipt is a decision about what to tell you, never about what to record.**
+Outcomes land in the call record and progress receipts alongside them, and your provider can see both
+on the message's detail page along with what you asked for.
+
+So "I never got a receipt" is always answerable, even when no receipt was forwarded.
+</Accordion>
+
+<Accordion title="Can I see receipts without running an endpoint?">
+Yes — the customer portal shows your messages with their final state and lets you export them. An
+endpoint is how you react in real time; the portal is how you check after the fact.
+</Accordion>
+
+</AccordionGroup>

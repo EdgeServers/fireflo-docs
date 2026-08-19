@@ -1,0 +1,79 @@
+---
+title: "Inbound messages"
+description: "Messages sent *to* your number — how they reach you, the placeholders, and why they are configured on the vendor rather than by you."
+source: "fireflo-sms-gateway/docs/07-webhooks.md @ 0.7.3"
+---
+
+An **MO** — mobile-originated — message is one a handset sends *to* a number you own. A reply to an
+alert, a `STOP`, an inbound keyword.
+
+## This one is not yours to configure
+
+Unlike a `dlr_url`, which you set per message, MO forwarding is configured **on the vendor worker
+that receives the traffic**, by whoever runs the gateway.
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+outSms.instance.testRoute.forward.mo.format = JSON
+```
+
+So if inbound messages are not reaching you, the fix is a conversation with your provider rather than
+a change in your code. Two things worth asking them: whether `forward.mo.url` is set on the right
+worker, and whether the number you expect is mapped to your account.
+
+## What arrives
+
+A **`POST`**, in `JSON` or `FORM` format. The same `200`–`399` success rule and the same retry budget
+as delivery receipts: 10 attempts, 120 seconds apart, 5-second timeout.
+
+The URL may carry placeholders. Values are URL-encoded before replacement:
+
+| Placeholder | Value |
+| :--- | :--- |
+| `%p` | Originating address — the handset |
+| `%P` | Destination address — your number |
+| `%a` | Message text |
+| `%t` | Timestamp |
+| `%i` | Inbound gateway identifier |
+| `%I` | Message centre |
+| `%o` | Data coding value |
+
+<Warning>
+**`%p` is the sender and `%P` is the destination.** Case is the only difference between them, and
+getting it the wrong way round produces a system that works perfectly until someone tries to reply to
+the number it recorded.
+</Warning>
+
+## Ownership has to be resolved
+
+An inbound message arrives at the gateway with a destination number and no account attached. The
+gateway maps that number to an account before it can forward anything.
+
+If the mapping is missing, the message is **unmapped** — it arrives, it is recorded, and it is
+forwarded nowhere. There is no error on your side to observe, because nothing was ever addressed to
+you as far as the routing is concerned.
+
+<Tip>
+When testing a new inbound number, send one message and ask your provider to confirm it resolved to
+your account rather than landing unmapped. That single check separates "my endpoint is broken" from
+"the number was never mine".
+</Tip>
+
+## Debugging
+
+Full inbound detail needs `print.mos = true` on the gateway, **temporarily**. That output contains
+message content and both addresses, so it is sensitive and is not something to leave on.
+
+Your provider will have to do this — and it is worth asking them to, rather than guessing, since the
+alternative is inferring an inbound path from its absence.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The outbound direction, which you do control per message.
+  </Card>
+  <Card title="Receiving FAQ" icon="circle-question" href="/developers/receive/faq">
+    Ordering, duplicates and what to do with a missing receipt.
+  </Card>
+</CardGroup>
