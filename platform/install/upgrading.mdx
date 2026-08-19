@@ -1,0 +1,105 @@
+---
+title: "Upgrading"
+description: "The order, what an update will not touch, and why the two components move together."
+source: "fireflo-sms-gateway/docs/18 §Upgrading, docs/20 §Updating @ 0.7.3"
+---
+
+## Before you start
+
+```bash
+scripts/fireflo verify        # is it healthy NOW
+scripts/fireflo db info       # what migrations are pending
+```
+
+Read the release notes. `update` **never touches the configuration directory**, which is what makes it
+safe — and means a new configuration key introduced by a release is not added to your file.
+
+<Warning>
+**Take a database backup.** Migrations are forward-only; there are no undo scripts.
+</Warning>
+
+## The order
+
+<Steps>
+  <Step title="Stop the gateway">
+    `SIGTERM`, not `SIGKILL`. A clean shutdown returns unspent reserved prepaid credit; a `kill -9`
+    strands it until [`fireflo credit release`](/reference/cli/fireflo) runs.
+  </Step>
+  <Step title="Apply migrations deliberately">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+    Rather than letting `FIREFLO_DB_MIGRATE=true` do it on startup, which ties a schema change to a
+    process start and shows you nothing first.
+  </Step>
+  <Step title="Update the artefact">
+```bash
+sudo ./scripts/fireflo-install update
+```
+    Replaces `/opt/fireflo` and nothing else.
+  </Step>
+  <Step title="Update the panel">
+```bash
+sudo ./scripts/fireflo-panel-install update
+```
+  </Step>
+  <Step title="Verify">
+```bash
+scripts/fireflo verify
+scripts/fireflo version      # what is RUNNING, not what is on disk
+```
+  </Step>
+</Steps>
+
+<Note>
+`version` asks the gateway rather than the files. **An artefact that was built but never restarted
+into is the whole reason to ask** — the jar on disk and the process serving traffic are different
+questions.
+</Note>
+
+## Both components move together
+
+The panel's version repeats the gateway release it was built against in its first three numbers.
+
+| Gateway | Panel |
+| :--- | :--- |
+| `0.7.3` | `0.7.3.1` |
+
+The panel checks the pair at runtime and reports a mismatch on screen. A mismatched pair is not
+necessarily broken — but it means the panel is describing a gateway it was not built against, and a
+feature added in the newer one may be missing or mis-rendered.
+
+## What an update replaces
+
+| Replaced | Never replaced |
+| :--- | :--- |
+| `/opt/fireflo` — the artefact | `/etc/fireflo` — configuration and the environment file |
+| The panel build | `panel.env` |
+| | `/var/lib/fireflo` — the receipt store, file CDRs |
+
+## Rolling back
+
+```bash
+sudo ./scripts/fireflo-install rollback
+```
+
+Restores the previous artefact.
+
+<Warning>
+**Rollback restores the artefact, not the schema.** If the release you are backing out of applied a
+migration, the older artefact runs against the newer schema. That usually works — the schema is
+additive — but it is not guaranteed, and it is why the backup matters.
+</Warning>
+
+## Reading `verify`
+
+| Exit | Means |
+| :--- | :--- |
+| `0` | Sound, and able to send |
+| `1` | Something failed |
+| `2` | Refused or misused |
+| `4` | **Deployment sound, this install's own data is not** |
+
+Exit 4 after an upgrade usually means a configuration domain went empty — worth checking before
+concluding the upgrade broke something.

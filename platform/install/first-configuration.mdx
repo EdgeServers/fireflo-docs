@@ -1,0 +1,113 @@
+---
+title: "First configuration, in order"
+description: "What bootstrap writes, what it deliberately does not, and the order to add the rest so the first message can actually leave."
+source: "fireflo-sms-gateway/docs/18 §First Configuration In Order, docs/09 §bootstrap @ 0.7.3"
+---
+
+A migrated database is empty, and an empty one does not start. This is the shortest path from there to
+a message going out.
+
+## bootstrap
+
+```bash
+scripts/fireflo bootstrap [--port 27777]
+```
+
+Writes the least a fresh database needs:
+
+- a `default` routing table
+- an empty `MESSAGE` table for a vendor to go in
+- one listener on 27777
+- one SMPP login, whose password it generates and **prints once**
+
+<Warning>
+The generated password is printed **once** and never again. Capture it before you close the terminal.
+</Warning>
+
+### What it deliberately does not write
+
+| Not written | Why |
+| :--- | :--- |
+| A vendor | It needs a host and credentials nobody can guess |
+| Any rates | An invented price bills silently, where an absent one shows up unpriced in the call record |
+
+Both absences are named in its closing output, so it does not merely omit them quietly.
+
+<Note>
+`bootstrap` **refuses** the moment it finds a routing table, a worker or a login, so it cannot
+overwrite a running deployment. There is no flag that makes it.
+
+To bring an existing file configuration in instead, use
+[`import`](/platform/install/configuration-source).
+</Note>
+
+## Then, in this order
+
+The order matters: each step is what makes the next one meaningful.
+
+<Steps>
+  <Step title="A product">
+    A named tariff a message is priced under. Without one, pricing has nothing to key on and a
+    product-scoped rate rule can never match.
+  </Step>
+  <Step title="A rate for that product">
+    Both sides: what you pay a vendor (**cost**) and what an account pays you (**price**). A message
+    matching no sell-side rule is recorded **UNKNOWN**, not free — delivered and billed to nobody.
+    See [rates.conf](/reference/files/rates-conf).
+  </Step>
+  <Step title="A vendor">
+    Host, port, system id, password, and the bind counts. Nothing leaves the building until one
+    exists. See [Vendors](/platform/connections/vendors).
+  </Step>
+  <Step title="A routing rule that names it">
+    `bootstrap` leaves `[MESSAGE]` empty on purpose. A catch-all sending everything to your one
+    vendor is the minimum:
+    ```ini
+    [MESSAGE]
+    vendor1::default:
+    ```
+  </Step>
+  <Step title="A customer login">
+    An account id, a product, and either an SMPP `systemId`/`password` or an HTTP pair. The
+    **account** is the billing key. See [credentials.yml](/reference/files/credentials-yml).
+  </Step>
+  <Step title="Credit, if you are enforcing it">
+    With `smsg.balance.enabled` on, an account with no balance row sends nothing. Credit enters
+    through the database as a ledger entry — the panel writes `RECHARGE` rows and never the balance
+    column directly.
+  </Step>
+</Steps>
+
+## Check it before you believe it
+
+```bash
+scripts/fireflo verify
+```
+
+<Note>
+**Exit 4** is the expected answer partway through this list: the deployment is sound, its own data is
+not — nothing to route to yet. It becomes 0 once a vendor and a rule exist.
+</Note>
+
+Then send one, as a customer would:
+
+```bash
+FIREFLO_SEND_LOGIN=... FIREFLO_SEND_PASSWORD=... \
+  scripts/fireflo send MyBrand 61400000000 "first message"
+```
+
+A `200` means accepted, charged and queued — not delivered. Watch the call record for the outcome.
+
+## The two things most likely to be wrong
+
+<AccordionGroup>
+  <Accordion title="It accepted the message and charged nothing">
+    No sell-side rate rule matched. The call record shows the message unrated. Either the account has
+    no rate scope, or every rule in its scope carries a product the message does not have — a
+    product-less message is only ever shown product-less rules.
+  </Accordion>
+  <Accordion title="Nothing left the building">
+    Either `[MESSAGE]` is still empty, or the catch-all is above your specific rules and they are
+    unreachable, or the vendor is not bound. `scripts/fireflo health` distinguishes the three.
+  </Accordion>
+</AccordionGroup>

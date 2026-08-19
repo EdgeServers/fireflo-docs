@@ -1,0 +1,103 @@
+---
+title: "Installing the control panel"
+description: "The panel installer, what it derives from the gateway's configuration, and the one connection it never guesses."
+source: "fireflo-control-panel/scripts/fireflo-panel-install, README; docs/09 §Control Panel Configuration @ 0.7.3"
+---
+
+The control panel serves both the operator screens and the customer portal. It is a separate process
+with its own installer and its own environment file.
+
+<Note>
+**Install it after the gateway.** The gateway owns the database schema; the panel only reads and writes
+rows in it.
+
+It is **not on the message path** — a panel that is down costs you the ability to make changes, not the
+ability to send.
+</Note>
+
+## Install
+
+```bash
+./scripts/fireflo-panel-install check
+sudo ./scripts/fireflo-panel-install install
+```
+
+`install` does Node, service user, directories, source, `npm ci`, build, environment, systemd unit, and
+then checks that it answers. It asks for what it needs first and changes nothing until you agree.
+
+## What it derives
+
+Given the gateway's configuration directory, the installer reads out the **operational tokens** and the
+**read-only database connection** rather than asking you to copy them by hand.
+
+<Warning>
+**`--config-url` is never derived.** The read-write connection to the configuration tables is the one
+that can change what customers are charged, so it is always given explicitly.
+
+Without it the panel reports every configuration domain as **not editable**, rather than failing at
+the first save.
+</Warning>
+
+## The operator account is two environment variables
+
+There is no user table.
+
+```bash
+sudo ./scripts/fireflo-panel-install passwd
+```
+
+That is the supported way to change it — it rewrites the environment file and restarts the unit in one
+step, rather than leaving you to edit a file the installer otherwise promises never to replace.
+
+## The two URLs that are easy to swap
+
+| Variable | Points at | If you get it wrong |
+| :--- | :--- | :--- |
+| `GATEWAY_OPS_URL` | The **management** port, 9000 | Live health reads 404 on everything |
+| `GATEWAY_API_URL` | The **messaging** port, 8080 | Every playground call 404s |
+
+They are different ports carrying different things and sharing no paths. Both failures look like an
+outage and are not.
+
+## TLS in front
+
+The panel speaks plain HTTP on `PORT` (3000 by default). Put nginx or similar in front of it, and set
+`AUTH_URL` to the public origin — unset, a sign-out redirects to localhost.
+
+`NODE_ENV=production` is set for the **build** as well as the run, because it decides whether the
+session cookie is marked secure.
+
+## Customer sign-in needs mail
+
+A customer signs in through a magic link. With `FIREFLO_SMTP_HOST` or `FIREFLO_SMTP_FROM` unset, **no
+customer can sign in at all** — the portal says the link cannot be sent rather than failing silently,
+but nobody gets in.
+
+See [Portal access](/platform/customers/portal-access).
+
+## Upgrading
+
+```bash
+sudo ./scripts/fireflo-panel-install update
+```
+
+Replaces the build. **Never touches the environment file.**
+
+<Warning>
+Upgrade the panel and the gateway **together**. The panel's version repeats the gateway release it was
+built against in its first three numbers — `0.7.3.1` pairs with gateway `0.7.3` — and it checks the
+pair at runtime and says so when they disagree.
+</Warning>
+
+## Under a virtualhost
+
+`--tenant NAME` puts the panel at `/srv/fireflo/NAME/panel` as unit `fireflo-NAME-panel`, and the same
+word names the same instance to the gateway installer. With `--vhost PATH` the root moves to
+`PATH/panel`, with the gateway at `PATH/gateway`.
+
+<Warning>
+Under `--vhost`, `CDR_EXPORT_DIR` must sit inside a `BindPaths=` root. **That failure is silent** —
+exports are prepared and then cannot be read.
+</Warning>
+
+Every variable is at [Control panel environment](/reference/config/control-panel).

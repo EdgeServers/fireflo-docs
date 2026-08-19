@@ -1,0 +1,90 @@
+---
+title: "Several instances on one host"
+description: "One word names one customer's instance to both installers, and the isolation a virtualhost buys."
+source: "fireflo-sms-gateway/scripts/fireflo-install, fireflo-control-panel/scripts/fireflo-panel-install @ 0.7.3"
+---
+
+Separate deployments on one host — one per customer, or one per environment. **Not a cluster**: these
+are independent gateways with their own databases and their own traffic. For why several instances
+against *one* database does not work, see [Clustering](/platform/install/clustering).
+
+## One name, two products
+
+```bash
+sudo ./scripts/fireflo-install       install --tenant websmsc
+sudo ./scripts/fireflo-panel-install install --tenant websmsc
+```
+
+`--tenant` is the whole idea: **the same word names the same instance to both installers**. One name
+per customer, two products.
+
+| | Path | Unit |
+| :--- | :--- | :--- |
+| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
+| Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+
+## On update it is a lookup, not a layout
+
+This is the part that prevents the expensive mistake.
+
+```bash
+sudo ./scripts/fireflo-install update --tenant websmsc
+```
+
+On `update`, `service` and `rollback`, `--tenant` **finds** the install with that name and uses its own
+paths, unit, account and ports.
+
+<Warning>
+Without that, an upgrade aimed by forgetting a flag would stop a unit that may not exist, replace a
+directory belonging to another instance, and enable a second service against the same database.
+
+A unit whose `WorkingDirectory=` names a different install is **refused, before anything is stopped**.
+</Warning>
+
+## Ports
+
+```bash
+--smpp-port-range 27777-27800
+```
+
+Give a band and the installer takes the next free listener port, so instance two does not collide with
+instance one. `--http-port` and `--ops-port` are set per instance too.
+
+Both installers read the ports back out of the environment file on `update`, so an instance on
+non-default ports stops failing its own verify at the end of every upgrade.
+
+## A virtualhost
+
+```bash
+sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc
+```
+
+Puts the instance under a per-customer home: `/home/websmsc/gateway`, with the panel at
+`/home/websmsc/panel`.
+
+**What it buys:** both generated units mount a **tmpfs over `/home`** and bind only that one
+virtualhost back in, so a gateway cannot see any other customer's home directory.
+
+<Warning>
+Under `--vhost`, the panel's `CDR_EXPORT_DIR` must also sit inside a `BindPaths=` root. **That failure
+is silent** — exports are prepared and then cannot be read.
+</Warning>
+
+<Note>
+`--vhost` **alone**, without `--tenant`, keeps its older flat meaning, so panels already installed
+under `/home/<name>` are reached exactly as before. That compatibility is deliberate: an upgrade must
+not relocate a running install.
+</Note>
+
+The three directory flags — `--app-dir`, `--conf-dir`, `--data-dir` — still win over either scheme
+wherever they are given.
+
+## What each instance needs of its own
+
+| | Shared? |
+| :--- | :--- |
+| Database | **No** — one per instance |
+| Listener, HTTP and ops ports | **No** |
+| Operational tokens | **No** — generated per install |
+| Service account | Optional, `--user` |
+| Host, packages, Java, Node | Yes |

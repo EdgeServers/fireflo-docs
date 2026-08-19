@@ -1,0 +1,165 @@
+---
+title: "Install by hand"
+description: "Ubuntu 24.04 from scratch: the two runtimes Ubuntu does not ship, the layout, and what an upgrade may and may not replace."
+source: "fireflo-sms-gateway/docs/18-deploying-on-a-server.md @ 0.7.3"
+---
+
+What [`fireflo-install`](/platform/install/one-command) automates. Read this if you are packaging
+FireFlo yourself, or if an installer step failed and you need to know what it was doing.
+
+## Prerequisites
+
+- **Java 25.** The build targets release 25 and **will not run on 21**.
+- **PostgreSQL 14 or newer.** Optional for the gateway alone in file mode; required for the control
+  panel, prepaid credit, whitelisting, and call records in a table.
+- **RabbitMQ**, only if submitted messages must survive a gateway restart. Without it the queue is in
+  memory and a restart drops whatever had not reached a vendor.
+- A service user with no login shell.
+
+## The awkward part of this platform
+
+Two of the three runtimes are **not** what Ubuntu ships:
+
+| Need | Ubuntu 24.04 ships | Do |
+| :--- | :--- | :--- |
+| Java 25 | `openjdk-21` | Add Adoptium |
+| Node 22 | `nodejs` 18 | Add NodeSource |
+| PostgreSQL 14+ | PostgreSQL 16 | `apt install postgresql` |
+
+<Steps>
+  <Step title="Base packages">
+```bash
+sudo apt update
+sudo apt install -y wget curl gpg apt-transport-https ca-certificates ufw nginx postgresql
+```
+  </Step>
+  <Step title="Java 25 from Adoptium">
+```bash
+sudo mkdir -p /etc/apt/keyrings
+wget -qO- https://packages.adoptium.net/artifactory/api/gpg/key/public \
+  | sudo tee /etc/apt/keyrings/adoptium.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] \
+https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/adoptium.list
+sudo apt update && sudo apt install -y temurin-25-jdk
+java -version        # must print 25
+```
+  </Step>
+  <Step title="Node 22 from NodeSource">
+Next.js 16 does not run on Ubuntu's Node 18 — this is for the control panel.
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version       # must print v22 or newer
+```
+  </Step>
+  <Step title="Service user and directories">
+```bash
+sudo useradd --system --home-dir /opt/fireflo --shell /usr/sbin/nologin fireflo
+sudo install -d -o fireflo -g fireflo /opt/fireflo /etc/fireflo /var/lib/fireflo /var/log/fireflo
+sudo chmod 750 /etc/fireflo
+```
+  </Step>
+  <Step title="Database">
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+Keep the password out of shell history — write it straight into the environment file.
+  </Step>
+</Steps>
+
+## Layout
+
+Configuration is kept **out of** the artefact directory, so an upgrade can replace the artefact
+wholesale without touching anything you edited.
+
+```text
+/opt/fireflo/            owned by fireflo, REPLACED on upgrade
+  quarkus-run.jar
+  lib/  app/  quarkus/
+  bin/fireflo            the operator CLI, kept out of what an upgrade replaces
+
+/etc/fireflo/            owned by fireflo, NEVER replaced on upgrade
+  fireflo.env            environment, including the database password. chmod 600
+  smsg.properties        workers and settings      \
+  credentials.yml        logins                     |  file mode only
+  routingTable.conf      routing                    |
+  rates.conf             tariffs                   /
+
+/var/lib/fireflo/        the receipt store, and CDRs when there is no database
+/var/log/fireflo/        logs
+```
+
+<Warning>
+**The artefact is a directory, not a file.** `quarkus-run.jar` will not run without the `lib/`, `app/`
+and `quarkus/` directories beside it. Copying the jar alone produces a process that starts and then
+fails to find its classes.
+</Warning>
+
+## The environment file
+
+`chmod 600`. It holds the database password and both operational tokens.
+
+```bash
+export FIREFLO_CONF_DIR=/etc/fireflo
+export FIREFLO_DB_URL=jdbc:postgresql://localhost:5432/fireflo
+export FIREFLO_DB_USER=fireflo
+export FIREFLO_DB_PASSWORD=...
+export FIREFLO_CONFIG_SOURCE=file
+export QUARKUS_HTTP_PORT=8080
+export FIREFLO_OPS_PORT=9000
+```
+
+<Warning>
+Set `FIREFLO_CONF_DIR` to an **absolute path**. A relative value — including the `conf` default —
+resolves against the process working directory, so a unit with `WorkingDirectory=/opt/fireflo` reads
+`/opt/fireflo/conf/`, which is not where you edited anything.
+</Warning>
+
+## Ports
+
+| Port | Carries | Expose to |
+| :--- | :--- | :--- |
+| 8080 | The REST API | Customers |
+| 27777 | SMPP binds | Customers |
+| 9000 | `/ops/*` and `/q/metrics` | **Loopback, or your own network only** |
+| 3000 | The control panel | Behind TLS |
+
+## systemd
+
+Two settings matter more than the rest:
+
+```ini
+# a bound SMPP session is a customer's connection, so stop deliberately rather than abruptly
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# one file descriptor per bound customer session, plus the vendor connections
+LimitNOFILE=65535
+```
+
+<Warning>
+`SIGTERM` rather than `SIGKILL` is not a nicety. A clean shutdown returns unspent **reserved prepaid
+credit**; a `kill -9` strands it until [`fireflo credit release`](/reference/cli/fireflo) runs.
+</Warning>
+
+## Log retention, which you now own
+
+Nothing in the gateway removes `httpapi.log`. Quarkus rotates it daily and keeps every file forever.
+`fireflo-install` writes a `tmpfiles.d` rule for exactly this; **installing by hand means writing one
+yourself, or accepting unbounded growth.** See [Logging](/reference/config/logging).
+
+## Verify
+
+```bash
+scripts/fireflo verify
+```
+
+And check the two tokens really are separate — reading with the admin token must **404**:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $FIREFLO_OPS_ADMIN_TOKEN" \
+  http://localhost:9000/ops/health      # expect 404
+```

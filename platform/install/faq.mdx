@@ -1,0 +1,109 @@
+---
+title: "Install FAQ"
+description: "The questions that come up between a fresh host and a working gateway."
+source: "fireflo-sms-gateway/docs/20, docs/18, scripts/fireflo @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="File configuration or the database — which do I pick, and can I change my mind?">
+Either. Neither is more supported.
+
+**Files** if you version-control configuration and deploy it with the rest of your infrastructure.
+**Database** if you want the control panel to edit anything — in file mode there is nothing for it to
+edit.
+
+You can change your mind, and `fireflo import` is the path. **Keep the files**: the gateway reads them
+until it restarts with `FIREFLO_CONFIG_SOURCE=db`, and going back is that variable again. Import every
+subject before flipping, not just the one you were working on — the switch moves all four domains at
+once.
+
+See [Choosing a source](/platform/install/configuration-source).
+</Accordion>
+
+<Accordion title="Why does the gateway refuse to start on an empty database?">
+Because there is no routing table, and a gateway that cannot route cannot do anything.
+
+The message names an internal structure rather than the missing row —
+`no default routing table in new targets!` — which reads like a bug and is not.
+
+`db migrate` creates the tables and leaves every one empty. `fireflo bootstrap` writes the least that
+will start. See [First configuration](/platform/install/first-configuration).
+</Accordion>
+
+<Accordion title="Why two operational tokens instead of one?">
+Because reading gateway state must not carry the ability to stop a vendor. A monitoring probe or a
+read-only dashboard gets `smsg.ops.token` and can see bind state, queue depths and throughput; it
+cannot disable anything.
+
+**Setting both to the same string does not simplify the configuration — it switches the controls
+off.** So does leaving the admin token unset. Either way the control verbs answer 404.
+</Accordion>
+
+<Accordion title="I get a 404 from the management port. Is the token wrong or is the endpoint off?">
+The gateway will not tell you, deliberately — a wrong token gets the same 404 as a disabled endpoint,
+so nothing advertises that there is a secret worth guessing.
+
+Four things produce it: wrong token, admin token unset, admin token equal to the read token, or a path
+that does not exist. **Check the tokens on both sides before concluding the gateway is down.**
+</Accordion>
+
+<Accordion title="Why does --dry-run show less than I expected?">
+It reports the decisions the installer would make. It cannot report what a package manager would pull
+in, or what a migration would find in a database it has not connected to.
+
+Read it as "the choices", not "everything that would change on this host".
+</Accordion>
+
+<Accordion title="install refuses because a configuration directory exists. Now what?">
+Use **`service`**, not `install`.
+
+`install` refuses rather than mint a second pair of operational tokens over the top of the first —
+which would leave the control panel authenticating against tokens the gateway no longer has. `service`
+generates the unit on the existing configuration and starts it.
+</Accordion>
+
+<Accordion title="Can I run two instances on one host?">
+Yes — as **independent** deployments, each with its own database and ports. `--tenant NAME` names the
+same instance to both installers, and on `update` it is a lookup rather than a layout, so an upgrade
+cannot be aimed at the wrong instance by forgetting a flag.
+
+See [Several instances](/platform/install/multiple-instances).
+
+**Two instances against one database is a different question, and the answer is no.** Most delivery
+receipts would be dropped. See [Clustering](/platform/install/clustering).
+</Accordion>
+
+<Accordion title="Java 25 and Node 22 — why not the distro packages?">
+Ubuntu 24.04 ships `openjdk-21` and Node 18. The gateway build targets release 25 and **will not run
+on 21**; the panel is Next.js 16, which will not run on Node 18.
+
+Adoptium and NodeSource, both in [Install by hand](/platform/install/by-hand).
+</Accordion>
+
+<Accordion title="What does verify exit code 4 mean?">
+**The deployment is sound; this install's own data is not.**
+
+The artefact is complete, Java is new enough, both ports answer and the tokens are separate — but
+there is nothing to route to, or no pricing, or no logins. It is the expected answer immediately after
+a `--bootstrap` install and before you add a vendor.
+
+`0` fine, `1` failed, `2` refused or misused.
+</Accordion>
+
+<Accordion title="Nothing removes httpapi.log. Is that right?">
+Yes, and it is the one bound nothing in the gateway enforces. Quarkus rotates it daily and offers no
+retention setting to go with that, so it writes one file per day and keeps every one forever.
+
+`fireflo-install --log-retain-days` writes a `tmpfiles.d` rule that deletes rotated files, never
+touching the four live ones. **A hand-built install must arrange that itself.**
+</Accordion>
+
+<Accordion title="Do I need RabbitMQ?">
+Only if submitted messages must survive a gateway restart. Without it the router queue is in memory
+and a restart drops whatever had not yet been handed to a vendor.
+
+Everything else works without it.
+</Accordion>
+
+</AccordionGroup>

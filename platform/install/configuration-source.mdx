@@ -1,0 +1,97 @@
+---
+title: "Choosing a configuration source"
+description: "File or database, the one switch that moves all four domains, and why import is a one-way door you should still keep the files for."
+source: "fireflo-sms-gateway/docs/09 §Moving file configuration into the database, docs/20 @ 0.7.3"
+---
+
+Configuration comes from files or from PostgreSQL. **One switch moves all four domains together** —
+credentials, properties, routing and rates.
+
+```bash
+FIREFLO_CONFIG_SOURCE=file   # the four files in the conf directory
+FIREFLO_CONFIG_SOURCE=db     # app_credential, app_config + app_worker, app_route_*, app_rate_rule
+```
+
+<Warning>
+**This replaced four separate keys.** `smsg.credentials.source`, `smsg.routing.source`,
+`smsg.rates.source` and `smsg.properties.source`, and their `FIREFLO_*_SOURCE` variables, no longer do
+anything — and the gateway **refuses to start** while one is still set, rather than reverting that
+domain to a file in silence.
+</Warning>
+
+## Which to pick
+
+| | File | Database |
+| :--- | :--- | :--- |
+| Edited by | A text editor, or configuration management | The control panel |
+| Applied in | ~200 ms, on a file watch | One poll interval, 30 s by default |
+| Panel can edit | **No** — there is nothing to edit | Yes |
+| Version controlled | Naturally | Needs a separate discipline |
+| Several instances | Each needs the files | Shared |
+
+Neither is more supported than the other. `fireflo import` moves between them.
+
+## Moving files into the database
+
+```bash
+scripts/fireflo import all --dry-run                        # parse, report, write nothing
+FIREFLO_CONFIG_IMPORT=true scripts/fireflo import all --replace
+```
+
+It parses `rates.conf`, `routingTable.conf` and `credentials.yml` **with the parsers the gateway
+already uses**, so nobody hand-writes INSERT statements over a decimal place or a password.
+
+<Note>
+**Run the dry run and read it.** It classifies every rate scope as a vendor cost or an account price
+and names the ones it can classify as **neither** — which is how a scope that will load and silently
+match nothing gets caught before it does.
+</Note>
+
+Subjects are `all` (the default), `rates`, `routing`, `credentials`.
+
+<Warning>
+**Credentials have one refusal the others do not.** An import yielding no usable credential is refused
+unconditionally, flag or no flag. An empty `app_credential` plus `FIREFLO_CONFIG_SOURCE=db` refuses
+every bind and every REST call at once, and nothing in the logs names the cause.
+
+The report also lists entries the parser drops — an SMPP credential with no password, or the loser of
+a duplicated lookup key — which the gateway would skip with a warning and no error.
+</Warning>
+
+## Importing changes nothing by itself
+
+The gateway keeps reading the files until it restarts with `FIREFLO_CONFIG_SOURCE=db`. **That is also
+the rollback, so keep the files.**
+
+<Warning>
+**Import every subject before flipping, not just the one you were working on.** The switch moves all
+four domains at once, and credentials are not as cheap to reverse as the rest: rolling pricing back
+changes prices; rolling credentials back makes **every bound session reconnect**.
+</Warning>
+
+`--replace` overwrites the scopes and tables the file names; anything it does not name is left alone
+unless you also pass `--prune`.
+
+## Exit codes
+
+| Code | Means |
+| :--- | :--- |
+| `0` | Fine |
+| `1` | The migration failed |
+| `2` | Refused without touching anything |
+
+That split is what lets a deploy pipeline tell a missing flag from a broken migration.
+
+## What changes once you are in `db` mode
+
+- Every file watcher stands down. `credentials.yml`, `routingTable.conf` and `rates.conf` are not read
+  after startup.
+- **`smsg.properties` is still read at startup**, because the source switch and the datasource have to
+  come from somewhere.
+- A change takes up to one poll interval; a **failed read retains** the previous configuration rather
+  than blanking it.
+- Editing `app_config` retunes running workers — `tps`, `maxRetries`, `pause`, registered TLVs — and
+  setting `outSms.instance.<x>.enable` to false **stops that vendor** within one interval.
+- Deleting a row reverts the key to the next tier, not to unset.
+
+Use [`fireflo reload`](/platform/operations/reload) when you do not want to wait for the poll.

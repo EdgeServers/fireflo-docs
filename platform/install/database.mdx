@@ -1,0 +1,108 @@
+---
+title: "The database"
+description: "What PostgreSQL buys you, applying the schema, and why db migrate alone leaves a gateway that will not start."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md §PostgreSQL, docs/18 §The Database @ 0.7.3"
+---
+
+PostgreSQL is **optional**. Leave `FIREFLO_DB_URL` unset and FireFlo runs on files, with call records
+written to `data/cdr/`.
+
+## What it buys
+
+| Feature | Needs a database |
+| :--- | :--- |
+| Rating, least-cost routing, call records | No |
+| The CDR **expiry sweep** | **Yes** — it queries for records with no outcome |
+| **Prepaid credit** | **Yes** — credit can only enter through the database |
+| Whitelisting | **Yes** |
+| The control panel editing anything | **Yes** — in file mode there is nothing to edit |
+
+The panel's read-only half works without one; it just has nothing to change.
+
+## Creating it
+
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+
+## Applying the schema
+
+`FIREFLO_DB_MIGRATE=true` migrates on startup, which is convenient for a first run and wrong for an
+upgrade — it ties a schema change to a process start and gives you no way to see what would be applied
+first.
+
+```bash
+scripts/fireflo db test        # reachable, authenticated, migrated, permitted, answered
+scripts/fireflo db info        # what is applied, what is pending
+scripts/fireflo db validate    # do the applied migrations still match the files
+scripts/fireflo db migrate     # apply what is pending
+```
+
+`info` and `validate` do **not** need the write-enabling flag. Reading the schema version changes
+nothing, and needing a flag before you may look would be a trap mid-incident.
+
+<Warning>
+**Migrations are forward-only.** There are no undo scripts, so rolling back a schema change means
+restoring a backup. Take one before migrating a database you care about.
+</Warning>
+
+## `db migrate` alone is not enough
+
+This is the one that catches people, and the failure is loud rather than graceful.
+
+`db migrate` creates the tables and leaves **every one of them empty**. With no routing table the
+gateway does not start at all:
+
+```
+no default routing table in new targets!
+```
+
+That names an internal structure rather than the missing row, so it reads like a bug. It is not — it
+means the database is empty.
+
+[`fireflo bootstrap`](/platform/install/first-configuration) writes the least that will start.
+
+## The consolidated baseline
+
+The schema is one file, `V1.19.0__baseline.sql`, **generated rather than hand-merged**: the originals
+were applied to a scratch database, dumped with `pg_dump --schema-only`, and the dump verified by
+applying it to a second database and diffing the two. Later changes carry on at `V1.20.0`.
+
+It is numbered at the **highest** version it replaces, not the lowest, deliberately. A deployment that
+stopped part-way would treat a lower-numbered baseline as already applied and migrate to a no-op,
+silently missing whatever came after. At `1.19.0` it instead tries to apply and fails on the first
+table that already exists — recoverable, where the silent version corrupts by omission.
+
+### Upgrading a deployment that applied the originals
+
+Flyway's history still names them all, so `db validate` fails until the record is realigned: one
+changed checksum, the rest no longer resolvable. One command fixes it, and it rewrites the **history**
+rather than the schema:
+
+```bash
+FIREFLO_DB_MIGRATE=true scripts/fireflo db repair
+```
+
+<Warning>
+**Finish applying any pending migration before running `repair`.** Repair on a part-migrated database
+makes it look complete when it is not.
+</Warning>
+
+## Upgrading, in order
+
+<Steps>
+  <Step title="Stop the gateway" />
+  <Step title="Look, then apply">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+  </Step>
+  <Step title="Start the new version" />
+</Steps>
+
+The command runs against the JVM artefact's `lib/` layout, so a native deployment migrates from the
+JVM image or any host with a JDK.
+
+Keys and tables are at [Database configuration](/reference/config/database).

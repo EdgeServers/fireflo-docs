@@ -1,0 +1,91 @@
+---
+title: "Running as a cluster"
+description: "A decision record. The short answer is no, not today — and here is exactly what breaks."
+source: "fireflo-sms-gateway/docs/21-clustering.md @ 0.7.3"
+---
+
+<Warning>
+**Status: a decision record, not a roadmap item.** Nothing on this page is implemented. It exists so
+the next person to ask "can we run two of these?" gets a real answer instead of rediscovering the
+constraints from the source.
+</Warning>
+
+**No, not today.** Two instances against one database will drop most delivery receipts, and did until
+recently double-credit every prepaid top-up. What follows is why, and what it would take.
+
+For independent gateways on one host — which does work — see
+[Several instances](/platform/install/multiple-instances).
+
+## What is already cluster-safe
+
+More than you would expect. The send path was built without a cluster in mind and is nonetheless
+correct across instances.
+
+| | Why it holds |
+| :--- | :--- |
+| **Message ids do not collide** | `msg.serial` is a random UUID at all three generation sites, so call-record keys are globally unique with no node ordinal |
+| **Prepaid credit does not overdraw** | Credit is reserved in blocks with an atomic conditional `UPDATE`, then spent from memory. Two instances reserving at once are serialised by row locking; the loser takes a smaller block |
+| **Call records do not duplicate on the normal path** | `cdr_submit` inserts with `ON CONFLICT ... DO NOTHING` |
+| **Configuration converges** | The poller is strictly read-only and writes nothing back, so every instance reaches the same state independently |
+
+## What breaks
+
+### Money and records
+
+| Problem | Consequence |
+| :--- | :--- |
+| ~~The recharge and transfer polls ran on every instance with no row lock and no re-apply guard~~ **Fixed in 0.7.3** — the selects take `FOR UPDATE SKIP LOCKED`, the mark carries `AND NOT applied`, and an entry is claimed before the money moves | Was: a 100-unit top-up credited N × 100. Money minted. Reproduced at 2×, then fixed |
+| The **CDR expiry sweeper** runs on every instance with no `ON CONFLICT`, and `cdr_final` has no unique key on `(gateway_msg_id, part_no)` | Duplicate `EXPIRED` rows fan out the profit-and-loss join and **inflate reported revenue** |
+| The **file CDR sink** appends to one file per day | Two JVMs sharing a data directory interleave buffer flushes mid-line and corrupt it. Only bites when the sink is `file` |
+
+### Message loss
+
+All receipt correlation lives in a **node-local** store.
+
+- A receipt arriving at an instance that did not submit the message finds nothing, is **dropped with a
+  single log line**, and produces no customer receipt, no webhook and no `cdr_final` row. With N
+  instances that is roughly (N−1)/N of all receipts.
+- The store takes an **exclusive file lock**. The second instance to start on the same path fails, the
+  failure is caught, logged at WARN, and it **silently continues with no persistence at all** — so
+  "two instances sharing a data directory" looks identical to "healthy".
+- Unpushed receipts are parked locally, so a customer reconnecting to a different instance never
+  receives them.
+- Bound sessions are tracked per JVM, so an instance cannot tell a customer is connected elsewhere.
+
+### Concatenated messages, concretely
+
+Segments arriving on different instances never reassemble. For a three-segment message split two-and-one
+across two instances:
+
+- each instance answers `ESME_ROK` and **charges** for the segments it received;
+- each waits out `reassembling.timeoutMillis`, 30 seconds by default;
+- each then transmits its segments as **orphaned fragments** carrying a concatenation header for a
+  message that will never complete.
+
+The handset holds them until its own timer expires and typically shows nothing. **The customer is
+billed for all three.** The only trace is one `message.parts.incomplete` warning per instance, neither
+of which knows the other exists.
+
+<Note>
+A customer's SMPP session is normally sticky at the TCP level, so this bites on reconnect mid-message,
+on load-balancer rebalance, and on clients holding several binds that spread segments across them.
+
+Content whitelisting still applies to what each instance sends — the timeout path is content-checked —
+so the failure is delivery and billing, not enforcement.
+</Note>
+
+### Degraded but not lost
+
+Vendor TPS, ingress rate limits, throughput sampling and routing-group cursors are all **per process**.
+N instances send up to **N × the contracted rate** to a carrier.
+
+That is a guard against a runaway sender, not a distributed quota — see
+[Limits](/reference/config/limits).
+
+## What it would take
+
+Broadly: move receipt correlation and reassembly into shared storage, give `cdr_final` a unique key and
+an upsert, and make the sweeper leader-elected or idempotent. Each is tractable; none is done.
+
+Until then, scale **vertically**, and use several independent instances where the traffic can be
+partitioned by customer.
