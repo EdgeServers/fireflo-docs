@@ -1,7 +1,6 @@
 ---
 title: "Sending one message"
 description: "The fields you will actually use, what each defaults to, and the four that change what a message costs or whether it is accepted."
-source: "fireflo-restapi SendRequestParser; panel lib/api-catalogue.ts @ 0.7.3"
 ---
 
 The minimum is two fields:
@@ -65,8 +64,8 @@ name.
 </Accordion>
 
 <Accordion title="validity_period — an integer, in minutes">
-Minutes the carrier should keep trying. **A whole number, not a duration string** — the old swagger
-types it as a string and the parser refuses that.
+Minutes the carrier should keep trying. **A whole number, not a duration string** — an older
+specification types it as a string, and the gateway refuses that.
 
 ```json
 "validity_period": 60     // correct

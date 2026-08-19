@@ -1,7 +1,6 @@
 ---
 title: "Configuration tables"
 description: "The tables the gateway reads its configuration from, grouped by what they control — and the four domains that switch together."
-source: "fireflo-core db/migration V1.19.0 baseline through V1.37.0 @ 0.7.3"
 ---
 
 With `FIREFLO_CONFIG_SOURCE=db`, the gateway reads **four domains** from PostgreSQL instead of files:
@@ -80,8 +79,8 @@ loaded**. A pending row behaves exactly as if it did not exist.
 | `app_config` | `smsg.*` properties |
 
 The three-tier resolution is `outSms.instance.<name>.<key>` → `outSms.default.<key>` → the coded
-default. A per-listener key **must be registered in the worker's `allPrms` array** to be read as a
-per-listener key at all — one left out silently reads a global nobody sets.
+default. **Not every setting can be scoped to one listener** — one that cannot silently reads a global
+nobody sets.
 
 ## Audit
 

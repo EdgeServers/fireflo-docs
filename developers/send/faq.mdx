@@ -1,7 +1,6 @@
 ---
 title: "Sending FAQ"
 description: "The questions that come up once messages are flowing — cost, encoding, ids, duplicates and scheduling."
-source: "fireflo-restapi parsers; fireflo-sms-gateway/docs/13, docs/16 @ 0.7.3"
 ---
 
 <AccordionGroup>
@@ -43,8 +42,8 @@ It is not a status. Fetching it back is not how you learn the outcome; the recei
 <Accordion title="Why is my validity_period rejected?">
 It is an **integer of minutes**, not a duration string. `60` is right, `"1h"` is a `400`.
 
-The checked-in swagger file types it as a string, which is one of three places that file is wrong —
-do not generate a client from it.
+An older specification types it as a string. If your client was generated from one, that is
+where this comes from.
 </Accordion>
 
 <Accordion title="Can I schedule a single message?">

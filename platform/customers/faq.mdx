@@ -1,7 +1,6 @@
 ---
 title: "Customers FAQ"
 description: "Accounts, products, approvals and enforcement — the questions that arrive as a support ticket rather than as a configuration error."
-source: "fireflo-sms-gateway/docs/17-whitelisting.md, docs/13-rating-and-cdr.md, docs/03-auth-security.md, fireflo-control-panel/lib/whitelist-types.ts, lib/tlv-coverage.ts @ 0.7.3"
 ---
 
 <AccordionGroup>
@@ -48,9 +47,9 @@ A message is checked only if all four say so.
 
 <Accordion title="A listener is not enforcing and I never turned it off">
 `conf.whitelist.enabled` defaults **on**, so a listener that is not checking has either been opted out
-explicitly, or the master switch is off, or the key is not registered in `SmppServerWorker`'s
-`allPrms` array — in which case it keeps its bare form, reads a global nobody sets, and returns its
-coded default however you configure it.
+explicitly, or the master switch is off, or the setting is not one that can be scoped to a single
+listener — in which case it keeps its bare form, reads a global nobody sets, and returns its coded
+default however you configure it.
 </Accordion>
 
 <Accordion title="I switched an account to ENFORCE and it refuses everything">

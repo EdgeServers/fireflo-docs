@@ -1,7 +1,6 @@
 ---
 title: "REST API overview"
 description: "The base URL, Basic authentication, the response envelope, and the field-name rule that catches most people porting from another gateway."
-source: "fireflo-restapi SendResource, SendRequestParser, FieldNormaliser; panel lib/api-catalogue.ts @ 0.7.3"
 ---
 
 Five endpoints, all JSON, all returning the same envelope. Four sit under `/secure/` and take HTTP
@@ -51,7 +50,7 @@ gateway usually announces itself.
 
 ## Underscores and hyphens are the same field
 
-`FieldNormaliser` rewrites every `_` to `-` before any parser reads the body. So `dlr_url` and
+Every `_` is rewritten to `-` before the body is parsed. So `dlr_url` and
 `dlr-url` are one field, and you may write whichever your language prefers.
 
 Two consequences worth knowing before they bite:
@@ -71,17 +70,21 @@ normaliser exempts this one name — see [Custom TLVs](/developers/send/custom-t
 
 </AccordionGroup>
 
-## Where this reference comes from
+## This reference is the authoritative one
 
-These pages are written from the parsers — `SendRequestParser`, `BatchRequestParser`,
-`FieldNormaliser`, `MsisdnReader`, `ScheduleAtParser` and the outcome switch in `SendResource` — and
-every example on them has been run against a live gateway.
+It describes what the gateway actually accepts, and its examples have been run against a live
+instance.
 
 <Warning>
-**Do not generate a client from `api/send-sms.swagger.json` in the gateway repository.** That file is
-hand-maintained and wrong in three places you meet on the first day: it types `custom_tlvs` as an
-array of pairs when the parser wants an object, types `validity-period` as a string when it must be
-an integer, and describes a `sendbatch` body whose keys the parser ignores.
+**If you have been given an OpenAPI or Swagger document, check it against these pages before
+generating a client from it.** An older specification circulated that is wrong in three places you
+meet on the first day:
+
+1. **`custom_tlvs` is an object**, not an array of pairs.
+2. **`validity_period` is an integer** of minutes, not a string.
+3. **`product` is missing from it entirely.**
+
+A client generated from that spec fails on its first call.
 </Warning>
 
 ## Related

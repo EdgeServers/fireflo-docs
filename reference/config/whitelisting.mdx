@@ -1,7 +1,6 @@
 ---
 title: "Whitelisting"
 description: "The master switch, the per-listener opt-out, the three TLV stamping modes, and the mandatory-tag checks at each ingress."
-source: "fireflo-sms-gateway/docs/09-configuration-reference.md, docs/17-whitelisting.md @ 0.7.3"
 ---
 
 Which sender IDs and message bodies an account may use, and what gets stamped onto the ones that
@@ -68,7 +67,7 @@ satisfied, and is warned about at load.
 decides whether enforcing is safe — an approval filed under an exempt product protects nothing.
 
 <Warning>
-Every per-listener key above must be registered in `SmppServerWorker`'s `allPrms` array. A key left
+Every key above is genuinely read per listener. A key left
 out keeps its bare form and reads a global nobody sets, so it reads its default however you configure
 it. `whitelist.tlvs.replace` shipped that way once and stamped nothing over SMPP for as long as it
 lasted.

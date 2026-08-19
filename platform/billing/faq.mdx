@@ -1,7 +1,6 @@
 ---
 title: "Billing FAQ"
 description: "The questions operators ask once money is moving — discrepancies, stranded credit, unpriced traffic and periods that will not close."
-source: "fireflo-sms-gateway/docs/13; fireflo-control-panel lib/reconcile.ts, lib/period-close.ts @ 0.7.3"
 ---
 
 <AccordionGroup>
@@ -63,8 +62,7 @@ nothing would tell you a vendor had no rates.
 </Accordion>
 
 <Accordion title="A postpaid account has stopped sending and is under its limit">
-Its period probably has not been closed. `PostpaidAllowance` reads the most recent `BILL` row as the
-start of the unbilled window — **closing is what returns headroom.**
+Its period probably has not been closed. The most recent `BILL` row is the start of the unbilled window — **closing is what returns headroom.**
 
 Nothing is broken; the bill has not been cut.
 </Accordion>

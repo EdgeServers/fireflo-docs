@@ -1,48 +1,21 @@
 ---
-title: "Releases and versioning"
-description: "How a version number is decided, what a commit message actually triggers, and what to read before upgrading."
-source: "fireflo-sms-gateway/docs/11-release-process.md @ 0.7.3"
+title: "Versioning and upgrading"
+description: "What a version number tells you, and the five things to check before you take a new release."
 ---
 
-FireFlo releases are automated from commit messages. If you are self-hosting, the useful parts are
-what a version number means and what to check before you upgrade.
+FireFlo uses standard semantic versioning. What matters to you is what a version number promises and
+what to check before you take one.
 
-## Versioning
+## What the number means
 
-Standard semantic versioning, decided by **Conventional Commit** messages rather than by hand.
+| Change | Means |
+| :--- | :--- |
+| **Major** — `1.0.0` → `2.0.0` | A breaking change. Expect to read the notes and to change something. |
+| **Minor** — `0.7.0` → `0.8.0` | New capability. Existing behaviour is intended to survive, but **defaults can move** — see below. |
+| **Patch** — `0.7.3` → `0.7.4` | A fix. The safest kind to take, and usually the reason to take it promptly. |
 
-| Commit type | Example | Release |
-| :--- | :--- | :--- |
-| `feat` | `feat(routing): add rule validation` | **Minor** |
-| `fix` | `fix(smpp): resolve reconnect failure` | **Patch** |
-| `perf` | `perf(http): reduce submit latency` | Patch |
-| `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style`, `revert` | | None by default |
-| `feat(routing)!:` or a `BREAKING CHANGE:` footer | | **Major** |
-
-Useful scopes: `http`, `smpp`, `routing`, `webhooks`, `docker`, `docs`, `ci`, `deps`, `release`.
-
-<Tip>
-If a PR contains several commits, **the squash title is what counts** — that is what lands on `main`
-and what the release tooling reads.
-</Tip>
-
-## What the pipeline does
-
-Release Please runs on every push to `main`:
-
-<Steps>
-  <Step title="Opens or updates a release pull request">
-    Whenever releasable changes exist. Nothing is released until it is merged.
-  </Step>
-  <Step title="Creates the GitHub release and tag on merge">
-  </Step>
-  <Step title="Publishes Maven artifacts">
-    To GitHub Packages.
-  </Step>
-  <Step title="Publishes Docker images">
-    JVM and native, to Docker Hub.
-  </Step>
-</Steps>
+Your release notes accompany each build. They are the authoritative list of what changed; this page is
+about what to look for in them.
 
 ## Before you upgrade
 
@@ -96,9 +69,13 @@ Check the pair before investigating anything that "should be there and isn't".
 
 ## Reporting problems
 
-- **Reproducible bugs** → GitHub Issues
-- **Questions and setup help** → GitHub Discussions
-- **Security-sensitive reports** → the maintainers privately, not a public issue
+Everything goes to [support@fireflo.au](mailto:support@fireflo.au). What changes is how you frame it:
+
+| | Include |
+| :--- | :--- |
+| **A reproducible bug** | The version pair, what you did, what happened, and one message serial that shows it |
+| **A question or setup help** | What you are trying to achieve, not only the error — the answer is often a different approach |
+| **Anything security-sensitive** | **Say so in the subject.** Do not attach unredacted logs or configuration to a first mail; we will tell you where to send them |
 
 <Warning>
 **Redact before sharing.** Credentials, system IDs, IP addresses, phone numbers and message content

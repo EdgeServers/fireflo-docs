@@ -1,7 +1,6 @@
 ---
 title: "POST /secure/send"
 description: "Every field on a single send, with its default, and the refusal each one produces."
-source: "panel lib/api-catalogue.ts, test-pinned against SendRequestParser.KNOWN @ 0.7.3"
 ---
 
 Queues a single message to one destination and returns the id you will see on its receipt.
@@ -82,14 +81,15 @@ passed to the carrier unchanged, so it chooses how the body is encoded, not mere
 The shared errors — `401`, `403 Authentication failure`, `415`, `429` — are on
 [API errors](/reference/api/errors).
 
-## Three things the old swagger gets wrong
+## Three fields that are commonly got wrong
 
 <Warning>
-Do not generate a client from `api/send-sms.swagger.json`:
+If you are working from an older specification, check these three before anything else — each fails
+on the first call:
 
 1. **`custom_tlvs` is an object**, not an array of pairs.
-2. **`validity_period` is an integer**, not a string.
-3. **`product` is missing from it entirely.**
+2. **`validity_period` is an integer** of minutes, not a string.
+3. **`product` exists**, and is absent from some older specs.
 </Warning>
 
 ## Field names

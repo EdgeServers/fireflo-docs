@@ -1,7 +1,6 @@
 ---
 title: "Statements and closing a period"
 description: "Why a closed period is never rewritten, why the BILL row moves no money, and what a late refund becomes instead."
-source: "fireflo-control-panel lib/period-close.ts @ 0.7.3"
 ---
 
 A statement is a customer's usage for a period. **Closing** a period turns that from a live query into
@@ -32,8 +31,8 @@ The gateway's recharge poll selects only `RECHARGE` and `TRANSFER`, so **nothing
 `BILL`**. Arrears never enter `account_balance.balance`, which keeps its non-negative constraint and
 its single meaning: money available to spend.
 
-What the row *is* load-bearing for is the window. `PostpaidAllowance` reads
-`max(created_at) WHERE entry_type = 'BILL'` as the start of the unbilled period — so **closing is what
+What the row *is* load-bearing for is the window. The most recent `BILL` row —
+`max(created_at) WHERE entry_type = 'BILL'` — is the start of the unbilled period — so **closing is what
 returns a postpaid account's headroom.**
 
 <Tip>

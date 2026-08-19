@@ -1,7 +1,6 @@
 ---
 title: "Connections FAQ"
 description: "Binds, sessions, receipts and tags — the questions that come up once traffic is flowing."
-source: "fireflo-sms-gateway/docs/04, docs/08, docs/10 @ 0.7.3"
 ---
 
 <AccordionGroup>
@@ -70,7 +69,7 @@ tag and you wrote it without the prefix, everything loads and the wrong tag goes
 </Accordion>
 
 <Accordion title="A per-listener setting appears to do nothing however I configure it">
-Check it is registered in `SmppServerWorker`'s `allPrms` array. A key left out keeps its bare form,
+Check the key is one the listener reads per-listener at all. A key that is not keeps its bare form,
 reads a global nobody sets, and therefore returns its coded default whatever you configure.
 
 `whitelist.tlvs.replace` shipped that way once and stamped nothing over SMPP for as long as it lasted —

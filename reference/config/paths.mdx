@@ -1,7 +1,6 @@
 ---
 title: "Paths and property tiers"
 description: "Where the four configuration files live, how a per-file override wins, and the three tiers a worker setting is resolved through."
-source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
 ---
 
 ## The configuration directory
@@ -67,15 +66,14 @@ So a worker setting resolves through three tiers, most specific first:
     The deployment-wide baseline.
   </Step>
   <Step title="The coded default">
-    From the `prms` table in `AbstractOutWorker`, `SmppClientWorker` or `SmppServerWorker`. These are
-    listed in [SMPP settings](/reference/smpp/worker-base).
+    What the vendor or listener falls back to when nothing sets it. These are listed in
+    [SMPP settings](/reference/smpp/worker-base).
   </Step>
 </Steps>
 
 <Warning>
-**A per-listener key has to be registered in `SmppServerWorker`'s `allPrms` array to be read as a
-per-listener key at all.** A key left out of that array keeps its bare form, reads a global nobody
-sets, and therefore reads its coded default however you configure it.
+**Not every setting can be scoped to one listener.** One that cannot keeps its bare form, reads a
+global nobody sets, and therefore reads its coded default however you configure it.
 
 `whitelist.tlvs.replace` shipped that way once, and stamped nothing over SMPP for as long as it
 lasted. If a per-listener setting appears to do nothing, this is the first thing to check.
@@ -104,8 +102,7 @@ While the HTTP server is running:
 | `/openapi.json` | OpenAPI JSON document |
 
 <Warning>
-The checked-in `api/send-sms.swagger.json` in the gateway repo is **stale and wrong** — it is stamped
-0.4.1, types `custom_tlvs` as an array the parser rejects, and omits `product`. Use
-[the REST API reference](/reference/api/overview) on this site, which is written from the panel's
-`lib/api-catalogue.ts` and executed against a live gateway.
+**Prefer [the REST API reference](/reference/api/overview) on this site** over any OpenAPI document
+you generate a client from. An older specification is still in circulation that types `custom_tlvs`
+as an array the parser rejects and omits `product` entirely.
 </Warning>

@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "FireFlo",
-  "description": "Open-source high-throughput SMS gateway, control panel and customer portal.",
+  "description": "High-throughput SMS gateway, control panel and customer portal.",
   "colors": {
     "primary": "#E2571E",
     "light": "#FF8A4C",
@@ -271,19 +271,14 @@
   "navbar": {
     "links": [
       {
-        "label": "GitHub",
-        "href": "https://github.com/EdgeServers/fireflo-sms-gateway"
+        "label": "fireflo.au",
+        "href": "https://fireflo.au"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Discussions",
-      "href": "https://github.com/EdgeServers/fireflo-docs/issues"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/EdgeServers/fireflo-sms-gateway"
+      "label": "Support",
+      "href": "mailto:support@fireflo.au"
     }
   },
   "redirects": [

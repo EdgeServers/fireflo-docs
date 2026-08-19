@@ -1,7 +1,6 @@
 ---
 title: "TLVs in practice"
 description: "Where a tag can come from, the order they compose in, and how to find out which approved rows have tags nothing will supply."
-source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, panel /cp/tlvs @ 0.7.3"
 ---
 
 The grammar is at [TLV declarations](/reference/smpp/tlvs) — read that first if `1400` versus `0x1400`
@@ -54,9 +53,8 @@ any — a silent change to what reaches a carrier.
 ## The failure that has actually happened
 
 <Warning>
-A per-listener key must be registered in `SmppServerWorker`'s `allPrms` array to be read as a
-per-listener key at all. A key left out keeps its bare form and reads a global nobody sets — so it
-returns its coded default however you configure it.
+Not every setting is read per listener. One that is not keeps its bare form and reads a global
+nobody sets — so it returns its coded default however you configure it.
 
 `whitelist.tlvs.replace` shipped that way once. It read false on every listener however it was
 configured, so an approved template's TLVs were **never stamped over SMPP** — silently, because not

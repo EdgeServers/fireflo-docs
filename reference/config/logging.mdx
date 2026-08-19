@@ -1,7 +1,6 @@
 ---
 title: "Logging and log bounds"
 description: "The four log files, which of them is bounded, the one that will fill a disk, and the flags that write secrets."
-source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
 ---
 
 ## The four logs
@@ -27,7 +26,7 @@ one. Neither is wrong; they are just different, and it is worth knowing which yo
 
 <Warning>
 **`httpapi.log` is covered by neither.** Quarkus rotates it daily and offers no retention to go with
-that — there is no such setting in `AccessLogConfig` — so it writes one file per day and keeps every
+that — there is no setting for it — so it writes one file per day and keeps every
 one of them forever. **Nothing in the gateway will ever remove them.**
 
 `fireflo-install` handles this with a `tmpfiles.d` rule that deletes rotated files older than

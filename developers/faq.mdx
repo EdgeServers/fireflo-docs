@@ -1,7 +1,6 @@
 ---
 title: "Developer FAQ"
 description: "Getting started, choosing between REST and SMPP, and the questions that come before your first message."
-source: "fireflo-sms-gateway/docs/06, docs/16; panel lib/api-catalogue.ts @ 0.7.3"
 ---
 
 <AccordionGroup>
@@ -38,15 +37,14 @@ No. The API is small enough that an HTTP client and four lines of code cover it 
 [Quickstart](/developers/quickstart) for curl, Node, Python and PHP.
 
 <Warning>
-**Do not generate a client from `api/send-sms.swagger.json`.** It is hand-maintained and wrong in
-three places you meet immediately: `custom_tlvs` typed as an array when the parser wants an object,
-`validity-period` typed as a string when it must be an integer, and a `sendbatch` body whose keys the
-parser ignores.
+**Check any OpenAPI document you were given against these pages before generating a client.** An
+older specification is still in circulation that types `custom_tlvs` as an array when it must be an
+object, types `validity_period` as a string when it must be an integer, and omits `product`.
 </Warning>
 </Accordion>
 
 <Accordion title="What is my base URL?">
-Your provider's, not a fixed one — FireFlo is software people run themselves. Every example here uses
+Your provider's, not a fixed one — each operator runs their own FireFlo. Every example here uses
 `https://sms.example.com` as a stand-in.
 </Accordion>
 

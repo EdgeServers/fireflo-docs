@@ -1,7 +1,6 @@
 ---
 title: "Sender IDs"
 description: "Approving the sender IDs an account may use, what the approval stamps onto the wire, and why an approved sender ID can still be refused by the carrier."
-source: "fireflo-sms-gateway/docs/17-whitelisting.md, docs/10-troubleshooting.md, fireflo-control-panel/lib/whitelist-types.ts, lib/tlv-coverage.ts @ 0.7.3"
 ---
 
 One row in `app_header` is one approved sender ID, matched **case-insensitively**, scoped to an
@@ -111,7 +110,7 @@ Both registration tables carry two TLV columns.
 Under `replace` the stamp overwrites whatever the client asserted, and **that overwrite is the
 approval**. A customer who could write the served column could assert somebody else's registration
 while sending approved wording, and the call record would then report the value they chose as
-approved. `RequestedTlvsNeverServedContainerTest` keeps that line.
+approved. That behaviour is pinned by a test, so it will not drift.
 
 The payoff is for the customer: a proposal changes nothing that is served, so unlike an edit to the
 sender ID it does **not** suspend the row. An approved registration keeps working while an operator

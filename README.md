@@ -1,7 +1,11 @@
 # FireFlo documentation
 
-The published documentation site for [FireFlo](https://github.com/EdgeServers/fireflo-sms-gateway), an
-open-source headless SMS gateway. Built with [Mintlify](https://mintlify.com).
+The published documentation site for FireFlo, a headless SMS gateway. Built with
+[Mintlify](https://mintlify.com).
+
+**FireFlo is commercial software, licensed per deployment.** This site is public and written for
+technical stakeholders — people evaluating, operating or integrating with the product, most of whom
+will not have the source. Nothing here should assume they do.
 
 ## Running it locally
 
@@ -20,31 +24,46 @@ npx mintlify broken-links
 
 | Repo | Holds |
 | :--- | :--- |
-| `fireflo-sms-gateway` | The gateway, and `docs/` — the in-repo documentation for people who have cloned it |
+| `fireflo-sms-gateway` | The gateway, and `docs/` — internal documentation kept alongside the code |
 | `fireflo-control-panel` | The operator panel and customer portal |
 | **this repo** | The published site, derived from both |
 
-**The gateway's `docs/` folder stays where it is.** It is part of a GPL project people clone, and it
-should keep working offline in a checkout. This site is written from it, adapted for a reader who has
-not cloned anything.
+**The gateway's `docs/` folder stays where it is.** It is written for whoever is working on the code,
+and should keep working offline beside it. This site is written from it and adapted for an external
+reader.
 
 That means two copies of some material, and two copies drift. Two rules keep it honest:
 
-1. **Neither is authoritative for facts.** The code is. Configuration keys are checked against
-   `application.properties` and the `prms` tables in `AbstractOutWorker`, `SmppClientWorker` and
-   `SmppServerWorker`; API fields against `lib/api-catalogue.ts` in the panel.
-2. **Pages that render another file carry its name in their frontmatter**, as `source:`, with the
-   version they were written from. When something looks wrong, that is where to look first.
+1. **Neither is authoritative for facts. The code is.** Configuration keys are checked against
+   `application.properties` and the worker property tables; API fields against the panel's
+   `lib/api-catalogue.ts`, which is test-pinned to the request parser.
+2. **Provenance lives here, not on the pages.** Each Platform and Reference page corresponds to a
+   numbered document under the gateway's `docs/`; the Developers and REST API pages come from the
+   panel's API catalogue. When something looks wrong, start with the code, then that document.
+
+Pages used to carry a `source:` frontmatter field naming the internal file they were written from.
+That was removed — the site is public, and the field disclosed repo layout, module names and the
+package namespace.
+
+## What must not appear on the published site
+
+This site was originally written on the mistaken premise that FireFlo is open source. When adding or
+editing pages, keep these out:
+
+- Any claim of an open-source or GPL licence.
+- Links to source repositories, issue trackers or discussion forums.
+- Support routed anywhere except **support@fireflo.au**.
+- Wording implying a reader can clone, fork, build or freely obtain the software.
+- Internal source-file paths, Java or TypeScript class names, test class names, or the
+  `au.remotiq.fireflo` package namespace. **State the behaviour, not the file that implements it.**
 
 ## The API reference is hand-written, deliberately
 
-`fireflo-sms-gateway/api/send-sms.swagger.json` exists and is **wrong** — stamped 0.4.1 against a 0.7.3
-gateway, typing `custom_tlvs` as an array the parser rejects, and omitting `product` entirely. The
-panel's own test calls it "the proof that a separately-maintained description drifts."
+An OpenAPI document exists and is **wrong** — stamped 0.4.1 against a 0.7.3 gateway, typing
+`custom_tlvs` as an array the parser rejects, and omitting `product` entirely.
 
-The pages under `reference/api/` are written from `fireflo-control-panel/lib/api-catalogue.ts`, which is
-test-pinned against the actual request parser. Every payload on those pages has been run against a live
-gateway. Do not regenerate them from the swagger file.
+The pages under `reference/api/` are written from the panel's `lib/api-catalogue.ts`, which is
+test-pinned against the actual request parser. Do not regenerate them from that spec.
 
 ## Conventions
 
