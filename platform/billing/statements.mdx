@@ -1,0 +1,107 @@
+---
+title: "Statements and closing a period"
+description: "Why a closed period is never rewritten, why the BILL row moves no money, and what a late refund becomes instead."
+source: "fireflo-control-panel lib/period-close.ts @ 0.7.3"
+---
+
+A statement is a customer's usage for a period. **Closing** a period turns that from a live query into
+a recorded fact.
+
+## A closed period is immutable
+
+Closing writes one `BILL` row recording what was invoiced. **It is never rewritten.**
+
+A refund that lands afterwards, a late receipt, a rate corrected in arrears — none of them restate a
+closed period. The panel re-runs the summary, compares it against the stored figure, and shows the
+difference as a **credit note against the next period**.
+
+<Warning>
+**This is the whole reason closing exists** rather than the statement simply being a live query.
+
+Silently restating a closed period destroys the customer's ability to reconcile: the invoice they paid
+last month stops matching the invoice the panel shows this month, with nothing anywhere recording
+that it moved or why.
+</Warning>
+
+## The `BILL` row moves no money
+
+`delta` records the amount invoiced — negative, because it is what the account consumed. But the row
+is **inert**.
+
+The gateway's recharge poll selects only `RECHARGE` and `TRANSFER`, so **nothing ever applies a
+`BILL`**. Arrears never enter `account_balance.balance`, which keeps its non-negative constraint and
+its single meaning: money available to spend.
+
+What the row *is* load-bearing for is the window. `PostpaidAllowance` reads
+`max(created_at) WHERE entry_type = 'BILL'` as the start of the unbilled period — so **closing is what
+returns a postpaid account's headroom.**
+
+<Tip>
+That connection is worth holding onto: a postpaid customer who has stopped being able to send may
+simply be waiting for you to close their period. Nothing is broken; the bill has not been cut.
+</Tip>
+
+## Closing twice is a conflict, not a second invoice
+
+The reference is deterministic:
+
+```
+bill:<accountId>:<label>
+```
+
+`uq_balance_ledger_ref` is unique where not null, so the same period cannot be closed twice.
+
+**Deterministic on purpose** — two operators clicking at once must collide, and a retried request must
+not produce a duplicate. The label is `YYYY-MM` or a date span, and may not contain a colon, so the
+*last* colon splits the reference back apart and an account id containing colons still round-trips.
+
+## What a statement is computed from
+
+The invoice is a **pure function of `cdr_submit` over a half-open window**. It never reads the
+postpaid counter, never reads `account_balance`, and never reads the ledger.
+
+So the only thing that can make a bill wrong is a missing or extra `cdr_submit` row.
+
+<Warning>
+Once a period is older than `FIREFLO_CDR_KEEP_DAYS`, the rows it was computed from are gone. The
+stored `BILL` figure and `usage_daily` are then the only record — which is why the purge refuses to
+delete a day nothing has summarised.
+</Warning>
+
+## Half-open windows
+
+A period covers `[start, end)` — start inclusive, end exclusive. A message at exactly midnight on the
+boundary belongs to the **later** period, and belongs to exactly one.
+
+That is the property worth checking in any query you write yourself: `BETWEEN` in SQL is inclusive at
+both ends and will double-count a boundary message across two statements.
+
+## The order that works
+
+<Steps>
+  <Step title="Let the period end">
+    Billable figures are final the moment the day is over — billing is on `submitted`.
+  </Step>
+  <Step title="Review before closing">
+    The summary is a live query until you close it. This is the last point at which a correction is
+    an edit rather than a credit note.
+  </Step>
+  <Step title="Close">
+    One `BILL` row, idempotent on the reference.
+  </Step>
+  <Step title="Let later corrections be credit notes">
+    They are visible, attributable, and land on the next period rather than silently altering a
+    number the customer has already paid.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Postpaid" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Credit limits, and why closing returns headroom.
+  </Card>
+  <Card title="Usage and retention" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    What survives after the call records are purged.
+  </Card>
+</CardGroup>

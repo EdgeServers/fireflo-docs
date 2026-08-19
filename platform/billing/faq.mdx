@@ -1,0 +1,110 @@
+---
+title: "Billing FAQ"
+description: "The questions operators ask once money is moving — discrepancies, stranded credit, unpriced traffic and periods that will not close."
+source: "fireflo-sms-gateway/docs/13; fireflo-control-panel lib/reconcile.ts, lib/period-close.ts @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="An account is refusing messages and has money on it">
+Credit is reserved in **blocks**, and a reservation only succeeds if the balance covers a whole block.
+The block is `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)` — twenty messages'
+worth by default.
+
+So refusals begin at roughly one block remaining, with the balance still positive. A very small
+top-up will not fix it either.
+
+If this happens on a **well-funded** account, the cause is different and historic: the floor used to
+be a currency amount, which could size a block at exactly one message for an expensive destination.
+That is what `smsg.balance.block.min.messages` exists to prevent.
+</Accordion>
+
+<Accordion title="A top-up did not arrive">
+The account almost certainly has no `account_balance` row. A `RECHARGE` for such an account credits
+nothing, stays **pending**, and applies itself the moment the row appears — with a WARN naming the
+account.
+
+**Creating a credential does not create a balance row.** Use *Open for credit* on the account page.
+</Accordion>
+
+<Accordion title="Reconciliation says an account is out by exactly its consumption">
+You are using the wrong identity. `credited − consumed = balance + reserved` is **wrong** and fails
+this way on every account.
+
+Consumption never touches the balance columns — `reserved` is a lifetime-consumed counter, not a
+hold. The correct pair is:
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+reserved − consumed    = reserved but not yet spent  (≥ 0)
+```
+</Accordion>
+
+<Accordion title="Credit is stuck in reserved after a crash">
+A `kill -9` strands it. `balance + reserved` is still conserved — **the money is parked, not lost** —
+and `POST /ops/credit/release` returns it. A clean shutdown does this automatically.
+</Accordion>
+
+<Accordion title="Traffic is being sent and nothing is charged for it">
+An account nobody has priced is **not refused** — it sends unpriced and uncharged, with one line at
+`debug`.
+
+Set the `[*]` scope. It prices any account with no rule of its own, including accounts created later,
+and it is the single highest-value thing to configure on day one. Without it, this failure is silent
+and cumulative.
+</Accordion>
+
+<Accordion title="A vendor's margin shows as unknown rather than a number">
+Working as intended. **A rule that matches nothing leaves the amount unknown, never zero** — and the
+`[*]` default applies to *price only, never to cost*.
+
+If it defaulted on the cost side too, every margin would compute to zero rather than unknown, and
+nothing would tell you a vendor had no rates.
+</Accordion>
+
+<Accordion title="A postpaid account has stopped sending and is under its limit">
+Its period probably has not been closed. `PostpaidAllowance` reads the most recent `BILL` row as the
+start of the unbilled window — **closing is what returns headroom.**
+
+Nothing is broken; the bill has not been cut.
+</Accordion>
+
+<Accordion title="A refund landed after I closed the period. Do I reopen it?">
+No — a closed period is never rewritten. The panel re-runs the summary, compares it against the
+stored figure, and shows the difference as a **credit note against the next period**.
+
+Restating silently would mean the invoice the customer paid last month stops matching what the panel
+shows this month, with nothing recording that it moved or why.
+</Accordion>
+
+<Accordion title="The purge refused to run">
+It found a day with no `usage_daily` row. That is a refusal of the whole run, by design — deleting an
+unsummarised day destroys the consumption record permanently.
+
+Run `fireflo usage rollup --catch-up`, then purge. The two are separate commands deliberately: a
+purge that quietly rolled up first would mean a rollup bug is discovered by the command that deletes
+the evidence.
+</Accordion>
+
+<Accordion title="Daily totals are off by a few hours of traffic">
+`FIREFLO_BILLING_ZONE`. A billing day is a **local** day, and on UTC the last five and a half hours of
+an Indian customer's evening land on the next day's line.
+
+Set it before the first rollup. Changing it afterwards means deleting and recomputing every day
+already summarised.
+</Accordion>
+
+<Accordion title="A message I know was sent appears in no list">
+Usually the writer and the reader are pointed at different databases. Check `smsg.cdr.sink` and the
+gateway's `FIREFLO_DB_URL` against the panel's `METRICS_DATABASE_URL` before looking anywhere else.
+</Accordion>
+
+<Accordion title="Revenue looks too high after a burst of vendor refusals">
+It should not, and if it does, check the query. A refused message carries **no money** — `price`,
+`cost` and `margin` are null, because credit was returned at the moment of refusal.
+
+Every built-in revenue query sums those columns *without* an outcome filter, precisely so a refunded
+message cannot overstate takings. A hand-written query treating `NULL` as zero breaks that.
+</Accordion>
+
+</AccordionGroup>

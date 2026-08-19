@@ -1,0 +1,104 @@
+---
+title: "Postpaid accounts"
+description: "Credit limits rather than balances — and the deliberate split between an exact bill and an approximate enforcement."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+An account is **either prepaid or postpaid at a time**, set by `account_balance.billing_mode`.
+Postpaid is off until `smsg.balance.postpaid.enabled` is true, so migrating adds two columns and
+changes nothing until you say so.
+
+```sql
+UPDATE account_balance
+   SET billing_mode = 'POSTPAID', credit_limit = 500000
+ WHERE account_id = 'acct-1001';
+```
+
+## What changes
+
+A postpaid account is **not debited at all**. Its `balance` stays at zero, no block is reserved, and
+what it owes is derived from `cdr_submit` when the bill is prepared.
+
+What the gateway enforces instead is `credit_limit` — how much unbilled usage may accrue before the
+account is refused.
+
+<Warning>
+**`credit_limit = 0` means no credit, not unlimited.**
+
+There is no representation of unlimited and there is not meant to be. A typo or a missing form field
+must fail closed: an account that can send nothing is a support call, and an account that can send
+everything is a month of traffic nobody can invoice for.
+</Warning>
+
+Hitting the limit is **the same refusal as running out of prepaid credit** — SMPP `0x402`, HTTP
+`402`, reason `insufficientCredit`. Deliberately: both mean "you may not send this now", and two
+status codes would make every client on the platform learn a second one.
+
+## Exact bill, approximate enforcement
+
+These are two different jobs, and they deliberately do not share an implementation.
+
+<CardGroup cols={2}>
+  <Card title="The limit check" icon="gauge">
+    Reads an **in-memory figure** refreshed on the same 30-second poll that applies recharges. It is
+    allowed to be stale.
+  </Card>
+  <Card title="The invoice" icon="file-invoice">
+    A **pure function of `cdr_submit`** over a half-open window. Never reads that counter, never reads
+    `account_balance`, never reads the ledger.
+  </Card>
+</CardGroup>
+
+So **the only thing that can make a bill wrong is a missing or extra `cdr_submit` row.** Nothing about
+the enforcement path can corrupt an invoice.
+
+### The staleness is biased safely
+
+A poll can only ever *tighten* headroom, never raise it — because the query cannot see messages sent
+while it was running. Headroom rises only when the debt genuinely shrinks: a period closed, a refund
+landed, or an operator changed the limit.
+
+That bias is the point. **Staleness refuses too early rather than too late.**
+
+## How far past the limit an account can get
+
+| Situation | Overshoot |
+| :--- | :--- |
+| Steady state, one instance | **0 messages** — the in-memory decrement *is* the enforcement |
+| Unclean restart | At most the unflushed CDR queue, once per restart |
+| A refund that was lost | 0, and conservative — it refuses too early |
+| Disabled mid-period | At most one poll interval, and the bill still covers the tail |
+| N instances | Up to (N−1) × limit |
+
+The last row is the one to watch if you ever run more than one gateway against a database. It is
+stated because it is the one that scales, not because it is a current problem.
+
+<Warning>
+**Never invoice from the counter, and never add a per-message ledger row to make billing exact.**
+
+That would put a database write on the money path at thousands per second — the exact thing this
+subsystem exists to avoid — and `cdr_submit` already *is* the per-message record.
+</Warning>
+
+## Choosing between the two
+
+| | Prepaid | Postpaid |
+| :--- | :--- | :--- |
+| Money moves | Before sending | After billing |
+| Risk you carry | None | Up to the credit limit |
+| Refusal | Balance below one block | Unbilled usage over the limit |
+| Operational load | Top-ups | Invoicing and collection |
+
+Prepaid is the safer default for a new account. Postpaid earns its risk with customers whose volume
+makes constant top-ups a nuisance.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocks, reservations and the money identity.
+  </Card>
+  <Card title="Statements" icon="receipt" href="/platform/billing/statements">
+    Closing a period and issuing the bill.
+  </Card>
+</CardGroup>

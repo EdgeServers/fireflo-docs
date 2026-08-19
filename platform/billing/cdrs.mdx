@@ -1,0 +1,168 @@
+---
+title: "Call records"
+description: "Three append-only tables, why progress receipts live apart from outcomes, and the columns that are NULL rather than zero."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+Three record types, **all append-only**. Nothing is ever updated, which is what makes concurrent
+delivery receipts safe and lets a re-routed message keep both attempts instead of overwriting the
+first.
+
+| Table | One row per |
+| :--- | :--- |
+| **`cdr_submit`** | Submitted segment, written when it goes on the wire |
+| **`cdr_final`** | **Outcome**, appended when it becomes known |
+| **`cdr_interim`** | **Progress** receipt, which is not an outcome and does not close the message |
+
+They join on `(gateway_msg_id, part_no)`. The `cdr_pnl` view left-joins submit and final, so records
+with no outcome yet surface as `PENDING` — **in-flight exposure stays visible** rather than being
+silently excluded from your numbers.
+
+## Why progress receipts live in their own table
+
+A vendor may send several receipts for one message: `ACCEPTD` when it takes it, `BUFFRED` while it
+retries, then `DELIVRD` or a failure. **Only the last is an outcome.**
+
+Every reader takes the **earliest** `cdr_final` row for a message — the message list, the portal
+dashboard, the revenue queries and the `cdr_pnl` view all do. So writing progress receipts into
+`cdr_final` would make an `ACCEPTD` outrank the `DELIVRD` that followed it, in every list, every chart
+and the P&L.
+
+The expiry sweep depends on the same thing: it finds unresolved messages by anti-joining `cdr_final`,
+so a progress receipt there would make an open message look closed and it would never be revisited.
+
+<Warning>
+**This is not hypothetical.** Before 0.6.6 the first receipt to arrive released the correlation entry
+and wrote `cdr_final`; the real outcome that followed had nothing to attach to and was logged as a
+receipt for an unknown message.
+
+**A delivered message could end up permanently recorded as `FAILED`.**
+</Warning>
+
+The two tables also have different lifetimes. `cdr_final` is billing history and lives as long as the
+CDR. `cdr_interim` is *quality* history — how fast a vendor reports, and whether it reports at all —
+which is a question about recent traffic, so it is pruned on its own shorter window
+(`smsg.cdr.interim.retention.days`, default 30). **Losing it costs a report, not an invoice.**
+
+## Both sides of the trade
+
+Rate, units and total are recorded separately per side, because the two can legitimately bill
+different unit counts for one message — a vendor bills per segment where you may bill per message.
+
+| Column | Meaning |
+| :--- | :--- |
+| `cost_rate`, `cost_units`, `cost` | What the vendor charges you |
+| `price_rate`, `billed_units`, `price` | What you charge the customer |
+| `margin`, `margin_pct` | Stored, so P&L sums a column |
+| `cost_currency`, `price_currency` | Per side; FireFlo never converts |
+| `cost_rule_id`, `price_rule_id` | Which rate rule matched, for audit |
+
+<Warning>
+**Unknown money is `NULL`, never `0`.** A rate that could not be determined stays distinguishable
+from a genuinely free message. Any query that treats `NULL` as zero will report an unpriced vendor as
+pure profit.
+</Warning>
+
+For a concatenated message **the money lives entirely on part 1**, whose cost already covers every
+segment. Later segments are delivery rows with no money — writing amounts on every segment would
+multiply both sides by the segment count.
+
+## A refused message carries no money
+
+Anything that reached a vendor has a `cdr_submit` row, accepted or not. A message the vendor refused
+is recorded in full — identity, timing, vendor, addresses — plus a `cdr_final` and a `cdr_rejected`
+row carrying the vendor's status code.
+
+But `price`, `cost` and `margin` are **null**, because the customer's credit was returned at the
+moment of refusal.
+
+<Tip>
+That is deliberate: every revenue query sums those columns **without an outcome filter**, and a price
+on a refunded message would overstate takings by precisely the traffic that was given back.
+</Tip>
+
+## The three TLV columns
+
+Three points on one pipeline. Every useful question is a comparison between two of them.
+
+| Column | What it holds |
+| :--- | :--- |
+| `tlvs_received` | As they arrived, before anything was added |
+| `tlvs` | As the gateway resolved them |
+| `tlvs_sent` | What the vendor actually put on the wire |
+
+```
+tlvs_received → tlvs       did an account, sender ID or template replace the customer's own?
+tlvs → tlvs_sent           what did the vendor add, and what did it drop?
+```
+
+The second comparison used to be unanswerable. A tag the vendor has not registered is discarded —
+correctly, that is the vendor deciding — but it happened in silence, so a DLT template id could be
+present on the message, absent from the wire, and mentioned nowhere above DEBUG. A drop is now also a
+throttled WARN naming the vendor and the tag.
+
+`NULL` means nothing recorded the column; `{}` means recorded and there were none. `tlvs_sent` is
+`NULL` for every non-SMPP vendor.
+
+## The message body
+
+Recorded **only if you switch it on**.
+
+| `smsg.cdr.body` | Stored |
+| :--- | :--- |
+| `off` *(default)* | Nothing |
+| `excerpt` | The first 160 characters |
+| `full` | The whole message |
+
+An unrecognised value is treated as `off` — the failure that matters is storing content nobody asked
+to store, so a typo must not turn recording on.
+
+<Warning>
+**This is a deliberate choice with consequences.** Content is the most sensitive thing a gateway
+handles — one-time passcodes, account numbers, personal messages — and once in `cdr_submit` it lives
+exactly as long as the billing row and appears in every backup of it.
+
+It is readable on both panel surfaces, searchable by substring, and **included in CSV exports**,
+which is where content most easily leaves the platform.
+
+`excerpt` is the middle ground for support work: enough to recognise a template, not the whole of a
+customer's traffic.
+</Warning>
+
+## Outcomes
+
+| State | Meaning |
+| :--- | :--- |
+| `DELIVERED` | The vendor confirmed delivery |
+| `FAILED` | The vendor reported a permanent failure |
+| `EXPIRED` | No receipt before the deadline — genuinely **unknown**, not known-bad |
+| `DROPPED` | A filter discarded it before any vendor |
+| `REJECTED` | Never routed or accepted; any charge refunded |
+
+`dlr_state` keeps the **raw** SMPP value alongside the coarse outcome, because `EXPIRED`, `REJECTD`
+and `UNDELIV` all bill as failures but are worth telling apart.
+
+**The expiry sweep** closes anything past its deadline as `EXPIRED`, leaving billing to decide what an
+unknown outcome is worth. The deadline is capped below three days: past the correlation window a
+receipt can no longer be matched even if it arrives, so waiting longer cannot change the answer.
+
+## If a message appears in no list at all
+
+The writer is usually pointed at a different database from the panel. Check `smsg.cdr.sink` and the
+gateway's `FIREFLO_DB_URL` against the panel's `METRICS_DATABASE_URL` before looking anywhere else.
+
+<Warning>
+**CDRs never contain credentials.** Addresses are present because rating and dispute resolution need
+them — treat the tables and files accordingly, and set a retention policy.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Usage and retention" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    What survives when the call records are purged.
+  </Card>
+  <Card title="How pricing works" icon="tag" href="/platform/billing/how-pricing-works">
+    Where each side of the trade is settled.
+  </Card>
+</CardGroup>

@@ -1,0 +1,115 @@
+---
+title: "Tariffs and reconciliation"
+description: "Editing rates from the panel, per-account overrides, and the two identities that say whether an account's credit adds up."
+source: "fireflo-sms-gateway/docs/13; fireflo-control-panel lib/reconcile.ts @ 0.7.3"
+---
+
+## Editing rates from the panel
+
+Two operations on a product's page, and the difference between them matters:
+
+| Action | Writes | Scope |
+| :--- | :--- | :--- |
+| **Set what everyone pays** | The `*` scope for that product | Every account with no rule of its own |
+| **Price one account** | A named account's scope | That account only |
+
+**Both save only the rules for the product you are looking at.** The rest of the scope is untouched, so
+setting `*` for `promo` cannot disturb `*` for anything else.
+
+The whole-scope editor on the *Pricing* page still replaces a scope wholesale — which is correct
+there, because it shows you all of it.
+
+<Warning>
+An account's own rules are tried first and **the first match wins**, so anything the account carries
+beats the default — **including a bare catch-all**.
+
+That is what makes a negotiated tariff an override rather than a suggestion. It also means an
+account-level catch-all silently disables every default you set afterwards.
+</Warning>
+
+## Two identities, not one
+
+Whether an account's credit adds up is checked against **two** equations. Getting this wrong reports a
+false discrepancy on every account, so it is worth stating precisely.
+
+```
+MONEY:        Σ(RECHARGE + TRANSFER)  =  balance + reserved
+CONSUMPTION:  reserved − consumed     =  credit reserved but not yet spent   (≥ 0)
+```
+
+<Warning>
+**The obvious equation is wrong.** `credited − consumed = balance + reserved` was written that way in
+the design and the data refuted it immediately — it was out by exactly the consumption on every
+account.
+
+Consumption never touches the balance columns. Credit is reserved in blocks (`balance -= n,
+reserved += n`), spent from an in-memory counter, and **the spent part is never written back**. So
+`reserved` is a lifetime-consumed counter, not a hold, and every movement the database sees leaves
+`balance + reserved` unchanged.
+</Warning>
+
+The money identity holds to the unit on every account, which is what makes a genuine discrepancy
+meaningful.
+
+### What is excluded, and why
+
+| Entry type | Counted? | Why |
+| :--- | :--- | :--- |
+| `RECHARGE`, `TRANSFER` | **Yes** | Money entering the account |
+| `RESERVE`, `RELEASE` | No | They move an amount between two columns of the same row, netting to zero |
+| `BILL` | No | A closed period records what was invoiced and moves nothing |
+
+## Lifetime, never a period
+
+Credit is a **running total**. Any shorter window needs an opening balance that nothing records — and
+a wrong opening figure invents a discrepancy every time it is run.
+
+<Tip>
+So "reconcile this account for March" is not a question the data can answer. "Reconcile this account"
+is, and always has been.
+</Tip>
+
+## Where the two sides come from
+
+| Side | Source |
+| :--- | :--- |
+| Credited | `Σ RECHARGE + TRANSFER`, **applied only** — pending entries have not moved money |
+| Consumed | `usage_daily` for rolled-up days **plus** `cdr_submit` for the live tail |
+
+Never both for one day. That is the join that makes reconciliation survive the retention window: once
+a day is rolled up and purged, its consumption still counts.
+
+## When the numbers do not agree
+
+Work through in this order:
+
+<Steps>
+  <Step title="Are there pending recharges?">
+    A `RECHARGE` for an account with no `account_balance` row credits nothing and stays pending. It is
+    in the ledger and not in the balance — which is exactly a money-side gap.
+  </Step>
+  <Step title="Was there an unclean shutdown?">
+    A `kill -9` strands credit in `reserved`. `balance + reserved` is still conserved, so the money
+    identity holds — but the account has less spendable than it should until
+    `POST /ops/credit/release` runs.
+  </Step>
+  <Step title="Is the rollup behind?">
+    A day neither rolled up nor still in `cdr_submit` is consumption nobody counts. The purge is
+    supposed to make this impossible; check it has not been bypassed.
+  </Step>
+  <Step title="Is the panel reading the same database?">
+    `METRICS_DATABASE_URL` against the gateway's `FIREFLO_DB_URL`. A split here makes every figure
+    disagree in a way that looks like an accounting bug.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="How pricing works" icon="tag" href="/platform/billing/how-pricing-works">
+    Scopes, the `*` default, and LCR.
+  </Card>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocks, reservations and the ledger.
+  </Card>
+</CardGroup>

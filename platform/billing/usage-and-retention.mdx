@@ -1,0 +1,118 @@
+---
+title: "Usage and retention"
+description: "Call records are deleted on a window. usage_daily is what survives — and the purge refuses to run without it."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md, UsageRollup.java @ 0.7.3"
+---
+
+`cdr_submit` part 1 is the **only** per-message record of what was charged, and it is deleted once it
+passes the retention window.
+
+Without a summary that means no statement older than the window can ever be reissued, and the
+consumption side of every reconciliation disappears — so every aged account drifts into a discrepancy
+nothing can explain.
+
+## `usage_daily` is that summary
+
+One row per account, per product, per **day**.
+
+Daily rather than monthly so that any period is a `SUM` over days — a calendar month, a quarter, an
+arbitrary from/to — forever, with no second derived table to disagree with it.
+
+```bash
+fireflo usage rollup --catch-up
+```
+
+Run it nightly. Running it twice changes nothing that matters.
+
+## Billable figures are final; delivery figures are not
+
+This is what makes the rollup safe to re-run.
+
+| Columns | Stable when | Why |
+| :--- | :--- | :--- |
+| `price_total`, `cost_total` | **Immediately** | Billing is on `submitted`, which stops moving when the day does |
+| Delivery columns | Never quite | Receipts keep arriving |
+
+The rollup is idempotent and restates **only** the delivery columns. A finished day's money is settled
+the moment the day ends.
+
+## A billing day is a local day
+
+`FIREFLO_BILLING_ZONE` decides where a day starts, and it is read from `app_config` so the rollup and
+the panel agree.
+
+<Warning>
+**On UTC, the last five and a half hours of an Indian customer's evening land on the next day's
+line.** Every daily figure, every month boundary and every invoice is then off by that much traffic.
+
+Set the zone before the first rollup, not after — restating days already summarised means deleting
+and recomputing them.
+</Warning>
+
+## The purge refuses to delete what nothing has summarised
+
+```bash
+FIREFLO_CDR_PURGE=true fireflo usage purge
+```
+
+If any day it would delete has **no `usage_daily` row**, it refuses the whole run and names the days.
+
+**Not a warning and not a skip.** Deleting an unsummarised day destroys the consumption record
+permanently, and that has to be structurally impossible rather than a matter of running things in the
+right order.
+
+<Tip>
+`rollup` is deliberately a **separate command**. A purge that quietly rolled up first would mean a
+rollup bug is discovered by the command that deletes the evidence.
+</Tip>
+
+`FIREFLO_CDR_KEEP_DAYS` sets the window, default **90**.
+
+## Two windows, two purposes
+
+| Table | Retained by | Losing it costs |
+| :--- | :--- | :--- |
+| `cdr_submit`, `cdr_final` | `FIREFLO_CDR_KEEP_DAYS`, default 90 | Per-message detail — but not the totals, if the rollup ran |
+| `cdr_interim` | `smsg.cdr.interim.retention.days`, default 30 | **A report, not an invoice** — it is vendor quality history |
+
+`cdr_interim` is pruned on its own shorter window precisely because it answers a question about
+*recent* traffic: how fast a vendor reports, and whether it reports at all.
+
+## A retention policy is not optional
+
+Call records contain **addresses** — they have to, because rating and dispute resolution need them.
+If message body recording is on, they contain content as well.
+
+<Warning>
+Set a retention policy deliberately rather than inheriting the default. Ninety days of destination
+numbers, and possibly of one-time passcodes, exists in every backup you take of that database.
+</Warning>
+
+## A working order of operations
+
+<Steps>
+  <Step title="Set the billing zone before any traffic">
+    It decides where every day boundary falls.
+  </Step>
+  <Step title="Roll up nightly">
+    `fireflo usage rollup --catch-up`, on a schedule.
+  </Step>
+  <Step title="Verify the rollup covers the window before purging">
+    The purge checks this itself and refuses — but knowing it passed is better than discovering it
+    refused.
+  </Step>
+  <Step title="Purge on its own schedule">
+    Behind `FIREFLO_CDR_PURGE=true`, which exists so it cannot happen by accident.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Call records" icon="database" href="/platform/billing/cdrs">
+    The three tables and what each column means.
+  </Card>
+  <Card title="Statements" icon="file-invoice" href="/platform/billing/statements">
+    Closing a period and issuing a bill.
+  </Card>
+</CardGroup>

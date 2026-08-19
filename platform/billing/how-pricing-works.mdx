@@ -1,0 +1,149 @@
+---
+title: "How pricing works"
+description: "Two sides to every message, settled at different moments — and the difference between an unknown price and a free one."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+Every message has **two prices**: what you charge the customer, and what the vendor charges you. They
+are settled at different points in the message's life, and the difference is the margin.
+
+## Where each side is settled
+
+<CardGroup cols={2}>
+  <Card title="Price — at ingress" icon="arrow-right-to-bracket">
+    Per inbound `submit_sm`. Depends only on the customer's tariff — account, product, destination —
+    never on which vendor is eventually chosen.
+  </Card>
+  <Card title="Cost — at the vendor" icon="arrow-right-from-bracket">
+    Once a route is chosen and the body is split, because only then is the segment count known.
+  </Card>
+</CardGroup>
+
+**Each inbound PDU is one billable unit.** A concatenated message arriving as three PDUs is three
+charges, and nothing has to predict segment counts to get the customer's bill right.
+
+Cost is **recomputed on every attempt**. A message re-routed after a NACK goes to a different vendor
+at a different cost, and each attempt is costed separately — while the customer is charged **once**,
+however many vendors were tried.
+
+## The rate table
+
+Rates use the routing grammar with the amount where routing puts the target:
+
+```
+Amount:Attribute:Operator:Value
+```
+
+```properties
+[vendor1]
+0.0450:to:matches:^61[45][0-9]{8}$
+0.0620:to:matches:^61[0-9]{9}$
+0.0900::default:
+
+[acct-1001]
+0.0800:product~~to:equals~~matches:premium~~^61[45][0-9]{8}$
+0.1200::default:
+```
+
+A `[scope]` is **either a vendor instance name** — what that vendor charges you — **or an account id**
+— what you charge that customer. Rules are evaluated top to bottom and **the first match wins**, so a
+catch-all belongs last.
+
+Attributes and operators are the routing engine's, so anything you can route on you can rate on,
+including `product` and `systemId`. Combine conditions with `~~` in all three positions.
+
+<Warning>
+**`matches` is a regex and is anchored.** `^61.*` matches a full number; a bare `61` does not.
+
+And `startsWith` compares **literal text** — a regular expression written into it can never be true,
+so the rule prices nothing and the traffic falls through to whatever comes next.
+</Warning>
+
+## The default that everyone should set
+
+`[*]` prices **any account with no rule of its own**:
+
+```properties
+[*]
+0.1200:product:equals:sms
+```
+
+Set it once and every account is priced, including accounts created later. An account's own rules are
+tried first and the first match still wins, so anything it carries beats the default — **including a
+bare catch-all**, which is what makes a negotiated tariff an override rather than a suggestion.
+
+<Warning>
+**Without a default, an account nobody has priced is not refused — it sends unpriced and uncharged**,
+with one line at `debug`.
+
+That is traffic given away rather than traffic blocked, and it is the failure the default really
+exists for. Set it on day one.
+</Warning>
+
+**It applies to price only, never to cost.** A vendor with no cost rules stays *unknown* rather than
+inheriting the sale price — otherwise every margin would compute to zero instead of unknown, and
+nothing would say so.
+
+`*` is reserved: no account or vendor may be named it.
+
+## Unknown is not zero
+
+**A rule that matches nothing leaves the amount unknown, never zero.** Zero is a real price meaning
+free, and an unknown side makes the margin unknown rather than wrong.
+
+This distinction is why an unpriced vendor shows as a gap in a margin report rather than as 100%
+profit.
+
+## Precision
+
+Amounts carry **at most four decimal places** and are parsed exactly, never through floating point. An
+amount with more precision is **rejected rather than truncated** — truncating `0.00001` to zero
+silently gives traffic away.
+
+`smsg.money.scale` (`0`–`4`, default `4`) controls how many places a **total** is displayed with.
+India uses `2`.
+
+<Tip>
+**Rates always keep four places regardless.** `/secure/rate` reports `0.0450`; shown as `0.05` that is
+11% out on every message, and a customer computing their bill from a quote would be wrong. CSV
+exports keep four for the same reason — a spreadsheet sums that column.
+</Tip>
+
+Storage never changes: amounts are integers of ten-thousandths. The setting is presentation only and
+can be changed at any time.
+
+## Least-cost routing
+
+A table marked `->function(LCR)` picks the cheapest vendor rather than the first matching rule:
+
+```properties
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+The semantics differ from a normal table in a way that matters:
+
+| | Normal table | LCR table |
+| :--- | :--- | :--- |
+| Evaluation | Stops at the first match | Scans every rule |
+| Matches are | A fallback chain | **Alternatives** |
+| Rule order | Is the priority | Carries no meaning |
+
+- Vendors that are down or not accepting are skipped, so the next cheapest carries the traffic.
+- A vendor with **no matching rate** is used only if nothing else matches — a forgotten rate line
+  degrades rather than causing an outage.
+- Rules pointing at another table are **ignored** inside an LCR table: a nested cost cannot be
+  compared, and routing at an unknown price would be worse.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Tariffs" icon="table" href="/platform/billing/tariffs">
+    Editing rates from the panel, and per-account overrides.
+  </Card>
+  <Card title="Call records" icon="database" href="/platform/billing/cdrs">
+    Where both sides of the trade are recorded.
+  </Card>
+</CardGroup>

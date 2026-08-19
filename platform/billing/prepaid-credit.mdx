@@ -1,0 +1,133 @@
+---
+title: "Prepaid credit"
+description: "Money in memory, reserved in blocks, and the identity that has to hold — plus the block size that decides when a funded account starts refusing."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md, BalanceService.java @ 0.7.3"
+---
+
+Prepaid credit is **off by default and PostgreSQL only**. Credit can only enter through the database,
+so a gateway without one would start at zero and reject everything — with no datasource the gate is
+simply not enforced.
+
+## The design in one paragraph
+
+An account's spendable balance is held **in memory** and decremented per message, so the message path
+does no database work at all. Durability comes from reserving in blocks: one atomic statement moves
+an amount from `balance` into `reserved`, and the gateway spends that block from memory.
+
+At a few thousand messages a second that is a couple of database writes per second rather than a
+couple of thousand — **and no message is ever sent against credit that was not committed first**.
+
+<Tip>
+Reserving **moves** money rather than marking it, which is why two gateway instances cannot hand out
+the same credit. The reservation is the mutual exclusion.
+</Tip>
+
+## The identity that must hold
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+```
+
+Every unit that entered through the ledger is either spendable or parked. **A `kill -9` strands
+credit in `reserved`; it does not lose it** — `POST /ops/credit/release` returns it, and a clean
+shutdown returns it automatically.
+
+If the two sides disagree, that is a real discrepancy and not a rounding artefact.
+
+## Topping up
+
+Credit is added by writing a `RECHARGE` row. The gateway applies it on its next poll and marks it
+applied, so a replay is a no-op.
+
+```sql
+INSERT INTO balance_ledger (account_id, delta, entry_type, ref)
+VALUES ('acct-1001', 500000, 'RECHARGE', 'receipt-88');
+```
+
+**Amounts are scaled by 10 000**, so `500000` is 50.0000 units.
+
+The control panel's *Add credit* writes exactly this row and nothing else. **The gateway itself
+cannot create credit** — it only applies rows somebody else wrote, and the `balance` column has
+exactly one writer, which is this poll.
+
+<Warning>
+**A `RECHARGE` for an account with no `account_balance` row credits nothing.** It stays pending,
+logs, and applies itself the moment the row appears:
+
+```
+WARN  1 recharge entries could not be credited because these accounts have no
+      account_balance row: [acct-1001]. They stay pending and will apply
+      themselves once the row exists.
+```
+
+Creating a credential does **not** create a balance row. Use *Open for credit* on the account page,
+or insert one at zero by hand.
+</Warning>
+
+## Block size, and the refusal it explains
+
+A block is sized from the rate the account has been observed sending at. From cold — or after an idle
+spell — there is no rate to size it from, so a floor applies:
+
+```
+block = max(smsg.balance.block.min, price × smsg.balance.block.min.messages)
+```
+
+`smsg.balance.block.min.messages` defaults to **20**, and the price comes from the message asking for
+the reservation.
+
+<Warning>
+**This floor is denominated in messages for a reason.** It used to be `smsg.balance.block.min`, a
+*currency* amount — and a currency amount cannot say how many messages it buys.
+
+At the default of `1000` (0.1000 units), an account whose messages cost more than that got a block
+covering exactly **one** message. The next message arrived long before the next reservation landed and
+was refused for want of credit on an account holding thousands of units.
+
+That is the entire "insufficient funds on a funded account" report.
+</Warning>
+
+The reserve only succeeds if the balance covers a **whole** block, so refusals begin at roughly one
+block's worth remaining — with the balance still positive. Alert on that threshold, not on zero.
+
+**What it costs:** an actively sending account holds up to twenty messages' worth in `reserved` that
+nothing else can spend.
+
+## Refusal
+
+An account with no credit gets `submit_sm_resp` status **`0x402`**, HTTP **402**, reason
+`insufficientCredit`.
+
+`ESME_RTHROTTLED` is deliberately not used: it means something else, and would make a client back off
+and retry a condition that only a top-up can clear.
+
+## Refunds
+
+A message charged and then dropped during routing has its credit returned **exactly once**. An
+unrated message is never charged at all.
+
+Refill triggers on a watermark while credit remains, on a background thread. **If traffic outruns it
+the message is refused immediately** rather than the SMPP thread waiting on a database — a stalled
+ingress thread is worse than a refused message.
+
+## Properties
+
+| Property | Default | What it does |
+| :--- | ---: | :--- |
+| `smsg.balance.enabled` | `false` | The master switch |
+| `smsg.balance.block.min.messages` | `20` | **The floor that binds.** Raise for bursty accounts |
+| `smsg.balance.block.min` | `1000` | Currency floor, below the above |
+| `smsg.balance.block.max` | `10000000` | Ceiling on a single reservation |
+| `smsg.balance.refill.watermark.percent` | `20` | Refill triggers here |
+| `smsg.balance.recharge.poll.seconds` | `30` | How soon a top-up lands |
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Postpaid" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Credit limits, and exact bills from approximate enforcement.
+  </Card>
+  <Card title="Refusals" icon="ban" href="/platform/troubleshooting/refusals">
+    Reading `insufficientCredit` against a positive balance.
+  </Card>
+</CardGroup>
