@@ -1,0 +1,113 @@
+---
+title: "Listeners your customers bind to"
+description: "Adding a server, what a bind is checked against, and the states a listener can be in."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, panel /cp/servers @ 0.7.3"
+---
+
+A **server** is a listener your customers bind in to. Adding one is a port, a name, and then the
+policy you want applied to everyone who connects to it.
+
+## Adding one
+
+<Tabs>
+  <Tab title="Control panel">
+    **Servers → Add server.** Name and port are the only required fields; everything else has a
+    working default.
+  </Tab>
+  <Tab title="smsg.properties">
+```properties
+outSms.instance.smpp.type     = smppserver
+outSms.instance.smpp.srv.port = 27777
+outSms.instance.smpp.enable   = true
+```
+  </Tab>
+</Tabs>
+
+Every setting is at [Listener settings](/reference/smpp/server).
+
+<Warning>
+**A listener that cannot take its port does not stop the gateway.** It logs and everything else keeps
+running — right for a multi-listener deployment, and surprising the first time.
+
+A clean start is not proof every listener is up. Check `/ops/health`.
+</Warning>
+
+## What a bind is checked against, in order
+
+<Steps>
+  <Step title="The credential">
+    `systemId` and `password` must match an enabled `SMPP` credential. See
+    [credentials.yml](/reference/files/credentials-yml).
+  </Step>
+  <Step title="allowedIps, if set">
+    Empty means **no restriction**.
+  </Step>
+  <Step title="Connection limits">
+    `srv.maxConnections` overall, `srv.maxConnectionsPerIP`, and
+    `conf.maxConnectionsPerUser.default` per account.
+  </Step>
+  <Step title="The product, if conf.product.required is on">
+    The resolved product must name an **enabled** row in the product catalogue. Blank or unknown is
+    refused with `0x40F` — at bind, not at submit, because the product lives on the session context.
+  </Step>
+</Steps>
+
+## Where the product comes from
+
+`system_type` on the bind request, falling back to the credential's `product` field.
+
+<Warning>
+`system_type` is free text validated nowhere else. A customer binding `prem` instead of `premium`
+passes any non-empty test and lands in the **unrated** state where messages are delivered and charged
+nothing.
+
+That is why `conf.product.required` checks **membership of the catalogue** rather than presence of a
+value — and why, in file mode, where there is no catalogue, only the non-empty half applies. It is
+logged once per configuration load naming the listener.
+</Warning>
+
+## What a listener applies to everyone bound to it
+
+| Setting | Effect |
+| :--- | :--- |
+| `conf.maxRate.default` | Per-account throughput ceiling |
+| `conf.maxPending.default` | Window size — unacknowledged requests in flight |
+| `forward.dlrs` | **Off suppresses receipts for everyone here**, whatever each customer asked for |
+| `conf.whitelist.enabled` | Whether sender ID and content are checked |
+| `mandatory.tlvs.submit` | Tags a message must carry, else `0xC3` |
+| `inQueue.capacity` | Messages held waiting for the message store |
+
+## The states a listener can be in
+
+| Verb | Effect |
+| :--- | :--- |
+| `enable` / `disable` | Loaded, or not |
+| `suspend` / `resume` | Stop accepting; the queue drains back to the router |
+| `hold` / `release` | Keep accepting, stop sending; **the queue grows** |
+
+The panel shows these as one badge per card. `Listening` with nobody bound is **not** a fault — a
+listener with no customers connected is quiet, not broken, which is why it is not painted red the way
+a vendor with no session is.
+
+## Dropping one customer's bind
+
+```bash
+scripts/fireflo disconnect smpp 7
+```
+
+Session ids come from `fireflo health`. They are the listener's own counter, so they collide between
+listeners and restart with the gateway.
+
+<Note>
+**This ends a connection; it does not withdraw permission.** A healthy client rebinds within seconds
+unless you also disable its login.
+</Note>
+
+## Inbound messages
+
+`mo.owner.map` decides which account owns which inbound address. `mo.owner.default` is where an
+unmatched one goes — and **empty means nowhere**: the listener logs `message.mo.unmapped` and consumes
+it rather than guessing an owner.
+
+Deliberate, because delivering a stranger's message to the wrong customer is worse. But unmapped
+traffic disappears quietly unless you watch for that line.

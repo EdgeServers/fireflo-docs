@@ -1,0 +1,95 @@
+---
+title: "TLVs in practice"
+description: "Where a tag can come from, the order they compose in, and how to find out which approved rows have tags nothing will supply."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, panel /cp/tlvs @ 0.7.3"
+---
+
+The grammar is at [TLV declarations](/reference/smpp/tlvs) — read that first if `1400` versus `0x1400`
+is new to you. This page is about running them.
+
+## A tag can come from four places
+
+<Steps>
+  <Step title="The customer's submit_sm">
+    Extracted only if the listener's `registered.tlvs.submit` declares it. **Undeclared tags are
+    discarded**, not passed through.
+  </Step>
+  <Step title="Their credential's defaultTlvs">
+    Fills tags the message did not carry.
+  </Step>
+  <Step title="The whitelist stamp">
+    In `assign` mode, fills a tag the message lacks. In `replace` mode, **overwrites** what the
+    customer sent — and that overwrite *is* the approval.
+  </Step>
+  <Step title="The vendor's default.tlvs.submit">
+    Fills anything still unset at send time.
+  </Step>
+</Steps>
+
+**Precedence is message > credential > vendor.** Defaults only fill gaps. The one exception is the
+whitelist stamp in `replace` mode, which is meant to win.
+
+## Two mandatory checks, at different points
+
+| Check | Runs | Failure |
+| :--- | :--- | :--- |
+| Listener `mandatory.tlvs.submit` | At ingress, after credential defaults and any stamp | `0xC3` to the customer |
+| **Vendor** `mandatory.tlvs.submit` | Against what actually goes on the wire | FAILED receipt, refund, `cdr_rejected` — **not re-routed** |
+
+<Warning>
+The vendor check runs **after** `registered.tlvs.submit` has filtered. Requiring a tag that is not also
+registered can never be satisfied — the gateway warns about that pairing at load, and it is worth
+reading the log after adding a mandatory tag.
+</Warning>
+
+## Finding out what will be missing before it is
+
+The control panel's TLV coverage report says, **per approved row**, which mandatory tags nothing will
+supply.
+
+That report is what makes the default stamping mode (`off`) discoverable rather than merely quiet.
+Defaulting to `assign` would start writing TLVs onto packets crossing listeners that have never written
+any — a silent change to what reaches a carrier.
+
+## The failure that has actually happened
+
+<Warning>
+A per-listener key must be registered in `SmppServerWorker`'s `allPrms` array to be read as a
+per-listener key at all. A key left out keeps its bare form and reads a global nobody sets — so it
+returns its coded default however you configure it.
+
+`whitelist.tlvs.replace` shipped that way once. It read false on every listener however it was
+configured, so an approved template's TLVs were **never stamped over SMPP** — silently, because not
+stamping looks exactly like having nothing to stamp.
+
+If a per-listener TLV setting appears to do nothing, this is the first thing to check.
+</Warning>
+
+## The customer's side
+
+A customer can see the TLVs **they sent** on their own messages, and can propose new tag definitions
+for an operator to approve. They never see what a vendor added downstream.
+
+The call record keeps three sets — received, sent, and what the whitelist stamped — so a dispute about
+what reached the carrier is answerable rather than argued.
+
+## A worked case: Indian DLT
+
+The registered entity id belongs on the **credential**, because it is a property of the customer rather
+than of any one message:
+
+```yaml
+defaultTlvs:
+  peid_0x1400: "1101234567890123456"
+```
+
+The template id varies per message and is usually stamped by the whitelist on approval, or supplied by
+the customer:
+
+```properties
+outSms.default.default.tlvs.submit = tmid_0x1402=1102000000000012345
+outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+With both mandatory, a message that resolves neither is refused at ingress with `0xC3` rather than
+rejected by the carrier later — which is the point of checking at all.

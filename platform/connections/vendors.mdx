@@ -1,0 +1,116 @@
+---
+title: "Vendors you send through"
+description: "Adding a carrier connection, proving it works before traffic depends on it, and reading the four states it can be in."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, panel /cp/vendors @ 0.7.3"
+---
+
+A **vendor** is a connection out to whoever carries your traffic. FireFlo dials it.
+
+## Adding one
+
+<Tabs>
+  <Tab title="Control panel">
+    **Vendors → Add vendor.** Host, port, system id and password. The panel groups the rest by what
+    it does, and every field carries its default.
+  </Tab>
+  <Tab title="smsg.properties">
+```properties
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+outSms.instance.vendor1.connections.transceivers = 2
+```
+  </Tab>
+</Tabs>
+
+Every setting is at [Vendor settings](/reference/smpp/client).
+
+## Prove it before traffic depends on it
+
+```bash
+scripts/fireflo test-bind vendor1
+```
+
+Dials once and reports what happened. The panel has the same thing as **Test connection**.
+
+<Warning>
+**It is refused while the vendor is already bound.** A second bind on the same `systemId` can cost you
+the live session — many carriers allow one.
+</Warning>
+
+## Bound is not the same as able to send
+
+| Field | Means |
+| :--- | :--- |
+| `bound` | Sessions established |
+| `bound_transmittable` | Sessions that can actually carry traffic out |
+
+A session carries traffic if it is a **transceiver**, or a **transmitter** on a client session. A
+receiver-only vendor binds perfectly and sends nothing.
+
+When those two numbers differ, that is the reason, and the panel shows **Can send** as its own figure
+for exactly this case.
+
+## The four states
+
+| Badge | Means | Colour |
+| :--- | :--- | :--- |
+| **Connected** | Bound and accepting | Green |
+| **Not connected** | No session — a vendor with none is broken | Red |
+| **Not accepting** | Suspended; the queue drains back to the router so traffic reroutes | Amber |
+| **Holding** | Accepting but not sending; **the queue grows** | Amber |
+| **Disabled** | Not loaded | Grey |
+| **Not loaded** | The gateway has never heard of it | Amber |
+
+<Note>
+**Not loaded** usually means one of two things: the gateway has not reloaded since the vendor was
+added, or it is not reading workers from the database at all. The badge's detail text says which.
+</Note>
+
+## Retries, and the number that used to lie
+
+`maxRetries` bounds the **total** `submit_sm` one message may cost at this vendor — across in-worker
+retries **and** every trip back through the router.
+
+<Warning>
+It used to bound only the in-worker half, and each router hop handed out a fresh allowance. A vendor
+could see roughly 100 PDUs for one message while the panel read `1`.
+
+If you tuned around the old behaviour, re-check the value. Failing over to a *different* vendor still
+starts a fresh budget — the bound is per vendor.
+</Warning>
+
+`status.retry.worker` (default `20,88`) classifies which carrier statuses are worth retrying locally;
+`status.retry.router` pushes back for another route.
+
+`ESME_RSUBMITFAIL` (`0x45`) is treated as **permanent** — a lane refused with it fails on the first
+answer rather than after twenty. Carriers that mean transient overload by it are opted back in per
+vendor: `status.retry.worker = 20,88,69`.
+
+## Receipts
+
+`request.dlrs` (default on) sets `registered_delivery` on every `submit_sm` to this vendor.
+
+<Warning>
+Turn it off and this vendor stops reporting outcomes, so every message through it settles as
+`EXPIRED` at the deadline. Your delivery rate for that vendor becomes **meaningless**, not zero.
+</Warning>
+
+## Controlling one live
+
+| Verb | Use when |
+| :--- | :--- |
+| `suspend` | You want traffic to reroute elsewhere now — the queue drains back to the router |
+| `hold` | You want it to stop sending but keep its queue |
+| `disable` | You want it gone within one poll interval |
+
+The panel exposes these as **Stop sending**, **Hold** and **Disable**, deliberately worded rather than
+iconographic — each reroutes or stops production traffic the moment it is pressed.
+
+## Cost
+
+A vendor's scope in the rate table is what it charges **you**. Without a cost rule, margin on traffic
+through it is unknown rather than 100% — see [rates.conf](/reference/files/rates-conf).

@@ -1,0 +1,108 @@
+---
+title: "Concatenated messages"
+description: "Two different segment counts, both ways of sending one, how many ids and receipts a customer gets, and what the outcome means."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md §Concatenated messages @ 0.7.3"
+---
+
+A message too long for one SMS becomes several. This page is the whole contract.
+
+## There are two segment counts, and confusing them causes most questions
+
+| | Counts | Where you see it |
+| :--- | :--- | :--- |
+| **Inbound** | The `submit_sm` the customer sent | One `message_id` each; `cdr_submit.reassembled_parts` |
+| **Outbound** | The PDUs sent to the carrier | `cdr_submit.part_no` / `part_count` |
+
+A message can arrive as three and leave as three **without those two 3s being related**: FireFlo
+reassembles what the customer sent, then splits the whole body again for the carrier using that
+carrier's encoding.
+
+## How a customer sends one
+
+Two ways, both accepted and treated identically.
+
+<Tabs>
+  <Tab title="UDH">
+    Set the UDHI bit — `esm_class` bit 6, `0x40` — and prefix each `short_message` with a
+    concatenation header: 8-bit `050003 RR TT SS` or 16-bit `060804 RRRR TT SS`.
+  </Tab>
+  <Tab title="SAR TLVs">
+    Send `sar_msg_ref_num` (`0x020C`), `sar_total_segments` (`0x020E`) and `sar_segment_seqnum`
+    (`0x020F`).
+
+    **All three must be present.** SMPP 3.4 §5.3.2.32–34 defines them as a set, and a PDU carrying
+    only some is not a segment of anything.
+  </Tab>
+</Tabs>
+
+<Warning>
+**A single `submit_sm` cannot carry more than one segment.** `short_message` is capped at one
+segment's worth, and a longer body is refused with `ESME_RINVMSGLEN` rather than truncated.
+
+Send several PDUs, or use the HTTP API — which takes a body of any length and splits it for you.
+
+`message_payload` has the same cap, and setting both it and `short_message` is refused outright with
+`ESME_ROPTPARNOTALLWD`.
+</Warning>
+
+## How many ids the customer gets
+
+**One `message_id` per `submit_sm`.** A three-segment message gives three, seconds apart.
+
+**All of them resolve.** `query_sm`, the control panel and the customer portal each accept any id the
+gateway issued and return that one message. Only the first is the id the message is *filed* under, so
+the panel says which part you asked about when they differ.
+
+## How many receipts
+
+Set by `conf.dlr.multipart` on the listener:
+
+| Value | Receipts | `sub:` / `dlvrd:` |
+| :--- | :--- | :--- |
+| `all` *(default)* | One per id submitted | `001` / `001` on each |
+| `first` | One, quoting the first id | The real totals, e.g. `003` |
+| `last` | One, quoting the last id | The real totals |
+
+Every receipt reports **the same outcome**, because the outbound segments are aggregated before any
+receipt is built. `all` is what this gateway has always done, so an upgrade changes nothing; the other
+two exist for aggregators expecting one message in and one receipt out.
+
+## The outcome is the worst segment, not the first
+
+<Warning>
+If any segment fails, the message is **FAILED**. Resolution waits for the last segment and reports the
+worst.
+
+That is the honest answer — the recipient did not receive a readable message — and it **moves
+delivery-rate figures down** relative to gateways that report the first segment. Worth knowing before
+comparing this month with last.
+</Warning>
+
+## What it costs
+
+`smsg.restapi.billing.units` decides whether a multipart message is charged once or per segment.
+
+<Warning>
+Set to `message`, a customer sending three-segment traffic pays for one and you pay your carrier for
+three. `segment` is the default for that reason.
+
+A message stays within one segment at **160 characters** of plain GSM text, or **70** if it contains
+any character outside that set — an emoji, or a curly quote pasted from a word processor, halves the
+limit for the whole message.
+</Warning>
+
+## Limits
+
+| | |
+| :--- | :--- |
+| Maximum segments | 255 — the UDH limit |
+| Reassembly timeout | `reassembling.timeoutMillis`, 30 s by default |
+| Reference numbers | `ccat.8bit` chooses 8-bit or 16-bit |
+
+An incomplete set at the timeout is logged as `message.parts.incomplete`. **Content whitelisting still
+applies** on the timeout path, so what does go out is checked.
+
+<Warning>
+Reassembly is **per JVM**. On several instances sharing customers, segments arriving on different
+instances never reassemble — see [Clustering](/platform/install/clustering) for what that costs.
+</Warning>

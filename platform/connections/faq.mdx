@@ -1,0 +1,104 @@
+---
+title: "Connections FAQ"
+description: "Binds, sessions, receipts and tags — the questions that come up once traffic is flowing."
+source: "fireflo-sms-gateway/docs/04, docs/08, docs/10 @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="A vendor shows as not connected but nothing seems wrong">
+Read `last_error` on that worker. It is the difference between the two cases the badge cannot
+distinguish:
+
+- **A value** — the socket opened and the bind was refused. Wrong credentials, wrong system type, an
+  IP the carrier does not expect, or a bind limit already reached.
+- **Empty** — the socket never opened. Firewall, DNS, or a carrier that is down.
+
+`fireflo test-bind vendor1` dials once and tells you which, without waiting for the reconnect cycle.
+</Accordion>
+
+<Accordion title="bound is 0 — is that nobody connected, or did the socket never open?">
+Same distinction, same answer: `last_error`.
+
+On a **listener**, `bound: 0` is usually neither — it means no customer is connected right now, which
+is quiet rather than broken. That is why a listener with nobody bound is not painted red the way a
+vendor with no session is.
+</Accordion>
+
+<Accordion title="The vendor is bound but nothing is going out">
+Compare `bound` with `bound_transmittable`. A session carries traffic only if it is a **transceiver**,
+or a **transmitter** on a client session. A receiver-only vendor binds perfectly and sends nothing.
+
+If both are non-zero, check whether the vendor is **held** — accepting but not sending, with the queue
+growing — and whether `tps_measured` is zero while `queue_depth` is not. That pair is a stall, and it
+is invisible in any single number.
+</Accordion>
+
+<Accordion title="Why did the gateway not exit when a listener could not take its port?">
+Because on a multi-listener deployment, one port conflict should not take down the ones that work.
+
+It logs and carries on. The cost is that a clean start is **not** proof every listener is up — check
+`/ops/health` rather than the absence of an error.
+</Accordion>
+
+<Accordion title="request.dlrs defaults to on. What does turning it off cost me?">
+Every message through that vendor settles as `EXPIRED` at the deadline instead of DELIVERED or FAILED,
+because nothing ever reports an outcome.
+
+Your delivery rate for that vendor becomes **meaningless rather than zero**, which is worse — a zero
+looks like a problem, a meaningless number looks like data.
+</Accordion>
+
+<Accordion title="Where does a TLV actually come from?">
+Four places, composing in this order: the customer's `submit_sm` (only if the listener declares the
+tag), their credential's `defaultTlvs`, the whitelist stamp, then the vendor's `default.tlvs.submit`.
+
+**Precedence is message > credential > vendor**, and defaults only fill gaps. The exception is the
+whitelist stamp in `replace` mode, where the overwrite *is* the approval.
+
+Undeclared tags are **discarded**, not passed through.
+</Accordion>
+
+<Accordion title="My default.tlvs.submit value silently disappeared">
+Check the format. It is `<name>_<tag>=<value>`, comma-separated.
+
+`PEID=1101234567890123456` has no tag on the name, so it parses to nothing and logs only a WARN. The
+setting looks applied and does nothing.
+
+Also check the tag base: **`vendor_1400` is decimal 1400, not `0x1400`.** If a carrier gave you a hex
+tag and you wrote it without the prefix, everything loads and the wrong tag goes on the wire.
+</Accordion>
+
+<Accordion title="A per-listener setting appears to do nothing however I configure it">
+Check it is registered in `SmppServerWorker`'s `allPrms` array. A key left out keeps its bare form,
+reads a global nobody sets, and therefore returns its coded default whatever you configure.
+
+`whitelist.tlvs.replace` shipped that way once and stamped nothing over SMPP for as long as it lasted —
+silently, because not stamping looks exactly like having nothing to stamp.
+</Accordion>
+
+<Accordion title="Do I need test-bind while the vendor is already bound?">
+You cannot — it is refused, deliberately. A second bind on the same `systemId` can cost you the live
+session, and many carriers allow only one.
+
+Use it before traffic depends on the vendor, or after suspending it.
+</Accordion>
+
+<Accordion title="A customer says they sent three segments and got three receipts. Is that right?">
+Yes, by default. `conf.dlr.multipart` is `all`, so there is one receipt per `submit_sm` they sent, each
+quoting the id they were given.
+
+`first` or `last` collapses that to one, carrying the real `sub:`/`dlvrd:` totals, for aggregators
+expecting one message in and one receipt out. **Every receipt reports the same outcome** whichever you
+pick, because the outbound segments are aggregated before any receipt is built.
+</Accordion>
+
+<Accordion title="Why is a partly-delivered long message reported as failed?">
+Because the recipient did not receive a readable message. Resolution waits for the last segment and
+reports the **worst**, not the first.
+
+It is the honest answer, and it moves delivery-rate figures down relative to gateways that report the
+first segment. Worth knowing before comparing months.
+</Accordion>
+
+</AccordionGroup>
