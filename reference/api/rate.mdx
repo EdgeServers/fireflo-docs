@@ -1,0 +1,93 @@
+---
+title: "GET /secure/rate"
+description: "What a message would cost. Sends nothing, charges nothing, and counts against no rate limit."
+source: "panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+The only genuinely free pre-flight check on the API.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**The cost is `unit_rate × submit_sm_count`.**
+
+## Parameters
+
+| Parameter | Type | Required | Default | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | **yes** | — | Pricing differs by country and network, so this is not optional. |
+| `content` | string | no | — | Only its length matters here — it decides the segment count. |
+| `coding` | integer | no | `0` | Changes how many segments the same text occupies, so it changes the price. |
+| `product` | string | no | your login's product | Prices against a different product, from the same allow list a send uses. |
+| `from` | string | no | — | **Accepted, and does not affect the price.** |
+
+## `submit_sm_count` is the segment count
+
+This is how you find out that a message you thought was one is actually three — before you pay for it.
+
+| Encoding | One message | Each segment of a longer one |
+| :--- | ---: | ---: |
+| GSM-7 | 160 characters | 153 |
+| UCS-2 | 70 characters | 67 |
+
+<Tip>
+**Call this on user-generated content before sending it.** One curly apostrophe `’` forces the whole
+message to UCS-2 and triples the segment count, and nothing in the send path flags it — the message
+goes out correctly, just three times more expensively.
+</Tip>
+
+## It costs nothing
+
+- Sends nothing.
+- Charges nothing.
+- **Counts against no rate limit** — so it will not consume the throughput you need for real sends.
+
+## Rates always show four decimal places
+
+Unlike a **total**, which honours `smsg.money.scale`, a rate keeps four places whatever that is set
+to.
+
+<Warning>
+`0.0450` shown as `0.05` is **11% out on every message**, and a customer computing their bill from a
+quote would be wrong. CSV exports keep four for the same reason — a spreadsheet sums that column.
+</Warning>
+
+## Errors particular to this endpoint
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument to is not found.` | `to` absent or blank. |
+| 403 | `This login may not send on '<product>'.` | You named a product your operator has not allowed for this login. |
+
+**The `product` allow list is the same one a send uses**, deliberately — a quote and a send cannot
+disagree about what you may name.
+
+## What it cannot tell you
+
+- **Whether the message would be accepted.** Sender-ID approval, template matching and credit are all
+  checked at send time, not here.
+- **Whether it would be delivered.** That is a receipt.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Encoding and segments" icon="text-width" href="/developers/send/encoding-and-segments">
+    Why the same text costs different amounts.
+  </Card>
+  <Card title="Check your balance" icon="wallet" href="/reference/api/balance">
+    What is left to spend.
+  </Card>
+</CardGroup>

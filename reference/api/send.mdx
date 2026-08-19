@@ -1,0 +1,111 @@
+---
+title: "POST /secure/send"
+description: "Every field on a single send, with its default, and the refusal each one produces."
+source: "panel lib/api-catalogue.ts, test-pinned against SendRequestParser.KNOWN @ 0.7.3"
+---
+
+Queues a single message to one destination and returns the id you will see on its receipt.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"61491570006","content":"Your OTP is 4417, valid for 10 minutes."}' \
+  'https://sms.example.com/secure/send'
+```
+
+```json
+{
+  "data": {
+    "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46"
+  }
+}
+```
+
+<Warning>
+A `200` means **accepted for routing**, not delivered. The submit response is sent before routing
+runs, so the outcome can only reach you as a
+[delivery receipt](/developers/receive/delivery-receipts).
+</Warning>
+
+## Fields
+
+| Field | Type | Required | Default | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | **yes** | — | International format. **Quote it** — an unquoted number loses leading zeros. |
+| `content` | string | either | — | The message text. Give this or `hex_content`, never both. |
+| `from` | string | no | your login name | Must be approved for your account, or `403`. |
+| `coding` | integer | no | `0` | SMPP `data_coding`. `8` for anything outside GSM-7 — halves the segment length. |
+| `priority` | integer | no | `0` | `0`–`3`. The gateway has two levels, so 0–1 are normal and 2–3 are high. |
+
+### Advanced
+
+| Field | Type | Default | Notes |
+| :--- | :--- | :--- | :--- |
+| `dlr` | string | `no` | `yes` to receive a receipt. **Requires `dlr_url`.** |
+| `dlr_url` | string | — | Where the receipt is POSTed. Mandatory once `dlr` is `yes`. |
+| `dlr_level` | integer | `2` | `1` progress only, `2` the outcome, `3` both. **Level 1 alone does not send the outcome.** |
+| `hex_content` | string | — | Body as hex octets, decoded with the charset for your `coding`. **An odd length is a `400`.** |
+| `validity_period` | integer | — | Minutes the carrier should keep trying. **A whole number, not a duration string.** |
+| `sdt` | string | — | Scheduled delivery time, passed to the carrier unchanged and **not validated here**. |
+| `product` | string | your login's product | Prices this message on a different product. Only products your operator has allowed for this login — **most logins are allowed none**. |
+| `custom_tlvs` | object | — | Extra SMPP parameters as a JSON **object** — `{"0x1401": "…"}`. Not a list of pairs, not a quoted string. |
+
+## `coding` values
+
+| Value | Alphabet |
+| ---: | :--- |
+| `0` | SMSC default |
+| `1` | ASCII |
+| `2` | Octet, unspecified |
+| `3` | Latin-1 |
+| `4` | Octet |
+| `6` | Cyrillic |
+| `7` | Hebrew |
+| `8` | UCS-2 |
+
+Anything else in 0–14 is accepted and decoded as UTF-8. **15 and above is a `400`.** The value is
+passed to the carrier unchanged, so it chooses how the body is encoded, not merely how it is counted.
+
+## Errors particular to this endpoint
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument to is not found.` | `to` absent or blank. The same shape names `content`, `dlr_url` and the rest. |
+| 400 | `Unknown argument: <name>` | A field the API does not have — **including `username` and `password`**, which belong in the header. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Right name, wrong shape — a non-numeric `coding`. |
+| 402 | `Insufficient credit` | Prepaid balance will not cover it. **Nothing sent, nothing charged.** |
+| 403 | `'<id>' is not an approved sender ID for this account.` | The `from` has not been approved. |
+| 403 | `The message content does not match any approved template for this account.` | Your account sends only approved wording. |
+| 412 | `Got unparseable json data: <body>` | Body empty, not JSON, or a bare array rather than an object. |
+| 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
+
+The shared errors — `401`, `403 Authentication failure`, `415`, `429` — are on
+[API errors](/reference/api/errors).
+
+## Three things the old swagger gets wrong
+
+<Warning>
+Do not generate a client from `api/send-sms.swagger.json`:
+
+1. **`custom_tlvs` is an object**, not an array of pairs.
+2. **`validity_period` is an integer**, not a string.
+3. **`product` is missing from it entirely.**
+</Warning>
+
+## Field names
+
+`_` and `-` are the same character to this API — `dlr_url` and `dlr-url` are one field, and sending
+**both is a `400`** rather than last-one-wins.
+
+**`custom_tlvs` is the exception** and keeps its underscore; `custom-tlvs` is an unknown argument.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Sending one message" icon="paper-plane" href="/developers/send/one-message">
+    The same fields, with the reasoning.
+  </Card>
+  <Card title="Custom TLVs" icon="tags" href="/developers/send/custom-tlvs">
+    The grammar, and the decimal tag that fails silently.
+  </Card>
+</CardGroup>

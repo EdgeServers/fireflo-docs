@@ -1,0 +1,97 @@
+---
+title: "POST /secure/sendbatch"
+description: "Many messages in one call — the fields, the expansion cap, and the response that confirms far less than it appears to."
+source: "panel lib/api-catalogue.ts, from BatchRequestParser and ScheduleAtParser @ 0.7.3"
+---
+
+Queues many messages in one call. **The response confirms acceptance only** — per-message results
+arrive on your errback URL.
+
+```json
+{
+  "messages": [
+    { "to": "61491570006", "content": "Your OTP is 4417." },
+    { "to": "61491570007", "content": "Your OTP is 9921." }
+  ]
+}
+```
+
+```json
+{
+  "data": {
+    "batchId": "c0ffee12-9f3a-4a1e-8d55-1b2c3d4e5f60",
+    "messageCount": 3,
+    "scheduled": "3600s"
+  }
+}
+```
+
+<Warning>
+**`messageCount` is how many the batch expanded to, not how many succeeded.** There are no
+per-message ids in this response and no per-message results — see
+[Batch callbacks](/developers/receive/batch-callbacks).
+</Warning>
+
+## Fields
+
+| Field | Type | Required | Notes |
+| :--- | :--- | :--- | :--- |
+| `messages` | array | **yes** | One object per message, each taking the fields of a single send. Its `to` may also be an array. |
+| `globals` | object | no | Defaults **merged under** every message, so a field set on a message wins. |
+| `batch_config` | object | no | `schedule_at`, `callback_url`, `errback_url`. |
+
+<Warning>
+**Other keys in `batch_config` are ignored, not refused.** A misspelled `errback_url` costs you every
+per-message result while the batch still returns `200`.
+
+This is the one place on the API where a typo does not produce a `400`. Verify it by sending a batch
+containing one message you know will be refused.
+</Warning>
+
+## `schedule_at`
+
+Exactly two forms:
+
+| Form | Meaning |
+| :--- | :--- |
+| `3600s` | Relative — in one hour |
+| `2026-08-20 09:30:00` | Absolute, `YYYY-MM-DD HH:MM:SS` |
+
+Anything else is `412 Got unknown format`. **A date in the past is refused**, not sent immediately.
+
+## Errors particular to this endpoint
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument messages is not found.` | Absent, not an array, or empty. |
+| 400 | `Argument messages has an invalid value: a batch may expand to at most 10000 messages.` | Array-valued destinations multiplied out past the cap. |
+| 412 | `Got unknown format: <value>, correct formats are …` | `schedule_at` in neither accepted form, or in the past. |
+
+**The cap is 10 000 after expansion.** 100 messages each with 200 recipients is 20 000, and refused.
+
+## Pacing and durability
+
+Batches **pace themselves** against the router queue's depth, pausing above a high-water mark — you do
+not need to throttle your own submission of a batch.
+
+<Warning>
+**Scheduled batches survive a restart only with a RabbitMQ broker configured**, and not even then
+while the broker connection is degraded. If durable scheduling matters, confirm with your provider
+which queue provider they run.
+</Warning>
+
+## There is no batch status endpoint
+
+Not in FireFlo and not in Jasmin. The `batchId` correlates the callbacks you receive; there is
+nothing to poll.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Worked examples and the pacing story.
+  </Card>
+  <Card title="Batch callbacks" icon="phone-arrow-down-left" href="/developers/receive/batch-callbacks">
+    Where per-message results actually arrive.
+  </Card>
+</CardGroup>

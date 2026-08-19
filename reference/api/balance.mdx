@@ -1,0 +1,86 @@
+---
+title: "GET /secure/balance"
+description: "What is left on the account this login bills to — and why the message count is always ND."
+source: "panel lib/api-catalogue.ts; BalanceService.java @ 0.7.3"
+---
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+No parameters.
+
+## The two fields
+
+| Field | Meaning |
+| :--- | :--- |
+| `balance` | Money on the account this login bills to. `"ND"` when prepaid credit is not enabled. |
+| `sms_count` | **Always `"ND"`** — not determined. |
+
+<Tip>
+**`sms_count` is `"ND"` by design, not by omission.** Jasmin reports a prepaid message quota; FireFlo
+has no such counter, because credit is money and how many messages it buys depends on where they are
+going.
+
+Rather than invent a number, the field says it is not determined.
+</Tip>
+
+## Which account
+
+The one the **login bills to** — `app_credential.account_id`, not the login name. Several logins on
+one account all report the same balance, and all spend the same credit.
+
+## Refusals begin before zero
+
+<Warning>
+Credit is reserved in **blocks**, and a reservation only succeeds if the balance covers a whole block.
+The block is `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)` — twenty messages'
+worth by default.
+
+So `402 Insufficient credit` starts while this endpoint still reports a **positive** balance, at
+roughly one block's worth remaining.
+
+Alert on the balance approaching one block, not on zero. And note that a top-up smaller than one block
+does not restore service.
+</Warning>
+
+## Do not poll this per message
+
+It is a database read, it tells you nothing about whether *this* message will be accepted, and it
+doubles your request volume.
+
+Poll it on a schedule for alerting, and let a `402` be your per-message signal.
+
+## Decimal places
+
+`balance` is displayed with `smsg.money.scale` decimal places — `0` to `4`, default `4`. India uses
+`2`.
+
+**Storage never changes**: amounts are integers of ten-thousandths. This is presentation only.
+
+Rates on [`/secure/rate`](/reference/api/rate) always keep four places regardless, because a rate
+shown as `0.05` instead of `0.0450` is 11% out on every message.
+
+## Errors
+
+Only the shared ones — see [API errors](/reference/api/errors).
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Balance and quotes" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Using this alongside `/secure/rate`.
+  </Card>
+  <Card title="Prepaid credit" icon="coins" href="/platform/billing/prepaid-credit">
+    The operator's side: blocks, ledger and the money identity.
+  </Card>
+</CardGroup>

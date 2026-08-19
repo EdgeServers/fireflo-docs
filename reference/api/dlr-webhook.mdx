@@ -1,0 +1,123 @@
+---
+title: "The delivery receipt webhook"
+description: "What the gateway POSTs to your dlr_url — every field, both formats, and the retry budget."
+source: "panel lib/api-catalogue.ts DLR_FIELDS; fireflo-sms-gateway/docs/07-webhooks.md @ 0.7.3"
+---
+
+The one direction where **you are the server**. Ask for it with `"dlr": "yes"` and a `dlr_url` on the
+send.
+
+## `json` — the default
+
+A `POST` with `Content-Type: application/json`:
+
+```json
+{
+  "id": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-13T08:58:59.672Z",
+  "done_date": "2026-08-13T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-in-2001",
+  "system_id": "sunrise-http",
+  "parts": 1
+}
+```
+
+## Fields
+
+| Field | Meaning |
+| :--- | :--- |
+| `id` | The `messageId` the send returned. **This is how you correlate.** |
+| `stat` | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED` or `SEEN` |
+| `level` | `2` the outcome, `1` progress. **A level 1 receipt does not mean the message is finished** — `ACCEPTD` and `BUFFRED` both arrive as 1 and another follows. |
+| `sub_date` | When you submitted it, ISO-8601. Omitted when unknown. |
+| `done_date` | When this receipt was raised. On a level 2 receipt, when the message finished. |
+| `to` | The destination, as you gave it. |
+| `from` | The sender ID that was used. |
+| `operator_msg_id` | The carrier's own reference, for raising a query with them. |
+| `account_id` | The account billed. |
+| `system_id` | The login that submitted it. |
+| `parts` | Segment count. Omitted when not known. |
+
+**Null fields are omitted rather than sent as nulls**, so a receipt for a message that never reached a
+vendor does not arrive full of empty keys.
+
+Every call carries `User-Agent: FireFlo/<version>`.
+
+<Warning>
+**There is no `err` field.** Jasmin sends one; FireFlo's resolver is handed only the delivery state,
+never an error code, so emitting one would mean inventing it.
+
+**`vendor` is absent unless your provider enables it.** It names which supplier carries your traffic,
+which is withheld from customers by construction elsewhere.
+</Warning>
+
+## `kannel` — placeholder substitution
+
+A bare `GET` against the registered URL with two placeholders replaced. **Nothing is appended.**
+
+| Placeholder | Value |
+| :--- | :--- |
+| `%s` | Gateway message id |
+| `%d` | `1` delivered, `2` failed, `4` buffered, `8` submitted to SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**A URL without placeholders receives a request carrying nothing at all** — no body, no query, no
+identifier. The endpoint is hit on schedule, returns `200`, and the integration looks like it is
+"working but empty".
+
+Nothing in the system flags this, because an empty callback is indistinguishable from a correctly
+configured one that happens to carry no data.
+</Warning>
+
+The format is chosen by your provider with `smsg.dlr.forward.format`, not by you. `dlr-method` is
+accepted on a send but does **not** select it.
+
+## Delivery and retries
+
+| Rule | Value | Property |
+| :--- | :--- | :--- |
+| Success | HTTP **`200`–`399`** | — |
+| Retries | **10** | `smsg.webhook.retries` |
+| Interval | **120 000 ms** | `smsg.webhook.retry.interval.ms` |
+| Timeout | **5 000 ms**, connect and request | `smsg.webhook.timeout.ms` |
+
+<Warning>
+**A `302` to a login page counts as success and swallows the receipt.** So does any `2xx` from a proxy
+that never reached your application. If receipts "arrive" but your handler never runs, look at what
+is in front of it.
+</Warning>
+
+Delivery is **at least once** — make your handler idempotent on `id` **plus `level`**, not on `id`
+alone, since a message can legitimately produce a level 1 and then a level 2.
+
+## Which receipts you get
+
+`dlr_level` on the send: `1` progress only, `2` the outcome (**default**), `3` both.
+
+Over SMPP the same choice is the `registered_delivery` octet — `0x11` is the SMPP spelling of
+`dlr_level: 3`.
+
+## Every receipt is recorded
+
+Whether or not it is forwarded. **Suppressing a receipt is a decision about what to tell you, never
+about what to record** — so "I never got a receipt" is always answerable by your provider.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    Building against this, with the level trap explained.
+  </Card>
+  <Card title="Callbacks not arriving" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    Diagnosing the silence.
+  </Card>
+</CardGroup>
