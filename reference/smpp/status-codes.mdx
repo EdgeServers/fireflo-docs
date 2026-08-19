@@ -1,0 +1,54 @@
+---
+title: "Status codes"
+description: "The statuses FireFlo returns beyond the standard SMPP set, and what each one is deliberately not."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md, VendorSpecificConstants @ 0.7.3"
+---
+
+Statuses FireFlo returns on `submit_sm_resp` beyond the standard SMPP set. **This is the whole list.**
+
+| Code | Name | Meaning |
+| :--- | :--- | :--- |
+| `0xC3` | `ESME_RMISSINGOPTPARAM` | A TLV listed in the listener's `mandatory.tlvs.submit` held no value after credential defaults and any whitelist stamp were applied. |
+| `0x402` | `STATUS_INSUFFICIENT_CREDIT` | The account has insufficient credit — prepaid balance exhausted, or a postpaid credit limit reached. |
+| `0x40F` | `STATUS_INVALID_PRODUCT` | Refused at **bind**, not at submit: the resolved product is blank, or names no enabled row in `app_product`. Only when `conf.product.required` is on. |
+| `0x418` | `STATUS_NO_RATE` | The message matched no sell-side rate rule. Only when `smsg.rating.unrated.refuse` is on; otherwise it is accepted and charged nothing. |
+| `0x14` | `ESME_RMSGQFUL` | The router queue or this listener's inbound queue is at its limit. Only when `smsg.queue.capacity` or `inQueue.capacity` is set; both default to unbounded. |
+
+## What each is deliberately not
+
+**`0x402` is not `ESME_RTHROTTLED`.** Throttled tells a client to back off and retry, which is exactly
+wrong for a condition only a top-up or an invoice can clear. A client that retries a credit refusal
+burns its own capacity achieving nothing.
+
+<Note>
+Prepaid and postpaid refuse **identically**. `0x402` over SMPP, `402` with `insufficientCredit` over
+HTTP, whichever mode the account is in. A customer's integration does not need to know which they are
+on.
+</Note>
+
+**`0x14` is a well-behaved backpressure signal.** An ESME that respects it backs off and retries. This
+is the one refusal here that a client *should* retry.
+
+**`0x40F` carries one code and two distinct WARN lines** — blank product versus unknown name. The
+client only ever sees the number, so the log is where those are told apart.
+
+## Vendor-side classification
+
+Codes a **vendor** returns are classified by `status.retry.worker` and `status.retry.router` — see
+[Vendor settings](/reference/smpp/client).
+
+`ESME_RSUBMITFAIL` (`0x45`, decimal 69) is treated as permanent. It is genuinely ambiguous across
+SMSCs — some mean transient overload — so it is a per-vendor opt-back-in rather than a global
+reclassification.
+
+## Where a refusal is recorded
+
+| Ingress | Refusal | Recorded as |
+| :--- | :--- | :--- |
+| SMPP | `submit_sm_resp` with the code | A `cdr_rejected` row |
+| REST | `402`, `503` or `429` | A `cdr_rejected` row with a reason |
+
+Nothing refused at ingress is charged. The REST path charges before it publishes, so a queue-full
+refusal there refunds; the SMPP path refuses before accepting, so there is nothing to refund.
+
+See [Refusals](/platform/troubleshooting/refusals) for reading them back.

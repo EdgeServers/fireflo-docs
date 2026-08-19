@@ -275,10 +275,6 @@
   "navbar": {
     "links": [
       {
-        "label": "Kannel converter",
-        "href": "https://edgeservers.github.io/fireflo-sms-gateway/"
-      },
-      {
         "label": "GitHub",
         "href": "https://github.com/EdgeServers/fireflo-sms-gateway"
       }
@@ -286,7 +282,7 @@
     "primary": {
       "type": "button",
       "label": "Discussions",
-      "href": "https://github.com/EdgeServers/fireflo-sms-gateway/discussions"
+      "href": "https://github.com/EdgeServers/fireflo-docs/issues"
     }
   },
   "footer": {

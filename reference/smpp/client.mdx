@@ -1,0 +1,111 @@
+---
+title: "Vendor settings"
+description: "Every per-vendor key: hosts, bind counts, keep-alives, retry classification, TLVs and MO handling."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, SmppClientWorker @ 0.7.3"
+---
+
+A **vendor** is a connection out to whoever carries your traffic. Keys are set as
+`outSms.instance.<name>.<key>` — see [Property tiers](/reference/config/paths). Every worker also has
+[the base settings](/reference/smpp/worker-base).
+
+## Connecting
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `host` | `localhost` | Primary SMSC host. |
+| `port` | `27777` | Primary SMSC port. |
+| `systemId` | — | The system id used to bind. |
+| `password` | `psms` | The bind password. |
+| `extra.hosts` | `""` | Extra `host:port` pairs to bind **concurrently**, comma-separated. |
+| `backup.hosts` | `""` | `host:port` pairs used **if the primary fails**. |
+
+## Bind counts
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `connections.transceivers` | `1` | Transceiver binds. |
+| `connections.transmitters` | `0` | Transmitter binds. |
+| `connections.receivers` | `0` | Receiver binds. |
+
+Counts apply across normal, `extra.hosts` and `backup.hosts`.
+
+<Note>
+A session may carry traffic out if it is a **transceiver**, or a **transmitter** on a client session.
+A receiver-only vendor binds successfully and sends nothing — which is why the panel reports
+`bound_transmittable` separately from `bound`. If they differ, that is the reason.
+</Note>
+
+## Keep-alive and timeouts
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `request.tout` | `30000` | Milliseconds waiting for a response. |
+| `enquire.link.interval.millis` | `30000` | Keep-alive interval. |
+| `enquire.link.noTrafficOnly` | `false` | Only send keep-alives when there has been no other traffic. |
+
+## Retry classification
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `status.retry.worker` | `20,88` | Status codes that trigger a **local** retry at this vendor. |
+| `status.retry.router` | `""` | Status codes that push the message back to the router for another route. |
+| `status.retry.router.removeHlr` | `true` | Strip network routing info when pushing back. |
+
+<Warning>
+`maxRetries` bounds the **total** `submit_sm` one message may cost at this vendor, across in-worker
+retries and router re-routes. Before that was true, a value of `1` alongside 20 routing attempts meant
+a vendor could see roughly 100 PDUs for one message. Failing over to a *different* vendor starts a
+fresh budget.
+</Warning>
+
+`ESME_RSUBMITFAIL` (`0x45`, decimal 69) is treated as **permanent**: a lane refused with it fails on
+the first answer rather than after roughly twenty. Carriers that mean transient overload by it are
+opted back in per vendor with `status.retry.worker = 20,88,69`.
+
+## Receipts
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `request.dlrs` | `true` | Whether `registered_delivery` is set on every `submit_sm` to this vendor. |
+
+<Note>
+Turning it off means this vendor stops reporting outcomes, so every message through it settles as
+`EXPIRED` at the deadline rather than DELIVERED or FAILED — and your delivery rate for that vendor
+becomes meaningless rather than zero.
+</Note>
+
+## TLVs
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `registered.tlvs.submit` | `""` | TLVs to append on `submit_sm`, as `tagName_tag`. |
+| `registered.tlvs.mo` | `""` | TLVs to extract from inbound MO. |
+| `registered.tlvs.dlr` | `""` | TLVs to extract from receipts. |
+| `default.tlvs.submit` | `""` | `tagName_tag=value` defaults, applied **only where the message carries no value** for that tag. Declaring one registers its tag. |
+| `mandatory.tlvs.submit` | `""` | Tags this vendor will not accept a message without. |
+
+<Warning>
+The vendor-side `mandatory.tlvs.submit` is checked against what actually goes on the wire — after
+`default.tlvs.submit`, and after `registered.tlvs.submit` has filtered. A message missing one is
+refused with a FAILED receipt, a refund and a `cdr_rejected` row. **It is not re-routed.**
+
+Requiring a tag that is not also in `registered.tlvs.submit` can never be satisfied, and is warned
+about at load.
+</Warning>
+
+## Inbound messages
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `forward.mo.url` | `""` | Webhook for inbound MO. |
+| `forward.mo.format` | `JSON` | `JSON` or `FORM`. |
+| `mo.route` | `false` | Whether an inbound MO is also put on the router queue, so it can reach a customer's bound session. |
+
+<Warning>
+`mo.route` is **off by default** because a gateway whose last routing rule is a catch-all would
+otherwise submit its own inbound messages straight back out to a vendor.
+
+It is independent of `forward.mo.url`: with both set, every MO is forwarded **and** routed.
+</Warning>
+
+See [Webhooks](/reference/config/webhooks) for the egress settings that govern the forward.

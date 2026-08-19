@@ -1,0 +1,96 @@
+---
+title: "Settings every worker has"
+description: "The base settings a vendor and a listener share: retries, throughput, queues, filters, failure actions and suspension."
+source: "fireflo-core AbstractOutWorker.java prms table @ 0.7.3"
+---
+
+Every worker — vendor or listener — is configured through
+`outSms.instance.<name>.<key>`, falling back to `outSms.default.<key>` and then to the coded default
+below. See [Property tiers](/reference/config/paths).
+
+## Throughput and retries
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `maxRetries` | `1` | **Total** `submit_sm` this vendor may receive for one message, not per routing pass. `0` is unlimited. |
+| `tps` | `0` | Transactions per second. `0` is unmetered. |
+| `threadCount` | `1` | Worker threads. |
+| `queue.honourPriorities` | `false` | Whether a higher-priority message overtakes. |
+| `queue.name` | `""` | Share a queue between workers by naming it. |
+
+<Warning>
+`maxRetries` **used to bound only the in-worker retries**, and every trip through the router handed
+out a fresh allowance. With this reading `1` alongside `outSms.routing.maxAttempts` of 20, a vendor
+could see roughly 100 PDUs for a single message. It is now a total.
+
+If you are upgrading from before that fix and had tuned around the old behaviour, re-check this value.
+</Warning>
+
+## Running state
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `pause` | `false` | Keep accepting, stop sending. The queue grows. |
+| `suspend` | `false` | Stop accepting; the queue drains back to the router so traffic reroutes. |
+| `pause.sleep.ms` | `1000` | Poll interval while paused. |
+
+These are the two states behind the `hold`/`release` and `suspend`/`resume` verbs in
+[the CLI](/reference/cli/fireflo) and the panel's traffic controls.
+
+## Failure actions
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `fail.action.worker.type` | `SLEEP` or `RE_ENQUEUE_WORKER` | Depends on whether message handling is synchronous. |
+| `fail.action.router.type` | `RE_ENQUEUE_ROUTER` | What happens when the worker gives the message back. |
+| `fail.action.worker.sleep` | `1000` / `0` | Milliseconds before retrying internally — exists to avoid a busy loop when a worker is misconfigured. |
+| `fail.action.router.sleep` | `2000` / `0` | The same, before handing back to the router. |
+| `fail.action.delayed.delay` | `5000` | How long a message entering the delay queue waits before it may be sent again. |
+
+## Suspension policy
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `suspension.policy` | `SUSPEND` | What the gateway does to a worker that keeps failing. |
+| `suspension.stopMessages.ms` | `-1` | How long to stop sending for. `-1` is never. |
+| `suspension.disable.ms` | `-1` | How long to disable for. `-1` is never. |
+
+## Alerts and KPIs
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `alert.maxPending` | `0` (unlimited) | Pending-message threshold. |
+| `alert.maxRejected` | `0` (unlimited) | Rejected-message threshold. |
+| `alert.maxQueueSize` | `0` (unlimited) | Queue-depth threshold. |
+| `kpi.enabled` | `false` | Whether KPI sampling runs. |
+| `kpi.period.minutes` | `60` | Sampling window, maximum 120. |
+| `kpi.volume` | `100` | Messages before a verdict is formed. |
+| `kpi.fail.statuses` | `""` | Statuses that count as a failure for KPI purposes. |
+
+## Filters
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `filters.beforeDoMessage` | `""` | Run before the message is handled. |
+| `filters.afterDoMessageSuccess` | `""` | Run after a success. |
+| `filters.afterDoMessageFailure` | `""` | Run after a failure. |
+
+<Warning>
+A worker whose filters all fail to resolve starts **with no filters**, rather than refusing to start.
+Check the load report — see [Filters](/platform/routing/filters).
+</Warning>
+
+## Character mapping and diagnostics
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `charmapper.enabled` | `true` | Whether character mapping runs. |
+| `charmapper` | `""` | The mapping to apply. |
+| `debug` | `false` | Verbose worker logging. |
+| `print.msgs` | `false` | **Writes message bodies to the log.** |
+
+<Warning>
+`print.msgs`, and the sibling flags on the client and server workers, write credentials, phone numbers
+and message content to logs. Prefer a [capture](/platform/operations/capture) — bounded, in memory,
+one session, self-expiring.
+</Warning>

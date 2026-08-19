@@ -1,0 +1,134 @@
+---
+title: "Listener settings"
+description: "Every per-listener key: ports, TLS, per-account defaults, MO ownership, receipts, concatenation and diagnostics."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, SmppServerWorker.allPrms @ 0.7.3"
+---
+
+A **server** is a listener your customers bind in to. Keys below are set as
+`outSms.instance.<name>.<key>`, with `outSms.default.<key>` as the fallback tier — see
+[Property tiers](/reference/config/paths). Every worker also has
+[the base settings](/reference/smpp/worker-base).
+
+## Ports and connections
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `srv.enabled` | `true` | Enables the plaintext listener. |
+| `srv.port` | `0` | The port it binds to. |
+| `srv.systemId` | `FireFlo` | System ID presented in bind responses. |
+| `srv.maxConnections` | `1000` | Absolute maximum concurrent connections. |
+| `srv.maxConnectionsPerIP` | `0` | Per-source-IP ceiling. `0` is unlimited. |
+| `srv.bindTimeout` | `5000` | Milliseconds waiting for a bind request. |
+| `srv.maxInactivityTime` | `60` | Session inactivity, **in minutes**. Sessions beyond it are terminated. |
+
+<Warning>
+A listener that cannot take its port does **not** stop the gateway. It logs and the rest keeps running,
+which is right for a multi-listener deployment and surprising the first time — check
+[`/ops/health`](/reference/management/endpoints) rather than assuming a clean start means every
+listener is up.
+</Warning>
+
+## TLS
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `srv.tls.enabled` | `false` | Enables the TLS listener. |
+| `srv.tls.port` | `0` | Its port. |
+| `srv.tls.keystore.path` | `""` | Path to the JKS file. |
+| `srv.tls.keystore.alias` | `""` | Certificate alias inside the keystore. |
+| `srv.tls.keystore.password` | `""` | Keystore password. |
+| `srv.tls.reload` | `""` | Changing this value at runtime triggers a TLS reload. |
+
+## Proxy protocol
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `srv.proxy.enabled` | `false` | A dedicated port expecting HAProxy protocol headers. |
+| `srv.proxy.port` | `2777` | That port. |
+
+## Per-account defaults
+
+Applied to every account binding here unless the credential overrides them.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `conf.maxConnectionsPerUser.default` | `0` | Concurrent binds per account. `0` is unlimited. |
+| `conf.maxRate.default` | `0` | Throughput per account, in TPS. `0` is unlimited. |
+| `conf.maxPending.default` | `1000` | Window size — unacknowledged requests in flight. |
+| `conf.windowMonitorInterval.default` | `15000` | Window monitoring interval, ms. |
+| `conf.responseTout.default` | `30000` | Request expiry / response timeout, ms. |
+| `conf.writeTimeout.default` | `30000` | Socket write timeout, ms. |
+
+<Note>
+`conf.maxRate.default` and the REST ceiling `smsg.restapi.maxRate.default` **do not track each other**.
+Set both when the limit is meant to be gateway-wide — see [Limits](/reference/config/limits).
+</Note>
+
+## Inbound messages (MO)
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `mo.owner.map` | `""` | Which account owns which inbound address. `<pattern>=<accountId>[:<systemId>]`, comma-separated, first match wins; the pattern is a regular expression. Omit `:systemId` to deliver to any session the account has bound. |
+| `mo.owner.default` | `""` | Where an MO goes when no pattern matched. |
+
+<Warning>
+**Empty `mo.owner.default` means nowhere.** The listener logs `message.mo.unmapped` and consumes the
+message rather than guessing an owner. That is deliberate — delivering a stranger's inbound message to
+the wrong customer is worse than dropping it — but it means unmapped MO traffic disappears quietly
+unless you watch for that log line.
+</Warning>
+
+## Receipts, addressing and encoding
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `forward.dlrs` | `true` | Master switch for forwarding receipts to clients on this listener. **Off suppresses them for everyone bound here, whatever they asked for.** |
+| `flag.reverseDlrSrcDst` | `true` | Reverses source and destination inside receipts. |
+| `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Regular expression validating the receiver address. |
+| `charset.gsm` | `GSM` | Charset for data coding `0`. |
+| `charset.latin1` | `ISO-8859-1` | Charset for Latin-1. |
+| `charset.ucs2` | `UCS-2` | Charset for data coding `8`. |
+| `ccat.8bit` | `true` | 8-bit reference numbers for concatenated SMS instead of 16-bit. |
+| `reassembling.timeoutMillis` | `30000` | How long to wait for every segment before failing. |
+| `dlr.multipart` | `all` | Which segments produce a receipt: `all`, `first` or `last`. |
+
+## TLVs, whitelisting and products
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `registered.tlvs.submit` | `""` | TLVs to extract from an inbound `submit_sm`, as `tagName_tag`. **Unlisted tags are discarded.** |
+| `mandatory.tlvs.submit` | `""` | TLVs that must hold a value after credential defaults. Otherwise `0xC3`. |
+| `conf.whitelist.enabled` | `true` | Whether this listener checks sender IDs and content. |
+| `whitelist.tlvs.mode` | *(unset)* | `off`, `assign` or `replace`. |
+| `conf.product.required` | `false` | Refuse a bind whose resolved product names no enabled product. |
+| `inQueue.capacity` | `0` | Messages this listener holds waiting for the message store. |
+| `filter.failOpen` | — | What happens when a filter cannot be resolved. |
+
+See [Whitelisting](/reference/config/whitelisting) and [Limits](/reference/config/limits).
+
+## Threads
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `srv.threads` | `1` | Netty boss threads — accepting connections. |
+| `srv.worker.threads` | `10` | Netty worker threads — I/O. |
+| `srv.out.threads` | `10` | Outgoing logic and routing. |
+| `srv.monitor.threads` | `1` | Session monitoring. |
+
+## Diagnostics
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `log.pdus` | `false` | Decoded PDUs. **May include bind passwords, phone numbers and message bodies.** |
+| `log.bytes` | `false` | Raw hex bytes. Treat as sensitive. |
+| `log.pdus.exclude` | `21,-2147483627` | PDU command ids to suppress — by default enquire_link and its response. |
+| `srv.printStatsPeriod` | `300` | Seconds between statistics dumps. |
+| `srv.printRatePeriod` | `60` | Seconds between rate calculations. |
+| `srv.jmx.enabled` | `false` | Expose metrics via JMX. |
+| `srv.jmx.domain` | `au.remotiq.fireflo` | JMX domain. |
+
+<Note>
+`message.trace.mode` appears in the per-instance table but is **global only** — an
+`outSms.instance.<name>.message.trace.mode` is never read. Set it unprefixed. See
+[Logging](/reference/config/logging).
+</Note>
