@@ -1,0 +1,64 @@
+---
+title: "Sending SMS with FireFlo"
+description: "Two ways in, one set of rules behind them, and the handful of things that behave differently from other gateways."
+source: "fireflo-sms-gateway/docs/16-sending-sms.md, docs/06-http-api.md @ 0.7.3"
+---
+
+You can reach FireFlo two ways, and which you pick is mostly about volume and what your stack already
+speaks.
+
+<CardGroup cols={2}>
+  <Card title="REST" icon="code" href="/developers/quickstart">
+    JSON over HTTPS. One call, one message. Start here unless you have a reason not to.
+  </Card>
+  <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
+    A persistent bind. Higher throughput, and what carriers themselves speak.
+  </Card>
+</CardGroup>
+
+**Everything downstream of acceptance is identical.** Same routing, same rating, same approvals, same
+receipts. The choice affects how you hand a message over, not what happens to it.
+
+## Three things that surprise people
+
+Worth knowing before your first integration rather than during your first incident.
+
+<AccordionGroup>
+
+<Accordion title="A success response does not mean delivered">
+The submit response is sent **before routing runs**. So `200` — or `ESME_ROK` — means *accepted for
+routing*, and nothing more.
+
+A message can be accepted and then refused, dropped or fail to route, and the only way you learn is a
+[delivery receipt](/developers/receive/delivery-receipts). If your integration treats acceptance as
+delivery, it will be wrong in exactly the cases you care about.
+</Accordion>
+
+<Accordion title="Your sender ID and your wording may both need approving">
+On an account with whitelisting enforced, an unapproved `from` is refused, and so is a message body
+that matches no approved template.
+
+This is normal for regulated destinations — Indian DLT most visibly. If your sends work in testing
+and fail in production, this is the first thing to check.
+</Accordion>
+
+<Accordion title="Underscores and hyphens are the same field — except once">
+`dlr_url` and `dlr-url` are one field, and sending **both** is a `400` rather than last-one-wins.
+
+The single exception is `custom_tlvs`, which keeps its underscore. `custom-tlvs` is an unknown
+argument.
+</Accordion>
+
+</AccordionGroup>
+
+## Where to go next
+
+| You want to | Read |
+| :--- | :--- |
+| Send your first message | [Quickstart](/developers/quickstart) |
+| Know every field | [`/secure/send`](/reference/api/send) |
+| Send to many people at once | [Batches](/developers/send/batches) |
+| Know why a long message costs three | [Encoding and segments](/developers/send/encoding-and-segments) |
+| Receive delivery receipts | [Delivery receipts](/developers/receive/delivery-receipts) |
+| Handle an error properly | [Errors](/developers/errors) |
+| Move from Jasmin | [Migrating from Jasmin](/developers/migrating/from-jasmin) |

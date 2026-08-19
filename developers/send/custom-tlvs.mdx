@@ -1,0 +1,117 @@
+---
+title: "Custom TLVs"
+description: "Extra SMPP parameters on a REST send — an object not a list, decimal unless you say hex, and Int8 meaning eight bytes."
+source: "fireflo-restapi SendRequestParser.readCustomTlvs, TlvUtil.parseTag; panel lib/custom-tlvs.ts @ 0.7.3"
+---
+
+Some destinations need parameters that are not part of an ordinary send — most visibly Indian DLT,
+which requires a registered entity id and a template id on every message.
+
+`custom_tlvs` carries them.
+
+```json
+{
+  "to": "919876543210",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "custom_tlvs": {
+    "0x1400": "1101234567890123456",
+    "tmid_0x1402:Int8": "1102000000000012345"
+  }
+}
+```
+
+## Four rules, and each has bitten someone
+
+<AccordionGroup>
+
+<Accordion title="It is an object, not a list of pairs">
+```json
+"custom_tlvs": { "0x1400": "…" }        // correct
+"custom_tlvs": [{ "tag": "0x1400" }]    // 400
+"custom_tlvs": "0x1400=…"               // 400
+```
+
+The checked-in swagger file types this as an array. **It is wrong** — the parser wants an object, and
+generating a client from that spec produces a payload that is refused on the first call.
+</Accordion>
+
+<Accordion title="A bare number is DECIMAL">
+`1401` is decimal 1401, which is tag `0x0579` — **not** the `0x1401` almost everybody means.
+
+This is the dangerous one, because it *parses*. Nothing is refused: the gateway sends tag `0x0579`,
+the carrier ignores a parameter it does not recognise, and the message is delivered without the value
+it was supposed to carry. There is no error anywhere.
+
+Write `0x1401` when you mean hex. Decimal tags are legal and some vendors do publish them that way,
+which is precisely why the gateway cannot guess for you.
+</Accordion>
+
+<Accordion title="The tag is what follows the LAST underscore">
+`tmid_0x1401` is tag `0x1401`. The name in front is decoration the gateway keeps for its own logs,
+and it may itself contain underscores — `source_network_id_5120` is tag 5120 decimal.
+
+A name on its own is not enough. The gateway matches on the number.
+</Accordion>
+
+<Accordion title="Int8 means eight BYTES">
+`:Int8` appended to a key pins the wire encoding. The widths are octets, following the SMPP
+convention:
+
+| Token | Octets |
+| :--- | ---: |
+| `Int1` | 1 |
+| `Int2` | 2 |
+| `Int4` | 4 |
+| `Int8` | 8 |
+| `OctetString` | *default* |
+| `COctetString` | null-terminated |
+
+Read as *bits*, `Int8` would look like a one-byte field and the resulting refusal is baffling. A DLT
+template id around 1.4 × 10¹⁸ fits nowhere smaller than eight bytes.
+</Accordion>
+
+</AccordionGroup>
+
+## The field name keeps its underscore
+
+Every other field on this API treats `_` and `-` as the same character. **`custom_tlvs` does not** —
+`custom-tlvs` is `400 Unknown argument`.
+
+## Where else a tag can come from
+
+You are not the only source, and yours does not always win:
+
+<Steps>
+  <Step title="Your custom_tlvs">
+    Only extracted if the listener declares the tag — undeclared tags are **discarded**, not passed
+    through.
+  </Step>
+  <Step title="Your credential's defaults">
+    Set by your provider, filling tags you did not send. This is where a DLT entity id usually
+    belongs, since it is a property of you rather than of any one message.
+  </Step>
+  <Step title="The whitelist stamp">
+    On an approved template. In `replace` mode this **overwrites** what you sent — and that overwrite
+    is the approval.
+  </Step>
+  <Step title="The vendor's defaults">
+    Filling anything still unset at send time.
+  </Step>
+</Steps>
+
+<Warning>
+If a tag you send never arrives, the likeliest cause is that the listener does not declare it. Ask
+your provider whether it is in `registered.tlvs.submit` — an undeclared tag is dropped silently at
+ingress, before anything else in this list runs.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="TLV declarations" icon="tags" href="/reference/smpp/tlvs">
+    The full grammar and the five declaration levels.
+  </Card>
+  <Card title="Send one message" icon="paper-plane" href="/reference/api/send">
+    Every field on the endpoint.
+  </Card>
+</CardGroup>

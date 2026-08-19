@@ -1,0 +1,110 @@
+---
+title: "Handling errors"
+description: "What to retry, what to never retry, and why a 500 is the safe one."
+source: "fireflo-restapi SendResource; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+Every failure is a JSON object with a single `message`. The status is the machine-readable part.
+
+```json
+{"message":"Insufficient credit"}
+```
+
+The full catalogue is in [API errors](/reference/api/errors). This page is about what your client
+should *do*.
+
+## The retry table
+
+| Status | Retry | Why |
+| :--- | :--- | :--- |
+| `400`, `412` | **Never** | Your payload is wrong. It will be wrong forever. |
+| `401`, `403` | **Never** | Credentials or approval. Alert a human. |
+| `402` | **Never** | Retrying cannot add credit. Alert, and stop sending. |
+| `415` | **Never** | Fix the `Accept` header. |
+| `429` | **Yes**, backed off | Transient by definition. |
+| `500` | **Yes**, once or twice | The charge was reversed — see below. |
+| `502`, `503`, `504` | **Yes** | Not from the gateway; a proxy in front of it. |
+
+<Warning>
+**There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A
+fixed interval across many workers re-synchronises them into the next burst, which is how a brief
+rate-limit becomes a sustained one.
+</Warning>
+
+## Why a 500 is safe to retry
+
+`500 Cannot send message` means the gateway accepted your request and could not queue it. **Any
+charge is reversed.**
+
+That is a deliberate property of the ingress rather than an accident: credit is taken before queueing
+and given back when queueing fails. So a retry costs one message, not two — which is exactly the
+guarantee that makes an automatic retry defensible here and not on a `402`.
+
+## Build for the receipt, not the response
+
+The single most common integration mistake is treating a `200` as delivery.
+
+The submit response is sent **before routing runs**, so acceptance and delivery are unrelated
+statements. A message can be accepted and then refused for an unapproved sender, dropped for want of
+a route, or rejected by the carrier — and none of that can appear on the original call.
+
+<Steps>
+  <Step title="Store the messageId">
+    It is the only thing that correlates your record with everything that follows.
+  </Step>
+  <Step title="Treat the send as 'submitted', not 'sent'">
+    A separate state in your own model, so the difference stays visible.
+  </Step>
+  <Step title="Move to a final state only on a level 2 receipt">
+    `ACCEPTD` and `BUFFRED` arrive as level 1 and another receipt follows.
+  </Step>
+  <Step title="Time out on your own clock">
+    A message that never gets a final receipt should expire in your system too, or it sits
+    "submitted" forever.
+  </Step>
+</Steps>
+
+## Errors you will meet in production, not in testing
+
+<AccordionGroup>
+
+<Accordion title="403 — not an approved sender ID">
+Your account has sender-ID approval enforced. The `from` you used has not been approved, or you
+omitted it and your login name is not approved either.
+
+Not retryable, and not fixable in code — it needs an approval from your provider.
+</Accordion>
+
+<Accordion title="403 — content does not match any approved template">
+Your account sends only approved wording. A message that works in staging and fails in production is
+usually this.
+
+**Whitespace is folded before matching**, so extra spaces and newlines are not the cause. A changed
+word, an added full stop, or a variable in a different position is.
+</Accordion>
+
+<Accordion title="402 with money still on the account">
+Credit is reserved in blocks, not per message — around twenty messages' worth at a time by default —
+and a reserve only succeeds if the balance covers a whole block.
+
+So refusals start while the balance is still positive. Alert on the balance approaching one block,
+not on zero.
+</Accordion>
+
+<Accordion title="400 — Unknown argument: custom-tlvs">
+Every other field treats `_` and `-` as the same character. `custom_tlvs` is the one exception and
+keeps its underscore.
+</Accordion>
+
+</AccordionGroup>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Every status" icon="table-list" href="/reference/api/errors">
+    The full catalogue with what provokes each.
+  </Card>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The half of the story the response cannot tell you.
+  </Card>
+</CardGroup>

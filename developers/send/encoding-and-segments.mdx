@@ -1,0 +1,113 @@
+---
+title: "Encoding and segments"
+description: "Why the same message costs one on one account and three on another — the exact segment sizes, and the character that quietly doubles your bill."
+source: "fireflo-sms-gateway SmppServerUtil.java constants @ 0.7.3"
+---
+
+**You are billed per segment, not per message.** A long message is several segments, and which
+encoding it uses decides how many.
+
+## The numbers
+
+Taken from the gateway's own constants, not from the specification in general:
+
+| Encoding | `coding` | One message | Each segment of a longer one |
+| :--- | ---: | ---: | ---: |
+| **GSM-7** | `0` | 160 characters | 153 characters |
+| **UCS-2** | `8` | 70 characters | 67 characters |
+
+<Tip>
+The concatenation header costs you the difference — 7 characters in GSM-7, 3 in UCS-2 — out of every
+segment, which is why 160 becomes 153 rather than staying 160.
+
+Internally these are byte limits: 140 bytes single, 134 bytes per segment. GSM-7 packs seven bits per
+character, UCS-2 uses two bytes each.
+</Tip>
+
+A message may be at most **255 segments**.
+
+## The character that doubles your bill
+
+**One non-GSM-7 character forces the whole message to UCS-2**, and the capacity drops from 160 to 70.
+A 150-character message that cost one segment now costs three.
+
+The usual culprits, all invisible when you look at the text:
+
+| Looks like | Actually is |
+| :--- | :--- |
+| `'` | A curly apostrophe `’` inserted by a word processor |
+| `-` | An en dash `–` |
+| `...` | An ellipsis character `…` |
+| a space | A non-breaking space |
+| `é`, `ü` | Fine in GSM-7 — these are **not** the problem |
+
+<Warning>
+**Smart quotes are the commonest cause of an unexplained tripling in cost.** Text pasted from a
+document, a CMS, or a chat client routinely carries `’` instead of `'`, and nothing in the send path
+flags it — the message goes out correctly, just three times more expensively.
+
+Normalise punctuation before sending if your content comes from anywhere a human typed it.
+</Warning>
+
+## Check the price before you send
+
+`/secure/rate` returns the segment count without sending anything:
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+`submit_sm_count` is the segment count. It costs nothing, sends nothing, and counts against no rate
+limit — so it is reasonable to call it on user-generated content before committing to a send.
+
+## Setting the encoding yourself
+
+`coding` maps to SMPP `data_coding` and is **passed to the carrier unchanged**, so it chooses how the
+body is encoded, not merely how it is counted.
+
+| `coding` | Alphabet |
+| ---: | :--- |
+| `0` | SMSC default |
+| `1` | ASCII |
+| `2` | Octet, unspecified |
+| `3` | Latin-1 |
+| `4` | Octet |
+| `6` | Cyrillic |
+| `7` | Hebrew |
+| `8` | UCS-2 |
+
+Anything else in 0–14 is accepted and decoded as UTF-8. **15 and above is a `400`.**
+
+## What a customer sees when it goes wrong
+
+A message split into segments arrives as one message on a modern handset, because the concatenation
+header tells it how to reassemble. Two failure modes are worth knowing:
+
+- **Segments arriving out of order or incomplete** show as separate messages, often with visible
+  fragments of header. That is a carrier problem, not an encoding one.
+- **A partly-delivered long message is reported FAILED**, not partly delivered — resolution waits for
+  the last segment and reports the worst outcome. That is the honest answer, and it moves delivery
+  rates down relative to gateways that report the first segment.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Concatenation" icon="link" href="/platform/connections/concatenation">
+    How segments are reassembled, and what that costs.
+  </Card>
+  <Card title="Price a message" icon="calculator" href="/reference/api/rate">
+    Every field on `/secure/rate`.
+  </Card>
+</CardGroup>

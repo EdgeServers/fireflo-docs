@@ -1,0 +1,115 @@
+---
+title: "Sending one message"
+description: "The fields you will actually use, what each defaults to, and the four that change what a message costs or whether it is accepted."
+source: "fireflo-restapi SendRequestParser; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+The minimum is two fields:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes."
+}
+```
+
+Everything else has a default. The complete table is on
+[`/secure/send`](/reference/api/send) — this page is about the ones that matter in practice.
+
+## The common fields
+
+| Field | Default | Notes |
+| :--- | :--- | :--- |
+| `to` | — | **Required.** International format, quoted. |
+| `content` | — | Required unless you send `hex_content`. Never both. |
+| `from` | your login name | Must be approved, or `403`. |
+| `coding` | `0` | `8` for anything outside GSM-7 — halves your capacity. |
+| `dlr` | `no` | `yes` requires `dlr_url`. |
+| `dlr_url` | — | Where the receipt is POSTed. |
+
+## Quote the destination
+
+```json
+"to": "61491570006"    // correct
+"to": 61491570006      // valid JSON, and wrong
+```
+
+An unquoted number is an integer by the time the parser sees it, so **any leading zero is already
+gone**. The gateway cannot recover it, and the message goes to a different number or nowhere.
+
+## The four fields that change an outcome
+
+<AccordionGroup>
+
+<Accordion title="from — the sender ID">
+Omitting it uses your login name, which on an enforcing account is usually **not** approved. So
+"it worked without `from` in testing" and "it fails in production" are the same fact seen twice.
+
+See [Sender IDs](/developers/send/sender-ids).
+</Accordion>
+
+<Accordion title="coding — what it costs">
+`0` gives you 160 characters. `8` gives you 70. One curly apostrophe in your text forces UCS-2
+anyway, so setting `coding` does not protect you from the cost — normalising your punctuation does.
+
+See [Encoding and segments](/developers/send/encoding-and-segments).
+</Accordion>
+
+<Accordion title="product — what it is priced against">
+Not free text. It prices the message against a different product, drawn from an allow list your
+provider maintains per login — and **most logins are allowed none**. Naming one you are not allowed
+is `403`.
+
+The same allow list governs `/secure/rate`, so a quote and a send cannot disagree about what you may
+name.
+</Accordion>
+
+<Accordion title="validity_period — an integer, in minutes">
+Minutes the carrier should keep trying. **A whole number, not a duration string** — the old swagger
+types it as a string and the parser refuses that.
+
+```json
+"validity_period": 60     // correct
+"validity_period": "1h"   // 400
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Asking for a receipt
+
+Two fields, and both are needed — setting one without the other does nothing:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+`dlr_level` chooses which receipts you get: `1` progress only, `2` the outcome (default), `3` both.
+
+<Warning>
+**Level 1 alone does not send the outcome.** A client asking for `1` and waiting for a final state
+waits forever. If you want progress *and* the answer, ask for `3`.
+</Warning>
+
+## Sending binary
+
+`hex_content` takes the body as hex octets, decoded with the charset for your `coding`. An odd number
+of characters is a `400`.
+
+Send `content` or `hex_content` — never both.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Every field" icon="list" href="/reference/api/send">
+    Defaults, refusals, and the advanced parameters.
+  </Card>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Many messages in one call, and scheduling.
+  </Card>
+</CardGroup>

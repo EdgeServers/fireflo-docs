@@ -1,0 +1,94 @@
+---
+title: "Sender IDs"
+description: "What goes in `from`, why it may need approving, and the default that catches every new integration."
+source: "fireflo-sms-gateway/docs/17-whitelisting.md; MessageSubmissionService @ 0.7.3"
+---
+
+`from` is what the recipient sees as the sender.
+
+```json
+{
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "content": "Your OTP is 4417, valid for 10 minutes."
+}
+```
+
+## The default is the trap
+
+**Omitting `from` uses your login name.** That is convenient in testing and almost never right in
+production, because your login name is usually not an approved sender ID — so the same code that
+worked in staging returns `403` the moment approval is enforced.
+
+<Tip>
+Set `from` explicitly from the very first message, even while approval is off. It costs nothing and
+removes an entire class of go-live surprise.
+</Tip>
+
+## Two kinds of sender ID
+
+| Kind | Example | Can the recipient reply? |
+| :--- | :--- | :--- |
+| **Alphanumeric** | `SUNOTP` | No |
+| **Numeric** | `61491570006` | Yes |
+
+Alphanumeric is typically limited to 11 characters, and support varies by country — some destinations
+refuse it entirely, some overwrite it, and some require pre-registration. Your provider knows which
+applies to your traffic.
+
+## When approval is enforced
+
+On an account with sender-ID whitelisting on, an unapproved `from` is refused:
+
+```json
+{"message":"'SUNOTP' is not an approved sender ID for this account."}
+```
+
+`403` over HTTP, `0x415` over SMPP. Nothing was sent and nothing was charged.
+
+**This is not fixable in code.** It needs an approval from whoever runs your gateway, usually
+requested through the customer portal.
+
+## Requesting one
+
+<Steps>
+  <Step title="Ask for the exact string">
+    `SUNOTP` and `SunOTP` are different sender IDs. Ask for the casing you will actually send.
+  </Step>
+  <Step title="Say which destinations it is for">
+    Regulated destinations — India most visibly — need registration with the carrier as well as with
+    your gateway, and that takes longer.
+  </Step>
+  <Step title="Wait for APPROVED">
+    A sender ID that is pending is not usable. It behaves exactly as if it did not exist.
+  </Step>
+</Steps>
+
+<Warning>
+**An approved sender ID may also carry TLVs**, which are stamped onto your message when it matches.
+On a DLT lane that stamp *is* the registered entity id — so an unapproved sender is not only refused
+for being unapproved, it would also have arrived at the carrier without the parameters it needed.
+</Warning>
+
+## Sender ID and content approval are separate
+
+Two different checks, two different refusals:
+
+| Check | Refusal |
+| :--- | :--- |
+| Is this `from` approved? | `not an approved sender ID` |
+| Does this wording match an approved template? | `does not match any approved template` |
+
+An account may enforce either, both, or neither. Passing one says nothing about the other — see
+[Refusals](/platform/troubleshooting/refusals) for reading the second.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs and templates" icon="shield-check" href="/platform/customers/sender-ids">
+    The operator's side: approving, rejecting and what a stamp does.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/developers/errors">
+    What to do with a 403 that will not go away.
+  </Card>
+</CardGroup>

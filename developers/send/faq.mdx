@@ -1,0 +1,91 @@
+---
+title: "Sending FAQ"
+description: "The questions that come up once messages are flowing — cost, encoding, ids, duplicates and scheduling."
+source: "fireflo-restapi parsers; fireflo-sms-gateway/docs/13, docs/16 @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="Why did one message cost three?">
+You are billed per segment. A message over 160 GSM-7 characters — or over **70** if anything in it
+forces UCS-2 — is split, and each segment is charged.
+
+The commonest cause of an unexpected tripling is a single curly apostrophe `’` pasted from a
+document, which forces the whole message to UCS-2. Call `/secure/rate` to see `submit_sm_count`
+before you send.
+</Accordion>
+
+<Accordion title="I got a 200 and the message never arrived">
+`200` means *accepted for routing*, not delivered — the submit response is sent before routing runs.
+
+Ask for a delivery receipt and treat that as the outcome. Without one you have no way to distinguish
+delivered from dropped, and neither does your provider's dashboard for your own messages.
+</Accordion>
+
+<Accordion title="Can I send the same message twice by accident?">
+Yes — there is **no idempotency key** on `/secure/send`. A retry after a timeout sends a second
+message and charges you for it.
+
+If you retry automatically, retry only on `429` and `500`. A `500` is safe because the charge is
+reversed; a timeout is *not* safe, because the message may well have been accepted and you simply did
+not see the response.
+
+For anything financial or user-visible, keep your own de-duplication key and check it before sending.
+</Accordion>
+
+<Accordion title="What is the messageId for?">
+Correlation, and nothing else. It appears on every delivery receipt as `id`, on the call record, and
+in your provider's search — so it is the single value worth storing against your own record.
+
+It is not a status. Fetching it back is not how you learn the outcome; the receipt is.
+</Accordion>
+
+<Accordion title="Why is my validity_period rejected?">
+It is an **integer of minutes**, not a duration string. `60` is right, `"1h"` is a `400`.
+
+The checked-in swagger file types it as a string, which is one of three places that file is wrong —
+do not generate a client from it.
+</Accordion>
+
+<Accordion title="Can I schedule a single message?">
+Not on `/secure/send`. Scheduling lives on `/secure/sendbatch` as `batch_config.schedule_at`, and a
+batch of one message is a perfectly reasonable way to schedule one message.
+
+`sdt` on a single send is passed to the carrier unchanged and **is not validated or acted on by the
+gateway** — do not use it as a scheduling mechanism.
+</Accordion>
+
+<Accordion title="My batch was accepted but nothing happened">
+The `sendbatch` response confirms acceptance only — it carries no per-message ids and no per-message
+results. Those arrive on your `errback_url`.
+
+**Unknown keys in `batch_config` are ignored rather than refused**, so a misspelled `errback_url`
+loses every result silently. Test it by deliberately sending one message you know will fail.
+</Accordion>
+
+<Accordion title="Do I need to throttle myself?">
+For a batch, no — batches pace themselves against the router queue.
+
+For ordinary sends, yes: your account has a messages-per-second limit and exceeding it returns `429`
+with **no `Retry-After`**. Back off exponentially with jitter; a fixed interval across several workers
+re-synchronises them into the next burst.
+</Accordion>
+
+<Accordion title="Can I send to several numbers in one call?">
+Yes, two ways. A batch takes a `messages` array, and any message's `to` may itself be an array of
+destinations, which multiplies out.
+
+The expansion is capped at **10 000** messages per batch. 100 messages each with 200 recipients is
+20 000 and is refused.
+</Accordion>
+
+<Accordion title="Why does my custom_tlvs value never reach the carrier?">
+Three likely causes, in order:
+
+1. **You wrote a bare decimal.** `1401` is tag `0x0579`, not `0x1401`. It parses, sends, and is
+   ignored by the carrier — with no error anywhere.
+2. **The listener does not declare the tag.** Undeclared tags are discarded at ingress.
+3. **Something overwrote it.** A whitelist stamp in `replace` mode is meant to win.
+</Accordion>
+
+</AccordionGroup>

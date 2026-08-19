@@ -1,0 +1,146 @@
+---
+title: "Quickstart"
+description: "One message, in four languages, with the three things that will refuse it before it sends."
+source: "fireflo-sms-gateway/docs/16-sending-sms.md; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+You need three things from whoever runs your gateway: a **base URL**, an **HTTP login**, and a
+**password**. If your login was set up for SMPP it will not work here — that is a deliberate
+separation, not a bug.
+
+## Send one message
+
+<CodeGroup>
+
+```bash curl
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "to": "61491570006",
+    "content": "Your OTP is 4417, valid for 10 minutes."
+  }' \
+  'https://sms.example.com/secure/send'
+```
+
+```javascript Node
+const auth = Buffer.from(`${process.env.SMS_LOGIN}:${process.env.SMS_PASSWORD}`).toString("base64");
+
+const res = await fetch("https://sms.example.com/secure/send", {
+  method: "POST",
+  headers: {
+    Authorization: "Basic " + auth,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    to: "61491570006",
+    content: "Your OTP is 4417, valid for 10 minutes.",
+  }),
+});
+
+const { data, message } = await res.json();
+if (!res.ok) throw new Error(message);
+console.log(data.messageId);
+```
+
+```python Python
+import os, requests
+
+r = requests.post(
+    "https://sms.example.com/secure/send",
+    auth=(os.environ["SMS_LOGIN"], os.environ["SMS_PASSWORD"]),
+    json={"to": "61491570006", "content": "Your OTP is 4417, valid for 10 minutes."},
+)
+r.raise_for_status()
+print(r.json()["data"]["messageId"])
+```
+
+```php PHP
+$ch = curl_init('https://sms.example.com/secure/send');
+curl_setopt_array($ch, [
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_USERPWD => getenv('SMS_LOGIN') . ':' . getenv('SMS_PASSWORD'),
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode([
+    'to'      => '61491570006',
+    'content' => 'Your OTP is 4417, valid for 10 minutes.',
+  ]),
+]);
+
+$out = json_decode(curl_exec($ch), true);
+```
+
+</CodeGroup>
+
+A success carries the id you will see again on every receipt:
+
+```json
+{
+  "data": {
+    "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46"
+  }
+}
+```
+
+<Warning>
+**Quote the destination.** `"to": 61491570006` is valid JSON and loses any leading zero before the
+parser ever sees it. Always send it as a string.
+</Warning>
+
+## Check it worked before you debug
+
+Two calls, neither of which sends anything or costs anything:
+
+```bash
+# Is the gateway up? No credentials needed.
+curl 'https://sms.example.com/ping'
+
+# Are my credentials right, and do I have credit?
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+<Tip>
+`/secure/rate` prices a message without sending it and counts against no rate limit — the cheapest
+way to confirm a destination is routable and priced before you send anything real.
+</Tip>
+
+## The three things that refuse a first message
+
+In the order you are likely to hit them:
+
+<Steps>
+  <Step title="403 Authentication failure">
+    Wrong password, unknown login — **or an SMPP login**, which cannot use this API at all. The
+    message is identical for all three.
+  </Step>
+  <Step title="403 not an approved sender ID">
+    Your account has sender-ID approval enforced and the `from` you sent is not on the list. Omitting
+    `from` uses your login name, which is usually not approved either.
+  </Step>
+  <Step title="402 Insufficient credit">
+    Prepaid, and the balance will not cover it. **Nothing was sent and nothing was charged.**
+  </Step>
+</Steps>
+
+## Then what?
+
+A `200` means *accepted for routing*, not delivered — the submit response is sent before routing runs.
+To find out what actually happened, ask for a receipt:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    The payload, the levels, and how to correlate on `messageId`.
+  </Card>
+  <Card title="Every field" icon="list" href="/reference/api/send">
+    Defaults, refusals and the advanced parameters.
+  </Card>
+</CardGroup>

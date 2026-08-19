@@ -1,0 +1,93 @@
+---
+title: "Developer FAQ"
+description: "Getting started, choosing between REST and SMPP, and the questions that come before your first message."
+source: "fireflo-sms-gateway/docs/06, docs/16; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="REST or SMPP — which should I use?">
+**REST**, unless you have a reason not to. One HTTPS call per message, nothing to keep alive, and
+every language speaks it.
+
+**SMPP** earns its complexity at high sustained volume, where a persistent bind avoids a TCP and TLS
+handshake per message, and where you want the protocol carriers themselves use.
+
+Everything downstream of acceptance is identical either way — same routing, rating, approvals and
+receipts.
+</Accordion>
+
+<Accordion title="Can one login do both?">
+No. Credentials are typed `HTTP` or `SMPP`, and the two are not interchangeable. Ask for one of each
+if you need both.
+
+This is the cause of a `403 Authentication failure` that survives every password check: the login is
+fine, it is simply the wrong type for the door you are knocking on.
+</Accordion>
+
+<Accordion title="Is there a sandbox?">
+That is your provider's decision, not a property of the gateway. Ask them.
+
+What exists everywhere is `/secure/rate`, which prices a message without sending it, charging nothing
+and counting against no rate limit — enough to validate destinations, encoding and pricing before you
+send anything real.
+</Accordion>
+
+<Accordion title="Is there an official SDK?">
+No. The API is small enough that an HTTP client and four lines of code cover it — see
+[Quickstart](/developers/quickstart) for curl, Node, Python and PHP.
+
+<Warning>
+**Do not generate a client from `api/send-sms.swagger.json`.** It is hand-maintained and wrong in
+three places you meet immediately: `custom_tlvs` typed as an array when the parser wants an object,
+`validity-period` typed as a string when it must be an integer, and a `sendbatch` body whose keys the
+parser ignores.
+</Warning>
+</Accordion>
+
+<Accordion title="What is my base URL?">
+Your provider's, not a fixed one — FireFlo is software people run themselves. Every example here uses
+`https://sms.example.com` as a stand-in.
+</Accordion>
+
+<Accordion title="Do I need to handle rate limiting?">
+Yes, if you send in bursts. Your account has a messages-per-second limit; over it you get `429` with
+**no `Retry-After` header**.
+
+Back off exponentially with jitter. A fixed retry interval across several workers re-synchronises them
+into the next burst, turning a momentary limit into a sustained one.
+</Accordion>
+
+<Accordion title="How do I know a message was delivered?">
+A [delivery receipt](/developers/receive/delivery-receipts), and only that. Ask for one with
+`"dlr": "yes"` and a `dlr_url`.
+
+Wait for a **level 2** receipt. `ACCEPTD` and `BUFFRED` arrive as level 1 and another follows — a
+client treating the first receipt as final reports the wrong outcome permanently.
+</Accordion>
+
+<Accordion title="Why do I get three receipts for one long message?">
+Because you sent three `submit_sm`. `conf.dlr.multipart` defaults to `all`, so there is one receipt
+per segment you submitted, each quoting the id you were given.
+
+Your provider can set it to `first` or `last` to collapse that to one. **Every receipt reports the
+same outcome** whichever they choose, because the segments are aggregated before any receipt is built.
+</Accordion>
+
+<Accordion title="Why is a partly-delivered long message reported as failed?">
+Because the recipient did not receive a readable message. Resolution waits for the last segment and
+reports the **worst** outcome, not the first.
+
+It is the honest answer, and it moves delivery-rate figures down relative to gateways that report the
+first segment — worth knowing before comparing providers on a delivery-rate number.
+</Accordion>
+
+<Accordion title="Can I get my messages out of the system?">
+Yes — the customer portal shows your own messages with search and a CSV export, and your statement
+separately. See [the portal](/developers/portal/messages-and-statement).
+
+You see the TLVs **you** sent on your own messages. What a vendor added downstream is not yours to
+see.
+</Accordion>
+
+</AccordionGroup>
