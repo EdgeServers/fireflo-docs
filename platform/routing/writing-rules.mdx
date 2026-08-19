@@ -1,0 +1,162 @@
+---
+title: "Writing rules"
+description: "The four-part rule grammar, the three operator mistakes that parse cleanly and match nothing, and how a rule targets a vendor group instead of one vendor."
+source: "fireflo-sms-gateway/conf.example/routingTable.conf, docs/05-routing-engine.md, docs/10-troubleshooting.md, fireflo-core/src/main/java/au/remotiq/fireflo/routing/RoutingRule.java, fireflo-control-panel/lib/routing-types.ts @ 0.7.3"
+---
+
+## Three ways to write a rule that can never be true
+
+Each of these loads without complaint, matches nothing, and costs an afternoon.
+
+<Warning>
+**`==` is a numeric operator.** `vendor1:from:==:MyBrand` does not quietly fail to match — it fails to
+*parse*, which fails the whole reload and leaves the previous table in service. Use `equals` for text.
+
+```
+vendor1:from:equals:MyBrand      correct
+vendor1:from:==:MyBrand          fails to parse
+```
+</Warning>
+
+<Warning>
+**`matches` is a regular expression and it is anchored**, because the gateway calls `Pattern.matches`
+rather than `find`. `^61.*` matches a whole destination; a bare `61` matches only the two-character
+string `61`.
+
+**`startsWith` compares literal text.** A regular expression handed to it asks whether a destination
+literally begins with the characters `^(?:\+61` — nothing does, so the rule stores, loads, displays
+and never fires. The control panel warns about this; a hand-edited file does not.
+</Warning>
+
+<Warning>
+**An unset field matches no positive operator.** `product:equals:premium` does not match a message
+carrying no product at all, and neither does `product:startsWith:prem`. Only `isNull` does.
+
+The reverse trips people the other way: `product:!equals:premium` **does** fire for a message with no
+product, because negation inverts the failed match.
+</Warning>
+
+## The grammar
+
+```
+Target:Attribute:Operator:Value
+```
+
+Rules are evaluated top to bottom within a table and the first match wins. `Target` is a worker
+instance (`vendor1`, `smppserver.smpp`), a **group**, or another table to chain into (`MESSAGE`).
+
+<Tabs>
+  <Tab title="Control panel">
+    **Routing** lists each table with its rules in order. The editor validates the operator against
+    the field before saving, refuses a numeric operator on a text field, and warns about a regular
+    expression written into a literal operator.
+  </Tab>
+  <Tab title="routingTable.conf">
+```ini
+[MESSAGE]
+vendor2:to:startsWith:614          # AU mobile
+vendor2:from:equals:MyBrand        # one sender ID
+vendor3:systemId:equals:acme-smpp  # one bound client
+vendor1::default:                  # the catch-all, LAST
+```
+  </Tab>
+</Tabs>
+
+<Warning>
+**The catch-all goes at the end.** Above other rules it makes every rule below it unreachable, and
+nothing warns you in the file — they parse fine, they simply never run. The panel reports it; the
+gateway records it as `unreachable-rules` on `/ops/health` and carries on.
+</Warning>
+
+## Operators
+
+Any operator can be negated with a leading `!`.
+
+| Kind | Operators |
+| :--- | :--- |
+| Always true | `default` — attribute and value left blank |
+| Text | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
+| Boolean | `isTrue`, `isFalse` |
+| Numeric | `==`, `>`, `>=`, `<`, `<=` |
+
+The four text comparisons are lexicographical, not numeric — `greaterThan` on a phone number compares
+strings.
+
+## Who sent it
+
+| Attribute | Source |
+| :--- | :--- |
+| `owner_id` | The credential's `accountId`, falling back to its `systemId`. On the HTTP API an explicit `account` parameter overrides it. |
+| `systemId` | The credential's `systemId` — the specific bound client, where several share one account. |
+| `product` | The `system_type` on the client's SMPP bind, falling back to the credential's `product`. HTTP callers have no bind, so they always use the credential value. |
+
+`product` is how one customer selects routing per session: the same credential binding with
+`system_type=premium` and `system_type=bulk` produces two sessions that route differently. See
+[Concepts](/platform/concepts).
+
+Message types for `type` rules: `0` text, `10` binary, `11` UCS-2, `14` flash, `17` push, `18` delivery
+receipt.
+
+## Conditions on the target, not the message
+
+Prefixing a field with `target.` reads a field of the destination worker instead, which is how a rule
+steers around a vendor that is backing up:
+
+```
+vendor2:target.queueSize:>i:5000
+```
+
+There are exactly four — `queueSize`, `sentPendingRate`, `sentDeliveredRate`, `sentFailRate` — matched
+case-insensitively, and an unrecognised one is refused at parse time with the four listed.
+
+<Note>
+`marginPercentage` and `marginStatus` are **message** fields, so drop the `target.` prefix and they
+resolve. Be aware of what they hold: both are set on the submit response, after the message has gone,
+so a routing condition on either reads `NOT_CALCULATED` on every first attempt.
+</Note>
+
+## Copy and continue
+
+A `+` on the target copies the message to that target and **carries on scanning**, rather than routing
+and stopping. In the database it is the `copied` column.
+
+## Vendor groups
+
+A rule may target a group instead of one vendor. The group picks a member, **skipping any that is
+suspended or not accepting** — that skip is the failover a single-target rule cannot do.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Policy | Picks |
+| :--- | :--- |
+| `round-robin` *(default)* | The next member in turn |
+| `weighted` | In proportion to the weights, deterministically — 70/30 is exactly 70/30 over a hundred messages, interleaved rather than in blocks |
+| `failover` | Always the first member that is up, in declared order |
+
+<Warning>
+**Group blocks must come before the first `[table]` header.** Inside a table block a member line
+matches nothing and is dropped silently, so the group ends up with fewer members than it reads as
+having — or none.
+
+A weight is read only by `weighted`. Setting one on the other two changes nothing, and the gateway
+says so at WARN rather than letting you believe a split is happening.
+</Warning>
+
+<Note>
+**One message, one debit, one destination.** A group always selects exactly one member, and `+copied`
+on a group rule still copies to one member — fanning out would be N sends against a single charge.
+
+If every member is down the rule sends nothing, logs `cause=group-all-dead` naming everyone it tried,
+and the scan **continues to the next rule**, which is what keeps a fallback rule written below a group
+rule reachable.
+</Note>
+
+Full grammar reference: [routingTable.conf](/reference/files/routing-table).

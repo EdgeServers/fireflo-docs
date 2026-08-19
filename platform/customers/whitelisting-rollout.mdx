@@ -1,0 +1,172 @@
+---
+title: "Rolling whitelisting out"
+description: "Turning sender ID and content checks on for a live customer without taking them off the air — the four switches, report before enforce, and the diagnostics that say what is actually running."
+source: "fireflo-sms-gateway/docs/17-whitelisting.md, fireflo-control-panel/lib/whitelist-types.ts @ 0.7.3"
+---
+
+Whitelisting is fail-closed by design, so switching it on for a live customer is the one change on
+this platform that can silence an account instantly. Everything below exists to make that a decision
+rather than a discovery.
+
+## The single most useful diagnostic
+
+```bash
+fireflo health
+```
+
+```json
+"whitelist": {
+  "active": true,
+  "generation": 4,
+  "scopes": 12,
+  "header_rejects": 3,
+  "template_rejects": 0,
+  "report_only_would_reject": 41,
+  "enforcing_with_nothing_approved": [],
+  "exempt_products": ["otp"]
+}
+```
+
+<Warning>
+**`active: false` while `smsg.whitelist.enabled` is true means the load has never succeeded.** It does
+not mean nothing is configured — it means nothing is being checked, on any account, however carefully
+their policies are set.
+
+That direction is deliberate: a fail-closed check that fired on a *failed* load would turn a database
+blip into a total outage. Fail-closed applies to a policy that was loaded and found empty, never to a
+subsystem that could not load at all. Which is why the flag has to be read rather than assumed — a
+whole deployment can be quietly unprotected and look identical to one that is working.
+</Warning>
+
+`exempt_products` is traffic going unchecked on purpose, and is the answer to "why was this not
+caught?" that no account's own policy can show.
+
+## Four switches, and the order they resolve in
+
+A message is checked only if **all four** say so. They are listed in the order the gateway resolves
+them, which is also the order to look in when something is not being enforced.
+
+| Layer | Where | Off means |
+| :--- | :--- | :--- |
+| 1. The feature | `smsg.whitelist.enabled` | Nothing is loaded, nothing is checked, anywhere. |
+| 2. The listener | `conf.whitelist.enabled` per SMPP listener | That listener checks nothing. The HTTP ingress is unaffected. |
+| 3. The product | `app_product.whitelist_enabled` | Every account on that product is exempt, on both ingresses. |
+| 4. The account | `app_whitelist_policy.header_mode` / `content_mode` | That account is not checked. |
+
+The first three are switches an operator sets; the fourth is the policy itself.
+
+<Note>
+**`conf.whitelist.enabled` defaults on**, so the master switch is the one that decides — a listener has
+to opt *out*. It exists because customers are rarely all on one listener: a registered-traffic
+listener can enforce while an internal or test one does not, without that being a property of each
+account.
+
+It applies only to SMPP. The HTTP ingress has no listener to hang it off, so use the product or the
+account there.
+</Note>
+
+## Report before enforce
+
+Each of `header_mode` and `content_mode` is `OFF`, `REPORT` or `ENFORCE`. **`REPORT` is why this is
+not a boolean.**
+
+<Steps>
+<Step title="Approve what you already know about">
+Sender IDs and templates for the account, or for a product that is checked. See
+[Sender IDs](/platform/customers/sender-ids) and [Content templates](/platform/customers/templates).
+</Step>
+<Step title="Set the account to REPORT">
+Every message is checked, logged as `message.wouldReject` at INFO, and **sent anyway**. Nothing is
+refused.
+</Step>
+<Step title="Read report_only_would_reject">
+It counts what `ENFORCE` would have refused, and it is the number to watch. Leave it running long
+enough to cover the customer's slow days — a template used once a month is invisible in an afternoon.
+</Step>
+<Step title="Approve what the log names, and only then enforce">
+`headerNotApproved` and `templateNotMatched` name what was wrong, and the account it belongs to.
+</Step>
+</Steps>
+
+Turning a fail-closed whitelist on for a live customer without first seeing what it would have refused
+is how a migration becomes an outage.
+
+## Enforcing with nothing approved
+
+<Warning>
+**An empty list at `ENFORCE` refuses everything, and that is correct** — a whitelist with nothing on
+it permits nothing. It is also almost always a half-finished setup, so the gateway says so at startup
+and reports it on `/ops/health` as `enforcing_with_nothing_approved` rather than leaving it to arrive
+as a support ticket.
+</Warning>
+
+The control panel refuses the save that would create it, counted the way the gateway counts. Two
+things make that more than a sum:
+
+- **Exempt products protect nothing.** A product with `whitelist_enabled = false` resolves to `OFF`
+  before any merge, so an approval filed under it is stored and never consulted. Counting it would
+  wave through an account whose approvals are all inert — creating the exact outage the guard exists
+  to prevent.
+- **Traffic with no product is served by the account scope alone.** No product-scoped approval can
+  ever reach it. So an account-level `ENFORCE` with an empty account list stops every login whose
+  credential names no product, however many product approvals exist.
+
+The second case is a loud warning rather than a refusal, because the configuration does run and does
+serve real traffic. To cover everything, approve at least one row with the product left blank.
+
+There is a third way to build one, and it is newer: a login with **no rows of its own and no
+account-wide rows** can send nothing. The account page warns when an account's approvals are all
+login-bound and some login is left with none.
+
+## Approved is not the same as accepted
+
+<Warning>
+**Nothing approved means nothing stamped.** An account whose sender IDs are all approved can still
+have every message refused *by the vendor* if the TLVs a carrier requires are not being supplied —
+the entity and template identifiers a DLT lane will not accept a message without.
+
+The panel's TLV coverage report says, per approved row, which mandatory tags nothing will supply and
+which vendors would drop them. Read it before switching to `ENFORCE`, not after: enforcing narrows
+what may be sent, and it does nothing at all about what a carrier requires.
+</Warning>
+
+## What a refusal looks like
+
+Over HTTP, **403** and a message naming what was wrong:
+
+```json
+{"message": "'SPAMCO' is not an approved sender ID for this account."}
+```
+
+403 rather than 400: the request is well formed and the caller is who they say they are — they are not
+allowed to send this.
+
+Over SMPP the `submit_sm` is **rejected rather than accepted and dropped**, so the customer's own
+client sees the failure at submit time instead of inferring it from a receipt that never arrives. See
+[Status codes](/reference/smpp/status-codes).
+
+Every refusal is logged with a reason — `headerNotApproved`, `templateNotMatched` — and the account it
+belongs to. In `REPORT` mode the same line appears as `message.wouldReject` at INFO and the message
+goes out.
+
+## Approving does not need a reconnect
+
+The whitelist is re-read on the configuration poll and each snapshot carries a generation, so an SMPP
+session bound for weeks picks up a newly approved sender ID without reconnecting. That matters because
+the customer whose traffic is being refused is usually on the phone while somebody approves it.
+
+```bash
+fireflo reload
+```
+
+applies it immediately instead of waiting for the poll. It takes the admin token — see
+[The fireflo CLI](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Whitelisting reference" href="/reference/config/whitelisting">
+Every property, the three stamping modes, and the per-vendor mandatory check.
+</Card>
+<Card title="Products" href="/platform/customers/products">
+Exemptions, and why an unknown product is checked rather than waved through.
+</Card>
+</CardGroup>

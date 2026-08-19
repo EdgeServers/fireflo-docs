@@ -1,0 +1,179 @@
+---
+title: "Customers FAQ"
+description: "Accounts, products, approvals and enforcement — the questions that arrive as a support ticket rather than as a configuration error."
+source: "fireflo-sms-gateway/docs/17-whitelisting.md, docs/13-rating-and-cdr.md, docs/03-auth-security.md, fireflo-control-panel/lib/whitelist-types.ts, lib/tlv-coverage.ts @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="A customer is sending happily and nothing is being charged">
+Check whether their login carries a **product**, and whether your rate rules do.
+
+A message with no product is shown only the rate rules that themselves have no product. On a
+deployment whose rules all carry one, it matches nothing, is left unrated, and an unrated message is
+never charged — pricing runs before the debit, so it is skipped. The message is delivered and billed
+to nobody.
+
+There is one line at `debug` and nothing else. The panel's **Pricing** page counts the last 24 hours
+of traffic that carried no price and names the accounts and products it came from.
+</Accordion>
+
+<Accordion title="Their credential names the right product and it is still unrated">
+`system_type` on an SMPP bind **overrides** the credential's product, and it is free text validated
+nowhere else. A client binding `prem` for `premium` lands in exactly the unrated state above.
+
+This is why `conf.product.required` checks **membership of the catalogue** rather than
+non-emptiness — `prem` passes any "is it set?" test perfectly. HTTP has no bind and so no override.
+</Accordion>
+
+<Accordion title="conf.product.required is on and a mistyped bind still gets through">
+The catalogue is `app_product`, a database table. A gateway on **file configuration** has no such
+table, and an unreachable database behaves the same way, so only the non-empty half is enforced: an
+unrecognisable product name is accepted.
+
+A WARN naming the setting and the value is logged **once per bind** saying exactly that. The
+tolerance is deliberate — refusing every bind because a query failed would be a far worse outage than
+the one this prevents.
+</Accordion>
+
+<Accordion title="Whitelisting is switched on and nothing is being checked">
+Read `active` on `/ops/health`. **`active: false` while `smsg.whitelist.enabled` is true means the
+load has never succeeded**, not that nothing is configured — nothing is being checked on any account,
+and that is the first thing to fix.
+
+If `active` is true, walk the four switches in order: the feature, the listener
+(`conf.whitelist.enabled`), the product (`app_product.whitelist_enabled`), then the account policy.
+A message is checked only if all four say so.
+</Accordion>
+
+<Accordion title="A listener is not enforcing and I never turned it off">
+`conf.whitelist.enabled` defaults **on**, so a listener that is not checking has either been opted out
+explicitly, or the master switch is off, or the key is not registered in `SmppServerWorker`'s
+`allPrms` array — in which case it keeps its bare form, reads a global nobody sets, and returns its
+coded default however you configure it.
+</Accordion>
+
+<Accordion title="I switched an account to ENFORCE and it refuses everything">
+An empty list at `ENFORCE` refuses everything, and that is correct: a whitelist with nothing on it
+permits nothing. It is reported as `enforcing_with_nothing_approved` on `/ops/health`.
+
+The usual cause is that the approvals exist but do not count. An approval filed under a product with
+`whitelist_enabled = false` protects nothing — that product resolves to `OFF` before any merge. And
+traffic with no product is served by the **account** scope alone, so no product-scoped approval can
+ever reach a login whose credential names no product.
+</Accordion>
+
+<Accordion title="The sender ID is approved and the carrier still refuses every message">
+Approved decides whether the message is matched here. It does not decide whether the carrier will take
+it.
+
+Nothing approved means nothing stamped, so a DLT lane receives a `submit_sm` with no entity or
+template id and refuses it — with a status in the 192–196 block, which is always about TLVs.
+`tlvCount=0` on the trace lines confirms it.
+
+The panel's TLV coverage report says, per approved row, which mandatory tags nothing will supply and
+which vendors would drop them.
+</Accordion>
+
+<Accordion title="The stamp is configured and the wire does not carry it">
+Three things to check, in this order:
+
+- **The token.** `PEID=…` has no underscore, so it carries no tag and stamps nothing. The format is
+  `<name>_<tag>=<value>`.
+- **The stamping mode.** `whitelist.tlvs.mode` defaults to `off` on a listener, so a match stamps
+  nothing at all. `assign` fills the tag in when the customer did not send one; `replace` overwrites
+  what they did send, and that overwrite *is* the approval.
+- **The vendor.** A tag missing from that vendor's `registered.tlvs.submit` is dropped on the way out,
+  *after* the call record has noted it as present. The record says sent; the wire does not carry it.
+</Accordion>
+
+<Accordion title="Do I need the customer to reconnect after approving something?">
+No. The whitelist is re-read on the configuration poll and each snapshot carries a generation, so a
+session bound for weeks picks up a newly approved sender ID without reconnecting.
+
+`fireflo reload` applies it now rather than at the next poll — which matters, because the customer
+whose traffic is being refused is usually on the phone while somebody approves it.
+</Accordion>
+
+<Accordion title="One login on the account works and another does not">
+Check whether the approvals are login-bound. `system_id` on a registration scopes it to a single
+credential; **NULL means every login on the account**, which is what every row meant before the column
+existed.
+
+Binding a row to one login removes it from every other login on that account. A login with no rows of
+its own and no account-wide rows can send nothing under `ENFORCE`. The account page warns when the
+approvals are all login-bound and some login is left with none.
+
+A message whose login is unknown gets the account-wide rows and nothing else — fail-closed on purpose,
+so a caller that did not pass a login is not handed approvals given to somebody specific.
+</Accordion>
+
+<Accordion title="A template saves cleanly and matches nothing">
+`{code}` has no `#` in it, so it is ordinary text — the template approves one exact string containing
+braces and refuses every real message.
+
+`{#VAR#}` and `{# var #}` are not the token either. The gateway loads them, matches them as
+`{#var#}`, and lists them under `templates_degraded` on `/ops/health`; the panel refuses to save them
+in the first place. Write the token lower case with no spaces inside it.
+
+The panel's preview is the check: it shows an example message the template accepts, built by the same
+scanner the matcher uses.
+</Accordion>
+
+<Accordion title="Can I raise the variable length for just one customer?">
+No. `smsg.whitelist.max.variable` is global, because templates are compiled once at load into one
+index per account — there is nowhere per-customer to put it.
+
+Raising it widens **every** approved template on the deployment at once, which is the largest
+false-accept in the design. It is logged at INFO and reported as `max_variable` on `/ops/health`, and
+that reported value is also the answer when the setting has been changed but the configuration poll
+has not landed yet.
+</Accordion>
+
+<Accordion title="A customer edited their template and their traffic stopped">
+Editing an approved registration sets it back to `PENDING` and clears the earlier review, so it is out
+of service until somebody approves it again.
+
+That is the point — a customer must not change approved wording and keep sending under the approval —
+and it has a sharp edge on a fail-closed account. Proposing TLVs is the one exception: `requested_tlvs`
+is read by nothing on the message path, so an approved row keeps working while an operator considers
+the proposal.
+</Accordion>
+
+<Accordion title="A customer proposed TLVs. Why can they not just set them?">
+Under `replace` the stamp overwrites whatever the client asserted, and **that overwrite is the
+approval**. A customer able to write the served column could assert somebody else's registration while
+sending approved wording, and the call record would then report the value they chose as approved.
+
+So the portal writes `requested_tlvs`, the gateway reads `tlvs`, and an operator either moves the
+proposal across or clears it. Accepting puts the value on the wire at the next configuration poll.
+</Accordion>
+
+<Accordion title="Which account gets billed when accountId is blank on a credential?">
+It differs by protocol. SMPP falls back to the `systemId`; HTTP falls back to the lookup key, which is
+the `apiKey` when one is set.
+
+So an HTTP login with an API key and no `accountId` bills to the key itself — the secret lands in
+`cdr_submit.account_id`, in the panel's revenue figures and in every CSV export. Set `accountId`
+explicitly and neither fallback matters.
+</Accordion>
+
+<Accordion title="I added credit and the balance did not move">
+Check whether the account has an `account_balance` row. An account with no row is **not at zero** — it
+has no balance, which is a different state.
+
+A `RECHARGE` written for an account with no row credits nothing. It stays pending, logs a WARN naming
+the account, and applies itself the moment the row appears. Creating a login does not create a balance;
+*Open for credit* on the account page does.
+</Accordion>
+
+<Accordion title="I unlisted an account and its traffic kept flowing">
+The gateway never reads the account catalogue. `enabled` on `app_account` decides whether this panel
+lists the account and nothing else — its logins keep connecting, its traffic keeps sending and its
+rate rules keep pricing.
+
+It is the opposite of what `enabled` means on a vendor or a product. To stop traffic, disable the
+**logins**; to stop spend, use the balance.
+</Accordion>
+
+</AccordionGroup>

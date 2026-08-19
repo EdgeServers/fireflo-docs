@@ -1,0 +1,135 @@
+---
+title: "Products"
+description: "What a product selects — the rate, the route and whether traffic is checked at all — and why an unset one sends messages for free."
+source: "fireflo-sms-gateway/docs/13-rating-and-cdr.md, docs/03-auth-security.md, docs/17-whitelisting.md, db/migration/V1.19.0__baseline.sql @ 0.7.3"
+---
+
+A **product** is a tag on a login. It is matchable in the routing table, it selects the rate, and it
+decides whether an account's sender IDs and content are checked. It is also optional, and the
+optional case is the expensive one.
+
+## An unset product is a supported state that sends for free
+
+Leaving `product` off a credential is legal configuration. It matches `product:isNull:` in the
+routing table and it is priced only by rate rules that themselves carry no product.
+
+**That last clause is the whole trap.** A rule with no product applies to every product, but a
+*message* with no product sees **only** the rules that have none. They are not two spellings of "any".
+
+<Warning>
+**On a deployment whose rate rules all carry a product, a message with no product matches nothing.**
+It is left unrated, and an unrated message is never charged — pricing runs before the debit, so
+`chargeCredit` skips it entirely. The message is delivered and billed to nobody.
+
+Nothing refuses it and nothing raises an error. There is one line at `debug`, which is the entire
+signal that traffic is being given away.
+</Warning>
+
+Two settings close it, both off by default:
+
+| Setting | Scope | Effect |
+| :--- | :--- | :--- |
+| `conf.product.required` | per SMPP listener | Refuses a **bind** whose resolved product is blank, or names no enabled row in `app_product`. Status `0x0000040F`. |
+| `smsg.restapi.product.required` | REST ingress | Refuses a **submission** the same way, with `403`. `/secure/rate` applies it too, so a quote cannot price traffic a send will refuse. |
+| `smsg.rating.unrated.refuse` | global, sell side only | Refuses any message no sell-side rate rule prices. `0x00000418` over SMPP, `403` over REST. |
+
+Least-cost routing deliberately still tolerates a vendor with no **cost** rate — that is a different
+question from whether the customer can be billed, and turning a forgotten vendor rate line into an
+outage would be worse than the thing it prevents.
+
+## Why the check is membership, not non-emptiness
+
+`system_type` on an SMPP bind **overrides** the credential's product, and it is free text validated
+nowhere else.
+
+So a customer who binds `prem` when the product is `premium` passes any non-empty test perfectly, and
+lands in exactly the unrated state above. Only checking the name against the catalogue catches it —
+which is what `conf.product.required` does, and why it is not simply "product must be set".
+
+HTTP has no bind and therefore no override: there the credential's `product` is the only source.
+
+<Warning>
+**File configuration has no catalogue, so only the non-empty half is enforced.** `app_product` is a
+database table; a gateway running on files, or one whose database is unreachable, cannot check
+membership at all. An unrecognisable product name is **accepted**, and a WARN naming the setting and
+the value is logged once per bind.
+
+The tolerance is deliberate — refusing every bind because a query failed is a far worse outage than
+the one this prevents — but it means the setting is weaker than its name on exactly the deployments
+that have no catalogue to check against.
+</Warning>
+
+Before switching either on, read the pre-flight report on the panel's **Servers** page: it lists the
+logins that would stop connecting. Note what it cannot see — for an SMPP login it checks the
+credential's fallback, so a customer binding a mistyped `system_type` will not appear there.
+
+The **Pricing** page carries the other pre-flight: the traffic of the last 24 hours that carried no
+price, named by account and product. That is precisely what `smsg.rating.unrated.refuse` would begin
+refusing. It counts messages whose CDR has no `price_rule_id`, so a rule deliberately set to `0` is
+not in it — a free route stays free and keeps sending.
+
+## The catalogue row
+
+| Column | Meaning |
+| :--- | :--- |
+| `name` | The primary key. Trimmed, non-empty, and matched **exactly** — `OTP` and `otp` are two products. |
+| `label`, `description` | For the panel. |
+| `enabled` | Whether the gateway counts this as a product it sells. |
+| `whitelist_enabled` | Default `true`. `false` exempts this product's traffic from sender ID and content checks. |
+
+## Exempting a product from whitelisting
+
+```sql
+UPDATE app_product SET whitelist_enabled = false WHERE name = 'otp';
+```
+
+Or *Products → Edit → Check sender IDs and content*. The question "must this be validated?" usually
+belongs to what is being sold rather than to each customer buying it — one-time passwords over a
+shortcode have no registered sender ID to check — and without this, every account on that product
+would need its own policy row saying so.
+
+Three rules surprise people:
+
+- **An exempt product overrides the account.** An account set to `ENFORCE` still sends freely under an
+  exempt product.
+- **No product is not exempt.** Traffic naming no product at all is checked. Otherwise the way out of
+  a whitelist would be to stop sending a `system_type`.
+- **An unknown product is not exempt.** A name with no row in `app_product` is checked. It is a typo in
+  a credential far more often than an intention.
+
+<Warning>
+**An approval filed under an exempt product protects nothing.** The gateway returns `OFF` for that
+product before any merge happens, so the row is stored, visible, and never consulted. The panel counts
+exempt products when it decides whether switching an account to `ENFORCE` is safe — otherwise the
+guard against building an outage would wave through an account whose approvals are all inert.
+</Warning>
+
+Unlisting a product (`enabled = false`) also ends its exemption: exempt products are read as
+`enabled AND NOT whitelist_enabled`. That direction is the safe one — traffic starts being checked
+rather than stopping — but it can begin refusing sender IDs nobody has approved, so unlist an exempt
+product deliberately rather than as tidying.
+
+## Naming a product on a REST send
+
+A REST caller may send `product` on `/secure/send`, `/secure/sendbatch` and `/secure/rate`, and it is
+accepted **only** from a login whose `allowedProducts` names it.
+
+| | |
+| :--- | :--- |
+| Field omitted | The login's own `product` applies. No existing caller is affected. |
+| No `allowedProducts` | The field is refused: `403 This login may not send on '<product>'.` This is every login until an operator opts one in. |
+| Value on the list | Accepted, and the message is **priced** on it — check `cdr_submit`, not the response, which looks the same either way. |
+| The login's own product | Always allowed, and does not need listing. |
+| On the list, absent from `app_product` | Still refused, with the other message. Two separate questions: may this login name it, then do we sell it. |
+
+An allow list rather than a plain field for the same reason as everything else on this page: the
+product selects the rate, so a caller free to name their own product is free to pick their own price.
+
+<CardGroup cols={2}>
+<Card title="How pricing works" href="/platform/billing/how-pricing-works">
+Where each side is priced, and what an unknown amount means.
+</Card>
+<Card title="Rolling whitelisting out" href="/platform/customers/whitelisting-rollout">
+The four switches, and the order they apply in.
+</Card>
+</CardGroup>

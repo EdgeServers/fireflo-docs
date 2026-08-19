@@ -1,0 +1,117 @@
+---
+title: "Queues and retries"
+description: "Everything in a FireFlo queue has already been accepted and charged — what a capacity limit changes, which end refuses, and what one message may cost in submit_sm."
+source: "fireflo-sms-gateway/docs/15-message-queueing.md, docs/09-configuration-reference.md, docs/10-troubleshooting.md, fireflo-core/src/main/java/au/remotiq/fireflo/routing/AbstractRoutingManager.java @ 0.7.3"
+---
+
+## Every queued message has already been paid for
+
+The gateway **answers a submission before it routes it**. By the time a message is on the router queue
+or a vendor's queue, the customer has been told it was accepted and their balance has been debited.
+
+<Warning>
+**Unbounded, that is a way to lose money silently.** A vendor that stops accepting, plus a listener that
+keeps accepting, grows the heap until the JVM is killed — and every queued message dies with it. None
+of them refunded, none of them recorded as anything but `PENDING`.
+
+There is no delivery receipt for a message that was in memory when the process died, so the customer's
+only signal is a message that never arrived.
+</Warning>
+
+## The two limits
+
+| Property | Scope | Default | Holds |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | global | `0` (unbounded) | The most messages the router queue, and each outbound worker queue, will hold |
+| `inQueue.capacity` | per listener | `0` (unbounded) | The most messages one SMPP listener will hold waiting to be written to the message store |
+
+<Note>
+**There is deliberately no default.** A limit is a statement about your own traffic and your own heap:
+too low refuses messages that would have been delivered, too high never fires before the JVM does.
+
+Start from how many messages you are willing to hold for a vendor that has gone quiet, and read the
+depths on `/ops/health` under normal load first — `router_queue` and each worker's `queue_depth`, with
+the limit beside them once one is set. Full detail at [Limits](/reference/config/limits).
+</Note>
+
+## Only the two ingresses refuse
+
+Inside the gateway a full queue is **backpressure, not an error**. The router waiting on a full worker
+queue is the router going at the speed the vendor can take, which is the correct behaviour.
+
+At an ingress there is a client holding a connection open, so waiting would stall that session rather
+than slow it down. Those two doors refuse instead:
+
+| Ingress | When the queue is full |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` with `ESME_RMSGQFUL` (`0x14`). **Nothing is charged** — the refusal happens before the message is accepted. A well-behaved ESME backs off and retries. |
+| REST | `503` with `queueFull` in `cdr_rejected`. **Anything already charged is refunded**, because the REST path charges before it publishes, so this one has money to return. |
+
+See [SMPP status codes](/reference/smpp/status-codes).
+
+## What one message may cost at a vendor
+
+`maxRetries` bounds the **total** `submit_sm` one message may cost at one vendor — across in-worker
+retries **and** every trip back through the router.
+
+<Warning>
+It used to bound only the in-worker half, with each router hop handing out a fresh allowance. A value of
+`1` alongside twenty routing attempts meant roughly **100 PDUs for one message** while the panel read
+`1`.
+
+If you tuned around the old behaviour, re-check the value. Failing over to a *different* vendor still
+starts a fresh budget — the bound is per vendor, not per message. See
+[Vendors](/platform/connections/vendors).
+</Warning>
+
+`outSms.routing.maxAttempts` (default `20`) is the other half: how many times a message may go round the
+router before it is abandoned, refunded and closed as `REJECTED` with `reason=maxAttempts`. A miss, and
+a filter asking for the message back, both count.
+
+`outSms.routing.retryBackoffMillis` (default `100`) is a delay on the **message**, not on the router —
+the thread parks it and carries straight on to the next one.
+
+## Two numbers that mean messages are gone
+
+<Warning>
+**`routing_failed_queue` — alert on non-zero.** These are messages parked by an unexpected routing
+failure. They have no call record and no delivery receipt, and they drain **only** if
+`outSms.enqueueFailedRouting` is set — so in the ordinary configuration a non-zero value here is
+messages that are simply gone, and this counter is the only place that fact exists.
+</Warning>
+
+`routing_retry_queue` is the softer one: messages waiting out a backoff after a miss or a filter
+requeue. Small numbers are ordinary. A number that stays high is a routing table that does not cover
+the traffic arriving.
+
+Both are on `/ops/health`, and exposed as `fireflo_routing_failed_queue` and
+`fireflo_routing_retry_queue`. `fireflo queue dump` lists what is actually waiting — account, product,
+destination, retry count and age — rather than just how many; see
+[Queues](/platform/operations/queues).
+
+## RabbitMQ is optional, and only for REST
+
+<Tabs>
+  <Tab title="memory (default)">
+    No external dependency. Both ingresses feed the in-process router queue.
+
+    **A restart drops whatever had not reached a vendor.** Nothing external is holding it.
+  </Tab>
+  <Tab title="rabbitmq">
+    The **REST** path publishes through the broker; the consumer feeds the same in-process router
+    queue. Scheduled batches survive a restart, and REST work can be shared across gateway instances —
+    see [Clustering](/platform/install/clustering).
+
+    The SMPP path is unchanged and stays in process, deliberately: a broker round trip inside the SMPP
+    window would add latency, and a broker outage would stop SMPP entirely.
+  </Tab>
+</Tabs>
+
+<Warning>
+The cost of that split is two ingress paths with **different durability guarantees**. A REST message is
+durable from acceptance until the consumer hands it to the router; an SMPP message never is.
+
+When the broker goes away, REST falls back to the in-process queue and keeps working — nothing rejects,
+nothing errors, throughput is unchanged. Alert on `amqp.bridge.degraded`, or a broker can be down for
+days while every dashboard looks healthy.
+</Warning>

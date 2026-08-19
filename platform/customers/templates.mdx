@@ -1,0 +1,149 @@
+---
+title: "Content templates"
+description: "Approving the wording an account may send, the three typed placeholders, and the ways a template saves cleanly and then matches nothing."
+source: "fireflo-sms-gateway/docs/17-whitelisting.md, fireflo-control-panel/lib/whitelist-types.ts, components/TemplateForm.tsx @ 0.7.3"
+---
+
+One row in `app_template` is one approved message body. A template is fixed text with placeholders, so
+`Your code is {#var#}` approves the message rather than one specific code.
+
+## The failure is a template that saves cleanly and matches nothing
+
+Content is fail-closed. "Matches nothing" does not mean the template is ignored — it means the
+customer stops sending, and it looks like nothing is wrong from every angle except theirs.
+
+<Warning>
+**`{code}` is not a placeholder.** It has no `#` in it, so it is ordinary text: the template approves
+one exact string containing braces and refuses every real message. Nothing about the row looks wrong,
+because nothing about it *is* wrong — it approves something no customer will ever send.
+
+The panel's preview exists for this one mistake. It shows an example message the template accepts,
+built by the same scanner the gateway's matcher uses, so a template approving literal braces is
+visible at the moment it is written rather than in a support ticket a week later.
+</Warning>
+
+The near-misses behave differently on the two sides, deliberately:
+
+| Written | The gateway does | The panel does |
+| :--- | :--- | :--- |
+| `{#VAR#}`, `{# var #}`, an unknown type | Loads it, matches it as `{#var#}`, and lists it under `templates_degraded` on `/ops/health` | Refuses to save it |
+| `{code}` | Ordinary text | Warns |
+
+<Note>
+The gateway used to refuse a malformed placeholder outright, which sounds safer and was not: the
+loader drops a template it cannot compile, so an operator saw an approved template in the panel while
+every message it covered was refused. **Strict at authoring, forgiving but loud at load** is the rule
+— the panel's job is to stop the row being written, the gateway's job on a row already in the database
+is to keep the account sending and say what it did.
+</Note>
+
+## The three placeholders, written exactly
+
+| Token | Accepts |
+| :--- | :--- |
+| `{#var#}` | Anything. |
+| `{#num#}` | ASCII `0`–`9` only. |
+| `{#alp#}` | Letters in any script, the combining marks Indic names are made of, and the punctuation that holds a name together. |
+
+Write the **token** lower case with no spaces inside it. That is its spelling and says nothing about
+what it accepts.
+
+`{#alp#}` takes spaces, apostrophes, hyphens and full stops, so `your login`, `Priya Sharma`,
+`O'Brien`, `Anne-Marie` and `St. John` all match. Both the ASCII and the typographic apostrophe and
+hyphen are accepted, because the typographic ones are what survive a paste out of a PDF. What it still
+refuses is **digits**, and that is the whole reason to choose it over `{#var#}`.
+
+A typed placeholder is strictly tighter than `{#var#}` — the same length limit, fewer characters
+allowed — so choosing one can only ever narrow what a template accepts.
+
+## How much one placeholder may stand for
+
+A variable matches 1 to 30 characters by default.
+
+<Warning>
+**Raising `smsg.whitelist.max.variable` widens every approved template on the deployment at once.**
+It is global rather than per-listener because templates are compiled once at load into one index per
+account, so there is nowhere per-customer to put it — a value raised for one customer's long merchant
+name loosens every other customer's approvals by the same amount.
+
+It is the largest false-accept in this design, which is why it is logged at INFO and reported as
+`max_variable` on `/ops/health`. A value outside 1–1000 falls back to the default with a WARN.
+</Warning>
+
+`max_variable` on the health output is also the answer to "the setting has been changed and nothing
+happened" — it reports the ceiling actually in force, so a configuration poll that has not landed yet
+is visible rather than guessed at.
+
+## Whitespace is compared folded
+
+Any run of spaces, tabs, newlines, CRLF or non-breaking spaces counts as a **single space** on both
+sides, and both ends are trimmed. So a template registered with a line break before its signature
+matches traffic that sends a space there.
+
+Folding never joins two words: a template approving `foo bar` still cannot be satisfied by `foobar`.
+
+<Note>
+This is comparison only. The message sent to the carrier is byte-for-byte what arrived, and the stored
+template is byte-for-byte what was pasted — which is what the DLT registration is auditable against.
+The panel's preview shows the **folded** text, deliberately, so an operator who pasted a body full of
+non-breaking spaces sees what will actually be compared.
+</Note>
+
+## What the panel refuses to save
+
+| Rule | Why |
+| :--- | :--- |
+| Not empty | A template needs the wording it approves. |
+| At most 2 000 characters | Ten SMS segments and change. A template longer than the message it approves cannot match one. |
+| A known placeholder type | Anything else is matched as `{#var#}`, which accepts more than you meant. |
+| No two placeholders adjacent | With nothing between them they cannot be told apart, so they act as one variable of twice the length. |
+| Not placeholders alone | A template of nothing but variables accepts every message, which is the same as not having one. |
+
+One thing is warned rather than refused: a template whose literal text between two placeholders
+repeats later in the body. Greedy matching can reject a message a backtracking engine would accept.
+Such a template is usually still correct, and this is the matcher's one invisible failure mode, so the
+point is to make it visible rather than to block it.
+
+## Templates and multi-segment messages
+
+At the SMPP ingress a `submit_sm` carrying a segment header is **not** content-checked — a segment
+carries a fragment of the body, so content cannot be judged yet. A template match is therefore also
+not what stamps that PDU.
+
+<Warning>
+**A mandatory TLV supplied only by a template may not reach a concatenated message.** If the tag a
+carrier needs comes from the template row alone, and nothing on the credential supplies it, the
+per-segment path has nothing to stamp — and a listener requiring that tag refuses. Put the tag the
+carrier requires on the **credential's** `defaultTlvs` as well, where it applies to every PDU
+regardless of matching.
+</Warning>
+
+The panel's TLV coverage report says, per approved row, which mandatory tags nothing will supply. See
+[Sender IDs](/platform/customers/sender-ids).
+
+## Approval, and what an edit costs
+
+Everything a customer submits from the portal lands `PENDING`. The gateway serves a row only when it
+is `enabled` **and** `APPROVED`.
+
+<Warning>
+**Editing an approved template suspends it.** Changing the name, the wording, the note or the login
+puts the row back to `PENDING` and clears the earlier review, so it is out of service until somebody
+approves it again — and on a fail-closed account that means the customer's traffic stops until then.
+
+That is what approval exists to stop: changing approved wording under an existing approval. Proposing
+TLVs is the one exception, because nothing on the message path reads the proposed column.
+</Warning>
+
+There is no natural key on `app_template`, so a duplicate body is caught in code rather than by a
+constraint: asking again for wording already requested or approved is refused with a message saying
+which, rather than becoming a second row nobody can tell apart from the first.
+
+<CardGroup cols={2}>
+<Card title="Sender IDs" href="/platform/customers/sender-ids">
+The other half of the same approval, and the TLV coverage report.
+</Card>
+<Card title="Whitelisting reference" href="/reference/config/whitelisting">
+Every property, the three stamping modes, and the per-vendor mandatory check.
+</Card>
+</CardGroup>

@@ -1,0 +1,123 @@
+---
+title: "Filters"
+description: "Named, reusable conditions shared between routing and rating — and why a missing or disabled filter removes the rules that reference it instead of widening them."
+source: "fireflo-sms-gateway/docs/05-routing-engine.md, docs/10-troubleshooting.md, fireflo-control-panel/lib/filter-types.ts, lib/routing-types.ts, fireflo-core/src/main/java/au/remotiq/fireflo/routing/AbstractRoutingManager.java @ 0.7.3"
+---
+
+## Disabling a filter makes its rules match less, not more
+
+<Warning>
+**A missing or disabled filter skips every rule that references it**, rather than loading the rule with
+fewer conditions.
+
+That is the opposite of the intuitive answer, and it is deliberate. A rule is a conjunction, so
+*removing* a condition makes it match **more** traffic: drop an `au_mobile` filter from a rule and it
+starts sending the entire world to that vendor, successfully, with nothing in the log to suggest a
+problem. Skipping the rule fails in the only safe direction — messages fall through to the next rule
+rather than to the wrong vendor.
+</Warning>
+
+So the observable effect of switching a filter off is that its rules stop matching anything at all, and
+their traffic lands on whatever rule follows. A different vendor, or a different price.
+
+```
+Skipping … filter '…' is missing or disabled
+```
+
+## What a filter is to the gateway
+
+**A load-time expansion, not a runtime indirection.** A filter expands into exactly the conditions it
+holds, and those are appended to the conditions of every rule referencing it. A rule's real test is:
+
+```
+its own conditions AND every referenced filter's conditions
+```
+
+Filters narrow a rule. They never replace or loosen it. Nothing is resolved per message, so matching
+costs the same as if the conditions had been written inline.
+
+<Note>
+Filters live in the database (`app_filter`, `app_filter_condition`) and are shared with rating, which
+is the point: name a predicate once, price and route on the same definition. The file grammar has no
+syntax for them, so `scripts/fireflo import routing` leaves `app_route_rule_filter` empty. See
+[routingTable.conf](/reference/files/routing-table).
+</Note>
+
+## A filtered rule is not a catch-all
+
+<Warning>
+Because filter conditions are folded into the rule's own conditions at load, **a rule carrying a filter
+is correctly reported as not being a catch-all** — however much it reads like a fallback.
+
+This is the case worth knowing about: a rule that *looked* like the table's catch-all carried a filter,
+matched almost nothing, and no surface anywhere said so until messages had already been dropped. The
+table is reported under `no-catch-all` on `/ops/health`; see
+[How routing works](/platform/routing/how-it-works).
+</Warning>
+
+A real catch-all is a rule with no conditions **and no filters**, placed last.
+
+## An empty filter counts as disabled
+
+A filter with no conditions saves and loads, which is what lets one be built up a condition at a time.
+The gateway's answer to it is not the intuitive one either: an empty filter is added to the *disabled*
+set, so every rule referencing it is skipped.
+
+Refusing an empty filter is the same reasoning as refusing a missing one — a filter that narrows
+nothing would widen every rule that carries it.
+
+## The safety net, and why it is not a workaround
+
+<Warning>
+**If skipping leaves the `default` table with no rules, the entire routing reload is rejected and the
+previous tables are retained**, logging `no default routing table in new targets!`.
+
+That is the safe outcome — disabling a filter that every rule depends on does not empty your routing.
+But it also means **disabling a filter is not a way to withdraw a route**: the change will appear to
+have had no effect at all, because the gateway is still serving the last good configuration.
+
+Delete or disable the *rule* instead.
+</Warning>
+
+For the same reason a referenced filter cannot be deleted while rules still point at it. The control
+panel shows the reference count across both rating and routing rules before letting you change one —
+routing is the half where the consequence is "messages stop being sent" rather than "messages are
+priced differently".
+
+## Checking one before you change it
+
+<Steps>
+  <Step title="Read the count">
+    **Filters** in the panel lists how many rate rules and how many routing rules reference each
+    filter. Disabling a filter used by four routing rules removes four rules from the running snapshot.
+  </Step>
+  <Step title="Look at what catches the traffic instead">
+    For each rule that would be skipped, find the next rule in the same table that the traffic would
+    match. That vendor is where the traffic goes.
+  </Step>
+  <Step title="Confirm the reload took">
+    After saving, check `routing_warnings` on `/ops/health` and the log for
+    `Error parsing new routing table`. A rejected reload keeps the previous table and looks like
+    nothing happened.
+  </Step>
+</Steps>
+
+## Filter workers are a different thing
+
+A rule may also target a **filter worker** — a worker the message passes through rather than a
+destination. It returns a verdict, and the router acts on it:
+
+| Verdict | What happens |
+| :--- | :--- |
+| `DROP` | The message is refunded if it was charged, closed as `DROPPED`, and recorded in `cdr_rejected` with `reason=filtered`. |
+| `RETRY` / `REENQUEUE` | The message is parked for `outSms.routing.retryBackoffMillis` and routed again. Each requeue **counts against `outSms.routing.maxAttempts`**, so a filter used for throttling eventually drops rather than holding a message forever. |
+
+<Note>
+`RESCHEDULE` has never been implemented and falls back to re-enqueue, saying so once per message.
+
+A dropped message is refunded and reported; a message held forever is neither — which is why counting
+the requeue is the intended trade rather than an oversight.
+</Note>
+
+Named filters and filter workers share a word and nothing else: one narrows a rule at load time, the
+other inspects messages at run time.

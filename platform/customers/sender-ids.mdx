@@ -1,0 +1,156 @@
+---
+title: "Sender IDs"
+description: "Approving the sender IDs an account may use, what the approval stamps onto the wire, and why an approved sender ID can still be refused by the carrier."
+source: "fireflo-sms-gateway/docs/17-whitelisting.md, docs/10-troubleshooting.md, fireflo-control-panel/lib/whitelist-types.ts, lib/tlv-coverage.ts @ 0.7.3"
+---
+
+One row in `app_header` is one approved sender ID, matched **case-insensitively**, scoped to an
+account and a product. In several markets a commercial sender ID is a registration rather than a
+string a customer picks — the carrier has approved `ACMEIN` for one company and expects the traffic
+carrying it to be theirs.
+
+## Approved is not the same as deliverable
+
+An approval does two jobs, and they fail independently. It decides whether the message is **matched**
+at this gateway, and it carries the TLVs that are **stamped** onto the message on the way out — under
+DLT, the entity identifier the carrier requires.
+
+<Warning>
+**Nothing approved means nothing stamped, so a DLT lane refuses everything.** With no matching row
+there is no stamp, the `submit_sm` reaches the vendor carrying no entity or template id, and the
+vendor rejects it — with an SMPP status in the 192–196 block, which is always about TLVs.
+
+`tlvCount=0` on the trace lines confirms it. This is the commonest cause of a lane that refuses every
+message while the account's own configuration looks correct, because at this gateway it *is* correct:
+the refusal is the carrier's.
+</Warning>
+
+The panel's **TLV coverage report** exists for exactly this. Per approved row, it names which
+mandatory tags nothing will supply, and why:
+
+| Reason | What it means |
+| :--- | :--- |
+| `nothingSupplies` | Neither the row nor any login on the scope carries the tag. |
+| `someLogins` | Some logins carry it and others do not, so it fails intermittently. |
+| `notStamped` | The row carries it, but that listener's `whitelist.tlvs.mode` is `off`. |
+| `notChecked` | The row carries it, but this list is not checked, so nothing is matched or stamped. |
+| `unparseable` | A token with no tag — `PEID=…` has no underscore, so it stamps nothing. |
+| `emptyValue` | The tag is named with no value, and an empty value stamps nothing. |
+| `vendorDrops` | Something supplies it, and the vendor it routes to does not register it. |
+
+<Note>
+It is a **report, never a guard**. A login is not tied to a listener and the route rules pick the
+vendor, so nothing here can be certain a given message meets a given listener. Refusing a save on it
+would block configurations that work — and every sentence it produces says that a client sending the
+tag itself makes the question moot.
+</Note>
+
+`vendorDrops` is the one worth reading twice: a tag the vendor has not registered is discarded on the
+way out, *after* the call record has already noted it as present. The record shows it sent and the
+wire does not carry it. See [TLVs on a connection](/platform/connections/tlvs).
+
+## Scope: account, product, and optionally one login
+
+A row is per `(account, product)`, with an empty product meaning every product. A product-specific
+list is merged **over** the account's any-product list — the two are unioned, not chosen between.
+
+`system_id` narrows further. **NULL means every login on the account**, which is what every row meant
+before the column existed, so an untouched deployment matches exactly as it did and no backfill was
+needed. Two logins on the same account may hold the same sender ID.
+
+<Warning>
+**A login with no rows of its own and no account-wide rows can send nothing once enforcement is on.**
+Binding an approval to one login does not merely add specificity — it removes that row from every
+other login on the account.
+
+The account page warns when an account's approvals are all login-bound and some login is left with
+none. Traffic whose login is unknown gets the account-wide rows and nothing else, which is fail-closed
+on purpose: a caller that did not pass a login must not be handed approvals given to somebody specific.
+</Warning>
+
+## Who proposes and who approves
+
+<Steps>
+<Step title="The customer asks">
+From the portal. Everything a customer writes lands `PENDING`, with their own note attached — under
+DLT, their registration reference. The gateway serves a row only when it is `enabled` **and**
+`APPROVED`, so a request is stored, visible to both sides, and inert.
+</Step>
+<Step title="An operator decides">
+Approve or refuse, on the account page or on the cross-account list. A refusal keeps the row and
+carries a reason the customer is shown — which is why there is no bulk refuse, only bulk approve.
+</Step>
+<Step title="It goes into service on the next poll">
+No reconnect. See below.
+</Step>
+</Steps>
+
+`status` and `enabled` are separate columns doing separate jobs. Approving writes `status` and records
+the reviewer. Unticking writes `enabled = false` and leaves `status` alone: **withdrawing something is
+not un-approving it**, and a withdrawn row put back into service should not need approving again.
+
+<Warning>
+**Editing an approved registration suspends it.** Changing the sender ID, the request note or the
+login sets the row back to `PENDING` and clears the earlier review, so the registration is out of
+service until somebody approves it again.
+
+That is the point rather than a side effect — a customer must not be able to change what was approved
+and keep sending under the approval — and it has a sharp edge: a typo stops their traffic. The forms
+arm a confirmation before the write.
+</Warning>
+
+## The TLVs a customer may propose but not set
+
+Both registration tables carry two TLV columns.
+
+| Column | Read by the gateway |
+| :--- | :--- |
+| `tlvs` | Yes. This is what is stamped onto the wire. |
+| `requested_tlvs` | **No.** The portal writes it; the loader selects `tlvs`. |
+
+Under `replace` the stamp overwrites whatever the client asserted, and **that overwrite is the
+approval**. A customer who could write the served column could assert somebody else's registration
+while sending approved wording, and the call record would then report the value they chose as
+approved. `RequestedTlvsNeverServedContainerTest` keeps that line.
+
+The payoff is for the customer: a proposal changes nothing that is served, so unlike an edit to the
+sender ID it does **not** suspend the row. An approved registration keeps working while an operator
+considers the proposal. Accepting moves the value across and stamps the operator as its owner;
+dismissing clears the request and leaves `tlvs` exactly as it was. Neither touches `status`.
+
+## What the panel refuses to store
+
+| Rule | Why |
+| :--- | :--- |
+| Not empty | There is nothing to approve. |
+| At most 64 characters | The field had no ceiling at all, and a multi-megabyte sender ID would reach the review queue and be read by the whitelist loader on every configuration poll. |
+| No space at either end | Compared exactly, and a trailing space is invisible everywhere it is shown. |
+| Printable ASCII only | Comparison is case-insensitive, and folding the case of other alphabets depends on the server's locale — the same row would match on one deployment and not another. |
+
+<Note>
+64 is generous rather than correct. SMPP caps `source_addr` at 21 octets, so anything past that cannot
+be delivered over a bind — but refusing at 21 here would also refuse edits to rows that already exist,
+and "you cannot deliver this" is a different decision from "you cannot save this".
+</Note>
+
+## Approving does not require a reconnect
+
+The whitelist is re-read on the configuration poll and each snapshot carries a generation. **An SMPP
+session bound for weeks picks up a newly approved sender ID without reconnecting** — which matters,
+because the customer whose traffic is being refused is usually on the phone while somebody approves it.
+
+```bash
+fireflo reload
+```
+
+applies it now rather than at the next poll. It takes the admin token — see
+[The fireflo CLI](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Content templates" href="/platform/customers/templates">
+The other half of the same approval, and the placeholder grammar.
+</Card>
+<Card title="Rolling whitelisting out" href="/platform/customers/whitelisting-rollout">
+Report before enforce, and the diagnostics on `/ops/health`.
+</Card>
+</CardGroup>

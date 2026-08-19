@@ -1,0 +1,181 @@
+---
+title: "Routing FAQ"
+description: "The routing questions that come in during an incident, answered in the order they usually arrive — starting with the edit that appeared to do nothing."
+source: "fireflo-sms-gateway/docs/05-routing-engine.md, docs/10-troubleshooting.md, docs/09-configuration-reference.md, docs/15-message-queueing.md, conf.example/routingTable.conf, fireflo-control-panel/lib/routing-types.ts @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="I edited the routing table and nothing changed">
+A malformed rule fails the **whole** reload, and the gateway keeps serving the previous table. Traffic
+carries on flowing, so nothing looks wrong.
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`no default routing table in new targets!` on the same line means the new configuration had no rules in
+`default` — often because a [filter](/platform/routing/filters) that every rule referenced is missing or
+disabled.
+</Accordion>
+
+<Accordion title="Why does vendor1:from:==:MyBrand not work?">
+`==` is a **numeric** operator. That line does not merely fail to match — it fails to parse, and takes
+the whole reload with it. Use `equals` for text:
+
+```
+vendor1:from:equals:MyBrand
+```
+
+The control panel refuses a numeric operator on a text field before saving. A hand-edited file has no
+such check.
+</Accordion>
+
+<Accordion title="My pattern matches nothing and nothing complains">
+Two different traps.
+
+`matches` is a regular expression and it is **anchored** — it must match the whole value. `^61.*`
+matches a full destination; a bare `61` matches only the two-character string `61`.
+
+`startsWith` compares **literal text**. A regular expression handed to it asks whether the value
+literally begins with `^(?:\+61`, which nothing does, so the rule loads, displays and never fires. The
+panel warns about this; the gateway does not.
+</Accordion>
+
+<Accordion title="Why does product:equals:premium miss messages with no product?">
+An unset field matches **no positive operator**. `isNull` is the only one that matches it.
+
+Negation goes the other way and surprises people equally: `product:!equals:premium` **does** fire for a
+message carrying no product at all.
+</Accordion>
+
+<Accordion title="Rules below my catch-all never run">
+They cannot. A `NORMAL` table stops at the first match, and a catch-all matches everything — so
+anything below it is unreachable. Nothing refuses the table; the rules parse perfectly.
+
+Move it last. The table is reported under `unreachable-rules` in `routing_warnings` on `/ops/health`,
+and the panel counts the dead rules for you.
+</Accordion>
+
+<Accordion title="I disabled a filter to widen a rule and the rule stopped matching entirely">
+That is the designed behaviour. A missing or disabled filter **skips every rule that references it**
+rather than loading the rule with fewer conditions.
+
+A rule is a conjunction, so dropping a condition makes it match *more* traffic — which would route the
+wrong things, successfully and silently. Skipping fails in the only safe direction. Details in
+[Filters](/platform/routing/filters).
+</Accordion>
+
+<Accordion title="I disabled a filter to withdraw a route and nothing happened">
+If skipping the rules left `default` with no rules, the entire reload was rejected and the previous
+tables are still in service.
+
+Disabling a filter is not a way to withdraw a route. Delete or disable the **rule**.
+</Accordion>
+
+<Accordion title="How do I find out why one specific message did not match?">
+```properties
+outSms.routing.trace = acct-1001
+```
+
+It takes one message serial **or** one account id, applies live, and logs which condition failed and
+what the message actually held. Set it during the incident, clear it after.
+
+**Do not reach for `outSms.routing.debug`** — it logs every
+rule of every message and renders the whole message object to do it, so it is unusable at the rates
+where routing questions get asked.
+</Accordion>
+
+<Accordion title="The log has gone quiet. Is the broken rule fixed?">
+Not necessarily. `routing.rule.broken` is logged **once per rule**, and the counter resets only when a
+new routing table is published. Silence is equally consistent with "already reported".
+
+Watch `routing_rules_broken` on `/ops/health` — the same fact as a number — and after a fix, watch for
+the line to *reappear* rather than for it to stay absent.
+</Accordion>
+
+<Accordion title="routing_failed_queue is not zero. What does that mean?">
+Messages parked by an unexpected routing failure. They have no call record and no delivery receipt, and
+they drain only if `outSms.enqueueFailedRouting` is set — so in the ordinary configuration those
+messages are gone, and this counter is the only place that fact exists.
+
+**Alert on it.** `routing_retry_queue` is the benign neighbour: messages waiting out a backoff, ordinary
+in small numbers, a routing gap when it stays high.
+</Accordion>
+
+<Accordion title="Does rule order matter in a least-cost table?">
+No. An `LCR` table scans every rule, treats the matches as alternatives, and lets the cost rate decide.
+Reordering changes nothing.
+
+If a least-cost table is behaving like a first-match table, check the function name — a name that is not
+recognised, such as `->function(LRC)`, falls back to `NORMAL` with only a log line. See
+[Least-cost routing](/platform/routing/least-cost).
+</Accordion>
+
+<Accordion title="A vendor in my LCR table has no cost rate. Will it block traffic?">
+No. A candidate with no matching rate is kept aside and used **only if nothing else matched**, so a
+missing rate line degrades rather than blocks.
+
+It is still worth finding: a vendor winning traffic that way is winning it at an unknown margin.
+</Accordion>
+
+<Accordion title="Why is my vendor group ignoring its weights, or its members?">
+Two separate causes. A weight is read **only** by `weighted` — set one under `round-robin` or
+`failover` and nothing splits, which the gateway says at WARN rather than letting you believe
+otherwise.
+
+And **group blocks must come before the first `[table]` header**. Inside a table block a member line
+matches nothing and is dropped silently, so the group has fewer members than it reads as having.
+</Accordion>
+
+<Accordion title="Can one rule send a message to every member of a group?">
+No, and deliberately. A group always selects exactly one member, because the message was charged once
+at ingress — fanning out would be N sends against a single debit. `+copied` on a group rule still
+copies to one member.
+
+If every member is down the rule sends nothing, logs `cause=group-all-dead` naming everyone it tried,
+and the scan **continues**, which is what keeps a fallback rule written below it reachable.
+</Accordion>
+
+<Accordion title="What happens when a queue fills up?">
+Only the two ingresses refuse — **SMPP** with `ESME_RMSGQFUL` (`0x14`) and nothing charged, **REST**
+with `503 queueFull` and anything already charged refunded. Inside the gateway a full queue is
+backpressure: the router waiting on a full worker queue is the router going at the speed the vendor can
+take.
+
+`smsg.queue.capacity` and `inQueue.capacity` both default to `0`, meaning unbounded. There is no default
+limit because a limit is a statement about your own traffic and heap.
+</Accordion>
+
+<Accordion title="How many submit_sm can one message cost me?">
+`maxRetries` bounds the **total** at one vendor, across in-worker retries and every trip back through
+the router.
+
+It used to bound only the in-worker half, with each router hop handing out a fresh allowance — so `1`
+alongside twenty routing attempts meant roughly 100 PDUs for one message. Re-check the value if you
+tuned around that. Failing over to a *different* vendor still starts a fresh budget.
+</Accordion>
+
+<Accordion title="Do I need RabbitMQ?">
+No. It is optional and serves the **REST** path only; the SMPP path is in process either way.
+
+Without it the router queue is in memory, and a restart drops whatever had not reached a vendor. With
+it, REST messages and scheduled batches survive a restart — until the broker goes away, at which point
+REST silently falls back to memory. Alert on `amqp.bridge.degraded`.
+</Accordion>
+
+<Accordion title="Messages are accepted and then vanish. Where do I start?">
+Not in the routing table. The submit response goes out **before** routing runs, so ask the database
+first:
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+`maxAttempts` is the **only** reason that means routing. `headerNotApproved`, `templateNotMatched`,
+`missingMandatoryTlv`, `insufficientCredit` and `filtered` all mean the message was refused before
+routing was ever reached. Full walk-through:
+[Nothing is delivered](/platform/troubleshooting/nothing-is-delivered).
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,145 @@
+---
+title: "How routing works"
+description: "What the router does between accepting a message and handing it to a vendor, and why a routing mistake shows up as missing traffic rather than as an error."
+source: "fireflo-sms-gateway/docs/05-routing-engine.md, docs/10-troubleshooting.md, fireflo-core/src/main/java/au/remotiq/fireflo/routing/AbstractRoutingManager.java, StandardRoutingManager.java @ 0.7.3"
+---
+
+## The edit that appeared to do nothing
+
+<Warning>
+**A malformed rule fails the whole reload, and the previous table is retained.** One bad line does not
+disable one rule — it rejects the entire table set, and the gateway carries on routing against the
+configuration it was already serving.
+
+Nothing looks wrong: traffic keeps flowing, the file on disk says what you meant, and the only trace
+is `Error parsing new routing table` at ERROR in the log. Check for it after every edit.
+</Warning>
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`routingTable.conf` is hot reloaded — an edit applies within about 200 ms, with no restart. That speed
+is exactly why the retained-table case is easy to miss: there is no restart to notice, so "my change
+did nothing" is the whole symptom.
+
+## What the router does with one message
+
+<Steps>
+  <Step title="The submission is answered first">
+    The gateway sends `submit_sm_resp`, or the REST `200`, **before** routing runs. The customer has
+    already been told the message was accepted, and charged for it.
+  </Step>
+  <Step title="The message goes on the router queue">
+    Accepted work waits here. See [Queues and retries](/platform/routing/queues-and-retries).
+  </Step>
+  <Step title="The `default` table is scanned">
+    Rules are tried top to bottom and **the first match wins**. A rule may send to a vendor, to a
+    vendor group, or into another table.
+  </Step>
+  <Step title="The chosen worker takes it">
+    The message is enqueued on that vendor's own queue and leaves at the speed the vendor allows.
+  </Step>
+</Steps>
+
+Because step 1 happens before step 3, a routing failure **cannot** be reported to the client as a
+submit error. It can only surface later, as a delivery receipt and a row in `cdr_rejected`.
+
+## Tables are a graph, not a list
+
+A rule whose target names another table chains into it, so `default → MESSAGE → cheapest` is an
+ordinary shape. Two things bound the recursion:
+
+| Bound | Behaviour |
+| :--- | :--- |
+| Cycle check at load | `a → b → a`, or a table naming itself, is **refused whole**. The log names the path and the previous table set stays in service. |
+| `outSms.routing.maxTableDepth` (default `16`) | Caps how many tables one message may chain through at runtime. Reaching it logs `routing.table.too-deep` and leaves the message with no destination from that rule. |
+
+A table reached twice by different paths is not a cycle: `default → a → c` alongside `default → b → c`
+loads normally.
+
+## The two things that load and then quietly misbehave
+
+Both appear on `/ops/health` under `routing_warnings`, and each is logged once when it first appears
+rather than on every publish.
+
+| Warning | What it means |
+| :--- | :--- |
+| `no-catch-all` | Every rule in a `NORMAL` table is narrowed, so a message matching none of them is requeued, retried and dropped at `outSms.routing.maxAttempts` — minutes later, with nothing linking the drop to the table. |
+| `unreachable-rules` | A rule that matches everything sits above others. The table stops at the first match, so the rules below it have never run. |
+
+<Warning>
+**The catch-all belongs last.** Placed above other rules it makes everything below it unreachable, and
+nothing refuses the table — the rules parse perfectly, they simply never run. A catch-all is a rule
+that narrows nothing: `vendor1::default:` in a file, or a rule with no conditions and no filters in
+the database.
+
+A rule carrying a filter is **not** a catch-all, however much it reads like one. See
+[Filters](/platform/routing/filters).
+</Warning>
+
+## When messages vanish
+
+<Note>
+Before editing any rule, rule out the three causes that are not routing at all. Only
+`reason = 'maxAttempts'` in `cdr_rejected` means routing; `headerNotApproved`, `templateNotMatched`,
+`missingMandatoryTlv`, `insufficientCredit` and `filtered` all mean the message was refused before
+routing was reached. See [Nothing is delivered](/platform/troubleshooting/nothing-is-delivered).
+</Note>
+
+These lines are at WARN or ERROR and need no debug flag:
+
+| Log line | Cause |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | The rule names something that is neither a table, a group nor a worker. It sends nothing. |
+| `routing.rule.broken cause=target-not-accepting` | The target exists but is suspended or shutting down. Often temporary — check the [vendor](/platform/connections/vendors). |
+| `routing.rule.broken cause=group-all-dead` | No member of the group is accepting. The scan carries on to the next rule. |
+| `message.routing.miss.first action=requeue` | The message matched no enabled rule at all. |
+| `message.dropped reason=maxAttempts` | The message gave up. One per message; the line above it says why. |
+
+<Warning>
+**`routing.rule.broken` is logged once per rule, not once per message**, and the counter resets only
+when a new table is published. A quiet log is therefore not proof the problem is fixed — it is equally
+consistent with "already reported".
+
+Watch the `routing_rules_broken` count on `/ops/health` instead, which is the same fact as a number.
+</Warning>
+
+## Asking why one message did not match
+
+```properties
+outSms.routing.trace = acct-1001
+```
+
+Takes **one message serial or one account id**. Every rule that message is tested against then logs
+which condition failed and what the message actually held:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+It applies live, so set it during the incident and clear it after. Empty — the default — costs one
+volatile read per rule.
+
+<Warning>
+**This is not `outSms.routing.debug`.** That one logs every rule of every message and renders the whole
+message object to do it, which makes it unusable at the rates where routing questions actually get
+asked. It is useful only on an idle gateway reproducing a single send.
+</Warning>
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Writing rules" icon="pen" href="/platform/routing/writing-rules">
+    The four-part grammar, the operators that lie, and vendor groups.
+  </Card>
+  <Card title="Least-cost routing" icon="coins" href="/platform/routing/least-cost">
+    Where rule order stops meaning anything.
+  </Card>
+  <Card title="Filters" icon="filter" href="/platform/routing/filters">
+    Named conditions, and why disabling one narrows a rule to nothing.
+  </Card>
+  <Card title="Queues and retries" icon="layer-group" href="/platform/routing/queues-and-retries">
+    What is already paid for and sitting in memory.
+  </Card>
+</CardGroup>

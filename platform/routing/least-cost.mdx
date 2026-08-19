@@ -1,0 +1,124 @@
+---
+title: "Least-cost routing"
+description: "How a table marked ->function(LCR) picks the cheapest vendor instead of the first matching rule, and the mistyped function name that routes first-match while looking like it routes by price."
+source: "fireflo-sms-gateway/docs/05-routing-engine.md, conf.example/routingTable.conf, fireflo-core/src/main/java/au/remotiq/fireflo/routing/StandardRoutingManager.java, fireflo-control-panel/lib/routing-types.ts @ 0.7.3"
+---
+
+## The table that was never least-cost
+
+<Warning>
+**A function name that is written and not recognised falls back to `NORMAL`.** `->function(LRC)` is a
+transposition anyone can make, and the table then routes first-match while its author believes it is
+routing by price — every vendor rate in it ignored, every message going to whichever rule happens to
+sit at the top.
+
+It logs `routing.table.unknown-function` and keeps working. The fallback is deliberate: refusing here
+would refuse the whole table set, and one mistyped name should not take routing down. Check the name
+character by character, and check the log.
+</Warning>
+
+There are exactly two functions, `NORMAL` and `LCR`. A table that declares no function is `NORMAL`.
+
+<Note>
+A third function, `RC`, was removed in `V1.28.0`. It was in the enum, allowed by the database
+constraint, and described in the panel — and nothing anywhere branched on it, so a table set to `RC`
+routed as `NORMAL` while every surface an operator could consult said otherwise. Existing rows are
+rewritten to `NORMAL`, which is what they were already doing.
+</Note>
+
+## What changes
+
+```ini
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+A `NORMAL` table stops at the first matching rule, which makes file order the priority. An `LCR` table
+scans **every** rule, treats the matches as alternatives rather than as a fallback chain, and lets only
+the rate in `rates.conf` decide.
+
+<Warning>
+**Rule order is irrelevant inside an LCR table.** Moving a rule up does not make it preferred, and
+putting a catch-all first does not shadow anything below it. If you are reordering rules here to change
+behaviour, you are changing the wrong file — the cost rates are what decide.
+</Warning>
+
+| In a `NORMAL` table | In an `LCR` table |
+| :--- | :--- |
+| First match wins | Every match is a candidate |
+| Order is the priority | Order carries no meaning |
+| A catch-all above others kills them | Nothing is shadowed, so the `unreachable-rules` and `no-catch-all` warnings do not apply |
+| A rule may chain into another table | Rules pointing at another table are **ignored** |
+
+## How a winner is chosen
+
+<Steps>
+  <Step title="Every rule in the table is scanned">
+    No early exit. A rule whose target is another table is skipped with a warning — a nested cost
+    cannot be compared, and routing at an unknown price would be worse than not routing there.
+  </Step>
+  <Step title="Dead vendors drop out">
+    A target that is down, suspended or otherwise not accepting is skipped, so the next cheapest
+    carries the traffic. This is the same signal a group uses; see
+    [Vendors](/platform/connections/vendors) for the four states.
+  </Step>
+  <Step title="The survivors are priced">
+    Each remaining candidate is rated for this message's product against the **cost** side of
+    [rates.conf](/reference/files/rates-conf). The cheapest wins.
+  </Step>
+  <Step title="An unrated candidate is the last resort">
+    A vendor with no matching cost rate is kept aside and used only if nothing else matched, logging
+    `No candidate in least-cost table … has a rate`.
+  </Step>
+</Steps>
+
+<Note>
+**A missing rate line degrades rather than blocks.** Refusing to route an unrated message would turn a
+forgotten line in `rates.conf` into an outage; preferring it would send everything through whichever
+vendor was least configured. Last-resort is the only answer that is neither.
+
+It is still worth alerting on, because a vendor that is winning traffic on a missing rate is winning it
+at an unknown margin. See [How pricing works](/platform/billing/how-pricing-works).
+</Note>
+
+## Two things refused outright
+
+Both are refused at load, whole, because neither has a partial state that routes the way anyone
+intended — the table set stops updating until it is fixed.
+
+<AccordionGroup>
+  <Accordion title="A vendor group inside an LCR table">
+    Least-cost picks by price and a group picks by policy. Expanding the members into rate candidates
+    would silently discard the policy, and a weighted group has no meaning to give a price comparison.
+
+    Use one or the other in a given table: a group where you want failover and proportional splitting,
+    an LCR table where you want the cheapest live vendor.
+  </Accordion>
+  <Accordion title="A name that is both a group and a table, or both a group and a worker">
+    Resolution is table, then group, then worker, so one of the two would be silently unreachable.
+    Rename one of them.
+  </Accordion>
+</AccordionGroup>
+
+## Copy-and-continue has no meaning here
+
+`+copied` marks a rule as "add this target and keep scanning". An LCR table already scans the whole
+table and then chooses one cheapest candidate, so there is nothing for a copy to bypass. The panel says
+so rather than letting the flag look meaningful.
+
+## Diagnosing a choice
+
+`outSms.routing.trace`, set to one serial or one account id, explains which rules matched. The
+selection itself — which candidate won and at what rate — is logged under `outSms.routing.debug`, which
+is only usable on an idle gateway; see [How routing works](/platform/routing/how-it-works).
+
+If an LCR table sends everything to one vendor, check in this order:
+
+- Is the function name spelled `LCR`?
+- Do the other candidates have a cost rate at all, for **this message's product**?
+- Are the other candidates accepting? A vendor that is bound but not transmittable is skipped.
+
+Rates are configured separately — see [rates.conf](/reference/files/rates-conf) and
+[routingTable.conf](/reference/files/routing-table).
