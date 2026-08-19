@@ -1,0 +1,114 @@
+---
+title: "Refusals"
+description: "Every reason in cdr_rejected, what each one really means, and the one property they share that makes them worth separating from routing."
+source: "fireflo-sms-gateway/docs/10, docs/13, docs/17; panel /cp/rejected @ 0.7.3"
+---
+
+A **refusal** is a message FireFlo declined before routing. It is recorded in `cdr_rejected`, and it
+is a different animal from a message that routed and failed.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+Or, without SQL, the **Refused** list in the control panel — which carries the same rows with the
+request that produced them.
+
+## The reasons
+
+| `reason` | What happened | Customer saw | Fix |
+| :--- | :--- | :--- | :--- |
+| `headerNotApproved` | The sender ID is not on the account's approved list | `0x415` / `403` | Approve the sender ID |
+| `templateNotMatched` | The body matched no approved template | `0x412` / `403` | Approve the wording, or fix the template |
+| `missingMandatoryTlv` | A required tag resolved to nothing | `0xC3` / `403` | Supply it somewhere — see [TLVs](/platform/connections/tlvs) |
+| `insufficientCredit` | Prepaid balance would not cover it | `0x402` / `402` | Top up |
+
+The SMPP column is what the customer's `submit_sm_resp` carried; the HTTP column is the REST
+equivalent. Three of the four are **vendor-specific** codes in the `0x4xx` range rather than SMPP
+standard ones — `0xC3` is the exception, being `ESME_RMISSINGOPTPARAM` from the specification. A
+customer's SMPP client will not have names for the `0x4xx` values, so quote the reason word to them,
+not the number.
+| `filtered` | A filter refused it | varies | Read the filter |
+| `maxAttempts` | **Not a refusal.** Routing gave up | nothing at submit time | [Nothing is delivered](/platform/troubleshooting/nothing-is-delivered) |
+
+## What every refusal has in common
+
+**Nothing was charged, or the charge was reversed.** A refusal costs the customer nothing, which is
+why they are safe to be strict about — and why `insufficientCredit` is not a paradox.
+
+## The one that is hardest to explain
+
+<Warning>
+**A multipart content refusal happens *after* every segment was acknowledged.**
+
+On SMPP, content is checked against a template only once the segments are reassembled — at submit
+time the body is still a fragment, and `"Your OTP is {#var#}, valid"` matches no part of a two-part
+message.
+
+So the customer's client saw an OK for every segment, and the message was then dropped, refunded and
+recorded. There is no error they could have caught, and the receipt is the only signal.
+
+This is the normal shape for Indian-language DLT templates, where UCS-2 puts 67 characters in a
+segment — so a template that works in English starts failing the moment the wording is translated.
+</Warning>
+
+## Reading a `templateNotMatched`
+
+Almost always one of four things, in descending order of how often it is actually the cause:
+
+<AccordionGroup>
+
+<Accordion title="The wording genuinely differs">
+Whitespace is folded before matching, so runs of spaces and newlines are not the problem. Anything
+else — an extra full stop, a changed word, a different variable position — is.
+
+The panel's template preview shows a sample message the template accepts. Compare it against what the
+customer actually sent, which is on the `cdr_rejected` row.
+</Accordion>
+
+<Accordion title="The template is degraded">
+An unrecognised placeholder name — `{#VAR#}`, `{#otp#}` — loads as a **generic variable** rather than
+being dropped, and the row is reported under `templates_degraded` on `/ops/health`.
+
+It still matches, but far more loosely than intended: `{#var#}` accepts anything at all up to the
+length limit. If a template is approving messages it should not, look here first.
+</Accordion>
+
+<Accordion title="The variable is longer than the limit">
+`smsg.whitelist.max.variable` bounds how much text one placeholder may stand for. A template of
+`"Your code is {#var#}"` with a 900-character body is refused even though the wording matches.
+</Accordion>
+
+<Accordion title="The account is in ENFORCE and should not be">
+`REPORT` mode counts what *would* be refused without refusing it — `whitelist_would_reject` on
+`/ops/health`. Running a new account in `REPORT` for a day before enforcing turns this whole class of
+incident into a number you read at your leisure.
+</Accordion>
+
+</AccordionGroup>
+
+## `insufficientCredit` on an account with money on it
+
+Not a contradiction, and the commonest surprise in prepaid operation.
+
+**Credit is reserved in blocks, not per message.** The block is `max(smsg.balance.block.min,
+price × smsg.balance.block.min.messages)` — twenty messages' worth by default — and the reserve only
+succeeds if the balance covers a *whole* block.
+
+So refusals begin while the balance is still positive, at roughly one block's worth remaining.
+
+<Tip>
+If customers complain about running out early, `smsg.balance.block.min.messages` is the number to
+look at, not the balance. Lowering it makes the tail smaller and the database busier.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Whitelisting" icon="shield-check" href="/platform/customers/whitelisting-rollout">
+    Approving sender IDs and wording.
+  </Card>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocks, reservations and the money identity.
+  </Card>
+</CardGroup>

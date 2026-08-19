@@ -1,0 +1,111 @@
+---
+title: "First checks"
+description: "The four questions that separate a routing problem from the three things that are not routing — asked in the order that rules the most out fastest."
+source: "fireflo-sms-gateway/docs/10-troubleshooting.md @ 0.7.3"
+---
+
+Most FireFlo incidents present the same way: **messages were accepted and nothing arrived**. That
+symptom has at least six distinct causes, and only one of them is routing.
+
+Work down this page in order. Each step rules out more than it costs.
+
+## 1. Ask the database, not the log
+
+Three of the four likely causes are not routing at all, and the database says which in one query.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+| `reason` | What it means | Where to go |
+| :--- | :--- | :--- |
+| `maxAttempts` | **The only value that means routing.** | [Nothing is delivered](/platform/troubleshooting/nothing-is-delivered) |
+| `headerNotApproved` | Sender ID was not approved | [Refusals](/platform/troubleshooting/refusals) |
+| `templateNotMatched` | Body matched no approved template | [Refusals](/platform/troubleshooting/refusals) |
+| `missingMandatoryTlv` | A required tag resolved to nothing | [TLVs in practice](/platform/connections/tlvs) |
+| `insufficientCredit` | Prepaid balance would not cover it | [Prepaid credit](/platform/billing/prepaid-credit) |
+| `filtered` | A filter refused it | [Refusals](/platform/troubleshooting/refusals) |
+
+<Warning>
+**No amount of route-table editing will change any row that is not `maxAttempts`.** Those messages
+were refused *before* routing was reached. This is the single most common wasted afternoon in
+FireFlo operations.
+</Warning>
+
+## 2. Is a vendor bound at all?
+
+A perfect catch-all pointing at a vendor that is not connected delivers nothing, and looks like a
+routing bug from every angle.
+
+```bash
+fireflo verify
+```
+
+It answers in words — *"N vendor(s) configured, none bound — nothing can be sent yet."*
+
+## 3. Did the client ever get told?
+
+**No.** This is worth internalising, because it shapes every conversation with a customer.
+
+The submit response is sent **before routing runs**. So a routing failure can never surface as an
+error on the customer's `submit_sm` or their HTTP call — it can only appear later, as a delivery
+receipt and a `cdr_rejected` row.
+
+<Tip>
+"My send returned success" and "my message was delivered" are entirely unrelated statements on any
+SMPP gateway, FireFlo included. A `200` means *accepted for routing*.
+</Tip>
+
+## 4. Is the log quiet because it is fixed, or because it already said so?
+
+`routing.rule.broken` is logged **once per rule, not once per message** — deliberately, since
+unguarded it would be a line per message per attempt on exactly the traffic already going wrong.
+
+The consequence is a trap: **a quiet log is not proof the problem is gone.** The counter resets only
+when a new routing table is published.
+
+So after fixing a rule, watch for the line to **reappear**, not for it to stay absent. The reliable
+form of the same question is the number:
+
+```bash
+fireflo health | grep routing_rules_broken
+```
+
+## What to capture before you change anything
+
+If you are going to ask for help, or you expect to be explaining this later, take these four now —
+they are all cheap and three of them are destroyed by a restart:
+
+<Steps>
+  <Step title="The rejection breakdown">
+    The `cdr_rejected` query above, with its counts.
+  </Step>
+  <Step title="/ops/health, whole">
+    `last_error`, `last_submit_error`, `routing_failed_queue` and `routing_retry_queue` in one
+    snapshot.
+  </Step>
+  <Step title="The WARN and ERROR lines">
+    Not the whole log — `routing.rule.broken`, `message.dropped`, `listener.bind.failed`,
+    `message.submit.response`.
+  </Step>
+  <Step title="One message serial that failed">
+    Everything downstream is easier when you can trace one real message rather than a class of them.
+  </Step>
+</Steps>
+
+<Warning>
+**Redact before sharing.** Credentials, system IDs, IP addresses, phone numbers and message content
+all appear in these outputs. `fireflo` redacts what it can, but a hand-copied log line is your own
+responsibility.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Nothing is delivered" icon="magnifying-glass" href="/platform/troubleshooting/nothing-is-delivered">
+    When it really is routing.
+  </Card>
+  <Card title="Refusals" icon="ban" href="/platform/troubleshooting/refusals">
+    Every `cdr_rejected` reason, and what fixes it.
+  </Card>
+</CardGroup>
