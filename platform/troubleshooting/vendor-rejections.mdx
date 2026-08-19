@@ -41,9 +41,9 @@ all.
 | 195 | `ESME_RMISSINGOPTPARAM` | A required TLV was not sent — on DLT, the entity or template id | no |
 | 196 | `ESME_RINVOPTPARAMVAL` | A TLV value was rejected — on DLT, a wrong or unstamped id | no |
 
-The full table, with the plain-English sentence each carries into the log, is `SmppStatus.java`. A
-code outside it logs as **`vendor-specific`**, deliberately: vendors do use their own, and inventing
-a name would send you looking for a spec entry that does not exist.
+The gateway carries the full table, and writes the plain-English sentence beside every code it
+recognises. A code outside it logs as **`vendor-specific`**, deliberately: vendors do use their own,
+and inventing a name would send you looking for a spec entry that does not exist.
 
 ## The 192–196 block is always about TLVs
 

@@ -1,0 +1,88 @@
+---
+title: "Runtime"
+description: "Whether the gateway has the memory, processor and connection capacity to keep working — five verdicts, each published with the rule it was reached by."
+---
+
+<Warning>
+**This page is about the gateway itself, not the messages it carries.** Nothing here counts messages,
+deliveries or vendor throughput — those are on the [dashboard](/platform/operations/dashboard) and
+[Live health](/platform/operations/live-health). This is whether the software has the memory,
+processing power and connection capacity to keep doing its job.
+</Warning>
+
+That separation is the whole design. A gateway can be delivering perfectly while quietly running out
+of file descriptors, and it can be idle while leaking memory. Neither shows up in a delivery figure.
+
+## Recent trend
+
+Four sparklines — memory, processor, tasks running, work waiting — labelled **since this page
+opened**. The history is held in the browser tab and starts empty, so it genuinely cannot show you
+anything from before you arrived. For a longer view, point a monitoring system at the gateway's own
+measurements endpoint.
+
+## The five verdicts
+
+Each card carries a badge — **Healthy**, **Worth watching**, **Under pressure**, or **Not
+reported** — a summary, a fill bar, and two lines of prose: what the reading means, and **the rule
+the badge was reached by**.
+
+Publishing the rule is deliberate. A threshold you cannot see is a threshold you cannot argue with,
+and these are judgements about your platform, not laws of nature. If 70% processor is normal for your
+traffic shape, the card is wrong and you should know precisely how wrong.
+
+| Card | Healthy | Worth watching | Under pressure |
+| :--- | :--- | :--- | :--- |
+| **Memory** | below 75% of the ceiling | to 90% | above 90% |
+| **Processor** | below 70% | to 90% | above 90% |
+| **Connection capacity** | below 70% of the limit | to 85% | above 85% |
+| **API requests** | under 250 ms average | to 1 second | above 1 second |
+| **Internal task queue** | below 70% of slots busy, nothing waiting | anything queued | — |
+
+### What each one is actually telling you
+
+**Memory.** Memory that keeps climbing and never falls back after a cleanup is how a leak looks. Run
+out entirely and the gateway stops accepting messages. The detail line counts cleanup pauses and the
+total time spent paused.
+
+**Processor.** Sustained high use means throughput is limited by this machine rather than by the
+vendor. Brief spikes during a burst are normal.
+
+**Connection capacity.** Every SMPP session, database connection and open file counts against this.
+
+<Note>
+Reach the connection limit and the gateway **refuses new vendor and customer connections before any
+other symptom shows**. Nothing about the traffic looks wrong first. This is the card that fails
+quietly, and the reason it is on the page at all.
+</Note>
+
+**API requests.** Messages submitted over HTTP, plus this panel's own calls. Slow responses here
+point at the gateway or its database, not at a vendor. The figure is an average since the process
+started — useful for "this is slow in general", useless for a spike a moment ago.
+
+**Internal task queue.** The gateway's own background work — database writes, receipt handling. Work
+waiting here that never clears means it is arriving faster than it can be done, and the detail line
+will tell you if any was turned away outright, which is work the gateway could not do at all.
+
+<Warning>
+**The internal task queue is not a worker pool.** *Worker* means an SMPP connection everywhere else
+in this documentation and everywhere else in the panel. It is avoided here on purpose: readers who
+met the word on this card went looking for a vendor that was never involved.
+</Warning>
+
+Where a reading is simply absent, the card says so in words — "The gateway did not report a memory
+ceiling" — rather than showing a zero that reads like a measurement.
+
+## The raw readings
+
+One control, **Show the raw readings**, opens everything the gateway publishes, in the software's own
+names, grouped by subject. This is the same data a monitoring system would scrape, and it is here for
+investigating something the cards above cannot explain.
+
+There is a single search box across every group rather than one per card, because when you are
+searching you generally do not know which group the measurement is in — that is most of why you are
+searching. Groups matching nothing disappear rather than leaving empty headings behind.
+
+The step down is one step on purpose. An earlier version dropped a reader from plain English to raw
+label syntax in a single click, which is not progressive disclosure so much as a cliff.
+
+A footer reports when the page last read, and refreshes every ten seconds.

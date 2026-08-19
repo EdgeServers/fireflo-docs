@@ -1,0 +1,74 @@
+---
+title: "Giving a customer portal access"
+description: "Two settings on the account, one deployment requirement, and the reason the panel will never confirm that a customer's address was recognised."
+---
+
+Customers reach the portal by entering their email address and following a one-time link. There is no
+password to issue, no invitation to send, and nothing to revoke except the two settings below.
+
+## What an operator sets
+
+Open the account, go to **Settings**, and set two things on the **Organisation** card.
+
+<Steps>
+<Step title="Set the email address">
+The **Email** field on the account. One account per address, ignoring case — a second account
+claiming the same address is refused rather than silently shadowing the first.
+
+A malformed address is refused as you type it, so an address that saved is an address the portal can
+match.
+</Step>
+
+<Step title="Leave the account listed">
+The **Listed** checkbox, under **Advanced**. A sign-in link is only ever issued for an account that
+is both matched by address **and** enabled.
+</Step>
+</Steps>
+
+<Warning>
+**Unlisting an account switches its portal access off, and the checkbox does not say so.**
+
+Its own description talks about panel listings and correctly notes that traffic keeps flowing either
+way — unlisting stops nothing the gateway does. But it *does* stop the portal issuing a sign-in link,
+which makes it the closest thing to a portal on/off switch the account has. That behaviour is the
+current one; the wording beside the checkbox has not caught up with it.
+
+To stop traffic, disable the logins. To stop spend, use the balance. To stop portal access, unlist.
+</Warning>
+
+## What the deployment needs
+
+The panel must be able to send mail, and must know its own public address, or no link can be issued
+at all. Where either is missing the customer is told plainly that sign-in by email is not available
+on this panel and to ask their account manager — an honest refusal rather than a link that never
+arrives. See [the control panel's configuration](/reference/config/control-panel).
+
+## What the customer sees, and what you will not be told
+
+After submitting an address the customer always gets the same answer:
+
+> If that address is on an account, a sign-in link is on its way. It expires in 15 minutes.
+
+<Note>
+**That response is identical whether the address exists, belongs to a disabled account, or has never
+been heard of.** A form that said "no such account" would let anyone test a list of addresses against
+your customer base and learn which of your competitors' customers are also yours.
+
+The consequence for support is worth knowing: **the panel cannot confirm to you that a customer's
+address was recognised.** If a customer reports no link arriving, check the address on the account
+rather than looking for a rejection that was never surfaced.
+</Note>
+
+Links work once and expire after fifteen minutes. A used or expired link says so and offers a fresh
+one. Requests are rate limited per account and per network, and hitting the per-account limit is
+answered with the same neutral sentence — the customer is not told they have been throttled.
+
+## What portal access is not
+
+**The Logins tab is not portal access.** It holds SMPP and HTTP credentials, which are how a
+customer's *software* connects. Nothing on it grants or revokes a person's sign-in. An account can
+have a dozen logins and no portal access, or portal access and no logins at all.
+
+Once in, a customer sees their own traffic, statement, sender IDs, templates and API playground — and
+never your cost, your margin or which vendor carried anything. What they can do there is described
+for them under [the portal](/developers/portal/signing-in).
