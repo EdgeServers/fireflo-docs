@@ -38,18 +38,17 @@ Rather than invent a number, the field says it is not determined.
 The one the **login bills to** — `app_credential.account_id`, not the login name. Several logins on
 one account all report the same balance, and all spend the same credit.
 
-## Refusals begin before zero
+## A positive balance can still refuse one message
 
 <Warning>
-Credit is reserved in **blocks**, and a reservation only succeeds if the balance covers a whole block.
-The block is `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)` — twenty messages'
-worth by default.
+Credit is reserved in **blocks** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
+twenty messages' worth by default — and refills are **asynchronous**.
 
-So `402 Insufficient credit` starts while this endpoint still reports a **positive** balance, at
-roughly one block's worth remaining.
+So a message arriving while the next reservation is being taken gets `402` even though this endpoint
+reports a positive balance. **It is transient; the retry succeeds.**
 
-Alert on the balance approaching one block, not on zero. And note that a top-up smaller than one block
-does not restore service.
+The block size does not strand credit: a reservation falls back through the block, the floor, and
+finally the single message that asked, so an account spends every unit it holds.
 </Warning>
 
 ## Do not poll this per message

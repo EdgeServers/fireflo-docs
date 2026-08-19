@@ -6,12 +6,14 @@ description: "The questions operators ask once money is moving — discrepancies
 <AccordionGroup>
 
 <Accordion title="An account is refusing messages and has money on it">
-Credit is reserved in **blocks**, and a reservation only succeeds if the balance covers a whole block.
-The block is `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)` — twenty messages'
-worth by default.
+Almost always a **refill in flight**, not stranded credit.
 
-So refusals begin at roughly one block remaining, with the balance still positive. A very small
-top-up will not fix it either.
+Credit is reserved in blocks, and refills are asynchronous by design — so a message arriving while the
+next reservation is being taken can be refused with money still on the account. Retrying succeeds.
+
+**The block floor does not strand anything.** A reservation tries the full block, then the
+message-denominated floor, then just the single message that asked, so an account spends every unit it
+holds. One funded for three messages sends three.
 
 If this happens on a **well-funded** account, the cause is different and historic: the floor used to
 be a currency amount, which could size a block at exactly one message for an expensive destination.

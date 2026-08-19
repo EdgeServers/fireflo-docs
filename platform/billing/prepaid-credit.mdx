@@ -86,11 +86,22 @@ was refused for want of credit on an account holding thousands of units.
 That is the entire "insufficient funds on a funded account" report.
 </Warning>
 
-The reserve only succeeds if the balance covers a **whole** block, so refusals begin at roughly one
-block's worth remaining — with the balance still positive. Alert on that threshold, not on zero.
+A reservation is all-or-nothing, so a single statement can only succeed if the balance covers the
+amount asked for. **The reserve therefore tries three descending rungs** — the full block, the
+message-denominated floor, then just the one message that asked:
+
+<Tip>
+**The bottom rung is why the floor cannot strand money.** An account with less than twenty messages
+left still gets the one it asked for, rather than being refused for failing to afford a floor that
+exists to keep busy accounts off the database. An account funded for three messages sends three.
+</Tip>
 
 **What it costs:** an actively sending account holds up to twenty messages' worth in `reserved` that
-nothing else can spend.
+nothing else can spend — returned by a clean shutdown, and by `credit release` after an unclean one.
+
+**What you will still see near the end:** refills are asynchronous by design, so a message arriving
+while the next reservation is in flight can be refused even though credit remains. That refusal is
+transient and the retry succeeds. It is not stranded credit.
 
 ## Refusal
 

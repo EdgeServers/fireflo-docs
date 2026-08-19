@@ -91,14 +91,15 @@ incident into a number you read at your leisure.
 Not a contradiction, and the commonest surprise in prepaid operation.
 
 **Credit is reserved in blocks, not per message.** The block is `max(smsg.balance.block.min,
-price × smsg.balance.block.min.messages)` — twenty messages' worth by default — and the reserve only
-succeeds if the balance covers a *whole* block.
+price × smsg.balance.block.min.messages)` — twenty messages' worth by default.
 
-So refusals begin while the balance is still positive, at roughly one block's worth remaining.
+A reservation tries **three descending rungs**: the full block, that floor, then the single message
+that asked. So the floor never strands money — an account spends every unit it holds.
 
 <Tip>
-If customers complain about running out early, `smsg.balance.block.min.messages` is the number to
-look at, not the balance. Lowering it makes the tail smaller and the database busier.
+**A refusal on an account with money left is usually a refill in flight.** Refills are asynchronous,
+so a message arriving mid-reservation can be refused; the retry succeeds. Persistent refusals with a
+healthy balance are a different problem — check the ledger and `reserved`.
 </Tip>
 
 ## Related

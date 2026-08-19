@@ -60,23 +60,22 @@ Pricing can differ by country and network, which is why `to` is required rather 
 without a destination would be a guess.
 </Tip>
 
-## The block behaviour, which explains a confusing refusal
+## The block behaviour, which explains an occasional refusal
 
-Credit is **reserved in blocks, not per message**. A block is around twenty messages' worth by
-default, and a reservation only succeeds if the balance covers a whole block.
-
-The consequence:
+Credit is **reserved in blocks, not per message** — around twenty messages' worth at a time — which is
+what keeps the send path off the database.
 
 <Warning>
-**`402 Insufficient credit` begins while the balance is still positive** — at roughly one block's
-worth remaining.
+**You can see a `402` with money still on the account.** Refills are asynchronous, so a message
+arriving while the next reservation is being taken is refused. **Retrying succeeds**, and this is the
+one `402` worth a retry.
 
-So a customer looking at a non-zero balance and a stream of refusals is not seeing a bug. Alert when
-the balance approaches one block, not when it approaches zero.
+A *persistent* `402` with a healthy balance is a different matter — raise it with your provider.
 </Warning>
 
-This also means a very small top-up may not restore service: adding less than one block's worth
-leaves every reservation failing exactly as before.
+**The block size does not strand your credit.** A reservation falls back through the full block, then
+the floor, then the single message that asked — so an account spends every unit it holds, and a small
+top-up works exactly as you would expect.
 
 ## Product changes the price
 

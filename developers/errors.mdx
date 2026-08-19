@@ -83,11 +83,12 @@ word, an added full stop, or a variable in a different position is.
 </Accordion>
 
 <Accordion title="402 with money still on the account">
-Credit is reserved in blocks, not per message — around twenty messages' worth at a time by default —
-and a reserve only succeeds if the balance covers a whole block.
+Credit is reserved in blocks, not per message — around twenty messages' worth at a time — and refills
+are asynchronous. A message arriving while the next reservation is in flight is refused even though
+credit remains.
 
-So refusals start while the balance is still positive. Alert on the balance approaching one block,
-not on zero.
+**That one is transient: retry it.** A `402` that persists with a healthy balance is not, and is worth
+raising.
 </Accordion>
 
 <Accordion title="400 — Unknown argument: custom-tlvs">

@@ -24,13 +24,13 @@ are the gap, and your provider can list them.
 </Accordion>
 
 <Accordion title="Why am I being refused when I have money on the account?">
-Credit is reserved in **blocks**, around twenty messages' worth by default, and a reservation only
-succeeds if the balance covers a whole block.
+Almost always a **refill in flight**. Credit is reserved in blocks and refills are asynchronous, so a
+message arriving mid-reservation is refused with money still there. Retrying succeeds.
 
-So refusals start at roughly one block remaining, not at zero. A very small top-up will not fix it
-either — anything under one block leaves every reservation failing exactly as before.
+**The block size does not strand credit** — a reservation falls back to the single message that asked
+if that is all the balance covers, so you spend every unit you hold.
 
-Alert on the balance approaching one block's worth, not on zero.
+A refusal that persists on a funded account is a different problem; raise it.
 </Accordion>
 
 <Accordion title="Do I get refunded for a failed message?">
