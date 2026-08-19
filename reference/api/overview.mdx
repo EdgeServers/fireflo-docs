@@ -1,0 +1,96 @@
+---
+title: "REST API overview"
+description: "The base URL, Basic authentication, the response envelope, and the field-name rule that catches most people porting from another gateway."
+source: "fireflo-restapi SendResource, SendRequestParser, FieldNormaliser; panel lib/api-catalogue.ts @ 0.7.3"
+---
+
+Five endpoints, all JSON, all returning the same envelope. Four sit under `/secure/` and take HTTP
+Basic authentication; `/ping` takes none.
+
+| Endpoint | Method | What it does |
+| :--- | :--- | :--- |
+| [`/secure/send`](/reference/api/send) | POST | Queue one message |
+| [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Queue many, optionally scheduled |
+| [`/secure/balance`](/reference/api/balance) | GET | What is left on the account |
+| [`/secure/rate`](/reference/api/rate) | GET | What a message would cost, sending nothing |
+| [`/ping`](/reference/api/ping) | GET | Liveness, no credentials |
+
+## The envelope
+
+Every response is a JSON object with **either** `data` **or** `message` — never both, and never a
+bare value at the top level.
+
+```json Success
+{ "data": { "status": "ok" } }
+```
+
+```json Failure
+{ "message": "Authentication required" }
+```
+
+So the branch in your client is `res.ok`, and the human-readable reason is always at `message`. There
+is no error code field: the HTTP status is the code, and the string is for a person reading a log.
+
+## Authenticating
+
+Basic, with your HTTP login as the username:
+
+```bash
+curl -u 'yourlogin:yourpassword' https://sms.example.com/secure/balance
+```
+
+<Warning>
+**An SMPP login cannot use this API**, and the refusal does not say so in as many words — it is a
+`403` reading `Authentication failure`, the same answer a wrong password gets. If a login works over
+SMPP and returns 403 here, check its type before you check its password.
+</Warning>
+
+Credentials go in the header and **nowhere else**. `username` and `password` as body fields are not
+ignored — they are rejected as unknown arguments, which is how a payload copied from a different
+gateway usually announces itself.
+
+## Underscores and hyphens are the same field
+
+`FieldNormaliser` rewrites every `_` to `-` before any parser reads the body. So `dlr_url` and
+`dlr-url` are one field, and you may write whichever your language prefers.
+
+Two consequences worth knowing before they bite:
+
+<AccordionGroup>
+
+<Accordion title="Sending both spellings is a 400, not last-one-wins">
+`{"dlr_url": "…", "dlr-url": "…"}` is a duplicate of one field, and the API refuses rather than
+silently picking one. This is deliberate: quietly choosing would mean a receipt going somewhere the
+caller did not intend.
+</Accordion>
+
+<Accordion title="`custom_tlvs` is the one exception">
+It keeps its underscore. **`custom-tlvs` is an unknown argument** and returns a `400`, because the
+normaliser exempts this one name — see [Custom TLVs](/developers/send/custom-tlvs).
+</Accordion>
+
+</AccordionGroup>
+
+## Where this reference comes from
+
+These pages are written from the parsers — `SendRequestParser`, `BatchRequestParser`,
+`FieldNormaliser`, `MsisdnReader`, `ScheduleAtParser` and the outcome switch in `SendResource` — and
+every example on them has been run against a live gateway.
+
+<Warning>
+**Do not generate a client from `api/send-sms.swagger.json` in the gateway repository.** That file is
+hand-maintained and wrong in three places you meet on the first day: it types `custom_tlvs` as an
+array of pairs when the parser wants an object, types `validity-period` as a string when it must be
+an integer, and describes a `sendbatch` body whose keys the parser ignores.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Errors" icon="triangle-exclamation" href="/reference/api/errors">
+    Every status this API returns, and what provokes it.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    First message in under five minutes.
+  </Card>
+</CardGroup>

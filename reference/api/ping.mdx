@@ -1,0 +1,57 @@
+---
+title: "GET /ping"
+description: "Liveness with no credentials — what it does and does not tell you."
+source: "fireflo-restapi PingResource; executed against 0.7.3 @ 2026-08-19"
+---
+
+The one endpoint that needs no authentication. Intended for a monitor.
+
+```bash
+curl -i https://sms.example.com/ping
+```
+
+Real response from a running 0.7.3:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=UTF-8
+
+{"data":{"status":"ok"}}
+```
+
+No parameters. No authentication. It counts against no rate limit.
+
+## What a 200 here actually proves
+
+That the HTTP ingress is up and serving. That is all, and the gap matters when you are choosing what
+to alert on.
+
+| A `200` from `/ping` proves | It does **not** prove |
+| :--- | :--- |
+| The process is running and accepting HTTP | That any vendor is bound |
+| The REST layer is initialised | That the database is reachable |
+| Your network path reaches it | That messages are being routed rather than queueing |
+
+<Warning>
+**A gateway with every vendor down still answers `/ping` with `200`.** Binds, queue depth and
+throughput live on the management port, which is not this one — see
+[the management port](/reference/management/endpoints). Alerting on `/ping` alone gives you a monitor
+that stays green through the outages you most want to know about.
+</Warning>
+
+## Using it as a health check
+
+Reasonable as a load-balancer liveness probe, where "is this process serving?" is exactly the
+question. For readiness — "should this instance receive traffic?" — use `/ops/health` on the
+management port instead, and read `bound_transmittable` rather than the status field.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="The management port" icon="heart-pulse" href="/reference/management/endpoints">
+    Binds, sessions, queue depth and measured TPS.
+  </Card>
+  <Card title="Live health" icon="chart-line" href="/platform/operations/live-health">
+    The handful of signals worth an alert.
+  </Card>
+</CardGroup>

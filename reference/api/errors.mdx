@@ -1,0 +1,135 @@
+---
+title: "API errors"
+description: "Every status the REST API returns, what provokes it, and the order the checks run in — which decides which error you actually see."
+source: "fireflo-restapi SendResource, SendRequestParser; panel lib/api-catalogue.ts. Responses executed against 0.7.3 @ 2026-08-19"
+---
+
+Every failure is a JSON object with a single `message`. The HTTP status is the machine-readable part;
+the string is for a person reading a log.
+
+```json
+{"message":"Authentication failure"}
+```
+
+## The order the checks run in
+
+This decides which error you see when a request is wrong in more than one way, and it is the reason a
+malformed payload can come back as an authentication problem.
+
+<Steps>
+  <Step title="Authentication">
+    Before the body is parsed at all.
+  </Step>
+  <Step title="Authorisation">
+    IP allow list, then login type.
+  </Step>
+  <Step title="Content negotiation">
+    The `Accept` header.
+  </Step>
+  <Step title="Parsing">
+    JSON well-formedness, then field names, then field values.
+  </Step>
+  <Step title="Business rules">
+    Sender ID, template, credit, rate limit.
+  </Step>
+</Steps>
+
+Executed against a live 0.7.3 — an unparseable body with no credentials returns the **authentication**
+error, not the parse error:
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Tip>
+**Fix credentials before you debug a payload.** A `401` or `403` tells you nothing about whether the
+rest of your request is right, because nothing downstream of authentication has run yet.
+</Tip>
+
+## Authentication and authorisation
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 401 | `Authentication required` | No `Authorization` header. The response carries `WWW-Authenticate: Basic realm="fireflo"`. |
+| 401 | `Invalid token` | The header is not Basic, is not valid Base64, or has no colon in it. |
+| 403 | `Authentication failure` | Unknown login, wrong password, **or an SMPP login** — those cannot use this API. |
+| 403 | `Authorization failure` | Your login has an IP allow list and the request did not come from one of them. |
+
+**401 means "you did not identify yourself"; 403 means "you did, and it was not accepted."** The
+distinction is worth wiring into your alerting: a sudden 401 is usually a deployment that lost its
+environment variable, while a sudden 403 is usually a password rotation or an IP that moved.
+
+<Warning>
+**An unknown path under `/secure/` returns `401`, not `404`.** Authentication runs before routing, so
+the API will not tell an unauthenticated caller which endpoints exist. Do not use a `404` to probe
+for endpoint availability — you will get `401` whatever you ask for.
+</Warning>
+
+## Content negotiation
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 415 | `This API supports JSON media type only.` | An `Accept` header that excludes JSON. |
+
+Omitting `Accept` entirely is fine. Sending `Accept: text/plain` is not, and this is the one error a
+browser address bar will reliably produce.
+
+## Parsing
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 412 | `Got unparseable json data: <body>` | The body was empty, was not JSON, or was a bare array rather than an object. |
+| 400 | `Mandatory argument <name> is not found.` | A required field was absent or blank. |
+| 400 | `Unknown argument: <name>` | A field the API does not have — including `username` and `password`, which belong in the header. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Right name, wrong shape — a non-numeric `coding`, an odd-length `hex_content`. |
+
+<Warning>
+**`412` for bad JSON, not `400`.** Most APIs use `400` for both, so a client that branches on the
+status will treat "your JSON is broken" as a network-level surprise. Both are permanent — do not
+retry either.
+</Warning>
+
+## Business rules
+
+| Status | `message` | When |
+| :--- | :--- | :--- |
+| 402 | `Insufficient credit` | The prepaid balance will not cover it. Nothing was sent and nothing was charged. |
+| 403 | `'<id>' is not an approved sender ID for this account.` | The `from` has not been approved. |
+| 403 | `The message content does not match any approved template for this account.` | The account sends only approved wording and this body matched none. |
+| 429 | `Rate limit exceeded` | Over the account's messages per second. |
+| 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
+
+<Warning>
+**There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A
+fixed-interval retry from many workers re-synchronises into the next burst.
+</Warning>
+
+## Which of these should you retry?
+
+| | Retry | Why |
+| :--- | :--- | :--- |
+| 401, 403, 412, 400 | **No** | Permanent. The same request will fail identically forever. |
+| 402 | **No** | Retrying cannot add credit. Alert instead. |
+| 415 | **No** | Fix the header. |
+| 429 | **Yes**, backed off | Transient by definition. |
+| 500 | **Yes**, once or twice | The charge was reversed, so a retry is not a double-charge. |
+| 502, 503, 504 | **Yes** | Not from the gateway — a proxy in front of it. |
+
+<Tip>
+**A `500` is safe to retry precisely because the charge is reversed.** That is a deliberate property
+of the ingress, not an accident: credit is taken before queueing and given back when queueing fails,
+so a retry costs one message, not two. See [How billing works](/platform/billing/prepaid-credit).
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="REST API overview" icon="book" href="/reference/api/overview">
+    The envelope, authentication and the field-name rule.
+  </Card>
+  <Card title="Send one message" icon="paper-plane" href="/reference/api/send">
+    Every field, with its default and its refusal.
+  </Card>
+</CardGroup>
