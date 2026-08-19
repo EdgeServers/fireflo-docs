@@ -1,0 +1,126 @@
+---
+title: "Customer notices"
+description: "Telling customers about a change that alters their numbers — the rule, the query that finds who is affected, and the ratio almost everyone gets wrong."
+source: "fireflo-sms-gateway/docs/23-customer-notices.md @ 0.7.3"
+---
+
+Some releases change what a customer sees on an invoice or in a portal. Those need a notice, and a
+notice that is vague is worse than none.
+
+## The rule
+
+**Say the number, say the direction, say the date.**
+
+A customer told *"some figures may change slightly"* reads it as noise and rediscovers the change
+through a finance query three weeks later. A customer told *"your March invoice will be about 18%
+higher and here is why"* can plan.
+
+<Warning>
+**Never describe a correction as an improvement.**
+
+These notices are fixes to defects, and in each case the customer was on the wrong side of the defect
+in at least one respect. Writing around that is precisely what destroys the trust the notice was sent
+to protect.
+</Warning>
+
+**Send from the platform's own address to the account's billing contact**, not through the portal. An
+in-app banner reaches whoever next signs in, which on a machine-to-machine account is nobody.
+`app_account.email` is the contact of record.
+
+## The ratio almost everyone gets wrong
+
+When a fix means retried messages start being counted, the customer's figures rise. **The size of that
+rise is not `retried / total`.**
+
+Their old figure was the **non-retried traffic alone** — so the step from what they saw to the truth
+is measured against *that*, not against the total.
+
+```
+what they saw     = non-retried
+what they now see = non-retried + retried
+the rise          = retried / non-retried
+```
+
+<Tip>
+**At a 20% retry rate the figures rise by 25%, not 20%.** Quote `pct_count_rises`, never
+`pct_of_traffic` — they are different questions and the gap widens as the retry rate goes up.
+</Tip>
+
+## Finding who is affected
+
+```sql
+SELECT account_id,
+       count(*)                                                             AS messages,
+       count(*) FILTER (WHERE retry_count > 0)                              AS were_retried,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*), 0), 1)                                      AS pct_of_traffic,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*) FILTER (WHERE retry_count = 0), 0), 1)       AS pct_count_rises,
+       round(100.0 * COALESCE(sum(price) FILTER (WHERE retry_count > 0), 0)
+             / nullif(sum(price) FILTER (WHERE retry_count = 0), 0), 1)     AS pct_spend_rises
+  FROM cdr_submit
+ WHERE part_no = 1 AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id ORDER BY pct_count_rises DESC NULLS LAST;
+```
+
+**Spend gets its own column rather than borrowing the message one**, because retried traffic is not
+priced like the average — it is whatever destinations and products happen to be failing. An account
+whose retries are concentrated on an expensive route sees a bigger money rise than message rise.
+
+`part_no = 1` because the money lives entirely on part 1 of a concatenated message.
+
+## Two sentences that must not be softened
+
+Whatever else is rewritten to suit your platform's voice, these survive intact:
+
+<AccordionGroup>
+
+<Accordion title="Your invoices are not affected and are not being reissued. They were always right.">
+When a fix raises a customer's *visible* figures towards their invoice, the customer's numbers were
+below what they were billed.
+
+A customer told their numbers are changing **without being told which side was wrong** reasonably
+assumes they have been overbilled — and every one of them asks. Saying it up front is cheaper than
+answering it thirty times.
+</Accordion>
+
+<Accordion title="credit_limit = 0 means no credit, not unlimited.">
+Never worded as "no limit" in anything sent outside.
+
+There is no representation of unlimited anywhere in the system, deliberately: a typo that reads as
+unlimited gives away a month of traffic nobody can invoice for.
+</Accordion>
+
+</AccordionGroup>
+
+## A notice that works
+
+<Steps>
+  <Step title="What is changing, in one sentence">
+    In the customer's terms — "the message counts in your portal", not "the CDR aggregation".
+  </Step>
+  <Step title="The number, for them specifically">
+    From the query above. A per-account figure beats a platform average every time.
+  </Step>
+  <Step title="Which direction, and whether money moves">
+    Say explicitly if invoices are unaffected. Assume they will otherwise conclude they were
+    overbilled.
+  </Step>
+  <Step title="The date it takes effect">
+    So they can align it with their own reporting period.
+  </Step>
+  <Step title="What they need to do">
+    Usually nothing — say so, rather than leaving them to work it out.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Migrating a deployment" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    The changes that need a notice in the first place.
+  </Card>
+  <Card title="Statements" icon="file-invoice" href="/platform/billing/statements">
+    Why a closed period is never restated.
+  </Card>
+</CardGroup>

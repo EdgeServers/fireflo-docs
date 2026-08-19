@@ -1,0 +1,119 @@
+---
+title: "Configuration tables"
+description: "The tables the gateway reads its configuration from, grouped by what they control — and the four domains that switch together."
+source: "fireflo-core db/migration V1.19.0 baseline through V1.37.0 @ 0.7.3"
+---
+
+With `FIREFLO_CONFIG_SOURCE=db`, the gateway reads **four domains** from PostgreSQL instead of files:
+properties, credentials, routing and rates.
+
+<Warning>
+**All four switch together.** There is one key, and it covers every domain — the older per-domain
+variables are gone and now refuse startup.
+
+`config_sources` on `/ops/health` reports what each domain actually resolved to, which is the thing to
+check when a panel edit appears to do nothing.
+</Warning>
+
+## Accounts, logins and products
+
+| Table | Holds |
+| :--- | :--- |
+| `app_account` | The billing identity. `account_id` is the rating scope **and** the prepaid credit key |
+| `app_credential` | Logins, typed `HTTP` or `SMPP` — **not interchangeable** |
+| `app_product` | Products, and whether each enforces whitelisting |
+| `app_login_token` | Single-use magic-link tokens for the customer portal |
+
+<Warning>
+**Creating a credential does not create an `account_balance` row.** A `RECHARGE` for an account
+without one credits nothing and stays pending.
+</Warning>
+
+## Money
+
+| Table | Holds |
+| :--- | :--- |
+| `account_balance` | `balance`, `reserved`, `currency`, `billing_mode`, `credit_limit` |
+| `balance_ledger` | Every movement: `RECHARGE`, `TRANSFER`, `RESERVE`, `RELEASE`, `BILL` |
+| `app_rate`, `app_rate_rule`, `app_rate_rule_condition`, `app_rate_rule_filter` | The tariff |
+
+`balance` has **exactly one writer** — the gateway's recharge poll. The panel writes ledger rows and
+never the balance column.
+
+<Tip>
+The entry types split into three jobs: `RECHARGE`/`TRANSFER` move money in, `RESERVE`/`RELEASE` move
+it between two columns of the same row and net to zero, and `BILL` is **inert** — the poll never
+selects it, so arrears never enter `balance`.
+</Tip>
+
+## Routing
+
+| Table | Holds |
+| :--- | :--- |
+| `app_route`, `app_route_table` | Tables and their rules |
+| `app_route_rule`, `_condition`, `_filter` | One rule, its conditions, its filters |
+| `app_route_group`, `app_route_group_member` | Vendor groups and selection policy (V1.29.0) |
+| `app_filter`, `app_filter_condition` | The shared filter library |
+
+**A rule referencing a missing or disabled filter is skipped entirely** rather than loaded with fewer
+conditions — dropping conditions would silently *widen* the rule.
+
+## Approvals and TLVs
+
+| Table | Holds |
+| :--- | :--- |
+| `app_whitelist_policy` | Per account and product: off, report or enforce |
+| `app_header` | Approved sender IDs, with their TLVs |
+| `app_template` | Approved content templates, with their TLVs |
+| `app_tlv_definition` | The operator's TLV catalogue |
+| `app_tlv_suggestion` | Customer-proposed tags awaiting approval |
+
+Both `app_header` and `app_template` carry an approval status (V1.19.0) — **only `APPROVED` rows are
+loaded**. A pending row behaves exactly as if it did not exist.
+
+## Workers and settings
+
+| Table | Holds |
+| :--- | :--- |
+| `app_worker` | Vendors and listeners |
+| `app_worker_property` | Their per-instance settings |
+| `app_config` | `smsg.*` properties |
+
+The three-tier resolution is `outSms.instance.<name>.<key>` → `outSms.default.<key>` → the coded
+default. A per-listener key **must be registered in the worker's `allPrms` array** to be read as a
+per-listener key at all — one left out silently reads a global nobody sets.
+
+## Audit
+
+| Table | Holds |
+| :--- | :--- |
+| `app_customer_access_log` | Customer portal access (V1.20.0) |
+
+Operator access is logged to a file in the panel's data folder rather than to this table.
+
+## Migrations are forward-only
+
+Flyway, `V1.19.0__baseline.sql` onward. **There is no down-migration** — the rollback path is a
+restore, so take the backup before applying, not after.
+
+```bash
+fireflo db test        # five graded connection checks
+fireflo verify         # does the configuration make sense
+```
+
+<Tip>
+Switching to `db` mode against an **empty** schema does not fall back to files. The loader publishes
+the empty set — and for credentials that means every bind and every REST call is refused at once. Run
+`fireflo import` first.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Call record tables" icon="database" href="/reference/data/cdr-tables">
+    The traffic and money half of the schema.
+  </Card>
+  <Card title="Database configuration" icon="sliders" href="/reference/config/database">
+    Connecting the gateway, and the db-mode switch.
+  </Card>
+</CardGroup>

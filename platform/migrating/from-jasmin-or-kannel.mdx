@@ -1,0 +1,112 @@
+---
+title: "Migrating a deployment"
+description: "Moving a platform rather than a client — the two billing changes that alter invoices, and the coding scale that silently changes what goes on the wire."
+source: "fireflo-sms-gateway/docs/14-migrating-from-jasmin.md @ 0.7.3"
+---
+
+This is the operator's side. If you are a customer changing your integration, read
+[Migrating from Jasmin](/developers/migrating/from-jasmin) instead.
+
+## From Jasmin
+
+The API is close enough that most customers change one line. Your work is mostly configuration and
+one reconciliation.
+
+The customer-visible changes are on their page. What matters to you:
+
+<Warning>
+**Messages now bill to the credential's `accountId`, not its login name.**
+
+Previously HTTP billed to the username while SMPP billed to `accountId` — so one customer appeared as
+**two identities** depending on how they connected. `accountId` is both the rating scope and the
+prepaid credit key, so the two had to be reconciled before credit could work over HTTP at all.
+</Warning>
+
+**Check your rate table before cutting over.** If `rates.conf` has a `[scope]` named after an HTTP
+username, rename it to that credential's `accountId` — otherwise those messages stop matching and
+become **unrated**, which means sent and charged nothing rather than refused.
+
+## From Kannel
+
+`GET /sendsms` has been **removed**. There is no compatibility shim.
+
+| Kannel | FireFlo |
+| :--- | :--- |
+| `GET /sendsms?…` | `POST /secure/send` with a JSON body |
+| `username`/`password` in the query string | HTTP Basic header |
+| `text` | `content` |
+| `validity` | `validity-period` |
+| `202 Accepted`, body is the id | `200 OK`, `data.messageId` |
+| `coding`: `0` 7-bit, `1` 8-bit, `2` UCS-2 | `coding`: **SMPP `data_coding`** — `0` GSM-7, `8` UCS-2 |
+
+```bash
+# before
+curl -G http://localhost:8080/sendsms \
+  --data-urlencode username=acme --data-urlencode password=secret \
+  --data-urlencode from=FireFlo --data-urlencode to=61491570006 \
+  --data-urlencode text=Hello
+
+# after
+curl -u acme:secret -H 'Content-Type: application/json' \
+  -d '{"from":"FireFlo","to":"61491570006","content":"Hello"}' \
+  http://localhost:8080/secure/send
+```
+
+<Warning>
+**The `coding` scale changed, and it fails quietly.** It is now the SMPP `data_coding` field.
+
+A client sending `coding=2` for UCS-2 now gets an **unspecified octet alphabet**. Nothing errors —
+the message goes out encoded wrongly. UCS-2 is `8`.
+
+Sweep your customers' integrations for `coding=2` before cutover, because neither side will notice
+until a recipient reports mojibake.
+</Warning>
+
+**Delivery receipts changed too.** FireFlo POSTs a JSON body by default, so a Kannel DLR handler
+expecting `%d`/`%s` substituted into a GET stops working. Set `smsg.dlr.forward.format = kannel` to
+keep the old behaviour while customers migrate.
+
+## The billing change that alters invoices
+
+**Billing is one unit per REST request**, however many segments the body occupies.
+
+<Warning>
+That is **cheaper than the same message over SMPP**, where each inbound PDU is billed. A customer who
+moves from SMPP to REST gets a lower bill for identical traffic, and one who moves the other way gets
+a higher one.
+
+Set `smsg.restapi.billing.units=segment` to price them alike. Decide this **before** cutover — changing
+it afterwards looks like a price rise.
+</Warning>
+
+## A cutover order that works
+
+<Steps>
+  <Step title="Reconcile rate scopes to accountId">
+    Before anything moves. An unmatched scope means unrated traffic, which is silent.
+  </Step>
+  <Step title="Decide the REST billing unit">
+    Request or segment. This is a pricing decision, not a technical one.
+  </Step>
+  <Step title="Set the receipt format customers expect">
+    `kannel` if they have Kannel handlers, so their side keeps working while they migrate.
+  </Step>
+  <Step title="Run report-only whitelisting for a period">
+    `whitelist_would_reject` tells you what enforcement would refuse before it refuses anything.
+  </Step>
+  <Step title="Move a small share of traffic first">
+    Compare delivery rates knowing FireFlo reports the **worst** segment of a long message, so its
+    figures are legitimately lower than a gateway reporting the first.
+  </Step>
+</Steps>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Customer notices" icon="envelope" href="/platform/migrating/customer-notices">
+    What to tell customers, and how to find who is affected.
+  </Card>
+  <Card title="The customer's side" icon="code" href="/developers/migrating/from-jasmin">
+    What their integration has to change.
+  </Card>
+</CardGroup>

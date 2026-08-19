@@ -1,0 +1,118 @@
+---
+title: "Releases and versioning"
+description: "How a version number is decided, what a commit message actually triggers, and what to read before upgrading."
+source: "fireflo-sms-gateway/docs/11-release-process.md @ 0.7.3"
+---
+
+FireFlo releases are automated from commit messages. If you are self-hosting, the useful parts are
+what a version number means and what to check before you upgrade.
+
+## Versioning
+
+Standard semantic versioning, decided by **Conventional Commit** messages rather than by hand.
+
+| Commit type | Example | Release |
+| :--- | :--- | :--- |
+| `feat` | `feat(routing): add rule validation` | **Minor** |
+| `fix` | `fix(smpp): resolve reconnect failure` | **Patch** |
+| `perf` | `perf(http): reduce submit latency` | Patch |
+| `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `style`, `revert` | | None by default |
+| `feat(routing)!:` or a `BREAKING CHANGE:` footer | | **Major** |
+
+Useful scopes: `http`, `smpp`, `routing`, `webhooks`, `docker`, `docs`, `ci`, `deps`, `release`.
+
+<Tip>
+If a PR contains several commits, **the squash title is what counts** — that is what lands on `main`
+and what the release tooling reads.
+</Tip>
+
+## What the pipeline does
+
+Release Please runs on every push to `main`:
+
+<Steps>
+  <Step title="Opens or updates a release pull request">
+    Whenever releasable changes exist. Nothing is released until it is merged.
+  </Step>
+  <Step title="Creates the GitHub release and tag on merge">
+  </Step>
+  <Step title="Publishes Maven artifacts">
+    To GitHub Packages.
+  </Step>
+  <Step title="Publishes Docker images">
+    JVM and native, to Docker Hub.
+  </Step>
+</Steps>
+
+## Before you upgrade
+
+The pattern worth internalising: **the changes that hurt are the quiet ones.** A breaking API change
+announces itself; a changed default does not.
+
+<AccordionGroup>
+
+<Accordion title="Read the release notes for changed defaults">
+A default that moves changes behaviour on every deployment that never set the value — which is most
+of them. These are the entries to read closely, more than the new features.
+</Accordion>
+
+<Accordion title="Check whether anything moved between ports">
+Enabling the management port **moved** `/q/metrics` from 8080 to 9000. A Prometheus job still pointed
+at the old one gets `404`s rather than failing loudly, so a dashboard reads as a quiet system rather
+than a broken monitor.
+</Accordion>
+
+<Accordion title="Check whether a database migration is included">
+Migrations are **forward-only**. There is no down-migration, so the rollback path is a restore rather
+than a reverse migration — take the backup before, not after.
+</Accordion>
+
+<Accordion title="Check whether receipt behaviour changed">
+Receipt semantics have changed twice in ways that were invisible until a customer noticed. `level`
+used to always read `2`, so `ACCEPTD` was reported as an outcome; and the `User-Agent` on webhook
+calls changed from the JDK default to `FireFlo/<version>`, which matters to any receiver with an
+allow-list.
+</Accordion>
+
+<Accordion title="Decide whether a customer notice is needed">
+If figures a customer can see will change, they need telling before it happens — with the number, the
+direction and the date. See [Customer notices](/platform/migrating/customer-notices).
+</Accordion>
+
+</AccordionGroup>
+
+## Version pairing
+
+The gateway publishes its running version on `/ops/health`, and the control panel shows both its own
+and the gateway's.
+
+<Warning>
+**A mismatched pair is flagged deliberately.** The panel degrades rather than breaking when it talks
+to an older gateway — a column simply drops out of its queries — but a feature that appears absent
+because of a version gap looks exactly like a feature that is broken.
+
+Check the pair before investigating anything that "should be there and isn't".
+</Warning>
+
+## Reporting problems
+
+- **Reproducible bugs** → GitHub Issues
+- **Questions and setup help** → GitHub Discussions
+- **Security-sensitive reports** → the maintainers privately, not a public issue
+
+<Warning>
+**Redact before sharing.** Credentials, system IDs, IP addresses, phone numbers and message content
+all appear in configuration and logs. `fireflo` redacts what it can; a hand-copied log line is your
+own responsibility.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Customer notices" icon="envelope" href="/platform/migrating/customer-notices">
+    When a release changes what a customer sees.
+  </Card>
+  <Card title="Migrating a deployment" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Coming from Jasmin or Kannel.
+  </Card>
+</CardGroup>

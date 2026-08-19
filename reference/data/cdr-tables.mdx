@@ -1,0 +1,157 @@
+---
+title: "Call record tables"
+description: "The five tables that record traffic and money, how they join, and the columns whose NULL means something different from zero."
+source: "fireflo-core db/migration V1.19.0 baseline onward; docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+Five tables, **all append-only**. Nothing is ever updated — which is what makes concurrent delivery
+receipts safe and lets a re-routed message keep both attempts.
+
+| Table | One row per | Since |
+| :--- | :--- | :--- |
+| `cdr_submit` | Submitted segment | baseline |
+| `cdr_final` | Outcome | baseline |
+| `cdr_interim` | Progress receipt | V1.33.0 |
+| `cdr_rejected` | Refusal | baseline |
+| `usage_daily` | Account × product × day | V1.37.0 |
+
+## How they join
+
+```
+cdr_submit  ─┬─ (gateway_msg_id, part_no) ─→ cdr_final     the outcome
+             ├─ (gateway_msg_id, part_no) ─→ cdr_interim   progress receipts
+             └─ gateway_msg_id            ─→ cdr_rejected  refusals
+```
+
+The `cdr_pnl` view **left**-joins submit and final, so records with no outcome yet surface as
+`PENDING` — in-flight exposure stays visible rather than being silently excluded.
+
+<Warning>
+**Every reader must take the *earliest* `cdr_final` row for a message.** That is why progress
+receipts live in their own table: an `ACCEPTD` written into `cdr_final` would outrank the `DELIVRD`
+that followed it, in every list, every chart and the P&L.
+</Warning>
+
+## `cdr_submit`
+
+The load-bearing table. **Part 1 is the only per-message record of what was charged.**
+
+### Identity and shape
+
+| Column | Notes |
+| :--- | :--- |
+| `gateway_msg_id` | The `messageId` returned to the customer |
+| `part_no`, `part_count` | Segment position and total |
+| `retry_count` | Attempts. **Non-zero is the signal that a route is struggling** |
+| `ingress` | How it arrived |
+| `in_gateway`, `vendor` | Which listener took it, which vendor carried it |
+| `operator_msg_id` | The carrier's own handle — what a customer quotes in a query |
+| `source_addr`, `dest_addr` | Kept because rating and disputes need them |
+| `mcc`, `mnc` | Country and network |
+| `dcs`, `msg_type` | Data coding, message class |
+
+### The money, both sides
+
+| Column | Meaning |
+| :--- | :--- |
+| `cost_rate`, `cost_units`, `cost`, `cost_currency` | What the vendor charges you |
+| `price_rate`, `billed_units`, `price`, `price_currency` | What you charge the customer |
+| `margin`, `margin_pct`, `margin_status` | Stored so P&L sums a column |
+| `cost_rule_id`, `price_rule_id` | Which rate rule matched, for audit |
+
+**All money is a `bigint` of ten-thousandths.** Divide by 10 000 to display; never store a float.
+
+<Warning>
+**`NULL` money is unknown, never zero.** A rate that could not be determined stays distinguishable
+from a genuinely free message.
+
+Any query that coalesces these to zero reports an unpriced vendor as **pure profit**. `margin_status`
+exists to make that state explicit rather than inferred.
+</Warning>
+
+**The money lives entirely on `part_no = 1`.** Later segments are delivery rows with no money —
+writing amounts on every segment would multiply both sides by the segment count. Every money query
+needs `WHERE part_no = 1`.
+
+### Two currencies, and no conversion
+
+`cost_currency` and `price_currency` are recorded per side. **FireFlo never converts between them.**
+A deployment buying in one currency and selling in another has a margin column that cannot be summed
+without doing the conversion yourself.
+
+### The three TLV columns
+
+| Column | Holds | Since |
+| :--- | :--- | :--- |
+| `tlvs_received` | As they arrived | V1.30.0 |
+| `tlvs` | As the gateway resolved them | baseline |
+| `tlvs_sent` | What the vendor put on the wire | V1.30.0 |
+
+`NULL` means nothing recorded the column; `{}` means recorded and there were none. `tlvs_sent` is
+`NULL` for every non-SMPP vendor.
+
+### `body`, and why it is usually NULL
+
+Recorded only if `smsg.cdr.body` is `excerpt` or `full` (V1.31.0). `NULL` on every row otherwise, and
+on every row written before the column existed.
+
+Searched with `ILIKE` over a trigram index (V1.32.0), always combined with a date range. That index
+needs `pg_trgm`; if the migration user may not create extensions, search still works, more slowly.
+
+### `registered_delivery`
+
+The SMPP octet **as the customer sent it**, raw rather than decoded — it carries three independent
+requests and only some are acted on.
+
+<Tip>
+It answers a question the record could not answer before: **did we owe this customer a receipt at
+all.**
+
+`NULL` on rows written before the column existed and on an ingress with no such concept. **That is
+not zero** — zero is a claim about the customer, namely that they asked for nothing.
+</Tip>
+
+## `cdr_final` and `cdr_interim`
+
+Outcomes and progress, split for the reason above. They also have **different lifetimes**:
+
+| | Retained by | Losing it costs |
+| :--- | :--- | :--- |
+| `cdr_final` | `FIREFLO_CDR_KEEP_DAYS`, default 90 | Billing history |
+| `cdr_interim` | `smsg.cdr.interim.retention.days`, default 30 | **A report, not an invoice** |
+
+`dlr_state` keeps the raw SMPP value alongside the coarse outcome, because `EXPIRED`, `REJECTD` and
+`UNDELIV` all bill as failures but mean different things.
+
+## `cdr_rejected`
+
+One row per refusal, with `reason` and — since V1.27.0 — the vendor's status code where the vendor was
+the one refusing.
+
+**A refused row carries no money.** `price`, `cost` and `margin` are `NULL` because credit was
+returned at the moment of refusal, which is what lets revenue queries sum those columns without an
+outcome filter.
+
+## `usage_daily`
+
+One row per account, per product, per day. **Daily rather than monthly** so any period is a `SUM` over
+days, forever, with no second derived table to disagree with it.
+
+Billable columns for a finished day are final; delivery columns are restated by re-running the
+rollup, which is why it is idempotent.
+
+<Warning>
+The purge **refuses to delete any day with no `usage_daily` row**, and refuses the whole run rather
+than skipping. Deleting an unsummarised day destroys the consumption record permanently.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Call records" icon="database" href="/platform/billing/cdrs">
+    What each table is for, in prose.
+  </Card>
+  <Card title="Configuration tables" icon="table" href="/reference/data/config-tables">
+    The other half of the schema.
+  </Card>
+</CardGroup>
