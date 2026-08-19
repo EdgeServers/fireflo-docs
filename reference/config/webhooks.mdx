@@ -1,0 +1,76 @@
+---
+title: "Webhooks and the receipt store"
+description: "How the gateway calls out to customer endpoints, what a forwarded receipt looks like, and where correlation state is kept."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md, docs/07-webhooks.md @ 0.7.3"
+---
+
+## Egress
+
+Applies to both `dlr_url` on a submission and `forward.mo.url` on a connector.
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` or `always`. |
+| `smsg.webhook.schemes` | `https,http` | Schemes the gateway will call. |
+| `smsg.webhook.private.targets` | `allow` | `deny` refuses private, loopback and link-local targets. |
+| `smsg.webhook.retries` | `10` | Attempts before the receipt is abandoned. |
+| `smsg.webhook.retry.interval.ms` | `120000` | Wait between attempts. |
+| `smsg.webhook.timeout.ms` | `5000` | Connect and request timeout. |
+
+<Warning>
+`smsg.webhook.redirects` **changed from following redirects to not following them.** It is the setting
+the others depend on: once a redirect is followed, the address that was checked is not the address
+that is fetched. An endpoint relying on a redirect now fails loudly rather than quietly going
+somewhere else.
+</Warning>
+
+`private.targets` defaults to `allow` so deployments posting to an application on their own network
+keep working. Set `deny` where customers are external.
+
+<Note>
+It resolves the host and then connects, so a name that answers differently in between defeats it. It
+raises the cost rather than closing the hole — egress firewall rules are what close it.
+</Note>
+
+At the default retry budget, one unreachable endpoint occupies a virtual thread for twenty minutes.
+
+## Receipt forwarding
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.dlr.forward.format` | `json` | `json` POSTs a JSON body; `kannel` issues a bare GET with `%s`/`%d` substituted into the registered URL. |
+| `smsg.dlr.forward.fields.vendor` | `false` | Whether the JSON receipt names the vendor that took the message. |
+
+<Warning>
+`kannel` carries information **only** where the registered URL has placeholders for it. A URL without
+them receives a request with nothing in it, and nothing reports a problem. That silent failure is why
+`json` is the default.
+</Warning>
+
+`vendor` is off by default because it discloses your supplier to your customer, at an endpoint they
+control — usually commercially sensitive.
+
+The payload is documented at [Delivery receipts](/developers/receive/delivery-receipts).
+
+## The delivery receipt store
+
+Correlation state for messages awaiting a receipt, and receipts held for a disconnected SMPP client.
+**The only persistent state outside PostgreSQL.**
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.dlr.store.path` | `data/dlr-mvstore.db` | Store file location. |
+| `smsg.dlr.retention.days` | `7` | How long a submitted message is remembered. |
+| `smsg.dlr.correlation.days` | `3` | How long a vendor message id can still be matched back. |
+| `smsg.dlr.expiry.check.minutes` | `60` | Sweep interval. |
+
+The path was previously settable only as a `-D fireflo.dlr.db.path` system property. That is still
+honoured when `smsg.dlr.store.path` is unset, so an existing deployment is not relocated on upgrade.
+
+<Note>
+**`smsg.dlr.correlation.days` bounds `smsg.cdr.deadline.hours`.** Past the correlation window a
+receipt can no longer be matched to its submission, so waiting longer for one only delays the same
+answer. The expiry sweeper derives its cap from this value rather than holding a constant of its own,
+so widening the window raises the cap and narrowing it lowers it. A deadline above the cap is clamped
+and logged.
+</Note>

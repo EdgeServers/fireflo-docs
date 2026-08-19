@@ -1,0 +1,59 @@
+---
+title: "The operational endpoint"
+description: "The two tokens, why unset means 404 rather than open, and why this lives away from the port that carries messages."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
+---
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.ops.token` | *(unset)* | Shared secret for `GET /ops/health` and `/q/metrics` — the reads. |
+| `smsg.ops.admin.token` | *(unset)* | Shared secret for everything that changes what the gateway is doing: `/ops/reload`, `test-bind`, `disconnect` and the six control verbs. |
+
+## Two tokens, not one
+
+Reading gateway state must not carry the ability to stop a vendor. A dashboard, a monitoring probe or
+a read-only panel gets `smsg.ops.token` and can see bind state, queue depths and throughput; it cannot
+disable anything.
+
+<Warning>
+`smsg.ops.admin.token` **unset, or set to the same string as the read token, disables the control
+verbs** and they answer 404. Setting both to the same value does not "simplify" the configuration — it
+switches the controls off.
+</Warning>
+
+## Unset means disabled, not open
+
+Unset means **disabled and answering 404**, not unauthenticated.
+
+A wrong token gets the same 404 as a disabled endpoint, rather than a 401, so nothing advertises that
+there is a secret here worth guessing.
+
+<Note>
+The cost of that choice: a dashboard reporting 404 should be read as **"check the token on both
+sides"** before "the gateway is down". The gateway cannot distinguish the two cases for the caller,
+and neither can the CLI, so both report the possibilities rather than guessing.
+</Note>
+
+## Why it is not under `/secure`
+
+That prefix is authenticated with **messaging** credentials, which belong to customers. The data here
+— bind state, queue depths, vendor names — is gateway-wide, and no customer credential should reach
+it.
+
+The endpoint lives on the management interface, port **9000** by default, away from the port that
+carries messages.
+
+```bash
+export FIREFLO_OPS_URL=http://localhost:9000   # the operational port, NOT the messaging one
+export FIREFLO_OPS_TOKEN=...                   # must match smsg.ops.token
+export FIREFLO_OPS_ADMIN_TOKEN=...             # must match smsg.ops.admin.token
+```
+
+<Warning>
+Pointing the control panel's `GATEWAY_API_URL` at this port yields 404s on every playground call, and
+pointing `GATEWAY_OPS_URL` at the messaging port yields 404s on every health read. The two ports carry
+different things and share no paths.
+</Warning>
+
+See [Management API](/reference/management/endpoints) for the endpoints themselves, and
+[Tokens and access](/platform/operations/tokens-and-access) for how to hand them out.

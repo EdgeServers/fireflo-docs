@@ -1,0 +1,78 @@
+---
+title: "Whitelisting"
+description: "The master switch, the per-listener opt-out, the three TLV stamping modes, and the mandatory-tag checks at each ingress."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md, docs/17-whitelisting.md @ 0.7.3"
+---
+
+Which sender IDs and message bodies an account may use, and what gets stamped onto the ones that
+match.
+
+| Property | Scope | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.whitelist.enabled` | global | `false` | The master switch. Off means nothing is loaded and nothing is checked, whatever any listener or account says. |
+| `smsg.whitelist.max.variable` | global | `30` | How many characters one template placeholder may stand for. |
+| `conf.whitelist.enabled` | per listener | `true` | Whether **this** listener checks. |
+| `whitelist.tlvs.mode` | per listener | *(unset → the legacy boolean)* | `off`, `assign` or `replace`. |
+| `whitelist.tlvs.replace` | per listener | `false` | The retired boolean, still read when `whitelist.tlvs.mode` is unset. |
+| `smsg.restapi.whitelist.tlvs.mode` | global | `replace` | The REST twin. |
+| `mandatory.tlvs.submit` | per listener | *(empty)* | Tags a message must carry after credential defaults and any stamp. |
+| `smsg.restapi.mandatory.tlvs.submit` | global | *(empty)* | The same, for the REST ingress. |
+| `mandatory.tlvs.submit` | per **vendor** | *(empty)* | Tags this vendor will not accept a message without. |
+
+## `conf.whitelist.enabled` defaults **on**
+
+So the master switch is the one that decides. A listener has to opt *out*.
+
+## `smsg.whitelist.max.variable` widens every template at once
+
+<Warning>
+Raising this widens every approved template on the deployment simultaneously. It is the largest
+false-accept this design has, so it is logged at INFO and reported as `max_variable` on
+`/ops/health`.
+</Warning>
+
+Global rather than per-listener because templates are compiled once at load into one index per
+account. A value outside 1–1000 falls back to the default with a WARN.
+
+## The three stamping modes
+
+| Mode | What it does |
+| :--- | :--- |
+| `off` | Nothing is stamped. |
+| `assign` | Fills a tag in **only when the message does not already carry it**. |
+| `replace` | Overwrites what the customer sent — and that overwrite **is** the approval. |
+
+<Note>
+**`off` is the default on purpose.** Defaulting to `assign` would start writing TLVs onto packets
+crossing listeners that have never written any — a silent change to what reaches a carrier.
+
+The control panel's coverage report is what makes `off` discoverable rather than merely quiet: it
+says, per approved row, which mandatory tags nothing will supply.
+</Note>
+
+The REST twin defaults to `replace` instead, because that is what the REST ingress did before the mode
+existed and an upgrade must not change behaviour.
+
+## The vendor-side mandatory check is different
+
+The per-listener check runs at ingress. The per-**vendor** one runs against what is actually going on
+the wire — after `default.tlvs.submit` and after `registered.tlvs.submit` has filtered.
+
+A message missing a required tag there is refused with a FAILED receipt, a refund and a `cdr_rejected`
+row. **It is not re-routed.** Requiring a tag that is not also in `registered.tlvs.submit` can never be
+satisfied, and is warned about at load.
+
+## Per-product exemptions live in the database
+
+`app_product.whitelist_enabled = false` exempts that product outright. The panel counts that when it
+decides whether enforcing is safe — an approval filed under an exempt product protects nothing.
+
+<Warning>
+Every per-listener key above must be registered in `SmppServerWorker`'s `allPrms` array. A key left
+out keeps its bare form and reads a global nobody sets, so it reads its default however you configure
+it. `whitelist.tlvs.replace` shipped that way once and stamped nothing over SMPP for as long as it
+lasted.
+</Warning>
+
+Refusal code for a missing mandatory tag is `0xC3` — see [Status codes](/reference/smpp/status-codes).
+For the rollout path, see [Rolling whitelisting out](/platform/customers/whitelisting-rollout).

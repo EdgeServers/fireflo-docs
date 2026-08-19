@@ -1,0 +1,85 @@
+---
+title: "Docker"
+description: "Image variants, the volumes and ports that matter, and the environment a container run needs."
+source: "fireflo-sms-gateway/docs/02-docker-deployment.md, docs/09-configuration-reference.md @ 0.7.3"
+---
+
+## Images
+
+| Image | Runtime |
+| :--- | :--- |
+| `edgeservers/fireflo:latest` | JVM image, Eclipse Temurin 25 JRE |
+| `edgeservers/fireflo:latest-native` | Native executable image |
+
+## Working directory and paths
+
+The container's working directory is `/work`, so the default configuration directory is `/work/conf`.
+Every relative path in [Paths](/reference/config/paths) resolves under it.
+
+| Host path | Container path | Purpose |
+| :--- | :--- | :--- |
+| `./conf` | `/work/conf` | The four configuration files |
+| `./data` | `/work/data` | Call records in file mode, and the delivery receipt store |
+| `./logs` | `/work/logs` | Application, SMPP and access logs |
+
+```text
+fireflo-runtime/
+  conf/
+    credentials.yml
+    smsg.properties
+    routingTable.conf
+    rates.conf
+  data/
+  logs/
+```
+
+## Ports
+
+| Port | Purpose |
+| :--- | :--- |
+| `8080` | HTTP API, Swagger UI, OpenAPI JSON |
+| `9000` | Management interface — `/ops/*` and `/q/metrics` |
+| `27777` | The listener port from the quick start; depends on `outSms.instance.<name>.srv.port` |
+
+<Warning>
+Publish `9000` to loopback only, as `-p 127.0.0.1:9000:9000`. It carries bind state, queue depths and
+vendor names, and the [two tokens](/reference/config/operational-endpoint) are the only thing in front
+of it.
+</Warning>
+
+## Run
+
+```bash
+docker run -d --name fireflo \
+  -e QUARKUS_LOG_FILE_ENABLE=true \
+  -e QUARKUS_LOG_CONSOLE_ENABLE=false \
+  -e QUARKUS_LOG_FILE_PATH=/work/logs/smsg.log \
+  -e QUARKUS_LOG_FILE_SMPPCLIENT_PATH=/work/logs/smppclient.log \
+  -e QUARKUS_LOG_FILE_SMPPSERVER_PATH=/work/logs/smppserver.log \
+  -e QUARKUS_HTTP_ACCESS_LOG_DIRECTORY=/work/logs \
+  -p 8080:8080 \
+  -p 127.0.0.1:9000:9000 \
+  -p 27777:27777 \
+  -v ./conf:/work/conf \
+  -v ./data:/work/data \
+  -v ./logs:/work/logs \
+  edgeservers/fireflo:latest
+```
+
+## Startup checks
+
+<Steps>
+  <Step title="The container is up">
+    `docker ps` shows it running rather than restarting.
+  </Step>
+  <Step title="The HTTP API answers">
+    `http://localhost:8080/swagger-ui` and `http://localhost:8080/openapi.json`.
+  </Step>
+  <Step title="If it did not start">
+    Read `logs/smsg.log` first, then `smppclient.log` and `smppserver.log`. A gateway with no routing
+    table does not start at all, and says so by naming an internal structure rather than the missing
+    row — see [First configuration](/platform/install/first-configuration).
+  </Step>
+</Steps>
+
+Log variables are listed under [Logging](/reference/config/logging).

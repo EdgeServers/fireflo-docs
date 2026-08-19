@@ -1,0 +1,91 @@
+---
+title: "Rating, CDRs and credit"
+description: "Currency and money scale, where call records are written, how long an outcome is waited for, and the prepaid and postpaid switches."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md, docs/13-rating-and-cdr.md @ 0.7.3"
+---
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.rates.currency` | `""` | Recorded on rated messages. FireFlo never converts. |
+| `smsg.money.scale` | `4` | Decimal places a **total** is published with. 0–4. |
+| `smsg.cdr.sink` | `auto` | `auto`, `postgres`, `file` or `none`. |
+| `smsg.cdr.directory` | `data/cdr` | File sink location. |
+| `smsg.cdr.deadline.hours` | `48` | Wait before recording an outcome as `EXPIRED`. |
+| `smsg.cdr.body` | `off` | `off`, `excerpt` (160 characters) or `full`. Whether message content is recorded at all. |
+| `smsg.cdr.interim.retention.days` | `30` | How long `cdr_interim` keeps progress receipts. |
+| `smsg.balance.enabled` | `false` | Enforce prepaid credit. PostgreSQL only. |
+| `smsg.balance.block.min.messages` | `20` | How many messages one credit reservation must cover. |
+| `smsg.balance.ledger.blocks` | `true` | Whether `RESERVE`/`RELEASE` bookkeeping is written to `balance_ledger`. |
+| `smsg.balance.postpaid.enabled` | `false` | Enforce credit limits on accounts marked `POSTPAID`. |
+| `smsg.billing.zone` | `UTC` | The time zone a **billing day** starts in. Database only — see below. |
+
+## `smsg.money.scale` applies to totals, not to rates
+
+Above 4 is refused, because amounts are stored as ten-thousandths.
+
+Per-message **rates** and CSV exports always keep four places regardless of this setting. `0.0450`
+shown as `0.05` is 11% out on every message — fine for a balance, ruinous for a tariff.
+
+## `smsg.cdr.deadline.hours` is capped by the correlation window
+
+Capped by `smsg.dlr.correlation.days`, which is 70 hours at its default. Past the correlation window a
+receipt can no longer be matched to its submission, so waiting longer only delays the same answer. A
+deadline above the cap is clamped and logged. See [Delivery receipt store](/reference/config/webhooks).
+
+## `smsg.balance.block.min.messages` is the floor that binds
+
+Credit is reserved in **blocks** and spent from an in-memory counter, so there is no database write on
+the message path. This key says how many messages one block must be worth.
+
+It replaced a currency-denominated floor as the binding one, because `smsg.balance.block.min` is an
+amount and an amount cannot say how many messages it buys. At any realistic price the old default
+bought one or two, which put an idle account back at the database on its second message and refused
+it while a refill was in flight.
+
+<Note>
+An actively sending account therefore holds up to `20 × price` in `reserved` that nothing else can
+spend. Nothing is lost — `balance + reserved` is conserved — and a clean shutdown returns it. A
+`kill -9` strands it until [`fireflo credit release`](/reference/cli/fireflo) runs.
+</Note>
+
+## `smsg.billing.zone` is read from the database only
+
+The one key here read from `app_config` rather than from `smsg.properties` or the environment, and
+deliberately so. The nightly rollup slices `usage_daily` on it and the control panel slices the live
+tail of `cdr_submit` on it; if the two disagree, a sliver of one day is counted twice or not at all.
+An environment variable on the gateway host is invisible to the panel, so it could not be the shared
+source.
+
+```sql
+INSERT INTO app_config (key, value) VALUES ('smsg.billing.zone', 'Asia/Kolkata')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+```
+
+`FIREFLO_BILLING_ZONE` is still honoured as a fallback for deployments that set it before the key
+existed.
+
+## What a call record contains
+
+CDRs carry destination and source addresses, because rating and dispute resolution need them, and
+never carry credentials.
+
+<Warning>
+**They contain message content only when you switch it on.** `smsg.cdr.body` ships `off`. Turning it
+on means message bodies are retained for the retention window and are readable by anyone with panel
+access or database access. Apply the same policy you apply to the access log.
+</Warning>
+
+## Batch billing units
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.restapi.billing.units` | `segment` | `message` or `segment` — whether a multipart message is charged once or per part. |
+
+<Warning>
+Set to `message`, a customer sending three-segment messages pays for one and you pay your carrier for
+three. `segment` is the default for that reason.
+</Warning>
+
+See [How pricing works](/platform/billing/how-pricing-works) for the model, and
+[Prepaid credit](/platform/billing/prepaid-credit) and [Postpaid](/platform/billing/postpaid) for the
+two enforcement modes.

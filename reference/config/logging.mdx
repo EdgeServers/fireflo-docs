@@ -1,0 +1,87 @@
+---
+title: "Logging and log bounds"
+description: "The four log files, which of them is bounded, the one that will fill a disk, and the flags that write secrets."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
+---
+
+## The four logs
+
+| Log | Records |
+| :--- | :--- |
+| `smsg.log` | Main application log |
+| `smppclient.log` | Vendor connection and message activity |
+| `smppserver.log` | Listener bind, session and message activity |
+| `httpapi.log` | HTTP access log, when file logging is enabled |
+
+## Bounds — and the one that has none
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `FIREFLO_LOG_MAX_SIZE` | `100M` | Size at which `smsg.log`, `smppclient.log` and `smppserver.log` roll over. |
+| `FIREFLO_LOG_BACKUPS` | `1` | How many rolled files each of those three keeps. |
+
+<Note>
+`conf.example/fireflo.env` ships `5`, so an install made from it keeps five and a hand-built one keeps
+one. Neither is wrong; they are just different, and it is worth knowing which you have.
+</Note>
+
+<Warning>
+**`httpapi.log` is covered by neither.** Quarkus rotates it daily and offers no retention to go with
+that — there is no such setting in `AccessLogConfig` — so it writes one file per day and keeps every
+one of them forever. **Nothing in the gateway will ever remove them.**
+
+`fireflo-install` handles this with a `tmpfiles.d` rule that deletes rotated files older than
+`--log-retain-days`, never touching the four live ones. **Installing by hand means arranging that
+yourself, or accepting unbounded growth.**
+</Warning>
+
+## What the access log deliberately omits
+
+`httpapi.log` records method, path, protocol, status, bytes sent, response time, referer and user
+agent. **It intentionally omits the query string.**
+
+Credentials travel in an `Authorization` header rather than the URL, but `GET /secure/rate` still
+takes `to` and `content` as query parameters, and `dlr_url` and `callback_url` are client-supplied and
+routinely carry tokens of their own.
+
+<Warning>
+Do not add `%U`, `%r`, `%q`, or `%{i,Authorization}` to `quarkus.http.access-log.pattern`. If you
+customise it, avoid `%r`, `%q`, `%{QUERY_STRING}` and `%{q,...}` unless the resulting logs are treated
+as sensitive data.
+</Warning>
+
+## Diagnostic flags that write secrets
+
+Worker flags `log.pdus`, `log.bytes`, `print.msgs`, `print.resps` and `print.mos` are disabled by
+default. Enabling any of them can write SMPP credentials, phone numbers, provider identifiers,
+callback URLs and message bodies to logs.
+
+<Note>
+For diagnosing one session, prefer [capture](/platform/operations/capture) over `log.pdus`: a capture
+is bounded, held in memory, scoped to a single session, and expires on its own, where `log.pdus`
+writes every session's PDUs to a shared file until someone remembers to turn it off.
+</Note>
+
+## Message lifecycle tracing
+
+`message.*` lifecycle logs are controlled by `message.trace.mode`:
+
+| Value | Keeps |
+| :--- | :--- |
+| `necessary` *(default)* | `message.accepted`, `message.submitted`, `message.dlr`, `message.deliver.sent` |
+| `off` | Nothing |
+| `all` | The above plus route, enqueue, response and retry detail |
+
+## Docker log variables
+
+| Variable | Example | Description |
+| :--- | :--- | :--- |
+| `QUARKUS_LOG_LEVEL` | `INFO` | Root Quarkus log level |
+| `LOG_LEVEL` | `INFO` | FireFlo package log level |
+| `QUARKUS_LOG_CONSOLE_ENABLE` | `false` | Console logging on or off |
+| `QUARKUS_LOG_FILE_ENABLE` | `true` | File logging on or off |
+| `QUARKUS_LOG_FILE_PATH` | `/work/logs/smsg.log` | Main application log path |
+| `QUARKUS_LOG_FILE_SMPPCLIENT_PATH` | `/work/logs/smppclient.log` | Vendor log path |
+| `QUARKUS_LOG_FILE_SMPPSERVER_PATH` | `/work/logs/smppserver.log` | Listener log path |
+| `QUARKUS_HTTP_ACCESS_LOG_ENABLE` | `true` | HTTP access logging |
+| `QUARKUS_HTTP_ACCESS_LOG_DIRECTORY` | `/work/logs` | Access log directory |

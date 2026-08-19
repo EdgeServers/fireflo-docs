@@ -1,0 +1,110 @@
+---
+title: "Database and configuration source"
+description: "The PostgreSQL variables, the one switch that moves all four configuration domains, and the tables behind them."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
+---
+
+PostgreSQL is **optional**. Leave `FIREFLO_DB_URL` unset and FireFlo runs on file configuration with
+call records written to `data/cdr/`.
+
+Only two features require it: the CDR **expiry sweep**, which needs to query for records with no
+outcome, and **prepaid credit**, since credit can only enter through the database. Rating, least-cost
+routing and CDRs all work without one. So does the control panel's read-only half — but the panel
+edits configuration, and in file mode there is nothing for it to edit.
+
+## Connection
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` | *(unset)* | JDBC url. Unset means no database. |
+| `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | *(unset)* | Credentials. |
+| `FIREFLO_DB_MIGRATE` | `false` | Whether FireFlo may modify this schema. Enables the startup migration **and** permits `fireflo db migrate`. |
+| `FIREFLO_CONFIG_IMPORT` | `false` | Permits `fireflo import`. |
+
+<Note>
+`FIREFLO_CONFIG_IMPORT` is separate from `FIREFLO_DB_MIGRATE` **on purpose**: one applies forward-only
+DDL, the other replaces the rules that decide what customers are charged. `--dry-run` ignores it.
+</Note>
+
+## The source switch
+
+One switch moves every domain at once.
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.config.source` | `file` | `file` or `db`, for all four domains: credentials (`app_credential`), properties (`app_config` + `app_worker`), routing (`app_route_table` + `app_route_rule`) and rates (`app_rate_rule`). |
+| `smsg.config.db.poll.seconds` | `30` | Poll interval. |
+
+Set through the environment as `FIREFLO_CONFIG_SOURCE`.
+
+<Warning>
+**Switching to `db` against an empty schema refuses every bind and every REST call at once.** The
+credential loader publishes the empty map rather than ignoring it, so there is no fallback to the
+file. Fill the schema with `fireflo import` first.
+</Warning>
+
+<Warning>
+**Upgrading from before 0.5.** This key replaced `smsg.credentials.source`, `smsg.routing.source`,
+`smsg.rates.source` and `smsg.properties.source`, and their `FIREFLO_*_SOURCE` variables. Those keys
+no longer do anything, so the gateway **refuses to start** while one of the variables is still set,
+rather than reverting that domain to a file in silence. Replace all four with
+`FIREFLO_CONFIG_SOURCE`.
+</Warning>
+
+## The tables
+
+| Table | Holds |
+| :--- | :--- |
+| `app_filter` / `app_filter_condition` | Named, reusable predicates, shared by routing and rating |
+| `app_route_table` / `app_route_rule` | Routing tables and their rules |
+| `app_route_rule_filter` / `app_route_rule_condition` | A rule's referenced filters and inline conditions |
+| `app_rate_rule` / `app_rate_rule_filter` / `app_rate_rule_condition` | The same shape, for rates |
+| `app_worker` / `app_worker_property` | One row per vendor or listener, plus its settings |
+| `app_credential` | Authentication profiles |
+| `app_config` | Everything that is not a worker property: `smsg.*`, `outSms.default.*`, `outSms.routing.*` |
+
+A worker's properties are projected onto `outSms.instance.<name>.<key>` and published exactly like
+`app_config` rows, so the fallback tier and live retuning are unaffected. **Keep a setting in one
+place or the other** — if both define the same key the worker table wins and the duplicate is logged.
+
+<Warning>
+**A missing or disabled filter skips every rule that references it**, rather than loading the rule
+with fewer conditions. Dropping a condition would make the rule match *more* traffic, so the failure
+would be silent and would route or price the wrong things.
+</Warning>
+
+## What changes when you are in `db` mode
+
+- A change takes up to one poll interval, against roughly 200 ms for a file edit.
+- A failed read **retains** the previous configuration rather than blanking it.
+- Changes are announced exactly as a file edit is, so editing `app_config` retunes running workers —
+  `tps`, `maxRetries`, `pause`, registered TLVs — and setting `outSms.instance.<x>.enable` to false
+  **stops that vendor** within one interval.
+- Deleting a row reverts the key to whatever the next tier holds — an environment variable, or the
+  coded default — rather than leaving it unset.
+- Every file watcher stands down. `conf/smsg.properties` is still read at startup.
+
+`app_route` and `app_rate` from the pre-normalised schema are still read when the normalised tables
+are empty, with a warning. Nothing is converted automatically — the packed `rule_line` cannot be split
+in SQL.
+
+## Schema versioning
+
+The schema is one baseline file, `V1.19.0__baseline.sql`, generated rather than hand-merged: the
+originals were applied to a scratch database, dumped with `pg_dump --schema-only`, and the dump
+verified by applying it to a second database and diffing the two. Later changes carry on at `V1.20.0`.
+Forward-only is the rule.
+
+It is numbered at the **highest** version it replaces, not the lowest, deliberately. A deployment that
+stopped part-way would treat a lower-numbered baseline as already applied and migrate to a no-op,
+silently missing whatever came after. At `1.19.0` it instead tries to apply and fails on the first
+table that already exists — recoverable, where the silent version corrupts by omission.
+
+<Warning>
+**Migrations are forward-only.** There are no undo scripts, so rolling back a schema change means
+restoring a backup. Take one before migrating a database you care about.
+</Warning>
+
+See [`fireflo db`](/reference/cli/fireflo) for `test`, `migrate`, `info`, `validate` and `repair`, and
+[Choosing a configuration source](/platform/install/configuration-source) for the migration path
+between file and database.

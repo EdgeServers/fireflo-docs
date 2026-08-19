@@ -1,0 +1,111 @@
+---
+title: "Paths and property tiers"
+description: "Where the four configuration files live, how a per-file override wins, and the three tiers a worker setting is resolved through."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
+---
+
+## The configuration directory
+
+`FIREFLO_CONF_DIR` decides where the four configuration files live, and it moves all four together.
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `FIREFLO_CONF_DIR` | `conf` | The directory holding the four files below. |
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.routing.file.path` | `${FIREFLO_CONF_DIR}/routingTable.conf` | Routing rules. |
+| `smsg.properties.file.path` | `${FIREFLO_CONF_DIR}/smsg.properties` | Worker and SMPP configuration. |
+| `smsg.credentials.file.path` | `${FIREFLO_CONF_DIR}/credentials.yml` | HTTP and SMPP credentials. |
+| `smsg.rates.file.path` | `${FIREFLO_CONF_DIR}/rates.conf` | Rate table for costing and pricing. |
+
+<Warning>
+A relative value — **including the `conf` default** — resolves against the **process working
+directory**, not the artefact.
+
+That is right for a checkout and wrong for a service. A unit with `WorkingDirectory=/opt/fireflo` and
+no `FIREFLO_CONF_DIR` reads `/opt/fireflo/conf/`, which is not where anybody edited anything. A
+packaged install sets it to an absolute path.
+</Warning>
+
+Each file can still be moved on its own, and a per-file override wins over `FIREFLO_CONF_DIR` —
+environment sources sit at a higher precedence than `application.properties`:
+
+| Variable | Overrides |
+| :--- | :--- |
+| `SMSG_ROUTING_FILE_PATH` | `smsg.routing.file.path` |
+| `SMSG_PROPERTIES_FILE_PATH` | `smsg.properties.file.path` |
+| `SMSG_CREDENTIALS_FILE_PATH` | `smsg.credentials.file.path` |
+| `SMSG_RATES_FILE_PATH` | `smsg.rates.file.path` |
+
+In the Docker image the working directory is `/work`, so the default configuration directory is
+`/work/conf`. See [Docker](/reference/config/docker).
+
+## Gateway-wide property defaults
+
+Any `outSms.instance.<name>.<property>` lookup that finds no value falls back to
+`outSms.default.<property>` before the built-in default. That gives one baseline every worker
+inherits, overridable per instance:
+
+```properties
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+```
+
+<Note>
+The doubled word in `outSms.default.default.tlvs.submit` is correct. The first `default` is the
+fallback tier; the second is part of the property name `default.tlvs.submit`.
+</Note>
+
+So a worker setting resolves through three tiers, most specific first:
+
+<Steps>
+  <Step title="outSms.instance.<name>.<key>">
+    This worker's own value, from `smsg.properties` or from `app_worker_property` in database mode.
+  </Step>
+  <Step title="outSms.default.<key>">
+    The deployment-wide baseline.
+  </Step>
+  <Step title="The coded default">
+    From the `prms` table in `AbstractOutWorker`, `SmppClientWorker` or `SmppServerWorker`. These are
+    listed in [SMPP settings](/reference/smpp/worker-base).
+  </Step>
+</Steps>
+
+<Warning>
+**A per-listener key has to be registered in `SmppServerWorker`'s `allPrms` array to be read as a
+per-listener key at all.** A key left out of that array keeps its bare form, reads a global nobody
+sets, and therefore reads its coded default however you configure it.
+
+`whitelist.tlvs.replace` shipped that way once, and stamped nothing over SMPP for as long as it
+lasted. If a per-listener setting appears to do nothing, this is the first thing to check.
+</Warning>
+
+## The four files
+
+| File | Holds |
+| :--- | :--- |
+| `credentials.yml` | HTTP and SMPP authentication profiles — [format](/reference/files/credentials-yml) |
+| `smsg.properties` | Workers, SMPP server and client settings, retry behaviour, logging — [format](/reference/files/smsg-properties) |
+| `routingTable.conf` | Routing tables, rules and fallbacks — [format](/reference/files/routing-table) |
+| `rates.conf` | Cost and price rules — [format](/reference/files/rates-conf) |
+
+In `db` mode every file watcher stands down and none of these are read after startup — except
+`smsg.properties`, which is still read **at** startup, because the source switch and the datasource
+have to come from somewhere. See [Database](/reference/config/database).
+
+## OpenAPI endpoints
+
+While the HTTP server is running:
+
+| Endpoint | Description |
+| :--- | :--- |
+| `/swagger-ui` | Interactive Swagger UI |
+| `/openapi.json` | OpenAPI JSON document |
+
+<Warning>
+The checked-in `api/send-sms.swagger.json` in the gateway repo is **stale and wrong** — it is stamped
+0.4.1, types `custom_tlvs` as an array the parser rejects, and omits `product`. Use
+[the REST API reference](/reference/api/overview) on this site, which is written from the panel's
+`lib/api-catalogue.ts` and executed against a live gateway.
+</Warning>

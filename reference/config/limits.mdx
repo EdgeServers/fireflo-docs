@@ -1,0 +1,116 @@
+---
+title: "Limits and refusals"
+description: "Queue capacities, per-account rate ceilings, batch bounds, and the three switches that turn a quiet misconfiguration into a loud one."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3"
+---
+
+## Queue limits
+
+| Property | Scope | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | global | `0` (unbounded) | The most messages the router queue, and each outbound worker queue, will hold. |
+| `inQueue.capacity` | per listener | `0` (unbounded) | The most messages one SMPP listener will hold waiting to be written to the message store. |
+
+**Why they exist.** The gateway answers a submission *before* it routes it, so every message in these
+queues has already been accepted and charged for. Unbounded, a vendor that stops accepting plus a
+listener that keeps accepting grows the heap until the JVM is killed — and every queued message dies
+with it, none refunded, none recorded as anything but PENDING.
+
+**What a limit changes.** Only the two ingresses refuse. Inside the gateway a full queue is still
+backpressure, and the router waiting on a full worker queue is the router going at the speed the
+vendor can take. At an ingress there is a client holding a connection open, so waiting would stall
+that session rather than slow it down:
+
+| Ingress | When the queue is full |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` with `ESME_RMSGQFUL` (`0x14`). Nothing is charged — the refusal happens before the message is accepted. |
+| REST | `503` with `queueFull` in `cdr_rejected`. Anything already charged is refunded, because the REST path charges before it publishes. |
+
+<Note>
+**Choosing a number.** There is no default because a limit is a statement about your own traffic and
+your own heap. Too low refuses messages that would have been delivered; too high and it never fires
+before the JVM does.
+
+Start from how many messages you are willing to hold for a vendor that has gone quiet, and check the
+depth under normal load first — `router_queue` and each worker's `queue_depth` are on
+[`/ops/health`](/reference/management/endpoints), with the limit beside them once one is set.
+</Note>
+
+## HTTP ingress limits
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.restapi.maxRate.default` | `0` | Messages per second per billing account. `0` is unlimited. |
+| `smsg.restapi.maxRate.<accountId>` | *(unset)* | Ceiling for one account, overriding the default. |
+| `quarkus.http.limits.max-body-size` | `1M` | Largest request body accepted. |
+| `quarkus.http.read-timeout` | `60S` | How long a request may take to arrive. |
+| `quarkus.http.idle-timeout` | `30M` | How long an idle connection is held. |
+
+Keyed on the **account**, not the credential: one account may hold several logins, and a per-login key
+would let a customer raise their own ceiling by creating another one.
+
+The check runs before the message is rated or charged, so a refused message is never billed. The
+caller gets `429`, deliberately not `403` — nothing about the request or the credential is wrong.
+
+<Warning>
+Counted **per process**. A multi-instance deployment allows this rate on each instance, so the
+effective ceiling is the rate times the instance count. It is a guard against a runaway sender, not a
+distributed quota.
+
+The SMPP listener has its own ceiling (`conf.maxRate.default`) and the two do not track each other.
+Set both when the limit is meant to be gateway-wide.
+</Warning>
+
+## Batch limits
+
+| Property | Default | Description |
+| :--- | :--- | :--- |
+| `smsg.restapi.batch.max.messages` | `10000` | Largest a batch may expand to, counting **destinations** rather than entries. |
+| `smsg.restapi.batch.concurrency` | `4` | How many batches run at once. Sized at startup, so a change needs a restart. |
+| `smsg.restapi.batch.rate.per.second` | `0` | Ceiling on how fast one batch is fed into the router. `0` is unpaced. |
+| `smsg.restapi.batch.queue.highwater` | `100000` | Router-queue depth at which batch expansion pauses and waits for it to drain. |
+
+Same reasoning as the queue limits: the router queue is unbounded by default and cannot push back, so
+an uncapped batch is a way to exhaust the heap.
+
+## Product and rating refusals
+
+Three switches, **all off by default**, that turn a quiet misconfiguration into a loud one.
+
+| Property | Scope | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `conf.product.required` | per listener | `false` | Refuse a bind whose resolved product is blank or names no enabled `app_product` row. |
+| `smsg.restapi.product.required` | global | `false` | The REST twin, checked at submit since there is no bind. |
+| `smsg.rating.unrated.refuse` | global | `false` | Refuse a message that matched no sell-side rate rule, instead of accepting it and charging nothing. |
+
+<Warning>
+Read this before turning any of them on: **each converts traffic that flows today into traffic that is
+refused.**
+</Warning>
+
+**Why they exist.** An unset product is a supported state that sends messages for free.
+`RateSnapshot.rulesFor` short-circuits a null product to the any-product bucket alone, so a
+product-less message can never reach a product-scoped rule. Nothing matches, the message is left
+unrated, and the credit charge returns early. On an account whose rate rules all carry a product, that
+is the whole bill.
+
+**`system_type` is the hole a non-empty check would not have closed.** On an SMPP bind it resolves
+*over* the credential's product and is free text validated nowhere, so a customer binding `prem`
+instead of `premium` passes any non-empty test and lands in exactly the same unrated state. That is
+why the check is membership of the catalogue rather than presence of a value.
+
+<Note>
+**File mode has no catalogue.** `credentials.yml` has nothing to derive one from, so the membership
+half is skipped and only the non-empty half applies, logged once per configuration load naming the
+listener. This is the one place the feature is weaker than it sounds.
+</Note>
+
+`conf.product.required` is checked at **bind**, after authentication, because the product lives on the
+session context. `smsg.restapi.product.required` also applies to `/secure/rate`, so a quote cannot
+price traffic a send would refuse.
+
+Before switching either product flag on, the control panel's pre-flight report lists every enabled
+credential that would stop binding. Its honest limit is stated on that page: for SMPP it checks the
+credential's fallback, and a mistyped `system_type` is invisible to it.
+
+Refusal codes are `0x40F` and `0x418` — see [Status codes](/reference/smpp/status-codes).

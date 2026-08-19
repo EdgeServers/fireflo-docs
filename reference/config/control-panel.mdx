@@ -1,0 +1,71 @@
+---
+title: "Control panel environment"
+description: "Every variable in panel.env, which are required, and the two that decide whether customers can sign in at all."
+source: "fireflo-sms-gateway/docs/09-configuration-reference.md @ 0.7.3, fireflo-control-panel conf.example/panel.env"
+---
+
+The control panel is a separate process with its own environment file — `panel.env`, installed by
+`fireflo-panel-install` and **never replaced by an update**.
+
+<Note>
+It is **not on the message path**. A panel that is down costs you the ability to make changes, not the
+ability to send.
+</Note>
+
+## Required
+
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `AUTH_SECRET` | yes | Signs the session cookie. Changing it signs everybody out. |
+| `AUTH_URL` | yes in production | The panel's public origin. Unset, a sign-out redirects to localhost. |
+| `NODE_ENV` | yes | `production`. Decides whether the session cookie is marked secure, so it is set for the **build** as well as the run. |
+| `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` | yes | There is no user table — **these two are the whole operator account.** Roll them with `fireflo-panel-install passwd`. |
+| `METRICS_DATABASE_URL` | yes | Read-only connection for call records and metrics. |
+| `CDR_EXPORT_DIR` | yes | Where prepared CSV exports are written. |
+| `PORT` | no | Listen port, default `3000`. |
+
+## Connecting to the gateway
+
+| Variable | Needed for | Description |
+| :--- | :--- | :--- |
+| `CONFIG_DATABASE_URL` | editing | Read-write connection for the configuration tables. Unset, the panel reports every configuration domain as not editable rather than failing at the first save. |
+| `GATEWAY_OPS_URL` | live health | The **management** port (9000), not the messaging one. |
+| `GATEWAY_OPS_TOKEN` | live health | Must match `smsg.ops.token`. |
+| `GATEWAY_OPS_ADMIN_TOKEN` | the controls | Must match `smsg.ops.admin.token`. Without it the panel can read gateway state but not change it. |
+| `GATEWAY_API_URL` | the playground | The **messaging** port. |
+| `NEXT_PUBLIC_APP_VERSION` | no | Shown beside the gateway's version so a mismatched pair is visible. Inlined at build time. |
+
+<Warning>
+`GATEWAY_API_URL` pointed at the ops port yields 404s on every playground call — the mirror of
+pointing `GATEWAY_OPS_URL` at the messaging port. The two are different ports carrying different
+things.
+</Warning>
+
+<Warning>
+Under `--vhost`, `CDR_EXPORT_DIR` must also sit inside a `BindPaths=` root. **That failure is silent** —
+exports are prepared and then cannot be read.
+</Warning>
+
+## The customer portal's sign-in mail
+
+A customer signs in through a magic link. With these unset, **no customer can sign in at all** — the
+portal says the link cannot be sent rather than failing silently, but nobody gets in.
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `MIS_PANEL_BASE_URL` | *(unset)* | Origin the link points at. Unset, the link is built relative. |
+| `FIREFLO_SMTP_HOST` | *(unset)* | Required. With this or the from-address unset, no link is sent. |
+| `FIREFLO_SMTP_FROM` | *(unset)* | Required, as above. |
+| `FIREFLO_SMTP_PORT` | `587` | |
+| `FIREFLO_SMTP_USER` / `FIREFLO_SMTP_PASSWORD` | *(unset)* | Omit both for an unauthenticated relay. |
+| `FIREFLO_SMTP_SECURE` | *(from the port)* | Implicit TLS. |
+
+<Note>
+`FIREFLO_SMTP_SECURE` is **parsed as a yes or a no**, not tested for presence — it was once the
+latter, which made `FIREFLO_SMTP_SECURE=0` mean "yes". An unrecognisable value now falls back to the
+port and logs.
+</Note>
+
+See [Installing the control panel](/platform/install/control-panel) for how these are derived at
+install time, and [Portal access](/platform/customers/portal-access) for the operator's side of
+getting a customer signed in.
