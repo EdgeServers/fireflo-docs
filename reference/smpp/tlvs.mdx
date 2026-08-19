@@ -1,0 +1,84 @@
+---
+title: "TLV declarations"
+description: "The tag grammar, the five declaration levels and their precedence, and why the tag is decimal unless you say otherwise."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md @ 0.7.3"
+---
+
+TLVs are declared as `<name>_<tag>` tokens. **The name is cosmetic — the tag is authoritative**, so
+the gateway, a credential and a vendor may each name the same tag differently and still agree on it.
+
+## The tag is decimal unless prefixed `0x`
+
+This is the one genuinely surprising part of the syntax, and it is that way because existing
+deployments already declare decimal tags.
+
+| Token | Tag |
+| :--- | :--- |
+| `vendor_1400` | 1400 **decimal** (`0x578`) |
+| `peid_0x1400` | `0x1400` |
+| `source_network_id_5120` | 5120 — the name may contain underscores; the tag is whatever follows the **last** one |
+
+Valid tags are `0x0000`–`0xFFFF`. A token whose tag will not parse is logged and skipped.
+
+<Warning>
+`vendor_1400` and `peid_0x1400` are **different tags**. If a carrier gives you a tag as `0x1400` and
+you write `1400`, everything loads, nothing warns, and the wrong tag goes on the wire.
+</Warning>
+
+## Five declaration levels
+
+| Level | Property or field | Purpose |
+| :--- | :--- | :--- |
+| Listener | `registered.tlvs.submit` | Tags extracted off an inbound `submit_sm` onto the message |
+| Listener | `mandatory.tlvs.submit` | Tags that must resolve, or the `submit_sm` is rejected `0xC3` |
+| Credential | `defaultTlvs` | Per-customer values filling tags the client did not send |
+| Vendor | `registered.tlvs.submit` | Tags written to the outbound `submit_sm` |
+| Vendor | `default.tlvs.submit` | Values filling tags still unset at send time |
+
+## Precedence: message > credential > vendor
+
+**Defaults only fill gaps. They never overwrite a value that is already present.**
+
+So a value the customer sent beats a credential default, which beats a vendor default. The exception
+is the whitelist stamp in `replace` mode, where the overwrite *is* the approval — see
+[Whitelisting](/reference/config/whitelisting).
+
+## Default values
+
+A default may be:
+
+| Form | Meaning |
+| :--- | :--- |
+| a literal | Used as-is |
+| `MESSAGE:<field>` | Copy a message attribute, using the routing engine's field names |
+| `hex:<bytes>` | A binary TLV |
+
+<Warning>
+**Values cannot contain `,` or `=`.** There is no escaping — use `hex:` when a vendor needs them.
+
+The format is `<name>_<tag>=<value>`, comma-separated. A malformed entry such as `PEID=…`, with no
+tag on the name, parses to nothing and logs only a WARN. The setting looks applied and does nothing.
+</Warning>
+
+## Unlisted tags are discarded
+
+`registered.tlvs.submit` on a listener is an allow-list: a tag the customer sends that is not declared
+there is **dropped**, not passed through. The same on the vendor side decides what actually reaches the
+carrier.
+
+<Warning>
+The per-vendor `mandatory.tlvs.submit` is checked **after** `registered.tlvs.submit` has filtered.
+Requiring a tag that is not also registered can therefore never be satisfied — the gateway warns about
+that pairing at load.
+</Warning>
+
+## Where a missing tag surfaces
+
+| Point | Result |
+| :--- | :--- |
+| Listener, after credential defaults and any stamp | `0xC3` `ESME_RMISSINGOPTPARAM` |
+| Vendor, against what is going on the wire | FAILED receipt, refund, `cdr_rejected` row — **not re-routed** |
+
+See [Status codes](/reference/smpp/status-codes) and, for the operator's view of which approved rows
+have tags nothing will supply, the coverage report described in
+[Sender IDs](/platform/customers/sender-ids).

@@ -1,0 +1,124 @@
+---
+title: "routingTable.conf"
+description: "The four-part rule grammar, table chaining, vendor groups, LCR tables, and the two mistakes the parser will not save you from."
+source: "fireflo-sms-gateway/conf.example/routingTable.conf, docs/05-routing-engine.md @ 0.7.3"
+---
+
+Hot reloaded — edits apply within about 200 ms with no restart.
+
+## A rule is four colon-separated parts
+
+```
+Target:Attribute:Operator:Value
+```
+
+`Target` is a worker instance (`vendor1`, `smppserver.smpp`), a **group**, or another table to chain
+into (`MESSAGE`).
+
+Rules are evaluated **top to bottom within a table**, and the first match wins.
+
+<Warning>
+**A malformed rule fails the whole reload** and the previous table is retained. Check the log for
+`Error parsing new routing table` after editing — the gateway keeps working on the old table, so
+nothing appears wrong until you wonder why your change did nothing.
+</Warning>
+
+## The two mistakes the parser will not save you from
+
+**`==` is a numeric operator.** Use `equals` for strings:
+
+```
+vendor1:from:equals:MyBrand      correct
+vendor1:from:==:MyBrand          fails to parse
+```
+
+**`matches` is anchored, `startsWith` is literal.** `^61.*` matches a full number; a bare `61` does
+not. And `startsWith` compares literal text — a regular expression handed to it matches nothing, quietly.
+
+## A minimal table
+
+```ini
+# Entry point. Message types: 0=text, 10=binary, 11=UCS-2, 14=flash,
+# 17=push, 18=delivery receipt.
+[default]
+MESSAGE:type:==:0
+MESSAGE:type:==:11
+MESSAGE:type:==:14
+MESSAGE:type:==:17
+MESSAGE:type:==:10
+smppserver.smpp:type:==:18
+
+[MESSAGE]
+vendor2:to:startsWith:614          # route AU mobile to vendor2
+vendor2:from:equals:MyBrand        # route one sender ID
+vendor2:product:equals:premium     # route one product
+vendor1::default:                  # the catch-all, LAST
+```
+
+<Warning>
+**The catch-all goes at the end.** Above other rules it makes everything below it unreachable, and
+nothing warns you — the rules parse fine, they simply never run.
+</Warning>
+
+`product` comes from the `system_type` on the client's SMPP bind, falling back to the credential's
+`product`. HTTP callers always use the credential value.
+
+## Vendor groups
+
+A group is another name a rule can send to. Instead of naming one vendor, the rule names a group and
+the group picks a member — **skipping any that is suspended or not accepting**, which is the failover
+a single-target rule cannot do.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Policy | Picks |
+| :--- | :--- |
+| `round-robin` *(default)* | The next member in turn |
+| `weighted` | In proportion to the weights |
+| `failover` | Always the first member that is up, in the order written |
+
+<Warning>
+**Group blocks must come before the first `[table]` header.** Inside a table block a member line
+matches nothing and is dropped silently.
+
+A weight is read only by `weighted`. Setting one on the other two changes nothing, and the gateway
+says so at WARN rather than letting you believe a split is happening.
+</Warning>
+
+## Least-cost routing tables
+
+A table marked `->function(LCR)` behaves differently: instead of stopping at the first matching rule,
+**every** matching rule is a candidate and the vendor with the cheapest rate in `rates.conf` wins.
+
+Rule order is therefore irrelevant in an LCR table — the rules are alternatives, not a fallback chain.
+
+- Vendors that are down or not accepting are skipped, so the next cheapest carries the traffic.
+- A vendor with **no matching rate** is used only if nothing else matches, so a missing rate line
+  degrades rather than blocks.
+- Rules pointing at another table are **ignored** inside an LCR table.
+
+See [Least-cost routing](/platform/routing/least-cost).
+
+## Filters
+
+A rule may reference a named filter from the filter library instead of spelling its conditions inline.
+
+<Warning>
+**A missing or disabled filter skips every rule that references it**, rather than loading the rule
+with fewer conditions. Dropping a condition would make the rule match *more* traffic, so failing that
+way would be silent and would route the wrong things.
+
+This is why disabling a filter can make a rule appear to match **less**, and why the fix is never to
+"just remove the condition".
+</Warning>
+
+In database mode this file is not read after startup; the same data lives in `app_route_table`,
+`app_route_rule` and their condition tables. See [Database](/reference/config/database).

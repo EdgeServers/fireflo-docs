@@ -125,11 +125,7 @@
           },
           {
             "group": "Project",
-            "pages": [
-              "platform/project/releases",
-              "platform/project/roadmap",
-              "platform/project/contributing"
-            ]
+            "pages": ["platform/project/releases"]
           }
         ]
       },

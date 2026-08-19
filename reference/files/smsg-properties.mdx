@@ -1,0 +1,98 @@
+---
+title: "smsg.properties"
+description: "How worker instances are declared, the three property tiers, and the one file that is still read at startup in database mode."
+source: "fireflo-sms-gateway/docs/04-smpp-configuration.md, docs/09-configuration-reference.md @ 0.7.3"
+---
+
+Worker definitions and their settings, plus the gateway-wide `smsg.*` properties.
+
+## Declaring a worker
+
+Every worker is a set of `outSms.instance.<name>.*` properties. The `type` decides what it is:
+
+```properties
+# A listener customers bind in to
+outSms.instance.smpp.type      = smppserver
+outSms.instance.smpp.srv.port  = 27777
+outSms.instance.smpp.enable    = true
+
+# A connection out to a carrier
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+```
+
+<Note>
+`smppclient` and `smppserver` are the configuration values. This site and the control panel call them
+**vendor** and **server** everywhere else — see [Concepts](/platform/concepts).
+</Note>
+
+Every key available on each is listed at [Listener settings](/reference/smpp/server),
+[Vendor settings](/reference/smpp/client) and [Base settings](/reference/smpp/worker-base).
+
+## Three tiers
+
+```properties
+# tier 2: the baseline every worker inherits
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+
+# tier 1: this worker only, wins over the above
+outSms.instance.vendor1.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+Resolution is instance → `outSms.default.*` → the coded default in the `prms` table. Full explanation
+at [Paths and property tiers](/reference/config/paths).
+
+<Note>
+The doubled word in `outSms.default.default.tlvs.submit` is correct. The first `default` is the
+fallback tier; the second is part of the property name `default.tlvs.submit`.
+</Note>
+
+## Gateway-wide properties
+
+Everything under `smsg.*` also lives here — rating, CDR, credit, whitelisting, queue limits, webhook
+egress, the operational tokens. They are catalogued by task under
+[Configuration keys](/reference/config/paths).
+
+```properties
+smsg.config.source        = file
+smsg.rates.currency       = AUD
+smsg.cdr.sink             = auto
+smsg.balance.enabled      = true
+smsg.ops.token            = REPLACE_ME
+smsg.ops.admin.token      = REPLACE_ME_DIFFERENTLY
+```
+
+## The one file still read in database mode
+
+In `db` mode every file watcher stands down and `credentials.yml`, `routingTable.conf` and
+`rates.conf` are not read after startup.
+
+<Warning>
+**`smsg.properties` is still read at startup**, because `smsg.config.source` and the datasource have
+to come from somewhere before the database can be consulted.
+
+That means the source switch and the connection details stay in this file even on a fully
+database-driven deployment — and a change to either still needs a restart.
+</Warning>
+
+Once running in `db` mode, worker settings come from `app_worker_property` and gateway properties from
+`app_config`, both projected onto the same key names. If a key is defined in both the worker table and
+`app_config`, **the worker table wins and the duplicate is logged**.
+
+## Routing and message-trace properties
+
+```properties
+outSms.routing.maxAttempts = 20
+outSms.routing.trace       = acct-1001
+message.trace.mode         = necessary
+```
+
+<Warning>
+`message.trace.mode` is **global only**. Despite appearing in per-instance tables, an
+`outSms.instance.<name>.message.trace.mode` is never read. Set it unprefixed.
+</Warning>
