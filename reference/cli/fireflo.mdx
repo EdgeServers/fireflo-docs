@@ -1,0 +1,211 @@
+---
+title: "fireflo"
+description: "Every verb, which of them need a running gateway, and the three that refuse rather than proceed."
+source: "fireflo-sms-gateway/scripts/fireflo @ 0.7.3 — the header comment block is the help text"
+---
+
+`scripts/fireflo` is the operator's command line. It talks to three different things depending on the
+verb, and knowing which is most of knowing how to use it.
+
+| Group | Talks to | Needs a running gateway |
+| :--- | :--- | :--- |
+| `db`, `bootstrap`, `import`, `show` | The database directly | No |
+| `send` | The **message** port, as a customer would | Yes |
+| everything else | The **operational** port, 9000 by default | Yes |
+
+<Warning>
+`show` reads the database, which is **not the same as what the gateway is doing**. In file mode it is
+not reading those tables at all; in database mode it holds a cached snapshot and re-reads on a poll.
+
+For what is actually in force — including whether whitelisting ever loaded — use `health`.
+</Warning>
+
+## Database and offline
+
+```bash
+fireflo db test        # reachable, authenticated, migrated, permitted, answered — separately
+fireflo db info        # applied and pending versions
+fireflo db validate    # do the applied migrations still match the files
+fireflo db migrate     # apply what is pending      (needs FIREFLO_DB_MIGRATE=true)
+fireflo db repair      # realign Flyway history with the files
+```
+
+`info` and `validate` do **not** need the write-enabling flag. Reading the schema version changes
+nothing, and needing a flag before you may look would be a trap in the middle of an incident.
+
+### bootstrap
+
+```bash
+fireflo bootstrap [--port N]
+```
+
+Writes the least a fresh database needs to start: a `default` routing table, an empty `MESSAGE` table
+for a vendor to go in, one listener on 27777, and one SMPP login whose password it generates and
+prints **once**.
+
+It writes nothing else on purpose — no vendor, because one needs a host and credentials nobody can
+guess; no rates, because an invented price bills silently where an absent one shows up unpriced. Both
+absences are named in its closing output.
+
+<Note>
+`bootstrap` refuses the moment it finds a routing table, a worker or a login, so it cannot overwrite a
+running deployment. There is no flag that makes it.
+</Note>
+
+### import
+
+```bash
+fireflo import all --dry-run                          # parse, report, write nothing
+FIREFLO_CONFIG_IMPORT=true fireflo import all --replace
+```
+
+Subjects are `all` (default), `rates`, `routing`, `credentials`. Flags: `--dry-run`, `--replace`,
+`--replace-filters`, `--prune`, `--rates-file`, `--routing-file`, `--currency`.
+
+**Run the dry run and read it.** It classifies every rate scope as a vendor cost or an account price
+and names the ones it can classify as neither — which is how a scope that will load and silently match
+nothing gets caught before it does.
+
+<Warning>
+**Credentials have one refusal the others do not.** An import yielding no usable credential is refused
+unconditionally, flag or no flag. An empty `app_credential` plus `FIREFLO_CONFIG_SOURCE=db` refuses
+every bind and every REST call at once, and nothing in the logs names the cause.
+</Warning>
+
+Exit codes: `0` fine, `1` the migration failed, `2` refused without touching anything — so a deploy
+pipeline can tell a missing flag from a broken migration.
+
+### show
+
+```bash
+fireflo show config [pattern]     workers     worker <name>
+fireflo show routing              rates [scope]
+fireflo show account [id]         whitelist [id]      rejected [id]
+```
+
+`whitelist` prints the four gates in the order they apply, then what is approved. `rejected` is what
+was refused in the last 24 hours, and why.
+
+## Sending one message
+
+```bash
+fireflo send <from> <to> <text>
+```
+
+Goes through the HTTP API exactly as a customer would. Needs `FIREFLO_SEND_LOGIN` and
+`FIREFLO_SEND_PASSWORD`.
+
+## Operational
+
+```bash
+fireflo health          # live state
+fireflo version         # which release is RUNNING, asked of the gateway
+fireflo verify          # is this deployment actually working
+fireflo reload          # re-read configuration without a restart
+```
+
+`version` asks the gateway rather than the files on disk — an artefact that was built but never
+restarted into is the whole reason to ask.
+
+`verify` checks in the order that makes the first failure the informative one: the artefact is
+complete, Java is new enough, the message port answers, the operational port agrees with the
+configuration you chose, and the two tokens are genuinely separate. It ends by saying whether it can
+send yet, which is not the same question as whether it is running.
+
+<Note>
+**`verify` exit code 4** means the deployment is sound but this install's own data is not — for
+example nothing is configured to route to. `0` is fine, `1` failed, `2` refused or misused.
+</Note>
+
+### Credit
+
+```bash
+fireflo credit release [account]
+```
+
+Returns unspent RESERVED prepaid credit so the next message re-reads the balance.
+
+<Warning>
+**This is the one piece of runtime state `reload` cannot rebuild.** Credit is handed out in blocks and
+stays spendable until used, so correcting a balance by hand does not take effect until this runs. It
+takes nothing away — the block is reservable again immediately.
+</Warning>
+
+### Queues
+
+```bash
+fireflo queue dump [worker] [limit]
+```
+
+Lists the messages waiting, not just how many — account, product, destination, retry count and age.
+Answers "whose traffic is this" when a queue is deep. Read-only: nothing is taken off a queue and
+nothing is reordered. Default 20 per queue, maximum 500.
+
+There is no message text in the output, by the same rule that keeps it out of call records by default.
+
+### Usage and retention
+
+```bash
+fireflo usage rollup [--catch-up]     # summarise cdr_submit into usage_daily
+fireflo usage purge                   # delete call records past retention
+```
+
+<Warning>
+`usage purge` **refuses the whole run** if any day it would delete has no rollup, and names the days.
+Not a warning — deleting an unsummarised day destroys the consumption record permanently, with nothing
+able to reconstruct it. Needs `FIREFLO_CDR_PURGE=true`.
+
+`rollup` is deliberately a separate command. A purge that quietly rolled up first would mean a rollup
+bug is discovered by the command that deletes the evidence.
+</Warning>
+
+### Connections
+
+```bash
+fireflo test-bind <vendor>                      # dial once and report
+fireflo disconnect <listener> <session-id>      # drop one bind
+fireflo capture start|stop|status <worker> <session-id> [seconds]
+fireflo capture txt|pcap <worker> <session-id> > file
+```
+
+Session ids come from `fireflo health`. They are the listener's own counter, so they collide between
+listeners and restart with the gateway.
+
+<Note>
+`disconnect` **ends a connection; it does not withdraw permission.** A healthy client rebinds within
+seconds unless you also disable its login.
+</Note>
+
+Captures contain message content and destination numbers. They are bounded and held in memory only:
+the capture stops itself and is dropped fifteen minutes later, downloaded or not. This replaces turning
+on `log.pdus` for a whole worker, which wrote every session's PDUs to a shared log file.
+
+### The six control verbs
+
+| Verb | Effect |
+| :--- | :--- |
+| `enable` | Start it now |
+| `disable` | Stop it now |
+| `suspend` | Stop accepting; drain the queue back to the router |
+| `resume` | Start accepting again |
+| `hold` | Keep accepting but stop sending; the queue grows |
+| `release` | Start sending again |
+
+### Purging sample data
+
+```bash
+fireflo purge seed <traffic-lane|india-dlt|all> [--with-traffic]
+fireflo purge --reset-database
+```
+
+`purge seed` runs the paired down script and nothing else. There is no search for things that *look
+like* test data, because on a configuration database that is how you delete a customer.
+
+`--reset-database` empties every table, back to the state just after `db migrate`. It refuses unless
+`FIREFLO_DB_RESET=true`, refuses while the gateway is reachable, and asks you to type the database
+name.
+
+## Environment
+
+See [Environment variables](/reference/cli/environment) for the full list, and
+[The operational endpoint](/reference/config/operational-endpoint) for the two tokens.

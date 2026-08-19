@@ -1,0 +1,81 @@
+---
+title: "fireflo-install"
+description: "The five verbs, the options worth knowing, and what each verb refuses to touch."
+source: "fireflo-sms-gateway/scripts/fireflo-install @ 0.7.3"
+---
+
+Installs and upgrades the **gateway**. The control panel has its own installer —
+[`fireflo-panel-install`](/reference/cli/fireflo-panel-install).
+
+## The five verbs
+
+| Verb | Does | Never touches |
+| :--- | :--- | :--- |
+| `check` | Is this host ready. Changes nothing. | Everything |
+| `install` | First install: packages, service user, directories, artefact, configuration, database, systemd unit, firewall, smoke test | An existing conf directory — it refuses instead |
+| `update` | Replaces **the artefact only** | The conf directory |
+| `service` | Generates the startup script and unit on an existing install, and starts it | The conf directory |
+| `rollback` | Restores the previous artefact | The conf directory |
+
+<Warning>
+**`install` refuses when a configuration directory already exists**, rather than minting a second pair
+of operational tokens over the top of the first. If you have configuration but no service, the verb
+you want is `service`, not `install`.
+</Warning>
+
+## Options worth knowing
+
+### Layout and identity
+
+| Option | Purpose |
+| :--- | :--- |
+| `--tenant NAME` | Names this instance. On `update`, `service` and `rollback` it is a **lookup** — the install with that name is found and its own paths, unit, account and ports are used, so an upgrade cannot be aimed at the wrong instance by forgetting a flag. |
+| `--vhost PATH` | Puts the instance in a per-customer virtualhost — `--tenant websmsc --vhost /home/websmsc` gives `/home/websmsc/gateway`, with the panel alongside at `/home/websmsc/panel`. |
+| `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Individual paths. |
+| `--user` / `--group` / `--service-name` | The service account and unit name. |
+
+Both generated units mount a **tmpfs over `/home`** and bind only the one virtualhost back in, so a
+gateway cannot see any other customer's home directory.
+
+### Configuration and database
+
+| Option | Purpose |
+| :--- | :--- |
+| `--config-source file\|db` | Which source the instance starts in. |
+| `--db-*` | Database connection details. |
+| `--bootstrap` / `--import` | Populate a fresh database, or bring an existing file configuration in. |
+| `--country` / `--country-code` / `--product` / `--rate` / `--decimals` / `--currency` | The first tariff. |
+
+### Behaviour
+
+| Option | Purpose |
+| :--- | :--- |
+| `--whitelist` / `--no-whitelist` | Whether sender-ID and content checking starts on. |
+| `--balance` / `--no-balance` | Whether prepaid credit is enforced. |
+| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. A range lets the installer pick the next free listener port. |
+| `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ for the REST path. |
+| `--log-backups` / `--log-retain-days` | Log retention, including the `tmpfiles.d` rule that reaps `httpapi.log`. |
+
+### Running it
+
+| Option | Purpose |
+| :--- | :--- |
+| `--yes` | Do not prompt. |
+| `--dry-run` | Show what would happen. |
+| `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Skip a stage. |
+| `--sudo` / `--no-sudo` | Privilege escalation. |
+
+<Note>
+**`--dry-run` shows less than you might expect.** It cannot report what a package manager would pull
+in, or what a migration would find in a database it has not connected to. Read it as "the decisions
+this script would make", not "everything that would change on this host".
+</Note>
+
+## What it does not install
+
+The **control panel**. That is `fireflo-panel-install`, and on a fresh host you run both.
+
+`--log-retain-days` writes a `tmpfiles.d` rule that deletes rotated logs, never touching the four live
+ones. **Installing by hand means arranging that yourself** — see [Logging](/reference/config/logging).
+
+See [Install in one command](/platform/install/one-command) for the walkthrough.

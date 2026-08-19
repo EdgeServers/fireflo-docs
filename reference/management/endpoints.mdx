@@ -1,0 +1,61 @@
+---
+title: "Management API"
+description: "The endpoints on port 9000, which token each takes, and why every refusal is a 404."
+source: "fireflo-sms-gateway/api/management-port.json @ 0.7.3"
+---
+
+Port **9000** by default, away from the port that carries messages. Bearer authentication, two tokens.
+
+<Warning>
+This is deliberately **not** described as OpenAPI, and there is no Swagger UI for it. It is an
+operational surface for one deployment's operators, not an API customers integrate against.
+</Warning>
+
+| Method | Path | Token | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/ops/health` | read | Everything the gateway knows about itself right now |
+| `GET` | `/q/metrics` | read | Prometheus exposition, as text |
+| `POST` | `/ops/reload` | admin | Re-read configuration now, instead of waiting for the poll |
+| `POST` | `/ops/workers/{name}/test-bind` | admin | Dial a vendor once and report what happened |
+| `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Drop one customer's bind, leaving others alone |
+| `POST` | `/ops/workers/{name}/{action}` | admin | `enable`, `disable`, `suspend`, `resume`, `hold`, `release` |
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://localhost:9000/ops/health
+```
+
+## Every refusal is a 404
+
+A wrong token, a disabled endpoint and a path that does not exist all answer **404**. Nothing
+advertises that there is a secret here worth guessing.
+
+<Note>
+That means a monitoring check reporting 404 has four possible causes, and the gateway will not tell
+you which: wrong token, admin token unset, admin token equal to the read token, or genuinely wrong
+path. Check the tokens on both sides before concluding the gateway is down.
+</Note>
+
+## What is not on this port
+
+`/openapi.json`, `/swagger-ui` and `/ping` live on the **messaging** port. Pointing a tool at the wrong
+one produces 404s that look like an outage.
+
+## `/ops/health`
+
+The payload carries, at the top level: the running version, configuration sources per domain, router
+queue depth, awaiting-receipt count, CDR counters, the broker queue depth when one is configured, and
+a `balance` section when credit enforcement is on.
+
+Per worker it carries `accepting`, `paused`, `suspended_manually`, `suspended_automatically`, `bound`,
+`bound_transmittable`, `queue_depth`, `retry_queue_depth`, `tps_limit`, `tps_measured`, `submitted`,
+`last_error` with its timestamp, `last_submit_error` with `submit_rejected`, a **sample** of sessions
+capped at 20, and `sessions_total`.
+
+<Warning>
+Never count the `sessions` array to answer "how many are bound". It is a capped sample —
+`sessions_total` is the count, and `bound` is the number of live binds.
+</Warning>
+
+See [Live health](/platform/operations/live-health) for how to read it, and
+[The operational endpoint](/reference/config/operational-endpoint) for the tokens.

@@ -1,0 +1,71 @@
+---
+title: "fireflo-panel-install"
+description: "The five verbs for the control panel, and why the operator password has its own one."
+source: "fireflo-control-panel/scripts/fireflo-panel-install @ 0.7.3.1"
+---
+
+Installs and upgrades the **control panel**, which serves both the operator screens and the customer
+portal.
+
+<Note>
+The panel edits configuration and reads call records. It is **not on the message path**: a panel that
+is down costs you the ability to make changes, not the ability to send.
+
+**Install it after the gateway.** The gateway owns the database schema; the panel only reads and
+writes rows in it.
+</Note>
+
+## The five verbs
+
+| Verb | Does | Never touches |
+| :--- | :--- | :--- |
+| `check` | Is this host ready. Changes nothing. | Everything |
+| `install` | Node, service user, directories, source, `npm ci`, build, environment, systemd unit, then a check that it answers | — |
+| `update` | Pulls a new build over an existing install | **The environment file** |
+| `service` | Generates the unit on an existing install, and starts it | The environment file |
+| `passwd` | Rolls the operator password and restarts | Everything else |
+
+`install` asks for what it needs first and changes nothing until you agree.
+
+## Why `passwd` exists as a verb
+
+**There is no user table.** `OPERATOR_USERNAME` and `OPERATOR_PASSWORD` in `panel.env` are the whole
+operator account. `passwd` is therefore the supported way to change it — it rewrites the environment
+file and restarts the unit in one step, rather than leaving you to edit a file the installer otherwise
+promises never to replace.
+
+## Layout
+
+| Option | Default | Notes |
+| :--- | :--- | :--- |
+| `--app-dir PATH` | `/opt/fireflo-panel` | Replaced by an update |
+| `--conf-dir PATH` | `/etc/fireflo-panel` | **Never replaced** |
+| `--data-dir PATH` | `<app-dir>/tmp` | Prepared CSV exports and anything else the panel writes. Preserved by an update; never replaced |
+| `--tenant NAME` | — | Installs into `/srv/fireflo/NAME/panel` as unit `fireflo-NAME-panel` |
+| `--vhost PATH` | — | Virtualhost layout: `PATH/app`, `PATH/conf`, `PATH/data` |
+
+**`--tenant` is the point of the shared vocabulary**: the same word names the same instance to the
+gateway installer. One name per customer, two products.
+
+With `--tenant NAME --vhost PATH` the root moves to `PATH/panel`, with the gateway at `PATH/gateway`.
+The three directory flags still win over either.
+
+<Note>
+`--vhost` **alone** keeps its older flat meaning, so panels already installed under `/home/<name>` are
+reached exactly as before. That compatibility is deliberate — an upgrade must not relocate a running
+install.
+</Note>
+
+## What it derives, and the one thing it does not
+
+Given the gateway's conf directory, the installer derives the operational tokens and the read-only
+database connection rather than asking you to copy them.
+
+<Warning>
+**`--config-url` is never derived.** The read-write connection to the configuration tables is the one
+that can change what customers are charged, so it is always given explicitly. Without it the panel
+reports every configuration domain as not editable, rather than failing at the first save.
+</Warning>
+
+See [Installing the control panel](/platform/install/control-panel) for the walkthrough and
+[Control panel environment](/reference/config/control-panel) for every variable it writes.

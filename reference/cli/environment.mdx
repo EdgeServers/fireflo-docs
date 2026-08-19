@@ -1,0 +1,46 @@
+---
+title: "Environment variables"
+description: "What each CLI verb reads from the environment, and the flags that exist only to make a destructive command deliberate."
+source: "fireflo-sms-gateway/scripts/fireflo @ 0.7.3"
+---
+
+## Connecting
+
+| Variable | Used by | Notes |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge` | The same variables the gateway reads, so sourcing your env file is the whole setup. |
+| `FIREFLO_OPS_URL` | everything on the operational port | The **management** interface, 9000 by default. |
+| `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify` | Must match `smsg.ops.token`. |
+| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, the six control verbs | Must match `smsg.ops.admin.token`. |
+| `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | A customer credential — this verb goes through the **message** port. |
+| `FIREFLO_CONF_DIR` | `verify` | Where to look for the configuration it checks. |
+
+## The four permission flags
+
+Each one exists because the command it guards is destructive in a way that is not obvious from its
+name. None of them has a command-line equivalent, on purpose: a flag you have to export is a flag you
+cannot pass by accident from shell history.
+
+| Variable | Required by | Guards against |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_MIGRATE=true` | `db migrate`, `db repair` | Applying forward-only DDL to the wrong database. |
+| `FIREFLO_CONFIG_IMPORT=true` | `import` (not `--dry-run`) | Replacing the rules that decide what customers are charged. |
+| `FIREFLO_CDR_PURGE=true` | `usage purge` | Deleting call records — the only per-message record of what was charged. |
+| `FIREFLO_DB_RESET=true` | `purge --reset-database` | Emptying every table. Also refuses while the gateway is reachable, and asks you to type the database name. |
+
+<Note>
+`FIREFLO_DB_MIGRATE` and `FIREFLO_CONFIG_IMPORT` are separate deliberately. One applies schema
+changes; the other replaces pricing and credentials. A deployment that is happy to auto-migrate is not
+necessarily happy to have its tariffs overwritten.
+</Note>
+
+## Exit codes
+
+| Code | Meaning |
+| :--- | :--- |
+| `0` | Fine |
+| `1` | Failed |
+| `2` | Refused, or misused — nothing was touched |
+| `4` | `verify` only: the deployment is sound, this install's own data is not |
+
+The `1` / `2` split is what lets a deploy pipeline tell a missing flag from a broken migration.
