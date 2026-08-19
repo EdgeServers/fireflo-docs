@@ -1,0 +1,134 @@
+---
+title: "Concepts"
+description: "The dozen words this site leans on. Two of them mean the opposite of what a Kannel or Jasmin background suggests."
+source: "fireflo-control-panel README and Sidebar.tsx, docs/01, docs/05, docs/13 @ 0.7.3"
+---
+
+Read this one first. Every other page assumes these words, and two of them are a deliberate departure
+from the configuration file's own vocabulary.
+
+## Vendor and server
+
+<CardGroup cols={2}>
+  <Card title="Vendor" icon="antenna">
+    A connection **out** to whoever carries your traffic. FireFlo dials it. Configuration calls it
+    `smppclient`.
+  </Card>
+  <Card title="Server" icon="server">
+    A **listener** your customers bind in to. FireFlo accepts. Configuration calls it `smppserver`.
+  </Card>
+</CardGroup>
+
+The configuration values stay `smppclient` and `smppserver`, and always will — they are what the
+gateway reads. **They never reach the interface**, and they are not used in prose on this site outside
+code blocks and key names.
+
+<Warning>
+This is where a Kannel or Jasmin background misleads. "Client" and "server" describe which end of a
+socket FireFlo is, which is an implementation fact. **Vendor** and **server** describe who is on the
+other end and who is paying whom — which is what you actually reason about when a message will not go
+out.
+
+The data layer agreed all along: `cdr_submit.vendor` and the delivery-receipt payload have always said
+*vendor*.
+</Warning>
+
+Both are **workers**, and share [a set of base settings](/reference/smpp/worker-base).
+
+## Account, login, product
+
+| Word | Is | Is not |
+| :--- | :--- | :--- |
+| **Account** | The billing key. Balance, credit limit, statement and tariff all hang off it. | A person, or a login |
+| **Login** (credential) | One way to authenticate — an SMPP `system_id` or a REST username. An account may hold several. | The thing that gets billed |
+| **Product** | A named tariff a message is priced under, resolved per message. | A feature flag |
+
+<Note>
+**One account, many logins.** This is why the rate ceiling is keyed on the account rather than the
+credential — a per-login limit would let a customer raise their own by creating another login.
+</Note>
+
+A product resolves, in order: the `system_type` on an SMPP bind, then the credential's `product`
+field. HTTP callers have no bind, so the credential value is the only source.
+
+<Warning>
+**An unset product is a supported state that can send messages for free.** A message with no product
+is shown only the rate rules that themselves have no product, so on a deployment whose rules all carry
+one, it matches nothing and is charged nothing. See [Limits](/reference/config/limits) for the two
+switches that close it.
+</Warning>
+
+## Routing table, rule, chain, group
+
+A **routing table** is a named list of **rules**, evaluated top to bottom; the first match wins.
+
+A rule's target may be a worker, another **table** — which is a *chain*, and how `[default]` sends text
+messages into `[MESSAGE]` — or a **group**.
+
+A **group** is a set of vendors with a policy: `round-robin`, `weighted` or `failover`. It skips
+members that are suspended or not accepting, which is the failover a single-target rule cannot do.
+
+An **LCR table** is marked `->function(LCR)` and inverts the usual rule: every matching rule is a
+candidate, and the cheapest vendor wins. Rule order is irrelevant there.
+
+## Filter
+
+A named, reusable set of conditions, shared by routing and rating so the same predicate is not written
+twice.
+
+<Warning>
+**A missing or disabled filter skips every rule that references it.** It does not load the rule with
+fewer conditions — dropping a condition makes a rule match *more*, so failing that way would silently
+route or price the wrong things.
+</Warning>
+
+## Scope and tariff
+
+A **scope** is the left-hand side of a rate rule, and which side of the trade it is depends entirely
+on what it names:
+
+| Scope names | It is |
+| :--- | :--- |
+| A vendor | **Cost** — what you pay |
+| An account | **Price** — what you charge |
+| `[*]` | The sell-side default for any account with no rules of its own |
+
+Nothing in the schema distinguishes them. The gateway tells them apart by which lookup asks, which is
+why the panel groups them as **What we pay** and **What we charge** rather than one list.
+
+A **tariff** is the set of price rules for one account.
+
+## Message, segment, part
+
+A **message** is what a customer submits. Longer than one SMS, it goes out as several **segments**,
+and `smsg.restapi.billing.units` decides whether that is charged once or per segment.
+
+<Note>
+Whatever the billing unit, a message leaves **exactly one** `part_no = 1` row in `cdr_submit`. Retries
+do not add rows. That invariant is what makes counting messages and summing money the same question.
+</Note>
+
+## Prepaid and postpaid
+
+| Mode | The account holds | Refused when |
+| :--- | :--- | :--- |
+| **Prepaid** | A balance, debited as it sends | The balance runs out |
+| **Postpaid** | A credit limit, billed in arrears | Unbilled usage reaches the limit |
+
+Both refuse **identically** — `0x402` over SMPP, `402` with `insufficientCredit` over HTTP — so a
+customer's integration never needs to know which it is on.
+
+<Warning>
+On a postpaid account, `credit_limit = 0` means **no credit**, not unlimited. There is no
+representation of unlimited anywhere in the system, deliberately: a typo must fail closed.
+</Warning>
+
+## Refusal
+
+FireFlo refuses rather than guesses in more places than most gateways: an unmapped inbound message, a
+rule whose filter is missing, an import that would leave no usable credential, a purge over a day with
+no rollup.
+
+Where a page here says something is refused, that is the documented behaviour and usually exists
+because the alternative silently lost a message or some money. It is not a limitation waiting to be
+lifted.

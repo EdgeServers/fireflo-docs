@@ -1,0 +1,111 @@
+---
+title: "Quickstart"
+description: "A gateway running in Docker, and the first message through it."
+source: "fireflo-sms-gateway/docs/02-docker-deployment.md @ 0.7.3"
+---
+
+The fastest way to a running FireFlo. For a real deployment go to
+[Install in one command](/platform/install/one-command) instead — this leaves out the service account,
+the systemd unit, log retention and TLS.
+
+## What you need
+
+- Docker.
+- A working directory with `conf`, `data` and `logs` subdirectories.
+- The configuration files in `conf`. Copy `conf.example` from the repository and replace every
+  `REPLACE_WITH_*` value.
+
+```text
+fireflo-runtime/
+  conf/
+    credentials.yml
+    smsg.properties
+    routingTable.conf
+    rates.conf
+  data/
+  logs/
+```
+
+## Start it
+
+```bash
+docker run -d --name fireflo \
+  -e QUARKUS_LOG_FILE_ENABLE=true \
+  -e QUARKUS_LOG_CONSOLE_ENABLE=false \
+  -e QUARKUS_LOG_FILE_PATH=/work/logs/smsg.log \
+  -e QUARKUS_LOG_FILE_SMPPCLIENT_PATH=/work/logs/smppclient.log \
+  -e QUARKUS_LOG_FILE_SMPPSERVER_PATH=/work/logs/smppserver.log \
+  -e QUARKUS_HTTP_ACCESS_LOG_DIRECTORY=/work/logs \
+  -p 8080:8080 \
+  -p 127.0.0.1:9000:9000 \
+  -p 27777:27777 \
+  -v ./conf:/work/conf \
+  -v ./data:/work/data \
+  -v ./logs:/work/logs \
+  edgeservers/fireflo:latest
+```
+
+`edgeservers/fireflo:latest-native` is the native build of the same thing.
+
+<Warning>
+Note `9000` is published to **loopback only**. It carries bind state, queue depths and vendor names,
+and the [two tokens](/reference/config/operational-endpoint) are the only thing in front of it.
+</Warning>
+
+## Check it started
+
+<Steps>
+  <Step title="The container is up">
+    ```bash
+    docker ps
+    ```
+    Running, not restarting.
+  </Step>
+  <Step title="The HTTP API answers">
+    ```bash
+    curl -s http://localhost:8080/ping
+    ```
+  </Step>
+  <Step title="If it did not start, read smsg.log first">
+    ```bash
+    tail -50 logs/smsg.log
+    ```
+    A gateway with **no routing table does not start at all**, and says so by naming an internal
+    structure — `no default routing table in new targets!` — rather than the missing configuration.
+    That message means your `routingTable.conf` is empty, missing, or failed to parse.
+  </Step>
+</Steps>
+
+## Send something through it
+
+```bash
+curl -s -u 'your-login:your-password' \
+  -X POST http://localhost:8080/secure/send \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"61400000000","content":"hello from FireFlo"}'
+```
+
+A `200` with a message id means it was accepted, charged and queued — **not** that it was delivered.
+Delivery is a separate answer that arrives as a receipt. See
+[Send one message](/developers/send/one-message).
+
+## What this quickstart does not give you
+
+| Missing | Why it matters | Where |
+| :--- | :--- | :--- |
+| A database | No prepaid credit, no expiry sweep, no panel editing | [Database](/platform/install/database) |
+| The control panel | No screens, no statements, no customer portal | [Installing the panel](/platform/install/control-panel) |
+| Log retention | `httpapi.log` grows forever | [Logging](/reference/config/logging) |
+| A real vendor | Nothing leaves the building | [Vendors](/platform/connections/vendors) |
+| TLS | Everything is plaintext | [Install by hand](/platform/install/by-hand) |
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Concepts" icon="book" href="/platform/concepts">
+    The words the rest of this site uses — read before the install pages.
+  </Card>
+  <Card title="Install properly" icon="server" href="/platform/install/one-command">
+    Service account, systemd, database, firewall, smoke test.
+  </Card>
+</CardGroup>
