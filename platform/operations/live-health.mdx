@@ -1,0 +1,128 @@
+---
+title: "Live health"
+description: "Bind state, queue depth and in-flight receipts exist only in the running JVM — the endpoint that reports them, and the two numbers people read wrong."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+Three surfaces answer three different questions, and reaching for the wrong one wastes an incident:
+
+| Surface | Answers |
+| :--- | :--- |
+| `/q/metrics` | **How much, over time** |
+| Call-record tables | **What happened** to a specific message |
+| `/ops/health` | **What is true right now** — binds, queue depth, in-flight receipts |
+
+The third exists because that state lives only in the running JVM. Nothing else can report it.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/ops/health
+```
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-05T11:28:50Z",
+    "router_queue": 0,
+    "router_queue_capacity": 50000,
+    "awaiting_receipt": 5139,
+    "dlr_store_persistent": true,
+    "config_sources": {
+      "properties": "database", "credentials": "file",
+      "routing": "database", "rates": "database"
+    },
+    "tps_window_seconds": 5,
+    "cdr": { "enabled": true, "sink": "postgres", "written": 1, "failed": 0 },
+    "workers": [
+      { "name": "smppclient.vendor1", "type": "smppclient", "accepting": true,
+        "bound": 1, "bound_transmittable": 1,
+        "queue_depth": 0, "queue_capacity": 50000, "submitted": 1,
+        "tps_limit": 200, "tps_measured": 12.4,
+        "sessions_total": 1,
+        "sessions": [ "…" ] },
+      { "name": "smppclient.vendor2", "type": "smppclient", "accepting": false,
+        "bound": 0, "queue_depth": 0,
+        "last_error": "Bind failed: ESME_RINVPASWD (Invalid password)",
+        "last_error_at": "2026-08-06T09:12:04Z" }
+    ]
+  }
+}
+```
+
+## `sessions` is a sample, not the set
+
+<Warning>
+**At most 20 sessions per worker appear in this response, whatever `sessions_total` says.**
+
+Health is polled every few seconds by every open dashboard, and a listener carrying five hundred
+binds was sending five hundred rows each time.
+
+**Counting the array to answer "how many are bound" gives a wrong number that looks plausible.** Use
+`bound`, or `sessions_total` for the row count.
+</Warning>
+
+To see or search the whole set, page it:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:9000/ops/workers/smppserver.smpp/sessions?q=acme&offset=0&limit=50'
+```
+
+```json
+{ "data": { "rows": [ "…" ], "total": 412, "matched": 3, "offset": 0, "limit": 50 } }
+```
+
+`q` matches case-insensitively by substring on `account`, `system_id`, `host`, `system_type` and
+`bind_type`. **Numeric columns are deliberately not searched** — `50` would otherwise match a
+throughput of 50, a port of 2750 and a session up for 50 seconds at once.
+
+`total` counts every session; `matched` counts those passing `q`. Both are reported because an
+operator who has filtered to one customer still needs to know the listener is carrying four hundred
+binds.
+
+`limit` defaults to 50, capped at 200, and **the response echoes the size actually applied** — so a
+caller asking for 10 000 can see it got 200 rather than concluding there were only 200 sessions.
+
+## The fields worth alerting on
+
+| Field | Watch for |
+| :--- | :--- |
+| `bound_transmittable` | Zero while `bound` is not — a receiver-only session carries nothing |
+| `last_error` | **Present** means a bind was refused; **empty** means the socket never opened |
+| `router_queue` against `router_queue_capacity` | Sustained growth is routing slower than ingress |
+| `awaiting_receipt` | Growth means receipts are not coming back |
+| `queue_depth` per worker | A single vendor backing up |
+| `cdr.failed` | Non-zero means records are being lost |
+
+<Tip>
+**`last_error` is the field that separates the two failures a badge cannot.** A value means the socket
+opened and the bind was refused — credentials, system type, IP, a bind limit. Empty means the socket
+never opened at all — firewall, DNS, or the far end down.
+
+It clears the moment a bind succeeds.
+</Tip>
+
+## `config_sources` answers a question people ask backwards
+
+It says, per domain, whether the gateway is reading files or the database.
+
+That matters because **a change made in the panel does nothing if the gateway is reading a file for
+that domain** — and the symptom is "my edit did not apply", which sends people looking at the edit.
+
+## `bound: 0` on a listener is usually fine
+
+On a **vendor** it means nothing is connected and nothing can be sent.
+
+On a **listener** it usually means no customer is connected right now — which is quiet rather than
+broken. That is why a listener with nobody bound is not painted red the way a vendor with no session
+is.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="The management port" icon="server" href="/reference/management/endpoints">
+    Every endpoint, and which token each needs.
+  </Card>
+  <Card title="Binds and listeners" icon="triangle-exclamation" href="/platform/troubleshooting/binds-and-listeners">
+    Three failures that all look like "nobody is connected".
+  </Card>
+</CardGroup>

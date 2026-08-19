@@ -1,0 +1,120 @@
+---
+title: "Inspecting a queue"
+description: "Depth tells you something is stuck; a dump tells you what. The one field that separates a volume problem from a vendor problem — and why there is no flush."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+`/ops/health` says how deep each queue is. That is enough to know something is stuck and **not enough
+to do anything about it**: 4 000 messages waiting on `vendor1` reads identically whether it is one
+customer's misfired batch or every account on the box.
+
+```bash
+./scripts/fireflo queue dump
+./scripts/fireflo queue dump vendor1
+./scripts/fireflo queue dump vendor1 100
+```
+
+A bare number is read as a **limit** rather than a worker name, so `queue dump 100` widens everything.
+The default is 20 per queue, ceiling 500 — past that the question belongs to `cdr_submit` rather than
+to a live gateway.
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-09T02:14:07Z",
+    "limit_per_queue": 20,
+    "queues": [
+      {
+        "name": "router", "kind": "router", "depth": 1204, "ordered": true, "returned": 20,
+        "entries": [
+          {
+            "serial": "01JC8…", "account": "acct-in-2001", "product": "in-otp",
+            "from": "SUNOTP", "to": "919876543210",
+            "body_chars": 44, "encoding": "gsm7", "parts": 1,
+            "retries": 0, "priority": 2, "ingress": "http", "target": "in-sim",
+            "queued_at": "2026-08-09T02:14:05Z"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## The four kinds
+
+| `kind` | Holds |
+| :--- | :--- |
+| `router` | Accepted, not yet routed. **One queue for the whole gateway.** |
+| `pending` | Routed to a vendor, waiting for its session. One per worker. |
+| `delayed` | Scheduled retries. `ready_in_ms` says how long until each is eligible. |
+| `broker` | Held on RabbitMQ. **Depth only** — see below. |
+
+## `retries` is the field that answers the question
+
+<Tip>
+**A queue full of zeroes is a volume problem** — more arrived than the vendor can take.
+
+**A queue full of non-zero retries is a vendor problem** — the same messages keep coming back.
+
+Those call for opposite responses. Adding capacity to a retry storm makes it worse; suspending a
+vendor that is merely busy moves the backlog somewhere more expensive.
+</Tip>
+
+**`depth` and `returned` are different questions.** `depth` is the whole queue; `returned` is how much
+was listed. Comparing them is how you tell whether you are seeing the problem or a corner of it.
+
+## No message text, and no flag that adds one
+
+`cdr_submit` excludes the body on principle — destination and source are kept because rating and
+disputes need them, the text is not because operating a gateway never does.
+
+A queue dump inherits that rule rather than becoming the one operator surface that hands back customer
+traffic in bulk.
+
+`body_chars` with `encoding` tells a one-part OTP from a stuck six-part blast, which is the diagnostic
+question actually being asked.
+
+## Nothing is consumed and nothing is reordered
+
+Each queue is walked with its own iterator **while the gateway keeps draining it**. So:
+
+- A message listed may already be gone by the time you read it.
+- `depth` is sampled after the walk and can disagree with `entries` by a few.
+- `ordered` says whether the list is the order the gateway will send in — **false** for a priority
+  queue and for the delay queue.
+
+That is the honest trade. The alternative is stopping traffic in order to look at it.
+
+## A broker queue is reported but never walked
+
+AMQP has no way to look at a queued message without taking it. `basicGet` plus a requeue would
+reorder the queue and reset delivery counts on paying customers' messages to satisfy a diagnostic.
+
+So the depth is reported and the dump says so. **A broker that is not answering reports the depth as
+unknown rather than as zero** — which matters, because zero is a claim and unknown is not.
+
+## There is deliberately no `queue flush`
+
+<Warning>
+Discarding a queue destroys messages that were **accepted, billed and promised to a customer**.
+
+To take traffic off a stuck vendor without losing it, use `suspend` — it drains that vendor's queue
+back to the router so routing can pick another.
+</Warning>
+
+## Access
+
+The **read** token, not the admin one. A dump takes nothing and moves nothing, so a monitoring system
+holding the watching secret can ask for it.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    Suspend, hold, and what each does to a queue.
+  </Card>
+  <Card title="Queues and retries" icon="rotate" href="/platform/routing/queues-and-retries">
+    Where the retries in that column come from.
+  </Card>
+</CardGroup>

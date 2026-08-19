@@ -1,0 +1,104 @@
+---
+title: "Operations FAQ"
+description: "Dashboards that show nothing, changes that do not apply, and the numbers that look like problems but are not."
+source: "fireflo-sms-gateway/docs/08, docs/19, docs/22 @ 0.7.3"
+---
+
+<AccordionGroup>
+
+<Accordion title="My dashboard gets 404 from /ops/health">
+Check the token on both sides **before** assuming the gateway is down.
+
+An unset `smsg.ops.token` disables the endpoint and answers `404`. A **wrong** token gets the same
+`404` rather than a `401`, deliberately — so a caller cannot tell whether there is something here to
+find a token for.
+</Accordion>
+
+<Accordion title="Prometheus stopped collecting after an upgrade">
+Enabling the management port **moves** `/q/metrics` from 8080 to 9000. A job still pointed at 8080
+gets `404`s rather than failing loudly, so the dashboard reads as a quiet system rather than a broken
+monitor.
+
+Change the scrape target at the same time as the upgrade.
+</Accordion>
+
+<Accordion title="I changed a setting in the panel and nothing happened">
+Check `config_sources` on `/ops/health`. It reports, per domain, whether properties, credentials,
+routing and rates come from `database` or `file`.
+
+**A panel change does nothing if the gateway is reading a file for that domain.** The symptom sends
+people looking at the edit rather than at the source.
+
+If the source is right, the poll is up to thirty seconds behind — `./scripts/fireflo reload` applies
+it now.
+</Accordion>
+
+<Accordion title="I corrected an account's balance and it kept sending">
+Credit is reserved in **blocks** and spent from memory. A correction does not take effect until the
+block already handed out is used up — an account set to zero keeps sending.
+
+`./scripts/fireflo credit release <account>` returns the unspent remainder so the next message
+reserves against the corrected figure. It takes nothing away.
+</Accordion>
+
+<Accordion title="A worker vanished from /ops/health">
+It was disabled. `disable` removes a worker from health entirely, which looks like a crash if you did
+not do it yourself.
+
+`suspend` is the one that keeps the worker visible while taking traffic off it.
+</Accordion>
+
+<Accordion title="Counting the sessions array gives the wrong number">
+**At most 20 sessions per worker appear in `/ops/health`**, whatever `sessions_total` says — health
+is polled constantly and a listener with five hundred binds was sending five hundred rows each time.
+
+Use `bound`, or `sessions_total`. To see the whole set, page the sessions endpoint.
+</Accordion>
+
+<Accordion title="tps_measured is missing rather than zero">
+Absent means **unmeasured**; zero means bound, counting and moving nothing — which is a stall.
+
+It is absent for the first two windows after startup, because one reading of a cumulative counter is
+a baseline and not yet a rate. An alert treating absent as zero fires on every restart.
+</Accordion>
+
+<Accordion title="Is a growing queue always a problem?">
+No. **Router queue flat while a vendor queue grows** means routing is keeping up and the vendor is
+the constraint — that is a pacing question, not a gateway one.
+
+Both growing means ingress is outrunning routing. A queue full of **non-zero `retries`** means the
+same messages keep coming back, which is a vendor problem and gets worse if you add capacity.
+</Accordion>
+
+<Accordion title="Should I raise maxAttempts when messages are dropping?">
+Probably not — it was measured and it does not help. Raising `maxAttempts` 20 → 60 with a 500 ms
+backoff changed loss from 217 to 227 messages and made throughput slightly worse.
+
+**Pace to the vendor instead.** Setting that vendor's `tps` to what it can actually take took the same
+run to zero lost, zero `ESME_RMSGQFUL`, and exactly 1.00 submits per message.
+</Accordion>
+
+<Accordion title="Can I clear a stuck queue?">
+There is deliberately no `queue flush`. Discarding a queue destroys messages that were accepted,
+billed and promised to a customer.
+
+Use `suspend` — it drains that vendor's queue back to the router so routing can pick another vendor.
+</Accordion>
+
+<Accordion title="Delivery receipts are being sent to a carrier as new messages">
+A missing `type == 18` routing rule. Receipts fall to the catch-all, reach a vendor worker, and are
+submitted upstream as brand new outbound traffic — which you pay for.
+
+`conf/routingTable.conf` has always carried this rule; the database did not, and **in database mode
+the database wins.**
+</Accordion>
+
+<Accordion title="How much logging is safe to leave on?">
+`message.trace.mode = all` produced **226 MB of log for one 20 000-message run**. Excellent for one
+investigation, ruinous as a default.
+
+The same applies to `log.pdus` — and it contains bind passwords and message bodies. Use a session
+capture instead: bounded, in memory, and expiring in fifteen minutes.
+</Accordion>
+
+</AccordionGroup>

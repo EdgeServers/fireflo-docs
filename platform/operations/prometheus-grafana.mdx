@@ -1,0 +1,112 @@
+---
+title: "Prometheus and Grafana"
+description: "Every metric the gateway publishes about itself, which four are worth an alert, and the upgrade that silently 404s your scrape job."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+Metrics are Prometheus-compatible through Quarkus Micrometer, on the **management port**:
+
+```bash
+curl http://localhost:9000/q/metrics
+```
+
+Everything the gateway publishes about itself is prefixed `fireflo_`, so one match finds all of it:
+
+```bash
+curl -s http://localhost:9000/q/metrics | grep '^fireflo_'
+```
+
+<Warning>
+**Enabling the management port *moves* `/q/metrics`.** A Prometheus job still pointed at 8080 starts
+getting `404`s rather than failing loudly, so change the scrape target at the same time.
+
+A scrape job returning 404 looks like "no data" on a dashboard, which reads as a quiet system rather
+than as a broken monitor.
+</Warning>
+
+## The metrics
+
+| Metric | Means |
+| :--- | :--- |
+| `fireflo_router_queue` | Messages waiting to be routed |
+| `fireflo_routing_retry_queue` | Waiting out a backoff after a miss or filter requeue |
+| `fireflo_routing_failed_queue` | **Alert on non-zero.** Parked by an unexpected routing failure — no CDR, no receipt |
+| `fireflo_routing_rules_broken` | Distinct rules reported broken since the table was published |
+| `fireflo_cdr_written` / `fireflo_cdr_failed` | **A failed CDR is revenue that cannot be invoiced** |
+| `fireflo_dlr_awaiting_receipt` | Submitted and still waiting for a receipt |
+| `fireflo_dlr_correlation_size` | Vendor ids still matchable back to a submission |
+| `fireflo_dlr_unpushed_size` | Receipts held for a customer that is not connected |
+| `fireflo_rating_unrated` | **Money.** Delivered with no sell-side rate — charged nothing |
+| `fireflo_whitelist_header_rejects` / `_template_rejects` | Refused for an unapproved sender or content |
+| `fireflo_whitelist_would_reject` | What report-only mode **would** have refused |
+| `fireflo_balance_debits_refused` | Refused for want of prepaid credit |
+| `fireflo_balance_refills_attempted` / `_failed` | Block reservations started, and those that found nothing |
+
+All gauges, read at scrape time, so **none of them costs anything per message**.
+
+## The four worth an alert
+
+<CardGroup cols={2}>
+  <Card title="fireflo_routing_failed_queue" icon="triangle-exclamation">
+    Non-zero means messages are **gone** — no CDR and no receipt — unless
+    `outSms.enqueueFailedRouting` is set.
+  </Card>
+  <Card title="fireflo_cdr_failed" icon="database">
+    Revenue you cannot invoice. Silent everywhere else.
+  </Card>
+  <Card title="fireflo_rating_unrated" icon="tag">
+    Traffic delivered and charged nothing. Grows quietly and never self-corrects.
+  </Card>
+  <Card title="amqp.bridge.degraded" icon="link-slash">
+    In the log rather than a metric. REST durability is gone and **nothing else will tell you.**
+  </Card>
+</CardGroup>
+
+## `routing_rules_broken` is how you tell fixed from already-reported
+
+The log says each broken rule **once per rule, not once per message** — deliberately, since unguarded
+it would be a line per message per attempt on exactly the traffic already going wrong.
+
+The counter resets only when a new routing table is published. So **a quiet log is not proof the
+problem is gone**, and this gauge is the reliable form of the same question.
+
+## `whitelist_would_reject` before you enforce
+
+Report-only mode counts what *would* have been refused without refusing it.
+
+<Tip>
+Read this for a day before switching an account to enforcement. It turns an entire class of go-live
+incident into a number you look at when convenient.
+</Tip>
+
+## Per-worker queue depth is not here
+
+It would need a meter per worker, registered and retired as workers start and stop. **`/ops/health`
+reports it per worker** in the meantime, so a per-vendor backlog alert has to come from there rather
+than from Prometheus.
+
+## Scrape configuration
+
+```yaml
+scrape_configs:
+  - job_name: fireflo
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ['fireflo-host:9000']
+```
+
+<Warning>
+**Port 9000 carries queue depths, vendor names, bind state and the controls that stop a vendor.**
+None of it belongs on the port customers reach — keep it on an admin network and do not publish it.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    The state that is not in Prometheus.
+  </Card>
+  <Card title="Tokens and access" icon="key" href="/platform/operations/tokens-and-access">
+    Which endpoints need which token.
+  </Card>
+</CardGroup>

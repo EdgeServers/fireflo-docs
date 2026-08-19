@@ -1,0 +1,79 @@
+---
+title: "Reloading without a restart"
+description: "Three different things get called 'the cache' and only one needs a command — plus the reason a corrected balance does not take effect immediately."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+| What | How it refreshes |
+| :--- | :--- |
+| **Configuration** — logins, routing, rates, settings, whitelist | `./scripts/fireflo reload`. Every cached snapshot is rebuilt from the database. |
+| **Ingress rate limits** | **Nothing to do.** The limiter re-reads the account's rate on every message, so a change applies to the next one. |
+| **Reserved prepaid credit** | `./scripts/fireflo credit release [account]` — see below. |
+
+Only the first is what people usually mean, and only the third is surprising.
+
+## Configuration reloads on its own anyway
+
+The gateway polls for database changes. `reload` exists because the poll is up to thirty seconds
+behind, which is too slow when you are watching.
+
+<Warning>
+**A change made in the panel does nothing if the gateway is reading a file for that domain.**
+
+Check `config_sources` on `/ops/health` — it reports per domain whether properties, credentials,
+routing and rates come from `database` or `file`. The symptom of getting this wrong is "my edit did
+not apply", which sends people looking at the edit rather than at the source.
+</Warning>
+
+## Credit is not configuration
+
+`reload` does not touch it, and this is the one that catches people.
+
+The gateway reserves credit in **blocks** — moving money out of `account_balance.balance` into
+`reserved` and holding the block in memory. That is what keeps the message path off the database.
+
+**So correcting a balance by hand does not take effect until the block already handed out is used
+up.** An account set to zero keeps sending.
+
+```bash
+./scripts/fireflo credit release acct-in-2001
+```
+
+`credit release` returns the **unspent** remainder of each block to `balance` and writes a `RELEASE`
+row to the ledger, so the next message reserves against the corrected figure.
+
+<Tip>
+**It takes nothing away.** Whatever is returned is immediately reservable again, and the already-spent
+portion stays spent — `balance + reserved` is unchanged by a release.
+
+Omitting the account releases every one. That is right after a bulk correction and wasteful
+otherwise, since every account's next message then pays for a fresh reservation.
+</Tip>
+
+## The same command after a crash
+
+A `kill -9` strands whatever was reserved. The money is **parked, not lost** — `balance + reserved`
+still balances — and `credit release` is how it comes back.
+
+A clean shutdown does this by itself.
+
+## What a reload does not do
+
+- **It does not restart workers.** A worker that failed to bind retries on its own schedule; a
+  listener that could not take its port retries on the next poll or reload without needing a restart.
+- **It does not clear runtime state** set by `disable`, `suspend` or `hold`. Those are deliberately
+  outside configuration so they can act immediately — and they revert on restart rather than on
+  reload.
+- **It does not change what a bound session is allowed to do.** A rate change applies to already-bound
+  SMPP sessions within about 200 ms; it does not require them to re-bind.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    The verbs that act immediately rather than on a poll.
+  </Card>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocks, reservations, and why the balance lags.
+  </Card>
+</CardGroup>

@@ -1,0 +1,111 @@
+---
+title: "Generating traffic"
+description: "Driving each of the four directions on its own — and the two routing-order mistakes that have already bitten a real deployment."
+source: "fireflo-sms-gateway/docs/19-generating-traffic.md @ 0.7.3"
+---
+
+A message can cross the gateway **four ways**. They are genuinely different code paths and they fail
+differently, so being able to drive each on its own is what turns "something is wrong" into a
+bisection.
+
+| # | Direction | Exercises |
+| :-- | :--- | :--- |
+| 1 | **MT out** — customer submits over SMPP, gateway sends to a vendor | Bind auth, whitelist, rating, credit, routing, vendor window |
+| 2 | **MT in over HTTP** — customer submits over REST | The REST ingress, then everything downstream of row 1 |
+| 3 | **DLR back** — the vendor's receipt reaches the customer's bound session | Receipt parsing, id correlation, the DLR store |
+| 4 | **MO in** — a subscriber texts your short code and it reaches the customer | Inbound decode, MO ownership, delivery to a bound session |
+
+## Setting up a lane
+
+```bash
+psql "$CONFIG_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/seed-traffic-lane.sql
+./scripts/fireflo reload
+./scripts/fireflo show routing
+```
+
+That creates an account with credit, a product with whitelisting off, an SMPP login and an HTTP
+login, a flat tariff, and the routing rules the four directions need. It is **idempotent**, and a
+matching teardown script removes exactly what it added.
+
+<Warning>
+**Change the two passwords** before pointing anything at this that is not your own machine.
+</Warning>
+
+## Read the match order before you send anything
+
+```
+seq  target   rule
+ 10  smpp     type == 18                       ← receipts to the customer
+ 20  smpp     ingateway startsWith smppclient. ← inbound MOs to the customer
+ 31  vendor1  to matches ^91[6-9][0-9]{9}$
+ 90  vendor1  (no conditions)                  ← everything else
+```
+
+The router takes the **first** rule that matches, and the last rule matches everything. Two things
+follow, and **both have already bitten a real deployment**:
+
+<AccordionGroup>
+
+<Accordion title="Rules selecting on message class must sit above rules selecting on destination">
+A delivery receipt for a message whose sender was a numeric Indian address arrives with that number
+in `to`, once `flag.reverseDlrSrcDst` has swapped source and destination.
+
+Placed **below** a `to matches ^91…` rule, that receipt goes to a **vendor** instead of to the
+customer.
+
+That is why the seed moves the destination rules down rather than just slotting a class rule in above
+the catch-all.
+</Accordion>
+
+<Accordion title="A gateway with no `type == 18` rule swallows every delivery receipt">
+It falls to the catch-all, reaches the vendor worker, and is **submitted upstream as a brand new
+outbound message.**
+
+`conf/routingTable.conf` has always carried this rule. The database did not — and in database mode
+the database wins.
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Both failures are silent from the customer's side: in the first the receipt simply never arrives, in
+the second it arrives at a carrier as traffic you pay for. Neither produces an error anywhere.
+</Tip>
+
+## What each direction proves
+
+<Steps>
+  <Step title="Direction 1 first — MT out over SMPP">
+    If this fails, nothing else will work either. It covers the longest path.
+  </Step>
+  <Step title="Direction 2 — the REST ingress">
+    Failing here while 1 works isolates the problem to the HTTP ingress: auth, parsing, rate limits.
+  </Step>
+  <Step title="Direction 3 — receipts back">
+    The one most often broken by routing order rather than by the receipt path itself.
+  </Step>
+  <Step title="Direction 4 — MO in">
+    Needs the destination number mapped to an account. An unmapped message is recorded and delivered
+    nowhere, with nothing observable on the customer's side.
+  </Step>
+</Steps>
+
+## Reading the outcome
+
+Do not judge a lane by whether the send returned `200` — that only means accepted for routing. Check:
+
+- `cdr_submit` for a row, and `cdr_final` for an outcome
+- `cdr_rejected` for anything refused, with its reason
+- `/ops/health` for `submitted` moving on the vendor
+- The log for `message.accepted`, `message.submitted`, `message.dlr`
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Throughput" icon="gauge-high" href="/platform/operations/throughput">
+    A measured baseline to compare a load run against.
+  </Card>
+  <Card title="First checks" icon="magnifying-glass" href="/platform/troubleshooting/first-checks">
+    When a lane does not work.
+  </Card>
+</CardGroup>

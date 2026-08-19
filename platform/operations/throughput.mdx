@@ -1,0 +1,125 @@
+---
+title: "Throughput"
+description: "A measured baseline, the one line of configuration that cut loss by 92%, and the lever that looked obvious and did nothing."
+source: "fireflo-sms-gateway/docs/22-throughput-baseline.md, measured 2026-08-17 @ 0.7.3"
+---
+
+These are real numbers from a real run, not projections. Read the caveats before quoting any of them
+— the rig used a test SMSC, and the most useful finding is about that.
+
+## The baseline
+
+| Run | Messages | Result |
+| :--- | ---: | :--- |
+| Warm, window 100 × 1 tx | 2 000 | ~840 msg/s, router queue peak 4, **0 lost** |
+| Burst, window 500 × **4 tx** | 20 000 | vendor queue to 7 987, **2 528 lost (12.6%)** |
+| Burst, window 500 × **1 tx** | 20 000 | vendor queue to 8 042, **217 lost (1.1%)**, 752 msg/s |
+| Burst, `vendor1.tps = 300` | 20 000 | **0 lost, 0 `RMSGQFUL`, 1.00 submits/msg** |
+
+**The corrected burst is the one to compare future work against: 752 msg/s delivered, 98.9% success,
+26.3 s for 20 000 messages.**
+
+## The router was never the bottleneck
+
+`fireflo_router_queue` read **0** for the whole 20 000-message burst and peaked at 18 across every
+other run.
+
+Messages were being routed as fast as they arrived; they then piled up in the **vendor worker's**
+queue, which reached 7 987. Everything limiting throughput was downstream of the routing code.
+
+<Tip>
+This is the single most useful diagnostic shape to recognise. **Router queue flat while a vendor
+queue grows** means the gateway is fine and the vendor is the constraint — adding router threads or
+tuning routing changes nothing.
+</Tip>
+
+## The one line that cut loss by 92%
+
+The first burst lost 2 528 messages, every one `message.dropped reason=maxAttempts attempts=20
+limit=20`, with 151 985 submit attempts for 24 000 accepted messages — about six each.
+
+The vendor connection never dropped. **This was not connectivity.** The test SMSC stopped answering
+fast enough under burst, submits expired, the worker retried, and messages that used all 20 routing
+attempts were abandoned.
+
+Re-running at `transceivers = 1` — same messages, same window, same router threads:
+
+| | 4 transceivers | 1 transceiver |
+| :--- | ---: | ---: |
+| Delivered | 21 472 (87.4%) | **19 783 (98.9%)** |
+| Dropped at the ceiling | 2 528 | **217** |
+| Submit attempts per message | ~6.3 | **4.1** |
+| Peak vendor queue | 7 987 | 8 042 |
+
+The queue still reached 8 042 and the router still never backed up, so the *shape* of the run was
+identical. What changed is that a single session does not provoke whatever the test SMSC does when
+over-sessioned.
+
+<Warning>
+**The first burst measured the test SMSC's limits, not the gateway's.** It is kept in the record
+because the contrast is the most useful thing the exercise produced — and because "we lost 12% of a
+burst" is exactly the kind of number that gets quoted without its cause.
+</Warning>
+
+## The lever that looked obvious and did nothing
+
+An earlier version of the baseline said the fix for the residual 1.1% was to raise
+`outSms.routing.maxAttempts` and `outSms.routing.retryBackoffMillis`, reasoning that a message
+survives only about two seconds of a vendor not accepting.
+
+**That was measured and it is wrong.**
+
+| Configuration | Lost | Throughput |
+| :--- | ---: | ---: |
+| maxAttempts 20, backoff default | 217 (1.1%) | 752 msg/s |
+| **maxAttempts 60, backoff 500 ms** | 227 (1.1%) | 720 msg/s |
+
+No improvement, and marginally slower. More retries against a vendor that is not accepting is more
+load on the thing already refusing.
+
+**What did fix it was `vendor1.tps = 300`** — pacing the gateway to what the vendor could actually
+take. Zero lost, zero `ESME_RMSGQFUL`, and exactly 1.00 submits per message.
+
+<Tip>
+The general lesson: **when a vendor is the constraint, pace to it rather than pushing harder at it.**
+A submits-per-message ratio above 1 is the number that tells you which situation you are in.
+</Tip>
+
+## What to measure on your own deployment
+
+<Steps>
+  <Step title="Router queue against vendor queue">
+    Flat router, growing vendor queue = the vendor is the limit. Both growing = ingress is outrunning
+    routing.
+  </Step>
+  <Step title="Submits per message">
+    1.00 is healthy. Anything materially above it is retries, and retries are wasted vendor capacity.
+  </Step>
+  <Step title="ESME_RMSGQFUL count">
+    Non-zero means you are pushing harder than the far end accepts.
+  </Step>
+  <Step title="Loss at the attempt ceiling">
+    `message.dropped reason=maxAttempts` is the end state of all of the above.
+  </Step>
+</Steps>
+
+## Caveats
+
+- **A test SMSC is not a carrier.** Both burst runs were bounded by the simulator, not by FireFlo.
+- **Run-to-run spread was larger than the effect of the window setting.** Raising `windowSize`
+  100 → 500 and transceivers 1 → 4 produced 337 and 910 msg/s on two runs of *identical*
+  configuration, against 500 and 840 for the baseline. **This rig cannot resolve that effect** —
+  which is a statement about the measurement, not evidence that the window does not matter.
+- **`message.trace.mode = all` produced 226 MB of log** for one 20 000-message run. Useful for one
+  investigation, ruinous as a default.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Queues" icon="layer-group" href="/platform/operations/queues">
+    Telling a volume problem from a vendor problem.
+  </Card>
+  <Card title="Generating traffic" icon="flask" href="/platform/operations/generating-traffic">
+    Producing load to measure against.
+  </Card>
+</CardGroup>

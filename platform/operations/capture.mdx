@@ -1,0 +1,134 @@
+---
+title: "Capturing a session"
+description: "Answering 'what is this customer actually sending' for one session, on demand — with the two things the file will not tell you."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+Answering *what is this customer actually sending* used to mean setting `log.pdus` on a **whole
+worker**, which writes every session's decoded PDUs into a shared log the cleanup timer keeps for a
+fortnight.
+
+A capture does the same for **one session**, on demand, and takes the result away with it.
+
+```bash
+fireflo capture start smppserver.smpp 3 120
+fireflo capture status smppserver.smpp 3
+fireflo capture txt   smppserver.smpp 3 > session-3.txt
+fireflo capture pcap  smppserver.smpp 3 > session-3.pcap
+fireflo capture stop  smppserver.smpp 3
+```
+
+The same five actions are on the management interface, all behind `smsg.ops.admin.token`.
+
+## What it contains, and why that is the admin token
+
+**Everything, decoded: message bodies, destination numbers, TLVs.**
+
+That is the point — a capture that left content out could not answer the question people start one
+for. It is also why these need the **admin** token rather than the read token, and why the `.txt`
+says so in its own header.
+
+<Warning>
+**A vendor capture left running across a reconnect will contain your own password at that carrier.**
+
+On a listener, a session only exists after its bind, so a capture started now will not contain the
+customer's password unless they re-bind while it runs. On a **vendor** connection the worker
+reconnects on its own schedule, and the bind it sends carries *this gateway's* credentials.
+</Warning>
+
+## What it costs
+
+Nothing measurable, which is the rule the feature is built to.
+
+The tap is **one volatile field read per PDU** on sessions that are not being captured. On the
+captured session it does one bounded `offer` onto a hand-off queue and returns; a separate thread does
+all formatting and encoding, so nothing expensive runs on the Netty I/O thread.
+
+Measured on a loopback listener at ~32 000 TPS — roughly thirty times a busy real session — a capture
+under load stayed inside the run-to-run noise of the uncaptured baseline, with `dropped` at zero.
+
+<Tip>
+If the hand-off queue ever does fill, it **drops and counts** rather than blocking. `dropped` appears
+in the status, the `.txt` header and the panel — because a lossy capture that says so is a
+diagnostic, while one that quietly omits PDUs makes you conclude a customer never sent something they
+did.
+</Tip>
+
+## Bounds, and nothing touching disk
+
+| Bound | Default | Maximum |
+| :--- | ---: | ---: |
+| Duration | 60s | 300s |
+| PDUs | 20 000 | 200 000 |
+| Bytes | 8 MB | 32 MB |
+| Concurrent captures | 3 | 3 |
+| Kept after stopping | 15 minutes | — |
+
+Whichever cap is reached first stops the capture and **says which** — `stopped_because` carries a
+sentence like `reached the 8388608 byte limit`. A truncated file with no explanation is a wrong fact
+about the customer.
+
+Captures live **in memory only**. The service runs under `ProtectSystem=strict`, so a file would have
+to sit in the data directory as plaintext customer content; a bounded buffer that expires makes the
+retention story *"fifteen minutes, enforced"* rather than *"until somebody remembers"*. A fourth
+concurrent capture is refused with `409`.
+
+## The pcap framing is synthetic
+
+The `.pcap` opens in Wireshark and its SMPP dissector reads it — but **the IPv4 and TCP headers around
+each PDU are fabricated**.
+
+What is captured is decoded PDUs, re-encoded, not the bytes that were on the wire. Addresses and ports
+are the session's real ones; sequence numbers, windows and flags are constructed to make the stream
+reassemble.
+
+<Warning>
+**Do not read the `.pcap` as evidence about TCP behaviour.** Read it as evidence about SMPP.
+
+And one consequence of tapping decoded PDUs: **a PDU that fails to decode is never captured.** If a
+client sends a malformed submit, the decoder rejects it before the tap and the capture shows nothing
+where the traffic was. The gateway log carries the decoder error in that case.
+</Warning>
+
+## On a non-standard port, tell Wireshark it is SMPP
+
+Wireshark registers the SMPP dissector on TCP **2775**. A session on any other port — a vendor on
+2779, a second listener on 27778 — is dissected as plain TCP, and the SMPP filter then matches
+**nothing**.
+
+That looks exactly like a corrupt file, so rule it out first:
+
+```bash
+tshark -r capture.pcap -d tcp.port==2779,smpp -Y smpp
+```
+
+In the GUI: **Analyze → Decode As…**, adding the port with SMPP as the protocol. The port in the file
+is the session's real one, so `tcpdump -r capture.pcap -n | head -1` tells you which number to use.
+
+<Tip>
+**A quick way to tell a port problem from a real one:** `tcpdump -r capture.pcap -n | wc -l` counts
+the packets, and the `-Y smpp` row count should match exactly. Equal means every PDU dissected; zero
+means the dissector was never applied.
+
+Verified against TShark 3.6.2 on a 48-PDU vendor capture: 48 in, 48 dissected, `submit_sm` paired to
+`submit_sm_resp` by sequence number, bodies and destinations readable, no malformed packets.
+</Tip>
+
+## Vendor sessions
+
+Captures work the same on a vendor connection, which is why every session reports a `session_id` on
+both kinds.
+
+That id does **not** mean a vendor bind can be dropped — disconnect still answers `409` for a vendor
+worker, because the guard is the worker kind, not the presence of an id.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Tokens and access" icon="key" href="/platform/operations/tokens-and-access">
+    Why this needs the admin token and health does not.
+  </Card>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    Disable, suspend and hold.
+  </Card>
+</CardGroup>

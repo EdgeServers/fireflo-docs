@@ -1,0 +1,106 @@
+---
+title: "Tokens and access"
+description: "Two tokens with a deliberate split, why an unset one gives you 404 rather than 401, and the absent-versus-zero rule that runs through every field."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+The management port carries queue depths, vendor names, bind state and the controls that stop a
+vendor. It is guarded by **two** shared secrets:
+
+```properties
+smsg.ops.token       = <a long random string>
+smsg.ops.admin.token = <a different long random string>
+```
+
+## The split
+
+| Token | Opens |
+| :--- | :--- |
+| `smsg.ops.token` | `GET /ops/health`, `GET /ops/queues`, `/q/metrics` — **everything that only reads** |
+| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture and the six control verbs |
+
+That way a dashboard or monitoring system can hold the read token **without also being able to stop a
+vendor**.
+
+<Warning>
+**They must differ.** Setting both to the same value is treated as no separation at all — the controls
+switch off and the gateway logs why.
+
+Leaving the admin token unset does the same, which is the safe direction: you lose the controls rather
+than exposing them.
+</Warning>
+
+## An unset token answers 404, not 401
+
+Absent configuration **disables** the endpoint rather than leaving it open. A wrong token gets the
+same `404` rather than a `401`, so a caller cannot tell whether there is something here to find a
+token for.
+
+<Tip>
+**If your dashboard reports 404, check the token on both sides before assuming the gateway is down.**
+That confusion is the cost of not leaking the endpoint's existence, and it is worth knowing about
+before an incident rather than during one.
+</Tip>
+
+## It is deliberately not under `/secure`
+
+That prefix is authenticated with **messaging credentials, which belong to customers**. Queue depths,
+vendor names and bind state are gateway-wide, so publishing them there would hand every customer who
+can send an SMS a view of the whole gateway.
+
+The management port carries its own token instead — and a messaging credential does not open it.
+
+## Keep the port off the public network
+
+| Port | Serves |
+| ---: | :--- |
+| 8080 | `/secure/*`, `/ping` — what customers call |
+| 9000 | `/q/metrics` and `/ops/*` |
+
+Keep 9000 on an admin network and do not publish it. The token is a second line, not the first.
+
+## Absent is not zero
+
+This rule runs through every field on `/ops/health`, and reading it wrong produces confident wrong
+conclusions:
+
+| Field | Absent means | Zero would mean |
+| :--- | :--- | :--- |
+| `router_queue_capacity` | **No limit** — the default | No room left |
+| `queue_capacity` | Unbounded | Full |
+| `in_queue_depth` | Not a listener at all | A vendor with an empty inbound queue |
+| `submitted` | Counters are off for this connector | Sent nothing |
+| `tps_limit` | No ceiling configured | A ceiling of zero |
+| `tps_measured` | **Unmeasured** — including the first two windows after startup | Bound, counting, and moving nothing |
+
+<Warning>
+`tps_measured` is the one that catches people. **Zero is a real value** meaning a bound session that
+is sending nothing — which is a stall worth alerting on. Absent means the gateway has not measured
+yet, because one reading of a cumulative counter is a baseline and not yet a rate.
+
+An alert that treats absent as zero fires on every restart.
+</Warning>
+
+## `cdr.failed` is lost billing data
+
+A failed batch is **never retried** and those records are gone. It is not a transient.
+
+**Alert on any non-zero value.** This is revenue you cannot invoice, and nothing else will tell you.
+
+## A substring search is not an identity check
+
+`q=ACME` on the sessions endpoint also returns `ACMEINTL`.
+
+Anything acting on a result — disconnecting a login's binds, say — must compare `system_id`
+**exactly** rather than trusting the match.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="The management port" icon="server" href="/reference/management/endpoints">
+    Every endpoint and its token.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Reading the payload those tokens unlock.
+  </Card>
+</CardGroup>

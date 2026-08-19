@@ -1,0 +1,102 @@
+---
+title: "Controlling a worker"
+description: "Three pairs of verbs that apply immediately, what each does to traffic in flight, and the one that will eventually refuse new messages."
+source: "fireflo-sms-gateway/docs/08-monitoring-observability.md @ 0.7.3"
+---
+
+Stored configuration alone is **too slow to be a control**. The gateway notices a database change on
+its next poll, up to thirty seconds later — and toggling something off and back on inside that window
+nets to no difference at all, so the gateway never hears about it.
+
+These verbs apply immediately.
+
+```bash
+./scripts/fireflo disable vendor1
+./scripts/fireflo suspend vendor1
+```
+
+## The three pairs
+
+| Verb | What it does |
+| :--- | :--- |
+| `enable` / `disable` | Starts or stops the worker outright. **A disabled worker leaves `/ops/health` entirely.** |
+| `suspend` / `resume` | Stops accepting and **drains the queue back to the router**, so traffic reroutes to another vendor. The session stays bound. |
+| `hold` / `release` | Keeps accepting and **stops sending**, so the queue grows for as long as it is held. |
+
+## Choosing between them
+
+<AccordionGroup>
+
+<Accordion title="Suspend — a vendor is misbehaving and you have another">
+The right default for a vendor problem. Queued traffic goes back to the router and finds an
+alternative, and the session stays bound so you can test it without a fresh bind.
+
+Nothing is lost and nothing waits.
+</Accordion>
+
+<Accordion title="Hold — you want the traffic kept, not rerouted">
+For a planned window where the vendor will be back shortly and you would rather queue than pay a more
+expensive route.
+
+<Warning>
+**Watch `queue_depth` — and `queue_capacity`.** A held worker under a capacity limit will eventually
+make the gateway **refuse new traffic** rather than grow.
+
+That refusal reaches customers as `ESME_RMSGQFUL` or a `503`. Holding is not free; it converts a
+vendor problem into an ingress problem if you leave it long enough.
+</Warning>
+</Accordion>
+
+<Accordion title="Disable — take it out of service entirely">
+The worker leaves `/ops/health` completely, which is worth knowing before you go looking for it in a
+dashboard and conclude something has crashed.
+
+Use it when you want the worker gone rather than paused.
+</Accordion>
+
+</AccordionGroup>
+
+## These are runtime state, not configuration
+
+<Warning>
+**A disabled or suspended worker returns on restart** unless the stored configuration says otherwise.
+
+These verbs exist to act *now*; they do not edit the configuration. If you want the change to survive
+a restart, make it in the panel as well — and if you want it *only* until the restart, that is exactly
+what these give you.
+</Warning>
+
+## Testing a vendor before you trust it
+
+```bash
+fireflo test-bind vendor1
+```
+
+Dials once and reports the outcome, without waiting for the reconnect cycle.
+
+<Tip>
+**It is refused while the vendor is already bound**, deliberately. A second bind on the same
+`systemId` can cost you the live session, and many carriers allow only one.
+
+Use it before traffic depends on the vendor, or after suspending it — suspending keeps the session,
+so suspend then test is *not* the sequence that works. Disable, then test.
+</Tip>
+
+## Dropping one customer's bind
+
+A listener session can be disconnected by id. A **vendor** session cannot — that answers `409`,
+because the guard is the worker kind rather than the presence of a session id.
+
+Disabling a login also drops its live binds, which is the difference between "they cannot reconnect"
+and "they are gone now".
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Reading `queue_depth`, `bound_transmittable` and `last_error`.
+  </Card>
+  <Card title="Reloading configuration" icon="arrows-rotate" href="/platform/operations/reload">
+    The other way to change what the gateway is doing.
+  </Card>
+</CardGroup>
