@@ -1,0 +1,115 @@
+---
+title: "Primeira configuração, em ordem"
+description: "O que o bootstrap escreve, o que ele deliberadamente não escreve, e a ordem para adicionar o resto para que a primeira mensagem possa efetivamente sair."
+---
+
+Um banco migrado está vazio, e um vazio não inicia. Este é o caminho mais curto dali até uma mensagem
+saindo.
+
+## bootstrap
+
+```bash
+scripts/fireflo bootstrap [--port 27777]
+```
+
+Escreve o mínimo que um banco novo precisa:
+
+- uma tabela de roteamento `default`
+- uma tabela `MESSAGE` vazia para um fornecedor entrar
+- um listener na 27777
+- um login SMPP, cuja senha ele gera e **imprime uma vez**
+
+<Warning>
+A senha gerada é impressa **uma vez** e nunca mais. Capture-a antes de fechar o terminal.
+</Warning>
+
+### O que ele deliberadamente não escreve
+
+| Não escrito | Por quê |
+| :--- | :--- |
+| Um fornecedor | Precisa de host e credenciais que ninguém pode adivinhar |
+| Nenhuma tarifa | Um preço inventado cobra silenciosamente, enquanto um ausente aparece sem preço no call record |
+
+Ambas as ausências são nomeadas em sua saída final, então não são simplesmente omitidas em silêncio.
+
+<Note>
+`bootstrap` **recusa** no momento em que encontra uma tabela de roteamento, um worker ou um login,
+então não pode sobrescrever um deployment em execução. Não há flag que force isso.
+
+Para trazer uma configuração de arquivo existente, use
+[`import`](/platform/install/configuration-source).
+</Note>
+
+## Depois, nesta ordem
+
+A ordem importa: cada passo é o que torna o próximo significativo.
+
+<Steps>
+  <Step title="Um produto">
+    Uma tarifa nomeada sob a qual uma mensagem é precificada. Sem uma, o pricing não tem chave, e uma
+    regra de tarifa com escopo em produto nunca pode casar.
+  </Step>
+  <Step title="Uma tarifa para esse produto">
+    Ambos os lados: o que você paga a um fornecedor (**custo**) e o que uma conta paga a você
+    (**preço**). Uma mensagem que não case com nenhuma regra do lado de venda é registrada como
+    **UNKNOWN**, não grátis — entregue e cobrada de ninguém. Veja
+    [rates.conf](/reference/files/rates-conf).
+  </Step>
+  <Step title="Um fornecedor">
+    Host, porta, system id, senha, e as contagens de bind. Nada sai do prédio até um existir. Veja
+    [Vendors](/platform/connections/vendors).
+  </Step>
+  <Step title="Uma regra de roteamento que o nomeie">
+    `bootstrap` deixa `[MESSAGE]` vazio de propósito. Um catch-all enviando tudo para o seu único
+    fornecedor é o mínimo:
+    ```ini
+    [MESSAGE]
+    vendor1::default:
+    ```
+  </Step>
+  <Step title="Um login de cliente">
+    Um account id, um product, e ou um `systemId`/`password` SMPP ou um par HTTP. A **account** é a
+    chave de cobrança. Veja [credentials.yml](/reference/files/credentials-yml).
+  </Step>
+  <Step title="Crédito, se estiver aplicando">
+    Com `smsg.balance.enabled` ligado, uma conta sem linha de saldo não envia nada. O crédito entra
+    pelo banco como um lançamento — o painel escreve linhas `RECHARGE` e nunca a coluna de saldo
+    diretamente.
+  </Step>
+</Steps>
+
+## Verifique antes de acreditar
+
+```bash
+scripts/fireflo verify
+```
+
+<Note>
+**Exit 4** é a resposta esperada no meio desta lista: o deployment está sólido, seus próprios dados
+não — nada para onde rotear ainda. Vira 0 assim que um fornecedor e uma regra existem.
+</Note>
+
+Depois envie uma, como um cliente faria:
+
+```bash
+FIREFLO_SEND_LOGIN=... FIREFLO_SEND_PASSWORD=... \
+  scripts/fireflo send MyBrand 61400000000 "first message"
+```
+
+Um `200` significa aceito, cobrado e enfileirado — não entregue. Observe o call record para o
+resultado.
+
+## As duas coisas mais prováveis de estarem erradas
+
+<AccordionGroup>
+  <Accordion title="Aceitou a mensagem e não cobrou nada">
+    Nenhuma regra de tarifa do lado de venda casou. O call record mostra a mensagem sem tarifação.
+    Ou a conta não tem escopo de tarifa, ou toda regra em seu escopo carrega um produto que a
+    mensagem não tem — a uma mensagem sem produto só são mostradas regras sem produto.
+  </Accordion>
+  <Accordion title="Nada saiu do prédio">
+    Ou `[MESSAGE]` ainda está vazio, ou o catch-all está acima das suas regras específicas e elas
+    estão inalcançáveis, ou o fornecedor não está conectado. `scripts/fireflo health` distingue os
+    três.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,121 @@
+---
+title: "Tables de configuration"
+description: "Les tables depuis lesquelles la passerelle lit sa configuration, groupées par ce qu'elles contrôlent — et les quatre domaines qui basculent ensemble."
+---
+
+Avec `FIREFLO_CONFIG_SOURCE=db`, la passerelle lit **quatre domaines** depuis PostgreSQL au lieu de
+fichiers : propriétés, credentials, routage et tarifs.
+
+<Warning>
+**Les quatre basculent ensemble.** Il y a une clé, et elle couvre chaque domaine — les anciennes
+variables par domaine ont disparu et refusent maintenant le démarrage.
+
+`config_sources` sur `/ops/health` rapporte ce à quoi chaque domaine s'est effectivement résolu, ce
+qui est la chose à vérifier quand une édition du panneau semble ne rien faire.
+</Warning>
+
+## Comptes, logins et produits
+
+| Table | Contient |
+| :--- | :--- |
+| `app_account` | L'identité de facturation. `account_id` est la portée de tarification **et** la clé du crédit prépayé |
+| `app_credential` | Logins, typés `HTTP` ou `SMPP` — **non interchangeables** |
+| `app_product` | Produits, et si chacun applique le whitelisting |
+| `app_login_token` | Tokens à usage unique pour magic-link du portail client |
+
+<Warning>
+**Créer un credential ne crée pas une ligne `account_balance`.** Un `RECHARGE` pour un compte sans
+elle ne crédite rien et reste en attente.
+</Warning>
+
+## Argent
+
+| Table | Contient |
+| :--- | :--- |
+| `account_balance` | `balance`, `reserved`, `currency`, `billing_mode`, `credit_limit` |
+| `balance_ledger` | Chaque mouvement : `RECHARGE`, `TRANSFER`, `RESERVE`, `RELEASE`, `BILL` |
+| `app_rate`, `app_rate_rule`, `app_rate_rule_condition`, `app_rate_rule_filter` | Le tarif |
+
+`balance` a **exactement un écrivain** — le poll de recharge de la passerelle. Le panneau écrit des
+lignes de ledger et jamais la colonne balance.
+
+<Tip>
+Les types d'entrée se divisent en trois travaux : `RECHARGE`/`TRANSFER` font entrer de l'argent,
+`RESERVE`/`RELEASE` le déplacent entre deux colonnes de la même ligne et se nettent à zéro, et
+`BILL` est **inerte** — le poll ne le sélectionne jamais, donc les arriérés n'entrent jamais dans
+`balance`.
+</Tip>
+
+## Routage
+
+| Table | Contient |
+| :--- | :--- |
+| `app_route`, `app_route_table` | Tables et leurs règles |
+| `app_route_rule`, `_condition`, `_filter` | Une règle, ses conditions, ses filtres |
+| `app_route_group`, `app_route_group_member` | Groupes de fournisseurs et politique de sélection (V1.29.0) |
+| `app_filter`, `app_filter_condition` | La bibliothèque de filtres partagée |
+
+**Une règle référençant un filtre manquant ou désactivé est entièrement sautée** plutôt que chargée
+avec moins de conditions — retirer des conditions *élargirait* silencieusement la règle.
+
+## Approbations et TLVs
+
+| Table | Contient |
+| :--- | :--- |
+| `app_whitelist_policy` | Par compte et produit : off, report ou enforce |
+| `app_header` | IDs d'expéditeur approuvés, avec leurs TLVs |
+| `app_template` | Templates de contenu approuvés, avec leurs TLVs |
+| `app_tlv_definition` | Le catalogue de TLVs de l'opérateur |
+| `app_tlv_suggestion` | Tags proposés par les clients en attente d'approbation |
+
+`app_header` et `app_template` portent tous deux un statut d'approbation (V1.19.0) — **seules les
+lignes `APPROVED` sont chargées**. Une ligne en attente se comporte exactement comme si elle
+n'existait pas.
+
+## Workers et réglages
+
+| Table | Contient |
+| :--- | :--- |
+| `app_worker` | Fournisseurs et listeners |
+| `app_worker_property` | Leurs réglages par instance |
+| `app_config` | Propriétés `smsg.*` |
+
+La résolution à trois niveaux est `outSms.instance.<name>.<key>` → `outSms.default.<key>` → le
+défaut codé. **Tous les réglages ne peuvent pas être cantonnés à un seul listener** — un qui ne peut
+pas lit silencieusement un global que personne ne règle.
+
+## Audit
+
+| Table | Contient |
+| :--- | :--- |
+| `app_customer_access_log` | Accès au portail client (V1.20.0) |
+
+L'accès opérateur est journalisé dans un fichier du dossier data du panneau plutôt que dans cette
+table.
+
+## Les migrations sont forward-only
+
+Flyway, `V1.19.0__baseline.sql` et suivantes. **Il n'y a pas de down-migration** — le chemin de
+rollback est une restauration, donc prenez la sauvegarde avant d'appliquer, pas après.
+
+```bash
+fireflo db test        # cinq contrôles de connexion gradués
+fireflo verify         # la configuration a-t-elle du sens
+```
+
+<Tip>
+Basculer vers le mode `db` sur un schéma **vide** ne fait pas de repli vers les fichiers. Le
+chargeur publie l'ensemble vide — et pour les credentials cela signifie que chaque bind et chaque
+appel REST est refusé d'un seul coup. Lancez d'abord `fireflo import`.
+</Tip>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Tables d'enregistrements d'appel" icon="database" href="/reference/data/cdr-tables">
+    La moitié trafic et argent du schéma.
+  </Card>
+  <Card title="Configuration de la base" icon="sliders" href="/reference/config/database">
+    Connecter la passerelle, et l'interrupteur du mode db.
+  </Card>
+</CardGroup>

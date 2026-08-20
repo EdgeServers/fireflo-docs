@@ -1,0 +1,97 @@
+---
+title: "Migrer un déploiement"
+description: "Déplacer une plateforme plutôt qu'un client. Les deux changements de facturation qui altèrent les factures, et l'échelle de codage qui change silencieusement ce qui va sur le fil."
+---
+
+C'est le côté opérateur. Si vous êtes un client changeant votre intégration, lisez [Migrer depuis Jasmin](/developers/migrating/from-jasmin) à la place.
+
+## Depuis Jasmin
+
+L'API est assez proche pour que la plupart des clients changent une ligne. Votre travail est surtout de la configuration et une réconciliation.
+
+Les changements visibles pour le client sont sur leur page. Ce qui compte pour vous :
+
+<Warning>
+**Les messages sont maintenant facturés à l'`accountId` du login, pas à son nom de login.**
+
+Auparavant HTTP facturait au nom d'utilisateur alors que SMPP facturait à `accountId`. Donc un client apparaissait comme **deux identités** selon la façon dont il se connectait. `accountId` est à la fois la portée de tarification et la clé de crédit prépayé, donc les deux devaient être réconciliés avant que le crédit puisse fonctionner sur HTTP du tout.
+</Warning>
+
+**Vérifiez votre table de tarifs avant de basculer.** Si `rates.conf` a un `[scope]` nommé d'après un nom d'utilisateur HTTP, renommez-le en l'`accountId` de ce login. Sinon ces messages cessent de correspondre et deviennent **sans tarif**, ce qui signifie envoyés et facturés rien plutôt que refusés.
+
+## Depuis Kannel
+
+`GET /sendsms` a été **supprimé**. Il n'y a pas de couche de compatibilité.
+
+| Kannel | FireFlo |
+| :--- | :--- |
+| `GET /sendsms?…` | `POST /secure/send` avec un corps JSON |
+| `username`/`password` dans la query string | En-tête HTTP Basic |
+| `text` | `content` |
+| `validity` | `validity-period` |
+| `202 Accepted`, corps est l'id | `200 OK`, `data.messageId` |
+| `coding` : `0` 7-bit, `1` 8-bit, `2` UCS-2 | `coding` : **`data_coding` SMPP**. `0` GSM-7, `8` UCS-2 |
+
+```bash
+# avant
+curl -G http://localhost:8080/sendsms \
+  --data-urlencode username=acme --data-urlencode password=secret \
+  --data-urlencode from=FireFlo --data-urlencode to=61491570006 \
+  --data-urlencode text=Hello
+
+# après
+curl -u acme:secret -H 'Content-Type: application/json' \
+  -d '{"from":"FireFlo","to":"61491570006","content":"Hello"}' \
+  http://localhost:8080/secure/send
+```
+
+<Warning>
+**L'échelle `coding` a changé, et elle échoue silencieusement.** C'est maintenant le champ `data_coding` SMPP.
+
+Un client envoyant `coding=2` pour UCS-2 obtient maintenant un **alphabet d'octet non spécifié**. Rien n'erreur. Le message sort mal encodé. UCS-2 est `8`.
+
+Balayez les intégrations de vos clients pour `coding=2` avant la bascule, parce que ni un côté ni l'autre ne remarquera jusqu'à ce qu'un destinataire signale du mojibake.
+</Warning>
+
+**Les accusés de réception ont changé aussi.** FireFlo POSTe un corps JSON par défaut, donc un handler DLR Kannel s'attendant à `%d`/`%s` substitués dans un GET cesse de fonctionner. Réglez `smsg.dlr.forward.format = kannel` pour garder l'ancien comportement pendant que les clients migrent.
+
+## Le changement de facturation qui altère les factures
+
+**La facturation est d'une unité par requête REST**, quel que soit le nombre de segments que le corps occupe.
+
+<Warning>
+C'est **moins cher que le même message sur SMPP**, où chaque PDU entrant est facturé. Un client qui passe de SMPP à REST obtient une facture plus basse pour un trafic identique, et un qui passe dans l'autre sens en obtient une plus haute.
+
+Réglez `smsg.restapi.billing.units=segment` pour les tarifer pareil. Décidez ceci **avant** la bascule. Le changer après ressemble à une hausse de prix.
+</Warning>
+
+## Un ordre de bascule qui fonctionne
+
+<Steps>
+  <Step title="Réconcilier les portées de tarif à accountId">
+    Avant que quoi que ce soit ne bouge. Une portée non correspondante signifie du trafic sans tarif, ce qui est silencieux.
+  </Step>
+  <Step title="Décider l'unité de facturation REST">
+    Requête ou segment. C'est une décision de tarification, pas une technique.
+  </Step>
+  <Step title="Régler le format d'accusé attendu par les clients">
+    `kannel` s'ils ont des handlers Kannel, pour que leur côté continue de fonctionner pendant qu'ils migrent.
+  </Step>
+  <Step title="Lancer le whitelisting en report-only pour une période">
+    `whitelist_would_reject` vous dit ce que l'application refuserait avant qu'elle refuse quoi que ce soit.
+  </Step>
+  <Step title="Déplacer une petite part de trafic en premier">
+    Comparez les taux de livraison en sachant que FireFlo rapporte le **pire** segment d'un long message, donc ses chiffres sont légitimement inférieurs à un gateway rapportant le premier.
+  </Step>
+</Steps>
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Avis clients" icon="envelope" href="/platform/migrating/customer-notices">
+    Ce qu'il faut dire aux clients, et comment trouver qui est affecté.
+  </Card>
+  <Card title="Le côté du client" icon="code" href="/developers/migrating/from-jasmin">
+    Ce que leur intégration doit changer.
+  </Card>
+</CardGroup>

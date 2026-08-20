@@ -1,0 +1,119 @@
+---
+title: "Inspeccionar una cola"
+description: "La profundidad te dice que algo está atascado; un dump te dice qué. El único campo que separa un problema de volumen de un problema de proveedor, y por qué no hay flush."
+---
+
+`/ops/health` dice cuán profunda es cada cola. Eso es suficiente para saber que algo está atascado y **no suficiente
+para hacer algo al respecto**: 4 000 mensajes esperando en `vendor1` se leen idénticamente ya sea el lote
+mal disparado de un cliente o cada cuenta de la caja.
+
+```bash
+./scripts/fireflo queue dump
+./scripts/fireflo queue dump vendor1
+./scripts/fireflo queue dump vendor1 100
+```
+
+Un número solo se lee como un **límite** en lugar de un nombre de worker, así que `queue dump 100` amplía todo.
+El valor por defecto es 20 por cola, tope 500. Más allá la pregunta pertenece a `cdr_submit` en lugar de a
+un gateway en vivo.
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-09T02:14:07Z",
+    "limit_per_queue": 20,
+    "queues": [
+      {
+        "name": "router", "kind": "router", "depth": 1204, "ordered": true, "returned": 20,
+        "entries": [
+          {
+            "serial": "01JC8…", "account": "acct-in-2001", "product": "in-otp",
+            "from": "SUNOTP", "to": "919876543210",
+            "body_chars": 44, "encoding": "gsm7", "parts": 1,
+            "retries": 0, "priority": 2, "ingress": "http", "target": "in-sim",
+            "queued_at": "2026-08-09T02:14:05Z"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Los cuatro tipos
+
+| `kind` | Contiene |
+| :--- | :--- |
+| `router` | Aceptado, aún no enrutado. **Una cola para el gateway entero.** |
+| `pending` | Enrutado a un proveedor, esperando su sesión. Una por worker. |
+| `delayed` | Reintentos programados. `ready_in_ms` dice cuánto falta hasta que cada uno sea elegible. |
+| `broker` | Retenido en RabbitMQ. **Solo profundidad**. Ver abajo. |
+
+## `retries` es el campo que responde la pregunta
+
+<Tip>
+**Una cola llena de ceros es un problema de volumen.** Llegaron más de los que el proveedor puede tomar.
+
+**Una cola llena de reintentos distintos de cero es un problema de proveedor.** Los mismos mensajes siguen volviendo.
+
+Esos requieren respuestas opuestas. Añadir capacidad a una tormenta de reintentos la empeora; suspender un
+proveedor que meramente está ocupado mueve el backlog a algún sitio más caro.
+</Tip>
+
+**`depth` y `returned` son preguntas diferentes.** `depth` es la cola entera; `returned` es cuánto
+se listó. Compararlas es como distingues si estás viendo el problema o un rincón de él.
+
+## Sin texto de mensaje, y sin flag que lo añada
+
+`cdr_submit` excluye el body por principio. Destino y origen se guardan porque rating y
+disputas los necesitan, el texto no porque operar un gateway nunca lo necesita.
+
+Un queue dump hereda esa regla en lugar de convertirse en la única superficie de operador que entrega tráfico
+de cliente al por mayor.
+
+`body_chars` con `encoding` distingue un OTP de una parte de un blast atascado de seis partes, que es la pregunta
+diagnóstica que se está haciendo realmente.
+
+## Nada se consume y nada se reordena
+
+Cada cola se recorre con su propio iterador **mientras el gateway sigue drenándola**. Así que:
+
+- Un mensaje listado puede ya haber desaparecido cuando lo leas.
+- `depth` se muestrea después del recorrido y puede discrepar con `entries` por unos pocos.
+- `ordered` dice si la lista es el orden en el que el gateway enviará. **False** para una cola de
+  prioridad y para la cola de retraso.
+
+Ese es el trato honesto. La alternativa es detener el tráfico para poder mirarlo.
+
+## Una cola de broker se reporta pero nunca se recorre
+
+AMQP no tiene forma de mirar un mensaje encolado sin tomarlo. `basicGet` más un requeue
+reordenaría la cola y resetearía los contadores de entrega en los mensajes de clientes que pagan para satisfacer un diagnóstico.
+
+Así que la profundidad se reporta y el dump lo dice. **Un broker que no responde reporta la profundidad como
+desconocida en lugar de como cero**. Lo que importa, porque cero es una afirmación y desconocido no.
+
+## Deliberadamente no hay `queue flush`
+
+<Warning>
+Descartar una cola destruye mensajes que fueron **aceptados, facturados y prometidos a un cliente**.
+
+Para quitar tráfico de un proveedor atascado sin perderlo, usa `suspend`. Drena la cola de ese proveedor
+de vuelta al router para que el enrutamiento pueda elegir otro.
+</Warning>
+
+## Acceso
+
+El token de **lectura**, no el admin. Un dump no toma nada y no mueve nada, así que un sistema de monitorización
+que tenga el secreto de observación puede pedirlo.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Control de workers" icon="sliders" href="/platform/operations/worker-control">
+    Suspend, hold, y lo que cada uno hace a una cola.
+  </Card>
+  <Card title="Colas y reintentos" icon="rotate" href="/platform/routing/queues-and-retries">
+    De dónde vienen los reintentos en esa columna.
+  </Card>
+</CardGroup>

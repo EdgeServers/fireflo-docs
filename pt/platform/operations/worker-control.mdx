@@ -1,0 +1,102 @@
+---
+title: "Controlando um worker"
+description: "Três pares de verbos que se aplicam imediatamente, o que cada um faz com o tráfego em voo, e o que eventualmente recusará novas mensagens."
+---
+
+Configuração armazenada sozinha é **lenta demais para ser um controle**. O gateway percebe uma
+mudança de banco no próximo poll, até trinta segundos depois — e alternar algo desligado e ligado de
+volta dentro dessa janela dá em zero diferença, então o gateway nunca fica sabendo.
+
+Estes verbos se aplicam imediatamente.
+
+```bash
+./scripts/fireflo disable vendor1
+./scripts/fireflo suspend vendor1
+```
+
+## Os três pares
+
+| Verbo | O que faz |
+| :--- | :--- |
+| `enable` / `disable` | Inicia ou para o worker por completo. **Um worker desabilitado deixa `/ops/health` inteiramente.** |
+| `suspend` / `resume` | Para de aceitar e **drena a fila de volta ao router**, então o tráfego é reroteado para outro fornecedor. A sessão permanece conectada. |
+| `hold` / `release` | Continua aceitando e **para de enviar**, então a fila cresce enquanto estiver segurado. |
+
+## Escolhendo entre eles
+
+<AccordionGroup>
+
+<Accordion title="Suspend — um fornecedor está se comportando mal e você tem outro">
+O padrão certo para um problema de fornecedor. O tráfego enfileirado volta ao router e encontra uma
+alternativa, e a sessão permanece conectada para você poder testá-la sem um novo bind.
+
+Nada é perdido e nada espera.
+</Accordion>
+
+<Accordion title="Hold — você quer o tráfego mantido, não reroteado">
+Para uma janela planejada onde o fornecedor voltará em breve e você prefere enfileirar do que pagar
+uma rota mais cara.
+
+<Warning>
+**Observe `queue_depth` — e `queue_capacity`.** Um worker segurado com limite de capacidade
+eventualmente fará o gateway **recusar novo tráfego** em vez de crescer.
+
+Essa recusa chega aos clientes como `ESME_RMSGQFUL` ou um `503`. Segurar não é grátis; converte um
+problema de fornecedor em um problema de ingress se você deixar por tempo suficiente.
+</Warning>
+</Accordion>
+
+<Accordion title="Disable — tire de serviço inteiramente">
+O worker deixa `/ops/health` completamente, o que vale saber antes de você ir procurá-lo em um
+dashboard e concluir que algo travou.
+
+Use quando quiser o worker fora em vez de pausado.
+</Accordion>
+
+</AccordionGroup>
+
+## Estes são estado de runtime, não configuração
+
+<Warning>
+**Um worker desabilitado ou suspenso volta no restart** a menos que a configuração armazenada diga o
+contrário.
+
+Estes verbos existem para agir *agora*; eles não editam a configuração. Se você quer que a mudança
+sobreviva a um restart, faça também no painel — e se você quer *apenas* até o restart, é exatamente
+o que estes te dão.
+</Warning>
+
+## Testando um fornecedor antes de confiar nele
+
+```bash
+fireflo test-bind vendor1
+```
+
+Disca uma vez e reporta o resultado, sem esperar o ciclo de reconexão.
+
+<Tip>
+**É recusado enquanto o fornecedor já está conectado**, deliberadamente. Um segundo bind no mesmo
+`systemId` pode te custar a sessão ativa, e muitas operadoras permitem apenas um.
+
+Use antes que o tráfego dependa do fornecedor, ou depois de suspendê-lo — suspender mantém a sessão,
+então suspend depois test *não* é a sequência que funciona. Disable, depois test.
+</Tip>
+
+## Derrubando o bind de um cliente
+
+Uma sessão de listener pode ser desconectada por id. Uma sessão de **fornecedor** não pode — isso
+responde `409`, porque a guarda é o tipo de worker em vez da presença de um id de sessão.
+
+Desabilitar um login também derruba seus binds ativos, que é a diferença entre "eles não podem
+reconectar" e "eles se foram agora".
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Lendo `queue_depth`, `bound_transmittable` e `last_error`.
+  </Card>
+  <Card title="Reloading configuration" icon="arrows-rotate" href="/platform/operations/reload">
+    A outra forma de mudar o que o gateway está fazendo.
+  </Card>
+</CardGroup>

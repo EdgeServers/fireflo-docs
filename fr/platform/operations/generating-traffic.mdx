@@ -1,0 +1,98 @@
+---
+title: "Générer du trafic"
+description: "Piloter chacune des quatre directions individuellement. Et les deux erreurs d'ordre de routage qui ont déjà mordu un déploiement réel."
+---
+
+Un message peut traverser le gateway **de quatre façons**. Ce sont vraiment des chemins de code différents et ils échouent différemment, donc pouvoir piloter chacun seul est ce qui transforme « quelque chose ne va pas » en une bissection.
+
+| # | Direction | Exerce |
+| :-- | :--- | :--- |
+| 1 | **MT out**, le client soumet sur SMPP, le gateway envoie à un vendeur | Auth de bind, whitelist, tarification, crédit, routage, fenêtre vendeur |
+| 2 | **MT in sur HTTP**, le client soumet sur REST | L'ingress REST, puis tout ce qui est en aval de la ligne 1 |
+| 3 | **DLR back**, l'accusé du vendeur atteint la session bindée du client | Parsing d'accusé, corrélation d'id, le stockage DLR |
+| 4 | **MO in**, un abonné texte votre shortcode et cela atteint le client | Décodage entrant, propriété MO, livraison à une session bindée |
+
+## Mettre en place une voie
+
+```bash
+psql "$CONFIG_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/seed-traffic-lane.sql
+./scripts/fireflo reload
+./scripts/fireflo show routing
+```
+
+Cela crée un compte avec du crédit, un produit avec whitelisting désactivé, un login SMPP et un login HTTP, un tarif plat, et les règles de routage dont les quatre directions ont besoin. C'est **idempotent**, et un script de démantèlement correspondant retire exactement ce qu'il a ajouté.
+
+<Warning>
+**Changez les deux mots de passe** avant de pointer quoi que ce soit dessus qui ne soit pas votre propre machine.
+</Warning>
+
+## Lisez l'ordre de correspondance avant d'envoyer quoi que ce soit
+
+```
+seq  target   rule
+ 10  smpp     type == 18                       ← accusés vers le client
+ 20  smpp     ingateway startsWith smppclient. ← MO entrants vers le client
+ 31  vendor1  to matches ^91[6-9][0-9]{9}$
+ 90  vendor1  (no conditions)                  ← tout le reste
+```
+
+Le routeur prend la **première** règle qui correspond, et la dernière règle correspond à tout. Deux choses en découlent, et **les deux ont déjà mordu un déploiement réel** :
+
+<AccordionGroup>
+
+<Accordion title="Les règles sélectionnant sur la classe de message doivent être au-dessus des règles sélectionnant sur la destination">
+Un accusé de livraison pour un message dont l'expéditeur était une adresse indienne numérique arrive avec ce numéro dans `to`, une fois que `flag.reverseDlrSrcDst` a échangé source et destination.
+
+Placé **sous** une règle `to matches ^91…`, cet accusé va à un **vendeur** au lieu du client.
+
+C'est pourquoi le seed déplace les règles de destination vers le bas plutôt que de simplement insérer une règle de classe au-dessus du catch-all.
+</Accordion>
+
+<Accordion title="Un gateway sans règle `type == 18` avale chaque accusé de livraison">
+Il tombe sur le catch-all, atteint le worker vendeur, et est **soumis en amont comme un nouveau message sortant.**
+
+`conf/routingTable.conf` a toujours porté cette règle. La base non. Et en mode base la base gagne.
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Les deux échecs sont silencieux du côté du client : dans le premier l'accusé n'arrive simplement jamais, dans le second il arrive chez un opérateur comme du trafic que vous payez. Ni l'un ni l'autre ne produit une erreur quelque part.
+</Tip>
+
+## Ce que chaque direction prouve
+
+<Steps>
+  <Step title="Direction 1 d'abord, MT out sur SMPP">
+    Si celle-ci échoue, rien d'autre ne fonctionnera. Elle couvre le chemin le plus long.
+  </Step>
+  <Step title="Direction 2, l'ingress REST">
+    Échouer ici pendant que 1 fonctionne isole le problème à l'ingress HTTP : auth, parsing, limites de débit.
+  </Step>
+  <Step title="Direction 3, accusés retour">
+    Celle le plus souvent cassée par l'ordre de routage plutôt que par le chemin d'accusé lui-même.
+  </Step>
+  <Step title="Direction 4, MO in">
+    Nécessite le numéro de destination mappé à un compte. Un message non mappé est enregistré et livré nulle part, sans rien d'observable du côté du client.
+  </Step>
+</Steps>
+
+## Lire le résultat
+
+Ne jugez pas une voie par le fait que l'envoi a renvoyé `200`. Cela signifie seulement accepté pour routage. Vérifiez :
+
+- `cdr_submit` pour une ligne, et `cdr_final` pour un résultat
+- `cdr_rejected` pour tout refus, avec sa raison
+- `/ops/health` pour `submitted` qui bouge sur le vendeur
+- Le log pour `message.accepted`, `message.submitted`, `message.dlr`
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Débit" icon="gauge-high" href="/platform/operations/throughput">
+    Une baseline mesurée pour comparer un run de charge contre.
+  </Card>
+  <Card title="Premiers contrôles" icon="magnifying-glass" href="/platform/troubleshooting/first-checks">
+    Quand une voie ne fonctionne pas.
+  </Card>
+</CardGroup>

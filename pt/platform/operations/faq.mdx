@@ -1,0 +1,109 @@
+---
+title: "FAQ de operações"
+description: "Dashboards que não mostram nada, mudanças que não se aplicam, e os números que parecem problemas mas não são."
+---
+
+<AccordionGroup>
+
+<Accordion title="Meu dashboard recebe 404 de /ops/health">
+Cheque o token dos dois lados **antes** de assumir que o gateway está fora.
+
+Um `smsg.ops.token` não definido desabilita o endpoint e responde `404`. Um token **errado** recebe o
+mesmo `404` em vez de um `401`, deliberadamente — para que um chamador não possa dizer se há algo
+aqui para o qual valha a pena descobrir um token.
+</Accordion>
+
+<Accordion title="Prometheus parou de coletar depois de uma atualização">
+Habilitar a porta de gerenciamento **move** `/q/metrics` da 8080 para a 9000. Um job ainda apontando
+para a 8080 recebe `404`s em vez de falhar ruidosamente, então o dashboard aparece como um sistema
+quieto em vez de um monitor quebrado.
+
+Mude o target de scrape ao mesmo tempo da atualização.
+</Accordion>
+
+<Accordion title="Alterei uma configuração no painel e nada aconteceu">
+Cheque `config_sources` em `/ops/health`. Ele reporta, por domínio, se properties, credentials,
+routing e rates vêm de `database` ou de `file`.
+
+**Uma alteração no painel não faz nada se o gateway está lendo um arquivo para aquele domínio.** O
+sintoma manda as pessoas olharem para a edição em vez da fonte.
+
+Se a fonte está certa, o poll está até trinta segundos atrasado — `./scripts/fireflo reload` aplica
+agora.
+</Accordion>
+
+<Accordion title="Corrigi o saldo de uma conta e ela continuou enviando">
+O crédito é reservado em **blocos** e gasto da memória. Uma correção não entra em vigor até que o
+bloco já entregue seja consumido — uma conta configurada como zero continua enviando.
+
+`./scripts/fireflo credit release <account>` devolve o restante não gasto para que a próxima mensagem
+reserve contra a cifra corrigida. Não tira nada.
+</Accordion>
+
+<Accordion title="Um worker desapareceu do /ops/health">
+Ele foi desabilitado. `disable` remove um worker da saúde inteiramente, o que parece um crash se você
+não fez isso.
+
+`suspend` é o que mantém o worker visível enquanto tira tráfego dele.
+</Accordion>
+
+<Accordion title="Contar o array sessions dá o número errado">
+**No máximo 20 sessões por worker aparecem em `/ops/health`**, seja o que for que `sessions_total`
+diga — health é consultado constantemente e um listener com quinhentos binds estava enviando
+quinhentas linhas a cada vez.
+
+Use `bound`, ou `sessions_total`. Para ver o conjunto inteiro, pagine o endpoint de sessões.
+</Accordion>
+
+<Accordion title="tps_measured está ausente em vez de zero">
+Ausente significa **não medido**; zero significa conectado, contando e não movendo nada — que é um
+stall.
+
+Ela está ausente para as duas primeiras janelas depois do startup, porque uma leitura de um contador
+cumulativo é um baseline e ainda não uma taxa. Um alerta tratando ausente como zero dispara a cada
+restart.
+</Accordion>
+
+<Accordion title="Uma fila crescendo é sempre um problema?">
+Não. **Fila do router estável enquanto uma fila de fornecedor cresce** significa que o roteamento
+está acompanhando e o fornecedor é a restrição — isso é uma questão de pacing, não do gateway.
+
+Ambas crescendo significa que o ingress está passando o roteamento. Uma fila cheia de `retries`
+não-zero significa que as mesmas mensagens continuam voltando, o que é um problema de fornecedor e
+piora se você adicionar capacidade.
+</Accordion>
+
+<Accordion title="Devo aumentar maxAttempts quando mensagens estão sendo perdidas?">
+Provavelmente não — foi medido e não ajuda. Aumentar `maxAttempts` 20 → 60 com 500 ms de backoff
+mudou a perda de 217 para 227 mensagens e piorou levemente o throughput.
+
+**Pace para o fornecedor em vez disso.** Definir o `tps` daquele fornecedor para o que ele realmente
+aguenta levou a mesma execução para zero perdidas, zero `ESME_RMSGQFUL`, e exatamente 1.00 submits
+por mensagem.
+</Accordion>
+
+<Accordion title="Posso limpar uma fila travada?">
+Deliberadamente não existe `queue flush`. Descartar uma fila destrói mensagens que foram aceitas,
+cobradas e prometidas a um cliente.
+
+Use `suspend` — ele drena a fila daquele fornecedor de volta para o router para que o roteamento
+possa escolher outro fornecedor.
+</Accordion>
+
+<Accordion title="Delivery receipts estão sendo enviados a uma operadora como novas mensagens">
+Falta uma regra de roteamento `type == 18`. Receipts caem no catch-all, chegam a um worker de
+fornecedor, e são submetidos upstream como novo tráfego de saída — pelo qual você paga.
+
+`conf/routingTable.conf` sempre carregou essa regra; o banco não, e **em modo de banco o banco
+vence.**
+</Accordion>
+
+<Accordion title="Quanto logging é seguro deixar ligado?">
+`message.trace.mode = all` produziu **226 MB de log para uma execução de 20 000 mensagens**.
+Excelente para uma investigação, ruinoso como padrão.
+
+O mesmo se aplica a `log.pdus` — e ele contém senhas de bind e corpos de mensagem. Use uma capture de
+sessão em vez disso: limitada, em memória, e expirando em quinze minutos.
+</Accordion>
+
+</AccordionGroup>

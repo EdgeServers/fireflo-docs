@@ -1,0 +1,76 @@
+---
+title: "Whitelisting"
+description: "A chave mestra, o opt-out por listener, os três modos de stamping de TLV, e os checks de tag obrigatória em cada entrada."
+---
+
+Quais sender IDs e corpos de mensagem uma conta pode usar, e o que é carimbado nos que casam.
+
+| Propriedade | Escopo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `smsg.whitelist.enabled` | global | `false` | A chave mestra. Off significa que nada é carregado e nada é checado, independentemente do que qualquer listener ou conta diga. |
+| `smsg.whitelist.max.variable` | global | `30` | Quantos caracteres um placeholder de template pode representar. |
+| `conf.whitelist.enabled` | por listener | `true` | Se **este** listener checa. |
+| `whitelist.tlvs.mode` | por listener | *(não definido → o booleano legado)* | `off`, `assign` ou `replace`. |
+| `whitelist.tlvs.replace` | por listener | `false` | O booleano aposentado, ainda lido quando `whitelist.tlvs.mode` está não definido. |
+| `smsg.restapi.whitelist.tlvs.mode` | global | `replace` | O gêmeo REST. |
+| `mandatory.tlvs.submit` | por listener | *(vazio)* | Tags que uma mensagem precisa carregar depois de defaults da credencial e de qualquer stamp. |
+| `smsg.restapi.mandatory.tlvs.submit` | global | *(vazio)* | O mesmo, para a entrada REST. |
+| `mandatory.tlvs.submit` | por **fornecedor** | *(vazio)* | Tags sem as quais este fornecedor não aceita uma mensagem. |
+
+## `conf.whitelist.enabled` é padrão **on**
+
+Então a chave mestra é a que decide. Um listener precisa dar opt-*out*.
+
+## `smsg.whitelist.max.variable` amplia todo template de uma vez
+
+<Warning>
+Subir isto amplia todo template aprovado no deployment simultaneamente. É o maior false-accept que
+este design tem, então é logado em INFO e reportado como `max_variable` em `/ops/health`.
+</Warning>
+
+Global e não por listener porque templates são compilados uma vez no load em um índice por conta. Um
+valor fora de 1–1000 cai de volta para o padrão com WARN.
+
+## Os três modos de stamping
+
+| Modo | O que faz |
+| :--- | :--- |
+| `off` | Nada é carimbado. |
+| `assign` | Preenche uma tag **somente quando a mensagem ainda não a carrega**. |
+| `replace` | Sobrescreve o que o cliente enviou — e essa sobrescrita **é** a aprovação. |
+
+<Note>
+**`off` é o padrão de propósito.** Se `assign` fosse o padrão, começaria a escrever TLVs em pacotes
+cruzando listeners que nunca escreveram nenhum. Uma mudança silenciosa no que chega a uma carrier.
+
+O relatório de cobertura do painel de controle é o que torna `off` descobrível em vez de simplesmente
+quieto: ele diz, por linha aprovada, quais tags obrigatórias nada vai fornecer.
+</Note>
+
+O gêmeo REST tem padrão `replace` porque é o que a entrada REST fazia antes de o modo existir e um
+upgrade não pode mudar comportamento.
+
+## O check do lado de fornecedor é diferente
+
+O check por listener roda na entrada. O check por **fornecedor** roda contra o que de fato vai para o
+fio, depois de `default.tlvs.submit` e depois de `registered.tlvs.submit` ter filtrado.
+
+Uma mensagem faltando uma tag obrigatória lá é recusada com um receipt FAILED, um refund e uma linha
+`cdr_rejected`. **Não é re-roteada.** Exigir uma tag que não está também em
+`registered.tlvs.submit` nunca pode ser satisfeito, e é avisado no load.
+
+## Isenções por produto vivem no banco
+
+`app_product.whitelist_enabled = false` isenta aquele produto completamente. O painel conta isso
+quando decide se enforcement é seguro. Uma aprovação registrada sob um produto isento não protege
+nada.
+
+<Warning>
+Toda chave acima é de fato lida por listener. Uma chave omitida fica na forma nua e lê um global que
+ninguém define, então lê seu padrão independentemente de como você configure.
+`whitelist.tlvs.replace` foi assim uma vez e não carimbou nada por SMPP enquanto durou.
+</Warning>
+
+Código de recusa para uma tag obrigatória ausente é `0xC3`. Veja [Códigos de
+status](/reference/smpp/status-codes). Para o caminho de rollout, veja [Fazendo rollout de
+whitelisting](/platform/customers/whitelisting-rollout).

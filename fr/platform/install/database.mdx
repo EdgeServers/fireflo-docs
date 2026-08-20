@@ -1,0 +1,91 @@
+---
+title: "La base de données"
+description: "Ce que PostgreSQL vous apporte, appliquer le schéma, et pourquoi db migrate seul laisse un gateway qui ne démarre pas."
+---
+
+PostgreSQL est **optionnel**. Laissez `FIREFLO_DB_URL` non défini et FireFlo tourne sur fichiers, avec les enregistrements d'appels écrits dans `data/cdr/`.
+
+## Ce que ça apporte
+
+| Fonctionnalité | Nécessite une base |
+| :--- | :--- |
+| Tarification, routage au moindre coût, enregistrements d'appels | Non |
+| Le **balayage d'expiration** CDR | **Oui**, il interroge des enregistrements sans résultat |
+| **Crédit prépayé** | **Oui**, le crédit ne peut entrer que par la base |
+| Whitelisting | **Oui** |
+| Le control panel éditant quoi que ce soit | **Oui**, en mode fichier il n'y a rien à éditer |
+
+La moitié en lecture seule du panel fonctionne sans ; elle n'a juste rien à changer.
+
+## La créer
+
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+
+## Appliquer le schéma
+
+`FIREFLO_DB_MIGRATE=true` migre au démarrage, ce qui est pratique pour une première exécution et faux pour une mise à niveau. Cela lie un changement de schéma à un démarrage de processus et ne vous laisse aucun moyen de voir ce qui serait appliqué d'abord.
+
+```bash
+scripts/fireflo db test        # joignable, authentifiée, migrée, autorisée, répondante
+scripts/fireflo db info        # ce qui est appliqué, ce qui est en attente
+scripts/fireflo db validate    # les migrations appliquées correspondent-elles toujours aux fichiers
+scripts/fireflo db migrate     # applique ce qui est en attente
+```
+
+`info` et `validate` n'ont **pas** besoin du drapeau d'activation d'écriture. Lire la version du schéma ne change rien, et avoir besoin d'un drapeau avant de pouvoir regarder serait un piège en pleine incident.
+
+<Warning>
+**Les migrations sont uniquement en avant.** Il n'y a pas de scripts d'annulation, donc revenir sur un changement de schéma signifie restaurer une sauvegarde. Prenez-en une avant de migrer une base à laquelle vous tenez.
+</Warning>
+
+## `db migrate` seul ne suffit pas
+
+C'est celui qui piège les gens, et l'échec est bruyant plutôt que gracieux.
+
+`db migrate` crée les tables et laisse **chacune vide**. Sans table de routage le gateway ne démarre pas du tout :
+
+```
+no default routing table in new targets!
+```
+
+Cela nomme une structure interne plutôt que la ligne manquante, donc ça ressemble à un bug. Ça ne l'est pas. Ça signifie que la base est vide.
+
+[`fireflo bootstrap`](/platform/install/first-configuration) écrit le minimum pour démarrer.
+
+## La baseline consolidée
+
+Le schéma est un fichier, `V1.19.0__baseline.sql`, **généré plutôt que fusionné à la main**. Les originaux ont été appliqués à une base brouillon, exportés avec `pg_dump --schema-only`, et l'export vérifié en l'appliquant à une seconde base et en comparant les deux. Les changements ultérieurs continuent à `V1.20.0`.
+
+Il est numéroté à la version la **plus haute** qu'il remplace, pas la plus basse, délibérément. Un déploiement arrêté en cours de route traiterait une baseline avec un numéro plus bas comme déjà appliquée et migrerait à un no-op, manquant silencieusement tout ce qui venait après. À `1.19.0` il essaie plutôt d'appliquer et échoue sur la première table qui existe déjà. Récupérable, là où la version silencieuse corrompt par omission.
+
+### Mettre à niveau un déploiement qui a appliqué les originaux
+
+L'historique de Flyway les nomme toujours tous, donc `db validate` échoue jusqu'à ce que l'enregistrement soit réaligné : un checksum changé, le reste non plus résoluble. Une commande le corrige, et elle réécrit l'**historique** plutôt que le schéma :
+
+```bash
+FIREFLO_DB_MIGRATE=true scripts/fireflo db repair
+```
+
+<Warning>
+**Terminez d'appliquer toute migration en attente avant de lancer `repair`.** Une réparation sur une base partiellement migrée la fait paraître complète alors qu'elle ne l'est pas.
+</Warning>
+
+## Mettre à niveau, dans l'ordre
+
+<Steps>
+  <Step title="Arrêter le gateway" />
+  <Step title="Regarder, puis appliquer">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+  </Step>
+  <Step title="Démarrer la nouvelle version" />
+</Steps>
+
+La commande tourne contre la disposition `lib/` de l'artefact JVM, donc un déploiement natif migre depuis l'image JVM ou n'importe quel hôte avec un JDK.
+
+Les clés et tables sont dans [Configuration de la base](/reference/config/database).

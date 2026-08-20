@@ -1,0 +1,103 @@
+---
+title: "FAQ de operaciones"
+description: "Dashboards que no muestran nada, cambios que no se aplican, y los números que parecen problemas pero no lo son."
+---
+
+<AccordionGroup>
+
+<Accordion title="Mi dashboard obtiene 404 de /ops/health">
+Comprueba el token en ambos lados **antes** de asumir que el gateway está caído.
+
+Un `smsg.ops.token` sin establecer deshabilita el endpoint y responde `404`. Un token **equivocado** obtiene el mismo
+`404` en lugar de un `401`, deliberadamente. Para que un llamador no pueda saber si hay algo aquí para
+lo que valga la pena encontrar un token.
+</Accordion>
+
+<Accordion title="Prometheus dejó de recolectar después de una actualización">
+Habilitar el puerto de gestión **mueve** `/q/metrics` de 8080 a 9000. Un job que aún apunta a 8080
+obtiene `404` en lugar de fallar sonoramente, así que el dashboard se lee como un sistema tranquilo en lugar de un monitor
+roto.
+
+Cambia el destino de scrape al mismo tiempo que la actualización.
+</Accordion>
+
+<Accordion title="Cambié un ajuste en el panel y no pasó nada">
+Comprueba `config_sources` en `/ops/health`. Reporta, por dominio, si propiedades, credenciales,
+enrutamiento y tarifas vienen de `database` o `file`.
+
+**Un cambio en el panel no hace nada si el gateway está leyendo un archivo para ese dominio.** El síntoma manda
+a la gente a mirar la edición en lugar de la fuente.
+
+Si la fuente es correcta, el sondeo va hasta treinta segundos por detrás. `./scripts/fireflo reload` lo aplica
+ahora.
+</Accordion>
+
+<Accordion title="Corregí el saldo de una cuenta y siguió enviando">
+El crédito se reserva en **bloques** y se gasta desde memoria. Una corrección no tiene efecto hasta que el
+bloque ya entregado se agote. Una cuenta puesta a cero sigue enviando.
+
+`./scripts/fireflo credit release <account>` devuelve el resto no gastado para que el siguiente mensaje
+reserve contra la cifra corregida. No quita nada.
+</Accordion>
+
+<Accordion title="Un worker desapareció de /ops/health">
+Fue deshabilitado. `disable` elimina un worker de health por completo, lo que parece un crash si no
+lo hiciste tú.
+
+`suspend` es el que mantiene visible el worker mientras le quita tráfico.
+</Accordion>
+
+<Accordion title="Contar el array sessions da el número equivocado">
+**Como máximo 20 sesiones por worker aparecen en `/ops/health`**, diga lo que diga `sessions_total`. Health
+se sondea constantemente y un listener con quinientos binds enviaba quinientas filas cada vez.
+
+Usa `bound`, o `sessions_total`. Para ver el conjunto entero, pagina el endpoint de sesiones.
+</Accordion>
+
+<Accordion title="tps_measured falta en lugar de ser cero">
+Ausente significa **no medido**; cero significa conectado, contando y sin mover nada. Que es un estancamiento.
+
+Está ausente durante las primeras dos ventanas tras el arranque, porque una lectura de un contador acumulativo es
+una línea base y aún no una tasa. Una alerta que trata ausente como cero se dispara en cada reinicio.
+</Accordion>
+
+<Accordion title="¿Una cola creciendo es siempre un problema?">
+No. **Cola del router plana mientras la cola de un proveedor crece** significa que el enrutamiento va al día y el proveedor es
+la restricción. Es una cuestión de pacing, no del gateway.
+
+Ambas creciendo significa que el ingreso está superando al enrutamiento. Una cola llena de **`retries` distintos de cero** significa
+que los mismos mensajes siguen volviendo, que es un problema del proveedor y empeora si añades capacidad.
+</Accordion>
+
+<Accordion title="¿Debería subir maxAttempts cuando los mensajes se caen?">
+Probablemente no. Se midió y no ayuda. Subir `maxAttempts` 20 → 60 con un backoff de 500 ms
+cambió la pérdida de 217 a 227 mensajes e hizo el throughput ligeramente peor.
+
+**Marca el paso al proveedor en su lugar.** Establecer el `tps` de ese proveedor a lo que puede realmente tomar llevó la misma
+ejecución a cero perdidos, cero `ESME_RMSGQFUL`, y exactamente 1.00 submits por mensaje.
+</Accordion>
+
+<Accordion title="¿Puedo vaciar una cola atascada?">
+Deliberadamente no hay `queue flush`. Descartar una cola destruye mensajes que fueron aceptados,
+facturados y prometidos a un cliente.
+
+Usa `suspend`. Drena la cola de ese proveedor de vuelta al router para que el enrutamiento pueda elegir otro proveedor.
+</Accordion>
+
+<Accordion title="Los recibos de entrega se están enviando a un operador como mensajes nuevos">
+Falta una regla de enrutamiento `type == 18`. Los recibos caen al catch-all, llegan a un worker de proveedor, y se
+envían aguas arriba como tráfico saliente nuevo. Por el que pagas.
+
+`conf/routingTable.conf` siempre ha llevado esta regla; la base de datos no, y **en modo base de datos
+gana la base de datos.**
+</Accordion>
+
+<Accordion title="¿Cuánto logging es seguro dejar activado?">
+`message.trace.mode = all` produjo **226 MB de log para una ejecución de 20 000 mensajes**. Excelente para una
+investigación, ruinoso como valor por defecto.
+
+Lo mismo aplica a `log.pdus`, y contiene contraseñas de bind y cuerpos de mensajes. Usa una captura
+de sesión en su lugar: acotada, en memoria, y que expira en quince minutos.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,110 @@
+---
+title: "Primeras comprobaciones"
+description: "Las cuatro preguntas que separan un problema de enrutamiento de las tres cosas que no son enrutamiento. Preguntadas en el orden que descarta más y más rápido."
+---
+
+La mayoría de incidentes en FireFlo se presentan de la misma forma: **mensajes aceptados y nada llegó**. Ese
+síntoma tiene al menos seis causas distintas, y solo una es de enrutamiento.
+
+Trabaja por esta página en orden. Cada paso descarta más de lo que cuesta.
+
+## 1. Pregunta a la base de datos, no al log
+
+Tres de las cuatro causas probables no son enrutamiento en absoluto, y la base de datos lo dice en una consulta.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+| `reason` | Qué significa | Dónde ir |
+| :--- | :--- | :--- |
+| `maxAttempts` | **El único valor que significa enrutamiento.** | [Nada se entrega](/platform/troubleshooting/nothing-is-delivered) |
+| `headerNotApproved` | El sender ID no estaba aprobado | [Rechazos](/platform/troubleshooting/refusals) |
+| `templateNotMatched` | El cuerpo no coincidió con ninguna plantilla aprobada | [Rechazos](/platform/troubleshooting/refusals) |
+| `missingMandatoryTlv` | Un tag requerido no resolvió a nada | [TLVs en la práctica](/platform/connections/tlvs) |
+| `insufficientCredit` | El saldo prepago no lo cubriría | [Crédito prepago](/platform/billing/prepaid-credit) |
+| `filtered` | Un filtro lo rechazó | [Rechazos](/platform/troubleshooting/refusals) |
+
+<Warning>
+**Ninguna cantidad de edición de tabla de rutas cambiará una fila que no sea `maxAttempts`.** Esos mensajes
+fueron rechazados *antes* de llegar al enrutamiento. Esta es la tarde perdida más común en
+las operaciones de FireFlo.
+</Warning>
+
+## 2. ¿Hay algún proveedor conectado?
+
+Un catch-all perfecto apuntando a un proveedor que no está conectado no entrega nada, y parece un
+bug de enrutamiento desde todos los ángulos.
+
+```bash
+fireflo verify
+```
+
+Responde en palabras: *"N vendor(s) configured, none bound — nothing can be sent yet."*
+
+## 3. ¿Se le llegó a decir algo al cliente?
+
+**No.** Vale la pena interiorizar esto, porque moldea cada conversación con un cliente.
+
+La respuesta de envío se manda **antes de que se ejecute el enrutamiento**. Así que un fallo de enrutamiento nunca puede aparecer como un
+error en el `submit_sm` del cliente o su llamada HTTP. Solo puede aparecer después, como un acuse
+de recibo y una fila `cdr_rejected`.
+
+<Tip>
+"Mi envío devolvió éxito" y "mi mensaje fue entregado" son afirmaciones completamente no relacionadas en cualquier
+pasarela SMPP, FireFlo incluida. Un `200` significa *aceptado para enrutamiento*.
+</Tip>
+
+## 4. ¿El log está en silencio porque está arreglado, o porque ya lo dijo?
+
+`routing.rule.broken` se registra **una vez por regla, no una vez por mensaje**. Deliberadamente, ya que
+sin protección sería una línea por mensaje por intento sobre exactamente el tráfico que ya va mal.
+
+La consecuencia es una trampa: **un log silencioso no es prueba de que el problema esté resuelto.** El contador se reinicia solo
+cuando se publica una nueva tabla de enrutamiento.
+
+Así que tras arreglar una regla, mira si la línea **reaparece**, no si se mantiene ausente. La forma fiable
+de la misma pregunta es el número:
+
+```bash
+fireflo health | grep routing_rules_broken
+```
+
+## Qué capturar antes de cambiar nada
+
+Si vas a pedir ayuda, o esperas explicar esto más tarde, toma estos cuatro ahora. Son todos baratos y tres de ellos
+son destruidos por un reinicio:
+
+<Steps>
+  <Step title="El desglose de rechazos">
+    La consulta a `cdr_rejected` de arriba, con sus recuentos.
+  </Step>
+  <Step title="/ops/health, entero">
+    `last_error`, `last_submit_error`, `routing_failed_queue` y `routing_retry_queue` en una
+    captura.
+  </Step>
+  <Step title="Las líneas WARN y ERROR">
+    No el log entero. `routing.rule.broken`, `message.dropped`, `listener.bind.failed`,
+    `message.submit.response`.
+  </Step>
+  <Step title="Un número de serie de mensaje que falló">
+    Todo lo posterior es más fácil cuando puedes rastrear un mensaje real en lugar de una clase de ellos.
+  </Step>
+</Steps>
+
+<Warning>
+**Redacta antes de compartir.** Credenciales, system IDs, direcciones IP, números de teléfono y contenido de mensajes
+aparecen todos en estas salidas. `fireflo` redacta lo que puede, pero una línea de log copiada a mano es tu propia
+responsabilidad.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Nada se entrega" icon="magnifying-glass" href="/platform/troubleshooting/nothing-is-delivered">
+    Cuando realmente es enrutamiento.
+  </Card>
+  <Card title="Rechazos" icon="ban" href="/platform/troubleshooting/refusals">
+    Cada razón `cdr_rejected` y qué la arregla.
+  </Card>
+</CardGroup>

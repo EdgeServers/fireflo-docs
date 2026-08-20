@@ -1,0 +1,158 @@
+---
+title: "Sender IDs"
+description: "Aprovar os sender IDs que uma conta pode usar, o que a aprovação estampa no fio, e por que um sender ID aprovado ainda pode ser recusado pela operadora."
+---
+
+Uma linha em `app_header` é um sender ID aprovado, comparado de forma **case-insensitive**, com escopo
+em uma conta e um produto. Em vários mercados um sender ID comercial é um registro, e não uma string
+que o cliente escolhe. A operadora aprovou `ACMEIN` para uma empresa e espera que o tráfego carregando
+esse ID seja dela.
+
+## Aprovado não é o mesmo que entregável
+
+Uma aprovação faz duas coisas, e elas falham independentemente. Ela decide se a mensagem é **casada**
+neste gateway, e carrega as TLVs que são **estampadas** na mensagem na saída — sob DLT, o identificador
+da entidade que a operadora exige.
+
+<Warning>
+**Nada aprovado significa nada estampado, então uma lane DLT recusa tudo.** Sem uma linha que case,
+não há stamp, o `submit_sm` chega ao fornecedor sem carregar entidade ou id de template, e o fornecedor
+rejeita — com um status SMPP no bloco 192–196, que é sempre sobre TLVs.
+
+`tlvCount=0` nas linhas de trace confirma isso. Essa é a causa mais comum de uma lane que recusa
+todas as mensagens enquanto a configuração da própria conta parece correta, porque neste gateway ela
+*está* correta: a recusa é da operadora.
+</Warning>
+
+O **TLV coverage report** do painel existe exatamente para isso. Por linha aprovada, ele diz quais
+tags mandatórias nada suprirá, e por quê:
+
+| Motivo | O que significa |
+| :--- | :--- |
+| `nothingSupplies` | Nem a linha nem qualquer login no escopo carrega a tag. |
+| `someLogins` | Alguns logins carregam e outros não, então falha intermitentemente. |
+| `notStamped` | A linha carrega, mas o `whitelist.tlvs.mode` daquele listener é `off`. |
+| `notChecked` | A linha carrega, mas esta lista não é checada, então nada é casado nem estampado. |
+| `unparseable` | Um token sem tag — `PEID=…` não tem underscore, então não estampa nada. |
+| `emptyValue` | A tag é nomeada sem valor, e um valor vazio não estampa nada. |
+| `vendorDrops` | Algo supre a tag, e o fornecedor para o qual roteia não a registra. |
+
+<Note>
+É um **relatório, nunca uma guarda**. Um login não está atrelado a um listener e as regras de rota
+escolhem o fornecedor, então nada aqui pode ter certeza de que uma dada mensagem atende a um dado
+listener. Recusar um save nisso bloquearia configurações que funcionam. E cada frase que ele produz
+diz que um cliente enviando a própria tag torna a questão irrelevante.
+</Note>
+
+`vendorDrops` é o que vale ler duas vezes: uma tag que o fornecedor não registrou é descartada na
+saída, *depois* de o call record já ter registrado sua presença. O registro mostra que foi enviada e o
+fio não a carrega. Consulte [TLVs em uma conexão](/platform/connections/tlvs).
+
+## Escopo: conta, produto e opcionalmente um login
+
+Uma linha é por `(account, product)`, com um produto vazio significando todo produto. Uma lista
+específica por produto é mesclada **sobre** a lista de qualquer produto da conta — as duas são unidas,
+não escolhidas entre si.
+
+`system_id` restringe ainda mais. **NULL significa todo login na conta**, que é o que toda linha
+significava antes de a coluna existir, então um deployment intocado casa exatamente como antes e não
+foi necessário backfill. Dois logins na mesma conta podem manter o mesmo sender ID.
+
+<Warning>
+**Um login sem linhas próprias e sem linhas em nível de conta não pode enviar nada quando o
+enforcement está ligado.** Vincular uma aprovação a um login não apenas adiciona especificidade — ela
+remove essa linha de todos os outros logins da conta.
+
+A página da conta avisa quando as aprovações de uma conta são todas vinculadas a logins e algum login
+ficou sem nenhuma. O tráfego cujo login é desconhecido recebe as linhas em nível de conta e nada mais,
+o que é fail-closed de propósito: um chamador que não passou um login não deve receber aprovações
+dadas a alguém específico.
+</Warning>
+
+## Quem propõe e quem aprova
+
+<Steps>
+<Step title="O cliente pede">
+Pelo portal. Tudo o que um cliente escreve chega `PENDING`, com sua própria nota anexada — sob DLT,
+sua referência de registro. O gateway serve uma linha somente quando ela está `enabled` **e**
+`APPROVED`, então uma requisição é armazenada, visível aos dois lados, e inerte.
+</Step>
+<Step title="Um operador decide">
+Aprovar ou recusar, na página da conta ou na lista entre contas. Uma recusa mantém a linha e carrega
+um motivo mostrado ao cliente — que é por que não há recusa em lote, apenas aprovação em lote.
+</Step>
+<Step title="Entra em serviço no próximo poll">
+Sem reconexão. Veja abaixo.
+</Step>
+</Steps>
+
+`status` e `enabled` são colunas separadas fazendo trabalhos separados. Aprovar escreve `status` e
+registra o revisor. Desmarcar escreve `enabled = false` e deixa `status` em paz: **retirar algo não é
+desaprová-lo**, e uma linha retirada colocada de volta em serviço não deve precisar ser aprovada
+novamente.
+
+<Warning>
+**Editar um registro aprovado o suspende.** Alterar o sender ID, a nota de requisição ou o login volta
+a linha para `PENDING` e limpa a revisão anterior, então o registro fica fora de serviço até que
+alguém o aprove novamente.
+
+Esse é o ponto, e não um efeito colateral — um cliente não pode conseguir mudar o que foi aprovado e
+seguir enviando sob a aprovação. E tem uma aresta afiada: um erro de digitação interrompe o tráfego
+dele. Os formulários armam uma confirmação antes da gravação.
+</Warning>
+
+## As TLVs que um cliente pode propor mas não definir
+
+Ambas as tabelas de registro têm duas colunas de TLV.
+
+| Coluna | Lida pelo gateway |
+| :--- | :--- |
+| `tlvs` | Sim. É isso que é estampado no fio. |
+| `requested_tlvs` | **Não.** O portal escreve; o loader seleciona `tlvs`. |
+
+Sob `replace`, o stamp sobrescreve o que o cliente afirmou, e **essa sobrescrita é a aprovação**. Um
+cliente que pudesse escrever a coluna servida poderia afirmar o registro de outra pessoa enquanto
+envia texto aprovado, e o call record então reportaria o valor que ele escolheu como aprovado. Esse
+comportamento é fixado por um teste, então não vai derivar.
+
+A recompensa é para o cliente: uma proposta não altera nada que é servido, então, diferentemente de
+uma edição no sender ID, ela **não** suspende a linha. Um registro aprovado continua funcionando
+enquanto um operador considera a proposta. Aceitar move o valor e carimba o operador como seu dono;
+descartar limpa a solicitação e deixa `tlvs` exatamente como estava. Nenhum dos dois toca em `status`.
+
+## O que o painel se recusa a armazenar
+
+| Regra | Por quê |
+| :--- | :--- |
+| Não vazio | Não há nada a aprovar. |
+| No máximo 64 caracteres | O campo não tinha limite algum, e um sender ID de vários megabytes chegaria à fila de revisão e seria lido pelo loader da whitelist a cada poll de configuração. |
+| Sem espaço em nenhuma das pontas | Comparado exatamente, e um espaço no final é invisível em toda parte em que é exibido. |
+| Apenas ASCII imprimível | A comparação é case-insensitive, e fazer case-folding de outros alfabetos depende do locale do servidor — a mesma linha casaria em um deployment e não em outro. |
+
+<Note>
+64 é generoso em vez de correto. SMPP limita `source_addr` a 21 octetos, então qualquer coisa além
+disso não pode ser entregue por um bind. Mas recusar em 21 aqui também recusaria edições em linhas que
+já existem, e "você não pode entregar isto" é uma decisão diferente de "você não pode salvar isto".
+</Note>
+
+## Aprovar não exige reconexão
+
+A whitelist é relida no poll de configuração e cada snapshot carrega uma geração. **Uma sessão SMPP
+conectada há semanas capta um sender ID recém-aprovado sem reconectar** — o que importa, porque o
+cliente cujo tráfego está sendo recusado geralmente está no telefone enquanto alguém aprova.
+
+```bash
+fireflo reload
+```
+
+aplica agora, em vez de no próximo poll. Ele exige o token admin — veja
+[The fireflo CLI](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Content templates" href="/platform/customers/templates">
+A outra metade da mesma aprovação, e a gramática dos placeholders.
+</Card>
+<Card title="Rolling whitelisting out" href="/platform/customers/whitelisting-rollout">
+Report antes de enforce, e os diagnósticos em `/ops/health`.
+</Card>
+</CardGroup>

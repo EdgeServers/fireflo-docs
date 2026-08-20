@@ -1,0 +1,122 @@
+---
+title: "Inspecionando uma fila"
+description: "Profundidade te diz que algo está travado; um dump te diz o quê. O único campo que separa um problema de volume de um problema de fornecedor — e por que não há flush."
+---
+
+`/ops/health` diz quão profunda é cada fila. Isso é suficiente para saber que algo está travado e
+**não é suficiente para fazer algo a respeito**: 4 000 mensagens esperando em `vendor1` lê idêntico
+seja um lote de um cliente que deu errado ou toda conta na máquina.
+
+```bash
+./scripts/fireflo queue dump
+./scripts/fireflo queue dump vendor1
+./scripts/fireflo queue dump vendor1 100
+```
+
+Um número solto é lido como um **limite**, não como nome de worker, então `queue dump 100` alarga
+tudo. O padrão é 20 por fila, teto 500 — além disso a pergunta pertence a `cdr_submit` em vez de a
+um gateway ao vivo.
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-09T02:14:07Z",
+    "limit_per_queue": 20,
+    "queues": [
+      {
+        "name": "router", "kind": "router", "depth": 1204, "ordered": true, "returned": 20,
+        "entries": [
+          {
+            "serial": "01JC8…", "account": "acct-in-2001", "product": "in-otp",
+            "from": "SUNOTP", "to": "919876543210",
+            "body_chars": 44, "encoding": "gsm7", "parts": 1,
+            "retries": 0, "priority": 2, "ingress": "http", "target": "in-sim",
+            "queued_at": "2026-08-09T02:14:05Z"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Os quatro tipos
+
+| `kind` | Contém |
+| :--- | :--- |
+| `router` | Aceito, ainda não roteado. **Uma fila para o gateway inteiro.** |
+| `pending` | Roteado a um fornecedor, esperando a sessão dele. Uma por worker. |
+| `delayed` | Retries agendados. `ready_in_ms` diz quanto até cada um estar elegível. |
+| `broker` | Retido no RabbitMQ. **Apenas profundidade** — veja abaixo. |
+
+## `retries` é o campo que responde a pergunta
+
+<Tip>
+**Uma fila cheia de zeros é um problema de volume** — chegaram mais do que o fornecedor aguenta.
+
+**Uma fila cheia de retries não-zero é um problema de fornecedor** — as mesmas mensagens continuam
+voltando.
+
+Essas pedem respostas opostas. Adicionar capacidade a uma tempestade de retries piora; suspender um
+fornecedor que está meramente ocupado move o backlog para algum lugar mais caro.
+</Tip>
+
+**`depth` e `returned` são perguntas diferentes.** `depth` é a fila inteira; `returned` é quanto foi
+listado. Compará-los é como você sabe se está vendo o problema ou um canto dele.
+
+## Sem texto de mensagem, e nenhuma flag que adiciona um
+
+`cdr_submit` exclui o corpo por princípio — destino e origem são mantidos porque rating e disputas
+precisam deles, o texto não porque operar um gateway nunca precisa.
+
+Um dump de fila herda essa regra em vez de virar a única superfície de operador que devolve tráfego
+de cliente em massa.
+
+`body_chars` com `encoding` distingue um OTP de uma parte de um blast de seis partes travado, que é
+a pergunta diagnóstica realmente sendo feita.
+
+## Nada é consumido e nada é reordenado
+
+Cada fila é percorrida com seu próprio iterador **enquanto o gateway continua drenando ela**. Então:
+
+- Uma mensagem listada pode já ter ido embora quando você lê.
+- `depth` é amostrado depois da caminhada e pode discordar de `entries` por alguns.
+- `ordered` diz se a lista é a ordem em que o gateway vai enviar — **false** para uma priority
+  queue e para a delay queue.
+
+Essa é a troca honesta. A alternativa é parar o tráfego para poder olhá-lo.
+
+## Uma fila de broker é reportada mas nunca percorrida
+
+AMQP não tem jeito de olhar uma mensagem enfileirada sem tirá-la. `basicGet` mais um requeue
+reordenaria a fila e resetaria contadores de entrega em mensagens de clientes pagantes para satisfazer
+um diagnóstico.
+
+Então a profundidade é reportada e o dump diz isso. **Um broker que não está respondendo reporta a
+profundidade como unknown em vez de zero** — o que importa, porque zero é uma afirmação e unknown
+não é.
+
+## Deliberadamente não existe `queue flush`
+
+<Warning>
+Descartar uma fila destrói mensagens que foram **aceitas, cobradas e prometidas a um cliente**.
+
+Para tirar tráfego de um fornecedor travado sem perdê-lo, use `suspend` — ele drena a fila daquele
+fornecedor de volta ao router para que o roteamento possa escolher outro.
+</Warning>
+
+## Acesso
+
+O token de **leitura**, não o admin. Um dump não tira e não move nada, então um sistema de
+monitoramento que segura o segredo de observação pode pedir.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    Suspend, hold, e o que cada um faz a uma fila.
+  </Card>
+  <Card title="Queues and retries" icon="rotate" href="/platform/routing/queues-and-retries">
+    De onde vêm os retries naquela coluna.
+  </Card>
+</CardGroup>

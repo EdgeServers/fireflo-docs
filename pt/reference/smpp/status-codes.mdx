@@ -1,0 +1,54 @@
+---
+title: "Códigos de status"
+description: "Os status que o FireFlo retorna além do conjunto SMPP padrão, e o que cada um deliberadamente não é."
+---
+
+Status que o FireFlo retorna em `submit_sm_resp` além do conjunto SMPP padrão. **Esta é a lista
+inteira.**
+
+| Código | Nome | Significado |
+| :--- | :--- | :--- |
+| `0xC3` | `ESME_RMISSINGOPTPARAM` | Um TLV listado em `mandatory.tlvs.submit` do listener não teve valor depois de defaults de credencial e de qualquer stamp de whitelist ser aplicado. |
+| `0x402` | `STATUS_INSUFFICIENT_CREDIT` | A conta tem crédito insuficiente. Saldo pré-pago exaurido, ou um limite de crédito pós-pago alcançado. |
+| `0x40F` | `STATUS_INVALID_PRODUCT` | Recusado no **bind**, não no submit: o produto resolvido está em branco, ou nomeia nenhuma linha habilitada em `app_product`. Só quando `conf.product.required` está on. |
+| `0x418` | `STATUS_NO_RATE` | A mensagem não casou com nenhuma regra de tarifa do lado de venda. Só quando `smsg.rating.unrated.refuse` está on; caso contrário é aceita e não cobra nada. |
+| `0x14` | `ESME_RMSGQFUL` | A fila do roteador ou a fila de entrada deste listener está no limite. Só quando `smsg.queue.capacity` ou `inQueue.capacity` está setado; ambos padrão ilimitado. |
+
+## O que cada um deliberadamente não é
+
+**`0x402` não é `ESME_RTHROTTLED`.** Throttled diz ao cliente para fazer backoff e tentar de novo, o
+que é exatamente errado para uma condição que só um top-up ou uma fatura pode resolver. Um cliente
+que retenta uma recusa de crédito queima sua própria capacidade sem conseguir nada.
+
+<Note>
+Pré-pago e pós-pago recusam de forma **idêntica**. `0x402` em SMPP, `402` com `insufficientCredit`
+em HTTP, seja qual for o modo em que a conta está. A integração de um cliente não precisa saber em
+qual está.
+</Note>
+
+**`0x14` é um sinal de backpressure bem-comportado.** Um ESME que o respeita faz backoff e retenta.
+Esta é a única recusa aqui que um cliente *deve* retentar.
+
+**`0x40F` carrega um código e duas linhas WARN distintas**. Produto em branco versus nome
+desconhecido. O cliente só vê o número, então o log é onde os dois são distinguidos.
+
+## Classificação do lado do fornecedor
+
+Códigos que um **fornecedor** retorna são classificados por `status.retry.worker` e
+`status.retry.router`. Veja [Configurações de fornecedor](/reference/smpp/client).
+
+`ESME_RSUBMITFAIL` (`0x45`, decimal 69) é tratado como permanente. É genuinamente ambíguo entre
+SMSCs. Alguns significam sobrecarga transitória. Então é um opt-back-in por fornecedor em vez de
+uma reclassificação global.
+
+## Onde uma recusa é registrada
+
+| Entrada | Recusa | Registrada como |
+| :--- | :--- | :--- |
+| SMPP | `submit_sm_resp` com o código | Uma linha `cdr_rejected` |
+| REST | `402`, `503` ou `429` | Uma linha `cdr_rejected` com uma razão |
+
+Nada recusado na entrada é cobrado. O caminho REST cobra antes de publicar, então uma recusa por
+fila-cheia lá dá refund; o caminho SMPP recusa antes de aceitar, então não há o que reembolsar.
+
+Veja [Recusas](/platform/troubleshooting/refusals) para lê-las de volta.

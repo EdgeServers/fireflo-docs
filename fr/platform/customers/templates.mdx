@@ -1,0 +1,106 @@
+---
+title: "Templates de contenu"
+description: "Approuver le libellé qu'un compte peut envoyer, les trois espaces réservés typés, et les façons dont un template s'enregistre proprement puis ne correspond à rien."
+---
+
+Une ligne dans `app_template` est un corps de message approuvé. Un template est du texte fixe avec des espaces réservés, donc `Your code is {#var#}` approuve le message plutôt qu'un code spécifique.
+
+## L'échec est un template qui s'enregistre proprement et ne correspond à rien
+
+Le contenu est fail-closed. « Ne correspond à rien » ne signifie pas que le template est ignoré. Cela signifie que le client cesse d'envoyer, et cela ressemble à ce que rien ne va sous tous les angles sauf le sien.
+
+<Warning>
+**`{code}` n'est pas un espace réservé.** Il n'a pas de `#` dedans, c'est donc du texte ordinaire : le template approuve une chaîne exacte contenant des accolades et refuse chaque vrai message. Rien sur la ligne ne semble incorrect, parce que rien dedans ne l'*est*. Il approuve quelque chose qu'aucun client n'enverra jamais.
+
+L'aperçu du panel existe pour cette seule erreur. Il montre un exemple de message que le template accepte, construit par le même analyseur que le matcher du gateway utilise. Ainsi un template approuvant des accolades littérales est visible au moment où il est écrit plutôt que dans un ticket de support une semaine plus tard.
+</Warning>
+
+Les quasi-erreurs se comportent différemment des deux côtés, délibérément :
+
+| Écrit | Le gateway fait | Le panel fait |
+| :--- | :--- | :--- |
+| `{#VAR#}`, `{# var #}`, un type inconnu | Le charge, le fait correspondre comme `{#var#}`, et le liste sous `templates_degraded` sur `/ops/health` | Refuse de l'enregistrer |
+| `{code}` | Texte ordinaire | Avertit |
+
+<Note>
+Le gateway refusait auparavant un espace réservé mal formé purement et simplement, ce qui semble plus sûr et ne l'était pas. Le loader rejette un template qu'il ne peut pas compiler, donc un opérateur voyait un template approuvé dans le panel alors que chaque message qu'il couvrait était refusé. **Strict à l'écriture, indulgent mais bruyant au chargement** est la règle. Le rôle du panel est d'empêcher l'écriture de la ligne, le rôle du gateway sur une ligne déjà en base est de garder le compte en envoi et de dire ce qu'il a fait.
+</Note>
+
+## Les trois espaces réservés, écrits exactement
+
+| Token | Accepte |
+| :--- | :--- |
+| `{#var#}` | N'importe quoi. |
+| `{#num#}` | ASCII `0`–`9` uniquement. |
+| `{#alp#}` | Lettres dans n'importe quelle écriture, les marques combinantes dont les noms indic sont faits, et la ponctuation qui tient un nom ensemble. |
+
+Écrivez le **token** en minuscules sans espaces à l'intérieur. C'est son orthographe et cela ne dit rien de ce qu'il accepte.
+
+`{#alp#}` prend les espaces, apostrophes, tirets et points, donc `your login`, `Priya Sharma`, `O'Brien`, `Anne-Marie` et `St. John` correspondent tous. À la fois l'apostrophe et le tiret ASCII et typographiques sont acceptés, parce que les typographiques sont ce qui survit à un collage depuis un PDF. Ce qu'il refuse toujours c'est les **chiffres**, et c'est toute la raison de le choisir plutôt que `{#var#}`.
+
+Un espace réservé typé est strictement plus serré que `{#var#}`. Même limite de longueur, moins de caractères autorisés. Choisir l'un ne peut donc que restreindre ce qu'un template accepte.
+
+## Combien un espace réservé peut représenter
+
+Une variable correspond à 1 à 30 caractères par défaut.
+
+<Warning>
+**Augmenter `smsg.whitelist.max.variable` élargit chaque template approuvé du déploiement d'un coup.** C'est global plutôt que par listener parce que les templates sont compilés une fois au chargement en un index par compte, donc il n'y a pas de « par client » où le mettre. Une valeur augmentée pour le long nom de marchand d'un client relâche toutes les approbations des autres clients d'autant.
+
+C'est le plus grand faux positif de cette conception, c'est pourquoi c'est journalisé au niveau INFO et rapporté comme `max_variable` sur `/ops/health`. Une valeur hors 1–1000 retombe sur le défaut avec un WARN.
+</Warning>
+
+`max_variable` sur la sortie health est aussi la réponse à « le paramètre a été changé et rien ne s'est passé ». Il rapporte le plafond effectivement en vigueur, donc un sondage de configuration qui n'a pas encore eu lieu est visible plutôt que deviné.
+
+## Les espaces blancs sont comparés repliés
+
+Toute séquence d'espaces, tabulations, sauts de ligne, CRLF ou espaces insécables compte comme un **espace unique** des deux côtés, et les deux extrémités sont trimées. Donc un template enregistré avec un saut de ligne avant sa signature correspond au trafic qui envoie un espace là.
+
+Le repli ne joint jamais deux mots : un template approuvant `foo bar` ne peut toujours pas être satisfait par `foobar`.
+
+<Note>
+C'est seulement la comparaison. Le message envoyé à l'opérateur est octet pour octet ce qui est arrivé, et le template stocké est octet pour octet ce qui a été collé. Ce qui est ce contre quoi l'enregistrement DLT est auditable. L'aperçu du panel montre le texte **replié**, délibérément, donc un opérateur qui a collé un corps plein d'espaces insécables voit ce qui sera réellement comparé.
+</Note>
+
+## Ce que le panel refuse d'enregistrer
+
+| Règle | Pourquoi |
+| :--- | :--- |
+| Non vide | Un template a besoin du libellé qu'il approuve. |
+| Au plus 2 000 caractères | Dix segments SMS et quelques. Un template plus long que le message qu'il approuve ne peut correspondre à aucun. |
+| Un type d'espace réservé connu | Tout le reste est mis en correspondance comme `{#var#}`, qui accepte plus que ce que vous vouliez. |
+| Pas deux espaces réservés adjacents | Sans rien entre eux ils ne peuvent pas être distingués, ils agissent donc comme une seule variable de longueur double. |
+| Pas des espaces réservés seuls | Un template constitué de rien d'autre que des variables accepte chaque message, ce qui revient à ne pas en avoir. |
+
+Une chose est avertie plutôt que refusée : un template dont le texte littéral entre deux espaces réservés se répète plus loin dans le corps. La correspondance gourmande peut rejeter un message qu'un moteur avec retour arrière accepterait. Un tel template est généralement toujours correct, et c'est le seul mode d'échec invisible du matcher, donc l'objectif est de le rendre visible plutôt que de le bloquer.
+
+## Templates et messages multi-segments
+
+À l'ingress SMPP un `submit_sm` portant un en-tête de segment n'est **pas** vérifié en contenu. Un segment porte un fragment du corps, donc le contenu ne peut pas encore être jugé. Une correspondance de template n'est donc pas non plus ce qui tamponne ce PDU.
+
+<Warning>
+**Une TLV obligatoire fournie uniquement par un template peut ne pas atteindre un message concaténé.** Si la balise dont un opérateur a besoin vient de la ligne template seule, et que rien sur le login ne la fournit, le chemin par segment n'a rien à tamponner. Et un listener exigeant cette balise refuse. Mettez la balise que l'opérateur exige sur le `defaultTlvs` **du login** aussi, où elle s'applique à chaque PDU indépendamment de la correspondance.
+</Warning>
+
+Le rapport de couverture TLV du panel indique, par ligne approuvée, quelles balises obligatoires ne seront fournies par rien. Voir [Sender IDs](/platform/customers/sender-ids).
+
+## Approbation, et ce que coûte une modification
+
+Tout ce qu'un client soumet depuis le portail atterrit en `PENDING`. Le gateway ne sert une ligne que quand elle est `enabled` **et** `APPROVED`.
+
+<Warning>
+**Modifier un template approuvé le suspend.** Changer le nom, le libellé, la note ou le login remet la ligne à `PENDING` et efface la relecture précédente, donc il est hors service jusqu'à ce que quelqu'un l'approuve à nouveau. Et sur un compte fail-closed cela signifie que le trafic du client s'arrête jusque-là.
+
+C'est ce que l'approbation existe pour empêcher : changer un libellé approuvé sous une approbation existante. Proposer des TLV est la seule exception, parce que rien sur le chemin du message ne lit la colonne proposée.
+</Warning>
+
+Il n'y a pas de clé naturelle sur `app_template`, donc un corps en doublon est attrapé en code plutôt que par une contrainte : redemander un libellé déjà demandé ou approuvé est refusé avec un message disant lequel, plutôt que de devenir une deuxième ligne que personne ne peut distinguer de la première.
+
+<CardGroup cols={2}>
+<Card title="Sender IDs" href="/platform/customers/sender-ids">
+L'autre moitié de la même approbation, et le rapport de couverture TLV.
+</Card>
+<Card title="Référence whitelisting" href="/reference/config/whitelisting">
+Chaque propriété, les trois modes de tamponnage, et le contrôle obligatoire par vendeur.
+</Card>
+</CardGroup>

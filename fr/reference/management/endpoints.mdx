@@ -1,0 +1,65 @@
+---
+title: "API de gestion"
+description: "Les endpoints sur le port 9000, quel token chacun prend, et pourquoi chaque refus est un 404."
+---
+
+Port **9000** par défaut, à l'écart du port qui porte les messages. Authentification Bearer, deux
+tokens.
+
+<Warning>
+Ceci n'est délibérément **pas** décrit comme OpenAPI, et il n'y a pas de Swagger UI pour cela.
+C'est une surface opérationnelle pour les opérateurs d'un déploiement, pas une API contre laquelle
+les clients s'intègrent.
+</Warning>
+
+| Méthode | Chemin | Token | Objet |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/ops/health` | lecture | Tout ce que la passerelle sait d'elle-même en ce moment |
+| `GET` | `/q/metrics` | lecture | Exposition Prometheus, en texte |
+| `POST` | `/ops/reload` | admin | Relire la configuration maintenant, au lieu d'attendre le poll |
+| `POST` | `/ops/workers/{name}/test-bind` | admin | Composer un fournisseur une fois et rapporter ce qui s'est passé |
+| `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Couper le bind d'un client, en laissant les autres tranquilles |
+| `POST` | `/ops/workers/{name}/{action}` | admin | `enable`, `disable`, `suspend`, `resume`, `hold`, `release` |
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://localhost:9000/ops/health
+```
+
+## Chaque refus est un 404
+
+Un mauvais token, un endpoint désactivé et un chemin qui n'existe pas répondent tous **404**. Rien
+n'annonce qu'il y a un secret ici qui vaut la peine d'être deviné.
+
+<Note>
+Cela signifie qu'un contrôle de supervision qui rapporte 404 a quatre causes possibles, et la
+passerelle ne vous dira pas laquelle : mauvais token, token admin non défini, token admin égal au
+token de lecture, ou vraiment mauvais chemin. Vérifiez les tokens des deux côtés avant de conclure
+que la passerelle est en panne.
+</Note>
+
+## Ce qui n'est pas sur ce port
+
+`/openapi.json`, `/swagger-ui` et `/ping` vivent sur le port de **messagerie**. Pointer un outil sur
+le mauvais produit des 404 qui ressemblent à une panne.
+
+## `/ops/health`
+
+La charge utile porte, au niveau supérieur : la version en marche, les sources de configuration par
+domaine, la profondeur de file du routeur, le compte des messages en attente d'accusé, les compteurs
+de CDR, la profondeur de file du broker quand il en est configuré un, et une section `balance`
+quand l'application du crédit est activée.
+
+Par worker, elle porte `accepting`, `paused`, `suspended_manually`, `suspended_automatically`,
+`bound`, `bound_transmittable`, `queue_depth`, `retry_queue_depth`, `tps_limit`, `tps_measured`,
+`submitted`, `last_error` avec son horodatage, `last_submit_error` avec `submit_rejected`, un
+**échantillon** de sessions plafonné à 20, et `sessions_total`.
+
+<Warning>
+Ne comptez jamais le tableau `sessions` pour répondre à « combien sont bindés ». C'est un
+échantillon plafonné — `sessions_total` est le compte, et `bound` est le nombre de binds en
+service.
+</Warning>
+
+Voir [Santé en direct](/platform/operations/live-health) pour comment le lire, et
+[Le endpoint opérationnel](/reference/config/operational-endpoint) pour les tokens.

@@ -1,0 +1,108 @@
+---
+title: "Avis clients"
+description: "Informer les clients d'un changement qui altère leurs chiffres. La règle, la requête qui trouve qui est affecté, et le ratio que presque tout le monde se trompe."
+---
+
+Certaines releases changent ce qu'un client voit sur une facture ou dans un portail. Celles-là ont besoin d'un avis, et un avis vague est pire que rien.
+
+## La règle
+
+**Dites le nombre, dites la direction, dites la date.**
+
+Un client à qui on dit *« quelques chiffres peuvent changer légèrement »* le lit comme du bruit et redécouvre le changement par une requête finance trois semaines plus tard. Un client à qui on dit *« votre facture de mars sera environ 18% plus haute et voici pourquoi »* peut planifier.
+
+<Warning>
+**Ne décrivez jamais une correction comme une amélioration.**
+
+Ces avis sont des corrections de défauts, et dans chaque cas le client était du mauvais côté du défaut sous au moins un aspect. Contourner cela est précisément ce qui détruit la confiance que l'avis a été envoyé pour protéger.
+</Warning>
+
+**Envoyez depuis l'adresse propre de la plateforme au contact de facturation du compte**, pas par le portail. Une bannière in-app atteint quiconque se connecte ensuite, ce qui sur un compte machine-à-machine est personne. `app_account.email` est le contact enregistré.
+
+## Le ratio que presque tout le monde se trompe
+
+Quand une correction signifie que les messages retentés commencent à être comptés, les chiffres du client montent. **La taille de cette hausse n'est pas `retenté / total`.**
+
+Leur ancien chiffre était le **trafic non retenté seul**. Donc le pas de ce qu'ils voyaient à la vérité se mesure contre *cela*, pas contre le total.
+
+```
+ce qu'ils voyaient     = non-retenté
+ce qu'ils voient maintenant = non-retenté + retenté
+la hausse              = retenté / non-retenté
+```
+
+<Tip>
+**À un taux de retry de 20% les chiffres montent de 25%, pas de 20%.** Citez `pct_count_rises`, jamais `pct_of_traffic`. Ce sont des questions différentes et l'écart se creuse à mesure que le taux de retry monte.
+</Tip>
+
+## Trouver qui est affecté
+
+```sql
+SELECT account_id,
+       count(*)                                                             AS messages,
+       count(*) FILTER (WHERE retry_count > 0)                              AS were_retried,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*), 0), 1)                                      AS pct_of_traffic,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*) FILTER (WHERE retry_count = 0), 0), 1)       AS pct_count_rises,
+       round(100.0 * COALESCE(sum(price) FILTER (WHERE retry_count > 0), 0)
+             / nullif(sum(price) FILTER (WHERE retry_count = 0), 0), 1)     AS pct_spend_rises
+  FROM cdr_submit
+ WHERE part_no = 1 AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id ORDER BY pct_count_rises DESC NULLS LAST;
+```
+
+**La dépense a sa propre colonne plutôt que d'emprunter celle des messages**, parce que le trafic retenté n'est pas tarifé comme la moyenne. C'est quelles que soient les destinations et produits qui échouent. Un compte dont les retries sont concentrés sur une route coûteuse voit une plus grande hausse d'argent qu'une hausse de messages.
+
+`part_no = 1` parce que l'argent vit entièrement sur la partie 1 d'un message concaténé.
+
+## Deux phrases qui ne doivent pas être adoucies
+
+Quoi que ce soit d'autre soit réécrit pour convenir au ton de votre plateforme, celles-ci survivent intactes :
+
+<AccordionGroup>
+
+<Accordion title="Vos factures ne sont pas affectées et ne sont pas rééditées. Elles ont toujours été correctes.">
+Quand une correction augmente les chiffres *visibles* d'un client vers sa facture, les chiffres du client étaient sous ce qu'il a été facturé.
+
+Un client à qui on dit que ses chiffres changent **sans qu'on lui dise quel côté était faux** assume raisonnablement qu'il a été surfacturé. Et chacun d'eux demande. Le dire d'emblée est moins cher qu'y répondre trente fois.
+</Accordion>
+
+<Accordion title="credit_limit = 0 signifie pas de crédit, pas illimité.">
+Jamais formulé comme « pas de limite » dans quoi que ce soit envoyé à l'extérieur.
+
+Il n'y a pas de représentation d'illimité nulle part dans le système, délibérément : une faute de frappe qui se lit comme illimité offre un mois de trafic que personne ne peut facturer.
+</Accordion>
+
+</AccordionGroup>
+
+## Un avis qui fonctionne
+
+<Steps>
+  <Step title="Ce qui change, en une phrase">
+    Dans les termes du client. « Les comptages de messages dans votre portail », pas « l'agrégation CDR ».
+  </Step>
+  <Step title="Le nombre, pour eux spécifiquement">
+    Depuis la requête ci-dessus. Un chiffre par compte bat une moyenne de plateforme à chaque fois.
+  </Step>
+  <Step title="Quelle direction, et si l'argent bouge">
+    Dites explicitement si les factures ne sont pas affectées. Supposez qu'ils concluront autrement qu'ils ont été surfacturés.
+  </Step>
+  <Step title="La date à laquelle ça prend effet">
+    Pour qu'ils puissent l'aligner avec leur propre période de reporting.
+  </Step>
+  <Step title="Ce qu'ils doivent faire">
+    Généralement rien. Dites-le, plutôt que de leur laisser le deviner.
+  </Step>
+</Steps>
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Migrer un déploiement" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Les changements qui nécessitent un avis en premier lieu.
+  </Card>
+  <Card title="Relevés" icon="file-invoice" href="/platform/billing/statements">
+    Pourquoi une période fermée n'est jamais redressée.
+  </Card>
+</CardGroup>

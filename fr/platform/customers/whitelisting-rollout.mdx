@@ -1,0 +1,129 @@
+---
+title: "Déployer le whitelisting"
+description: "Activer les contrôles de sender ID et de contenu pour un client en production sans le mettre hors ligne. Les quatre interrupteurs, rapporter avant d'appliquer, et les diagnostics qui disent ce qui tourne vraiment."
+---
+
+Le whitelisting est fail-closed par conception, donc l'activer pour un client en production est le seul changement de cette plateforme qui peut faire taire un compte instantanément. Tout ce qui suit existe pour faire de cela une décision plutôt qu'une découverte.
+
+## Le seul diagnostic le plus utile
+
+```bash
+fireflo health
+```
+
+```json
+"whitelist": {
+  "active": true,
+  "generation": 4,
+  "scopes": 12,
+  "header_rejects": 3,
+  "template_rejects": 0,
+  "report_only_would_reject": 41,
+  "enforcing_with_nothing_approved": [],
+  "exempt_products": ["otp"]
+}
+```
+
+<Warning>
+**`active: false` alors que `smsg.whitelist.enabled` est vrai signifie que le chargement n'a jamais réussi.** Cela ne signifie pas que rien n'est configuré. Cela signifie que rien n'est vérifié, sur aucun compte, quel que soit le soin apporté à leurs politiques.
+
+Cette direction est délibérée : un contrôle fail-closed qui se déclencherait sur un chargement *échoué* transformerait une hoquet de base en panne totale. Fail-closed s'applique à une politique qui a été chargée et trouvée vide, jamais à un sous-système qui n'a pas pu charger du tout. C'est pourquoi le drapeau doit être lu plutôt que supposé. Tout un déploiement peut être silencieusement non protégé et sembler identique à un qui fonctionne.
+</Warning>
+
+`exempt_products` est du trafic passant sans contrôle volontairement, et est la réponse à « pourquoi cela n'a-t-il pas été attrapé ? » que la propre politique d'aucun compte ne peut montrer.
+
+## Quatre interrupteurs, et l'ordre dans lequel ils se résolvent
+
+Un message est vérifié seulement si **les quatre** l'indiquent. Ils sont listés dans l'ordre où le gateway les résout, qui est aussi l'ordre où chercher quand quelque chose n'est pas appliqué.
+
+| Couche | Où | Off signifie |
+| :--- | :--- | :--- |
+| 1. La fonctionnalité | `smsg.whitelist.enabled` | Rien n'est chargé, rien n'est vérifié, nulle part. |
+| 2. Le listener | `conf.whitelist.enabled` par listener SMPP | Ce listener ne vérifie rien. L'ingress HTTP n'est pas affecté. |
+| 3. Le produit | `app_product.whitelist_enabled` | Chaque compte sur ce produit est exempt, sur les deux ingress. |
+| 4. Le compte | `app_whitelist_policy.header_mode` / `content_mode` | Ce compte n'est pas vérifié. |
+
+Les trois premiers sont des interrupteurs qu'un opérateur définit ; le quatrième est la politique elle-même.
+
+<Note>
+**`conf.whitelist.enabled` est activé par défaut**, donc l'interrupteur principal est celui qui décide. Un listener doit opter *out*. Il existe parce que les clients sont rarement tous sur un seul listener : un listener de trafic enregistré peut appliquer alors qu'un interne ou de test ne le fait pas, sans que ce soit une propriété de chaque compte.
+
+Il ne s'applique qu'à SMPP. L'ingress HTTP n'a pas de listener à quoi l'accrocher, donc utilisez le produit ou le compte là.
+</Note>
+
+## Rapporter avant d'appliquer
+
+Chacun de `header_mode` et `content_mode` est `OFF`, `REPORT` ou `ENFORCE`. **`REPORT` est la raison pour laquelle ceci n'est pas un booléen.**
+
+<Steps>
+<Step title="Approuver ce que vous connaissez déjà">
+Les sender IDs et templates du compte, ou d'un produit qui est vérifié. Voir [Sender IDs](/platform/customers/sender-ids) et [Templates de contenu](/platform/customers/templates).
+</Step>
+<Step title="Passer le compte à REPORT">
+Chaque message est vérifié, journalisé comme `message.wouldReject` en INFO, et **envoyé quand même**. Rien n'est refusé.
+</Step>
+<Step title="Lire report_only_would_reject">
+Il compte ce que `ENFORCE` aurait refusé, et c'est le nombre à surveiller. Laissez-le tourner assez longtemps pour couvrir les jours calmes du client. Un template utilisé une fois par mois est invisible en un après-midi.
+</Step>
+<Step title="Approuver ce que le journal nomme, et seulement alors appliquer">
+`headerNotApproved` et `templateNotMatched` nomment ce qui n'allait pas, et le compte auquel cela appartient.
+</Step>
+</Steps>
+
+Activer un whitelist fail-closed pour un client en production sans d'abord voir ce qu'il aurait refusé est comment une migration devient une panne.
+
+## Appliquer avec rien d'approuvé
+
+<Warning>
+**Une liste vide en `ENFORCE` refuse tout, et c'est correct.** Un whitelist sans rien dessus n'autorise rien. C'est aussi presque toujours une configuration à moitié finie, donc le gateway le dit au démarrage et le rapporte sur `/ops/health` comme `enforcing_with_nothing_approved` plutôt que de laisser cela arriver comme un ticket de support.
+</Warning>
+
+Le control panel refuse l'enregistrement qui le créerait, compté comme le gateway compte. Deux choses font que c'est plus qu'une somme :
+
+- **Les produits exempts ne protègent rien.** Un produit avec `whitelist_enabled = false` se résout à `OFF` avant toute fusion, donc une approbation classée dessous est stockée et jamais consultée. La compter laisserait passer un compte dont toutes les approbations sont inertes. Créant exactement la panne que le garde-fou existe pour empêcher.
+- **Le trafic sans produit est servi par la portée compte seule.** Aucune approbation à portée de produit ne peut jamais l'atteindre. Donc un `ENFORCE` au niveau compte avec une liste de compte vide arrête chaque login dont le login ne nomme aucun produit, quel que soit le nombre d'approbations de produit qui existent.
+
+Le second cas est un avertissement bruyant plutôt qu'un refus, parce que la configuration s'exécute bien et sert bien du trafic réel. Pour tout couvrir, approuvez au moins une ligne avec le produit laissé vide.
+
+Il y a une troisième façon d'en construire un, et elle est plus récente : un login **sans ses propres lignes et sans lignes à portée du compte** ne peut rien envoyer. La page du compte avertit quand toutes les approbations d'un compte sont liées à des logins et qu'un login est laissé sans aucune.
+
+## Approuvé n'est pas la même chose qu'accepté
+
+<Warning>
+**Rien d'approuvé signifie rien de tamponné.** Un compte dont les sender IDs sont tous approuvés peut toujours avoir chaque message refusé *par le vendeur* si les TLV qu'un opérateur exige ne sont pas fournis. Les identifiants d'entité et de template qu'une voie DLT n'acceptera pas de message sans.
+
+Le rapport de couverture TLV du panel indique, par ligne approuvée, quelles balises obligatoires ne seront fournies par rien et quels vendeurs les rejetteraient. Lisez-le avant de passer à `ENFORCE`, pas après : appliquer restreint ce qui peut être envoyé, et ne fait rien du tout à propos de ce qu'un opérateur exige.
+</Warning>
+
+## À quoi ressemble un refus
+
+Sur HTTP, **403** et un message nommant ce qui n'allait pas :
+
+```json
+{"message": "'SPAMCO' is not an approved sender ID for this account."}
+```
+
+403 plutôt que 400 : la requête est bien formée et l'appelant est bien qui il dit être. Il n'est pas autorisé à envoyer ceci.
+
+Sur SMPP le `submit_sm` est **rejeté plutôt qu'accepté puis supprimé**, donc le propre client du client voit l'échec au moment de la soumission au lieu de le déduire d'un accusé qui n'arrive jamais. Voir [Codes de statut](/reference/smpp/status-codes).
+
+Chaque refus est journalisé avec une raison. `headerNotApproved`, `templateNotMatched`. Et le compte auquel il appartient. En mode `REPORT` la même ligne apparaît comme `message.wouldReject` en INFO et le message sort.
+
+## Approuver n'a pas besoin de reconnexion
+
+La whitelist est relue lors du sondage de configuration et chaque snapshot porte une génération, donc une session SMPP bindée depuis des semaines récupère un sender ID nouvellement approuvé sans se reconnecter. Ce qui compte parce que le client dont le trafic est refusé est généralement au téléphone pendant qu'on l'approuve.
+
+```bash
+fireflo reload
+```
+
+l'applique immédiatement au lieu d'attendre le sondage. Il prend le token admin. Voir [La CLI fireflo](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Référence whitelisting" href="/reference/config/whitelisting">
+Chaque propriété, les trois modes de tamponnage, et le contrôle obligatoire par vendeur.
+</Card>
+<Card title="Produits" href="/platform/customers/products">
+Exemptions, et pourquoi un produit inconnu est vérifié plutôt que laissé passer.
+</Card>
+</CardGroup>

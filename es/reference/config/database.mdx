@@ -1,0 +1,109 @@
+---
+title: "Base de datos y fuente de configuración"
+description: "Las variables de PostgreSQL, el único interruptor que mueve los cuatro dominios de configuración y las tablas detrás de ellos."
+---
+
+PostgreSQL es **opcional**. Deja `FIREFLO_DB_URL` sin establecer y FireFlo se ejecuta con configuración de archivo con
+registros de llamadas escritos a `data/cdr/`.
+
+Solo dos características lo requieren: el **sweep de expiración** de CDR, que necesita consultar registros sin
+resultado, y el **crédito prepago**, ya que el crédito solo puede entrar por la base de datos. Tarificación, enrutamiento por menor coste
+y CDRs funcionan todos sin ella. También lo hace la mitad de solo lectura del panel de control. Pero el panel
+edita configuración, y en modo archivo no hay nada que editar.
+
+## Conexión
+
+| Variable | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` | *(sin establecer)* | URL JDBC. Sin establecer significa sin base de datos. |
+| `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | *(sin establecer)* | Credenciales. |
+| `FIREFLO_DB_MIGRATE` | `false` | Si FireFlo puede modificar este esquema. Habilita la migración al arranque **y** permite `fireflo db migrate`. |
+| `FIREFLO_CONFIG_IMPORT` | `false` | Permite `fireflo import`. |
+
+<Note>
+`FIREFLO_CONFIG_IMPORT` es separado de `FIREFLO_DB_MIGRATE` **a propósito**: uno aplica DDL solo
+hacia adelante, el otro reemplaza las reglas que deciden qué se cobra a los clientes. `--dry-run` lo ignora.
+</Note>
+
+## El interruptor de fuente
+
+Un interruptor mueve cada dominio a la vez.
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.config.source` | `file` | `file` o `db`, para los cuatro dominios: credenciales (`app_credential`), propiedades (`app_config` + `app_worker`), enrutamiento (`app_route_table` + `app_route_rule`) y tarifas (`app_rate_rule`). |
+| `smsg.config.db.poll.seconds` | `30` | Intervalo de sondeo. |
+
+Establecida a través del entorno como `FIREFLO_CONFIG_SOURCE`.
+
+<Warning>
+**Cambiar a `db` contra un esquema vacío rechaza cada bind y cada llamada REST a la vez.** El
+cargador de credenciales publica el mapa vacío en lugar de ignorarlo, así que no hay fallback al
+archivo. Rellena el esquema con `fireflo import` primero.
+</Warning>
+
+<Warning>
+**Actualizando desde antes de 0.5.** Esta clave reemplazó a `smsg.credentials.source`, `smsg.routing.source`,
+`smsg.rates.source` y `smsg.properties.source`, y sus variables `FIREFLO_*_SOURCE`. Esas claves
+ya no hacen nada, así que la pasarela **rechaza arrancar** mientras una de las variables aún esté establecida,
+en lugar de revertir ese dominio a un archivo en silencio. Reemplaza las cuatro por
+`FIREFLO_CONFIG_SOURCE`.
+</Warning>
+
+## Las tablas
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_filter` / `app_filter_condition` | Predicados nombrados y reutilizables, compartidos por enrutamiento y tarificación |
+| `app_route_table` / `app_route_rule` | Tablas de enrutamiento y sus reglas |
+| `app_route_rule_filter` / `app_route_rule_condition` | Los filtros referenciados de una regla y condiciones inline |
+| `app_rate_rule` / `app_rate_rule_filter` / `app_rate_rule_condition` | La misma forma, para tarifas |
+| `app_worker` / `app_worker_property` | Una fila por proveedor o listener, más sus ajustes |
+| `app_credential` | Perfiles de autenticación |
+| `app_config` | Todo lo que no es una propiedad de worker: `smsg.*`, `outSms.default.*`, `outSms.routing.*` |
+
+Las propiedades de un worker se proyectan sobre `outSms.instance.<name>.<key>` y se publican exactamente como
+filas de `app_config`, así que el nivel de fallback y el reajuste en vivo no se ven afectados. **Mantén un ajuste en un
+sitio u otro.** Si ambos definen la misma clave, la tabla de worker gana y el duplicado se registra.
+
+<Warning>
+**Un filtro faltante o deshabilitado omite cada regla que lo referencia**, en lugar de cargar la regla
+con menos condiciones. Descartar una condición haría que la regla coincidiera con *más* tráfico, así que el fallo
+sería silencioso y enrutaría o tarificaría cosas equivocadas.
+</Warning>
+
+## Qué cambia cuando estás en modo `db`
+
+- Un cambio tarda hasta un intervalo de sondeo, contra aproximadamente 200 ms para una edición de archivo.
+- Una lectura fallida **retiene** la configuración anterior en lugar de vaciarla.
+- Los cambios se anuncian exactamente como una edición de archivo, así que editar `app_config` reajusta workers en ejecución.
+  `tps`, `maxRetries`, `pause`, TLVs registrados. Y establecer `outSms.instance.<x>.enable` a false
+  **detiene ese proveedor** dentro de un intervalo.
+- Borrar una fila revierte la clave a lo que retiene el siguiente nivel: una variable de entorno, o el
+  valor por defecto codificado. En lugar de dejarla sin establecer.
+- Cada watcher de archivo se retira. `conf/smsg.properties` aún se lee al arranque.
+
+`app_route` y `app_rate` del esquema pre-normalizado aún se leen cuando las tablas normalizadas
+están vacías, con una advertencia. Nada se convierte automáticamente: la `rule_line` empaquetada no puede dividirse
+en SQL.
+
+## Versionado de esquema
+
+El esquema es un archivo baseline, `V1.19.0__baseline.sql`, generado en lugar de fusionado a mano: los
+originales se aplicaron a una base de datos scratch, se volcaron con `pg_dump --schema-only`, y el volcado
+se verificó aplicándolo a una segunda base de datos y comparando ambas. Cambios posteriores continúan en `V1.20.0`.
+Solo hacia adelante es la regla.
+
+Está numerado en la versión **más alta** que reemplaza, no la más baja, deliberadamente. Un despliegue que
+se detuviera a mitad trataría un baseline con número más bajo como ya aplicado y migraría a un no-op,
+perdiendo silenciosamente lo que vino después. En `1.19.0` intenta aplicar y falla en la primera
+tabla que ya existe. Recuperable, donde la versión silenciosa corrompe por omisión.
+
+<Warning>
+**Las migraciones son solo hacia adelante.** No hay scripts de deshacer, así que revertir un cambio de esquema significa
+restaurar un backup. Toma uno antes de migrar una base de datos que te importe.
+</Warning>
+
+Consulta [`fireflo db`](/reference/cli/fireflo) para `test`, `migrate`, `info`, `validate` y `repair`, y
+[Elegir una fuente de configuración](/platform/install/configuration-source) para la ruta de migración
+entre archivo y base de datos.

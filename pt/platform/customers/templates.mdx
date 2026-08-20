@@ -1,0 +1,149 @@
+---
+title: "Content templates"
+description: "Aprovar o texto que uma conta pode enviar, os três placeholders tipados, e as formas pelas quais um template salva sem erros e depois não casa com nada."
+---
+
+Uma linha em `app_template` é um corpo de mensagem aprovado. Um template é um texto fixo com
+placeholders, então `Your code is {#var#}` aprova a mensagem em vez de um código específico.
+
+## A falha é um template que salva sem erros e não casa com nada
+
+Conteúdo é fail-closed. "Não casa com nada" não significa que o template é ignorado — significa que o
+cliente para de enviar, e parece que nada está errado sob qualquer ângulo exceto o dele.
+
+<Warning>
+**`{code}` não é um placeholder.** Ele não tem `#`, então é texto comum: o template aprova uma string
+exata contendo chaves e recusa toda mensagem real. Nada na linha parece errado, porque nada nela *está*
+errado — ela aprova algo que nenhum cliente jamais enviará.
+
+O preview do painel existe para esse único erro. Ele mostra uma mensagem de exemplo que o template
+aceita, construída pelo mesmo scanner que o matcher do gateway usa, então um template aprovando chaves
+literais é visível no momento em que é escrito e não em um ticket de suporte uma semana depois.
+</Warning>
+
+Os quase-erros se comportam de forma diferente nos dois lados, deliberadamente:
+
+| Escrito | O gateway faz | O painel faz |
+| :--- | :--- | :--- |
+| `{#VAR#}`, `{# var #}`, um tipo desconhecido | Carrega, casa como `{#var#}`, e lista em `templates_degraded` no `/ops/health` | Recusa salvar |
+| `{code}` | Texto comum | Avisa |
+
+<Note>
+O gateway costumava recusar um placeholder malformado de imediato, o que parece mais seguro e não era:
+o loader descarta um template que não consegue compilar, então um operador via um template aprovado
+no painel enquanto toda mensagem coberta por ele era recusada. **Estrito na autoria, tolerante mas
+barulhento no load** é a regra — o trabalho do painel é impedir que a linha seja escrita, o trabalho
+do gateway em uma linha já no banco é manter a conta enviando e dizer o que fez.
+</Note>
+
+## Os três placeholders, escritos exatamente
+
+| Token | Aceita |
+| :--- | :--- |
+| `{#var#}` | Qualquer coisa. |
+| `{#num#}` | Apenas ASCII `0`–`9`. |
+| `{#alp#}` | Letras em qualquer script, os combining marks de que nomes índicos são feitos, e a pontuação que mantém um nome unido. |
+
+Escreva o **token** em minúsculas sem espaços dentro. Essa é sua grafia e não diz nada sobre o que
+ele aceita.
+
+`{#alp#}` aceita espaços, apóstrofos, hífens e pontos finais, então `your login`, `Priya Sharma`,
+`O'Brien`, `Anne-Marie` e `St. John` todos casam. Tanto o apóstrofo e hífen ASCII quanto os
+tipográficos são aceitos, porque os tipográficos são o que sobrevive a um paste de um PDF. O que ele
+ainda recusa são **dígitos**, e esse é o motivo inteiro para escolhê-lo em vez de `{#var#}`.
+
+Um placeholder tipado é estritamente mais restrito que `{#var#}` — mesmo limite de comprimento, menos
+caracteres permitidos — então escolher um só pode restringir o que um template aceita.
+
+## Quanto um placeholder pode representar
+
+Uma variável casa com 1 a 30 caracteres por padrão.
+
+<Warning>
+**Aumentar `smsg.whitelist.max.variable` alarga todo template aprovado no deployment de uma vez.** Ela
+é global em vez de por-listener porque templates são compilados uma vez no load em um índice por
+conta, então não há um lugar por-cliente para colocá-la. Um valor aumentado para o nome longo do
+merchant de um cliente afrouxa as aprovações de todos os outros clientes no mesmo montante.
+
+É o maior falso-aceite neste design, e por isso é logado em INFO e reportado como `max_variable` em
+`/ops/health`. Um valor fora de 1–1000 volta ao padrão com um WARN.
+</Warning>
+
+`max_variable` na saída de saúde também é a resposta para "a configuração foi alterada e nada
+aconteceu" — ele reporta o teto realmente em vigor, então um poll de configuração que ainda não chegou
+fica visível em vez de ser adivinhado.
+
+## Whitespace é comparado com folding
+
+Qualquer sequência de espaços, tabs, quebras de linha, CRLF ou non-breaking spaces conta como um
+**único espaço** nos dois lados, e ambas as pontas são aparadas. Assim, um template registrado com uma
+quebra de linha antes de sua assinatura casa com tráfego que envia um espaço ali.
+
+Folding nunca junta duas palavras: um template que aprova `foo bar` ainda não pode ser satisfeito por
+`foobar`.
+
+<Note>
+Isto é apenas comparação. A mensagem enviada à operadora é byte a byte o que chegou, e o template
+armazenado é byte a byte o que foi colado — que é aquilo contra o que o registro DLT é auditável. O
+preview do painel mostra o texto **com folding**, deliberadamente, para que um operador que colou um
+corpo cheio de non-breaking spaces veja o que realmente será comparado.
+</Note>
+
+## O que o painel se recusa a salvar
+
+| Regra | Por quê |
+| :--- | :--- |
+| Não vazio | Um template precisa do texto que aprova. |
+| No máximo 2 000 caracteres | Dez segmentos SMS e um pouco. Um template mais longo do que a mensagem que aprova não pode casar com uma. |
+| Um tipo de placeholder conhecido | Qualquer outra coisa é casada como `{#var#}`, que aceita mais do que você quis. |
+| Sem dois placeholders adjacentes | Sem nada entre eles não é possível distingui-los, então agem como uma variável do dobro do comprimento. |
+| Não placeholders sozinhos | Um template feito apenas de variáveis aceita toda mensagem, o que é o mesmo que não ter um. |
+
+Uma coisa é avisada em vez de recusada: um template cujo texto literal entre dois placeholders se
+repete mais adiante no corpo. O matching guloso pode rejeitar uma mensagem que um engine com
+backtracking aceitaria. Tal template geralmente ainda está correto, e este é o único modo de falha
+invisível do matcher, então o ponto é torná-lo visível em vez de bloqueá-lo.
+
+## Templates e mensagens multi-segmento
+
+No ingress SMPP, um `submit_sm` carregando um cabeçalho de segmento **não** é checado por conteúdo —
+um segmento carrega um fragmento do corpo, então conteúdo ainda não pode ser julgado. Um match de
+template portanto também não é o que estampa esse PDU.
+
+<Warning>
+**Uma TLV mandatória suprida apenas por um template pode não chegar a uma mensagem concatenada.** Se a
+tag que a operadora precisa vem apenas da linha do template, e nada na credencial a supre, o caminho
+por-segmento não tem o que estampar. E um listener exigindo essa tag recusa. Coloque a tag exigida
+pela operadora também no `defaultTlvs` da **credencial**, onde ela se aplica a todo PDU
+independentemente de matching.
+</Warning>
+
+O TLV coverage report do painel diz, por linha aprovada, quais tags mandatórias nada suprirá. Veja
+[Sender IDs](/platform/customers/sender-ids).
+
+## Aprovação, e o custo de uma edição
+
+Tudo o que um cliente submete pelo portal chega `PENDING`. O gateway serve uma linha somente quando
+está `enabled` **e** `APPROVED`.
+
+<Warning>
+**Editar um template aprovado o suspende.** Alterar o nome, o texto, a nota ou o login volta a linha
+para `PENDING` e limpa a revisão anterior, então ela fica fora de serviço até que alguém a aprove
+novamente. E em uma conta fail-closed, isso significa que o tráfego do cliente para até lá.
+
+Isso é o que a aprovação existe para impedir: alterar texto aprovado sob uma aprovação existente.
+Propor TLVs é a única exceção, porque nada no caminho da mensagem lê a coluna proposta.
+</Warning>
+
+Não há chave natural em `app_template`, então um corpo duplicado é pego em código em vez de por uma
+constraint: pedir novamente por um texto já solicitado ou aprovado é recusado com uma mensagem dizendo
+qual, em vez de virar uma segunda linha que ninguém consegue distinguir da primeira.
+
+<CardGroup cols={2}>
+<Card title="Sender IDs" href="/platform/customers/sender-ids">
+A outra metade da mesma aprovação, e o TLV coverage report.
+</Card>
+<Card title="Whitelisting reference" href="/reference/config/whitelisting">
+Cada propriedade, os três modos de stamping, e a checagem mandatória por-fornecedor.
+</Card>
+</CardGroup>

@@ -1,0 +1,134 @@
+---
+title: "Réglages listener"
+description: "Chaque clé par listener : ports, TLS, défauts par compte, propriété des MO, accusés, concaténation et diagnostics."
+---
+
+Un **serveur** est un listener sur lequel vos clients se binderont. Les clés ci-dessous sont
+réglées comme `outSms.instance.<name>.<key>`, avec `outSms.default.<key>` comme niveau de repli —
+voir [Niveaux de propriétés](/reference/config/paths). Chaque worker a aussi
+[les réglages de base](/reference/smpp/worker-base).
+
+## Ports et connexions
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `srv.enabled` | `true` | Active le listener en clair. |
+| `srv.port` | `0` | Le port sur lequel il bind. |
+| `srv.systemId` | `FireFlo` | System ID présenté dans les réponses de bind. |
+| `srv.maxConnections` | `1000` | Maximum absolu de connexions simultanées. |
+| `srv.maxConnectionsPerIP` | `0` | Plafond par IP source. `0` est illimité. |
+| `srv.bindTimeout` | `5000` | Millisecondes d'attente d'une requête de bind. |
+| `srv.maxInactivityTime` | `60` | Inactivité de session, **en minutes**. Les sessions au-delà sont terminées. |
+
+<Warning>
+Un listener qui ne peut pas prendre son port n'arrête **pas** la passerelle. Il journalise et le
+reste continue de tourner, ce qui est correct pour un déploiement multi-listeners et surprenant la
+première fois — vérifiez [`/ops/health`](/reference/management/endpoints) plutôt que de supposer
+qu'un démarrage propre signifie que tous les listeners sont en service.
+</Warning>
+
+## TLS
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `srv.tls.enabled` | `false` | Active le listener TLS. |
+| `srv.tls.port` | `0` | Son port. |
+| `srv.tls.keystore.path` | `""` | Chemin vers le fichier JKS. |
+| `srv.tls.keystore.alias` | `""` | Alias du certificat dans le keystore. |
+| `srv.tls.keystore.password` | `""` | Mot de passe du keystore. |
+| `srv.tls.reload` | `""` | Changer cette valeur en runtime déclenche un rechargement TLS. |
+
+## Protocole proxy
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `srv.proxy.enabled` | `false` | Un port dédié attendant des en-têtes HAProxy protocol. |
+| `srv.proxy.port` | `2777` | Ce port. |
+
+## Défauts par compte
+
+Appliqués à chaque compte se bindant ici sauf si le credential les surcharge.
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `conf.maxConnectionsPerUser.default` | `0` | Binds simultanés par compte. `0` est illimité. |
+| `conf.maxRate.default` | `0` | Débit par compte, en TPS. `0` est illimité. |
+| `conf.maxPending.default` | `1000` | Taille de fenêtre — requêtes non acquittées en vol. |
+| `conf.windowMonitorInterval.default` | `15000` | Intervalle de surveillance de fenêtre, ms. |
+| `conf.responseTout.default` | `30000` | Expiration de requête / timeout de réponse, ms. |
+| `conf.writeTimeout.default` | `30000` | Timeout d'écriture socket, ms. |
+
+<Note>
+`conf.maxRate.default` et le plafond REST `smsg.restapi.maxRate.default` **ne se suivent pas**.
+Réglez les deux quand la limite doit être à l'échelle de la passerelle — voir
+[Limites](/reference/config/limits).
+</Note>
+
+## Messages entrants (MO)
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `mo.owner.map` | `""` | Quel compte possède quelle adresse entrante. `<pattern>=<accountId>[:<systemId>]`, séparé par virgules, la première correspondance l'emporte ; le pattern est une expression régulière. Omettez `:systemId` pour livrer à toute session que le compte a bindée. |
+| `mo.owner.default` | `""` | Où va un MO quand aucun pattern n'a correspondu. |
+
+<Warning>
+**`mo.owner.default` vide signifie nulle part.** Le listener journalise `message.mo.unmapped` et
+consomme le message plutôt que de deviner un propriétaire. C'est délibéré — livrer le message
+entrant d'un étranger au mauvais client est pire que de le jeter — mais cela signifie que le
+trafic MO non mappé disparaît silencieusement sauf si vous surveillez cette ligne de log.
+</Warning>
+
+## Accusés, adressage et encodage
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `forward.dlrs` | `true` | Interrupteur maître pour transférer les accusés aux clients sur ce listener. **Éteint les supprime pour tous ceux bindés ici, quoi qu'ils aient demandé.** |
+| `flag.reverseDlrSrcDst` | `true` | Inverse source et destination dans les accusés. |
+| `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Expression régulière validant l'adresse receveur. |
+| `charset.gsm` | `GSM` | Charset pour data coding `0`. |
+| `charset.latin1` | `ISO-8859-1` | Charset pour Latin-1. |
+| `charset.ucs2` | `UCS-2` | Charset pour data coding `8`. |
+| `ccat.8bit` | `true` | Numéros de référence 8 bits pour SMS concaténés au lieu de 16 bits. |
+| `reassembling.timeoutMillis` | `30000` | Combien de temps attendre chaque segment avant d'échouer. |
+| `dlr.multipart` | `all` | Quels segments produisent un accusé : `all`, `first` ou `last`. |
+
+## TLVs, whitelisting et produits
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `registered.tlvs.submit` | `""` | TLVs à extraire d'un `submit_sm` entrant, sous forme `tagName_tag`. **Les tags non listés sont jetés.** |
+| `mandatory.tlvs.submit` | `""` | TLVs qui doivent porter une valeur après les défauts du credential. Sinon `0xC3`. |
+| `conf.whitelist.enabled` | `true` | Si ce listener vérifie les IDs d'expéditeur et le contenu. |
+| `whitelist.tlvs.mode` | *(non défini)* | `off`, `assign` ou `replace`. |
+| `conf.product.required` | `false` | Refuse un bind dont le produit résolu ne nomme aucun produit activé. |
+| `inQueue.capacity` | `0` | Messages que ce listener retient en attendant le magasin de messages. |
+| `filter.failOpen` | — | Ce qui se passe quand un filtre ne peut pas être résolu. |
+
+Voir [Whitelisting](/reference/config/whitelisting) et [Limites](/reference/config/limits).
+
+## Threads
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `srv.threads` | `1` | Threads boss Netty — acceptant les connexions. |
+| `srv.worker.threads` | `10` | Threads worker Netty — E/S. |
+| `srv.out.threads` | `10` | Logique sortante et routage. |
+| `srv.monitor.threads` | `1` | Surveillance de session. |
+
+## Diagnostics
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `log.pdus` | `false` | PDUs décodées. **Peuvent inclure mots de passe de bind, numéros de téléphone et corps de messages.** |
+| `log.bytes` | `false` | Octets hex bruts. Traitez comme sensibles. |
+| `log.pdus.exclude` | `21,-2147483627` | IDs de commande PDU à supprimer — par défaut enquire_link et sa réponse. |
+| `srv.printStatsPeriod` | `300` | Secondes entre les dumps de statistiques. |
+| `srv.printRatePeriod` | `60` | Secondes entre les calculs de débit. |
+| `srv.jmx.enabled` | `false` | Exposer les métriques via JMX. |
+| `srv.jmx.domain` | *(interne)* | Domaine JMX. Réglez-le à quelque chose que vous choisissez avant d'activer JMX, sinon vos noms de MBean dépendent d'un défaut interne qui ne fait pas partie de l'interface supportée. |
+
+<Note>
+`message.trace.mode` apparaît dans la table par instance mais est **global uniquement** — un
+`outSms.instance.<name>.message.trace.mode` n'est jamais lu. Réglez-le sans préfixe. Voir
+[Journalisation](/reference/config/logging).
+</Note>

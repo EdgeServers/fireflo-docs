@@ -1,0 +1,106 @@
+---
+title: "Tokens e acesso"
+description: "Dois tokens com uma divisão deliberada, por que um não definido te dá 404 em vez de 401, e a regra ausente-versus-zero que atravessa todo campo."
+---
+
+A porta de gerenciamento carrega profundidades de fila, nomes de fornecedores, estado de binds e os
+controles que param um fornecedor. Ela é guardada por **dois** segredos compartilhados:
+
+```properties
+smsg.ops.token       = <uma string longa e aleatória>
+smsg.ops.admin.token = <uma string longa e aleatória diferente>
+```
+
+## A divisão
+
+| Token | Abre |
+| :--- | :--- |
+| `smsg.ops.token` | `GET /ops/health`, `GET /ops/queues`, `/q/metrics` — **tudo que apenas lê** |
+| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture e os seis verbos de controle |
+
+Dessa forma um dashboard ou sistema de monitoramento pode manter o token de leitura **sem também ser
+capaz de parar um fornecedor**.
+
+<Warning>
+**Eles precisam ser diferentes.** Configurar ambos com o mesmo valor é tratado como se não houvesse
+separação — os controles desligam e o gateway loga o porquê.
+
+Deixar o token admin sem definir faz o mesmo, que é a direção segura: você perde os controles em vez
+de expô-los.
+</Warning>
+
+## Um token não definido responde 404, não 401
+
+Configuração ausente **desabilita** o endpoint em vez de deixá-lo aberto. Um token errado recebe o
+mesmo `404` em vez de um `401`, então um chamador não pode dizer se há algo aqui para o qual valha
+descobrir um token.
+
+<Tip>
+**Se seu dashboard reporta 404, cheque o token dos dois lados antes de assumir que o gateway está
+fora.** Essa confusão é o custo de não vazar a existência do endpoint, e vale saber sobre ela antes
+de um incidente e não durante um.
+</Tip>
+
+## Deliberadamente não está sob `/secure`
+
+Esse prefixo é autenticado com **credenciais de mensageria, que pertencem aos clientes**. Profundidades
+de fila, nomes de fornecedores e estado de binds são de todo o gateway, então publicá-los ali daria a
+todo cliente que pode enviar um SMS uma visão do gateway inteiro.
+
+A porta de gerenciamento carrega seu próprio token, e uma credencial de mensageria não a abre.
+
+## Mantenha a porta fora da rede pública
+
+| Porta | Serve |
+| ---: | :--- |
+| 8080 | `/secure/*`, `/ping` — o que os clientes chamam |
+| 9000 | `/q/metrics` e `/ops/*` |
+
+Mantenha a 9000 numa rede admin e não a publique. O token é uma segunda linha, não a primeira.
+
+## Ausente não é zero
+
+Esta regra atravessa todo campo em `/ops/health`, e lê-la errado produz conclusões erradas
+confiantes:
+
+| Campo | Ausente significa | Zero significaria |
+| :--- | :--- | :--- |
+| `router_queue_capacity` | **Sem limite** — o padrão | Sem espaço restante |
+| `queue_capacity` | Sem limite | Cheia |
+| `in_queue_depth` | Não é um listener | Um fornecedor com fila de entrada vazia |
+| `submitted` | Contadores estão desligados para este connector | Não enviou nada |
+| `tps_limit` | Sem teto configurado | Um teto de zero |
+| `tps_measured` | **Não medido** — incluindo as duas primeiras janelas após o startup | Conectado, contando, e movendo nada |
+
+<Warning>
+`tps_measured` é o que pega as pessoas. **Zero é um valor real** significando uma sessão conectada
+que não está enviando nada — que é um stall que vale alerta. Ausente significa que o gateway ainda
+não mediu, porque uma leitura de um contador cumulativo é um baseline e ainda não uma taxa.
+
+Um alerta que trata ausente como zero dispara a cada restart.
+</Warning>
+
+## `cdr.failed` é dado de billing perdido
+
+Um batch falho **nunca é retentado** e esses registros se foram. Não é transitório.
+
+**Alerta em qualquer valor não-zero.** Isto é receita que você não consegue faturar, e nada mais vai
+te dizer.
+
+## Uma busca por substring não é uma checagem de identidade
+
+`q=ACME` no endpoint de sessões também retorna `ACMEINTL`.
+
+Qualquer coisa agindo em um resultado — desconectando os binds de um login, digamos — precisa
+comparar `system_id` **exatamente** em vez de confiar no match.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="The management port" icon="server" href="/reference/management/endpoints">
+    Cada endpoint e seu token.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Lendo o payload que esses tokens destravam.
+  </Card>
+</CardGroup>

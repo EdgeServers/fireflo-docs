@@ -1,0 +1,119 @@
+---
+title: "Limites e recusas"
+description: "Capacidades de fila, tetos de rate por conta, limites de batch, e as três chaves que transformam uma má configuração silenciosa em uma barulhenta."
+---
+
+## Limites de fila
+
+| Propriedade | Escopo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | global | `0` (ilimitado) | O máximo de mensagens que a fila do roteador, e cada fila de worker de saída, vai manter. |
+| `inQueue.capacity` | por listener | `0` (ilimitado) | O máximo de mensagens que um listener SMPP vai manter aguardando para ser gravado no message store. |
+
+**Por que existem.** O gateway responde a uma submissão *antes* de rotear, então toda mensagem nessas
+filas já foi aceita e cobrada. Sem limites, um fornecedor que para de aceitar somado a um listener
+que continua aceitando faz o heap crescer até a JVM ser morta. E toda mensagem enfileirada morre
+junto, nenhuma reembolsada, nenhuma registrada como algo diferente de PENDING.
+
+**O que um limite muda.** Só as duas entradas recusam. Dentro do gateway uma fila cheia continua
+sendo backpressure, e o roteador esperando em uma fila cheia de worker é o roteador indo na
+velocidade que o fornecedor consegue receber. Em uma entrada há um cliente com uma conexão aberta,
+então esperar travaria essa sessão em vez de apenas reduzir a velocidade:
+
+| Entrada | Quando a fila está cheia |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` com `ESME_RMSGQFUL` (`0x14`). Nada é cobrado. A recusa acontece antes de a mensagem ser aceita. |
+| REST | `503` com `queueFull` em `cdr_rejected`. Qualquer valor já cobrado é reembolsado, porque o caminho REST cobra antes de publicar. |
+
+<Note>
+**Escolhendo um número.** Não há padrão porque um limite é uma declaração sobre o seu próprio tráfego
+e o seu próprio heap. Baixo demais recusa mensagens que teriam sido entregues; alto demais não
+dispara antes de a JVM disparar.
+
+Comece por quantas mensagens você está disposto a manter em memória para um fornecedor que ficou
+mudo, e verifique a profundidade sob carga normal primeiro. `router_queue` e o `queue_depth` de cada
+worker estão em [`/ops/health`](/reference/management/endpoints), com o limite ao lado depois de
+definido.
+</Note>
+
+## Limites de entrada HTTP
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.restapi.maxRate.default` | `0` | Mensagens por segundo por conta de billing. `0` é ilimitado. |
+| `smsg.restapi.maxRate.<accountId>` | *(não definido)* | Teto para uma conta, sobrescrevendo o padrão. |
+| `quarkus.http.limits.max-body-size` | `1M` | Maior body de requisição aceito. |
+| `quarkus.http.read-timeout` | `60S` | Quanto tempo uma requisição pode levar para chegar. |
+| `quarkus.http.idle-timeout` | `30M` | Quanto tempo uma conexão ociosa é mantida. |
+
+Chaveado por **conta**, não por credencial: uma conta pode ter vários logins, e uma chave por login
+deixaria um cliente subir o próprio teto criando outro.
+
+O check roda antes de a mensagem ser tarifada ou cobrada, então uma mensagem recusada nunca é
+cobrada. O chamador recebe `429`, deliberadamente não `403`. Nada na requisição ou na credencial
+está errado.
+
+<Warning>
+Contado **por processo**. Uma implantação multi-instância permite esse rate em cada instância, então
+o teto efetivo é o rate vezes o número de instâncias. É uma proteção contra um sender fora de
+controle, não uma cota distribuída.
+
+O listener SMPP tem seu próprio teto (`conf.maxRate.default`) e os dois não se acompanham. Configure
+ambos quando o limite deve valer para o gateway inteiro.
+</Warning>
+
+## Limites de batch
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.restapi.batch.max.messages` | `10000` | Maior tamanho que um batch pode expandir, contando **destinos** e não entradas. |
+| `smsg.restapi.batch.concurrency` | `4` | Quantos batches rodam ao mesmo tempo. Dimensionado no startup, então uma mudança precisa de restart. |
+| `smsg.restapi.batch.rate.per.second` | `0` | Teto na velocidade com que um batch é alimentado no roteador. `0` é sem pacing. |
+| `smsg.restapi.batch.queue.highwater` | `100000` | Profundidade da fila do roteador na qual a expansão de batch pausa e espera drenar. |
+
+Mesma lógica dos limites de fila: a fila do roteador é ilimitada por padrão e não pode fazer push
+back, então um batch sem teto é uma forma de exaurir o heap.
+
+## Recusas de produto e rating
+
+Três chaves, **todas off por padrão**, que transformam uma má configuração silenciosa em uma
+barulhenta.
+
+| Propriedade | Escopo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `conf.product.required` | por listener | `false` | Recusa um bind cujo produto resolvido está em branco ou nomeia nenhuma linha `app_product` habilitada. |
+| `smsg.restapi.product.required` | global | `false` | O gêmeo REST, checado no submit já que não há bind. |
+| `smsg.rating.unrated.refuse` | global | `false` | Recusa uma mensagem que não bateu com nenhuma regra de tarifa de venda, em vez de aceitar e não cobrar nada. |
+
+<Warning>
+Leia isto antes de ligar qualquer uma delas: **cada uma converte tráfego que flui hoje em tráfego
+recusado.**
+</Warning>
+
+**Por que existem.** Um produto não definido é um estado suportado que envia mensagens de graça.
+`RateSnapshot.rulesFor` curto-circuita um produto null para o bucket any-product apenas, então uma
+mensagem sem produto nunca alcança uma regra com escopo de produto. Nada casa, a mensagem fica sem
+tarifa, e a cobrança de crédito retorna cedo. Em uma conta cujas regras de tarifa todas carregam
+produto, essa é a conta inteira.
+
+**`system_type` é o buraco que um check de não-vazio não fecharia.** Em um bind SMPP ele resolve
+*sobre* o produto da credencial e é texto livre validado em nenhum lugar, então um cliente fazendo
+bind com `prem` em vez de `premium` passa por qualquer teste de não-vazio e cai exatamente no mesmo
+estado sem tarifa. É por isso que o check é pertencimento ao catálogo em vez de presença de valor.
+
+<Note>
+**Modo de arquivo não tem catálogo.** `credentials.yml` não tem de onde derivar um, então a metade de
+pertencimento é pulada e só a metade de não-vazio se aplica, logada uma vez por carga de configuração
+nomeando o listener. Este é o único lugar em que o recurso é mais fraco do que parece.
+</Note>
+
+`conf.product.required` é checado no **bind**, depois da autenticação, porque o produto vive no
+contexto da sessão. `smsg.restapi.product.required` também se aplica a `/secure/rate`, então uma
+cotação não pode precificar tráfego que um send recusaria.
+
+Antes de ligar qualquer uma das flags de produto, o relatório pré-flight do painel de controle lista
+toda credencial habilitada que pararia de fazer bind. O limite honesto está declarado nessa página:
+para SMPP ele checa o fallback da credencial, e um `system_type` digitado errado é invisível para
+ele.
+
+Códigos de recusa são `0x40F` e `0x418`. Veja [Códigos de status](/reference/smpp/status-codes).

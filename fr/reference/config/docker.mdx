@@ -1,0 +1,84 @@
+---
+title: "Docker"
+description: "Variantes d'image, les volumes et ports qui comptent, et l'environnement qu'une exécution en conteneur nécessite."
+---
+
+## Images
+
+| Image | Runtime |
+| :--- | :--- |
+| `edgeservers/fireflo:latest` | Image JVM, Eclipse Temurin 25 JRE |
+| `edgeservers/fireflo:latest-native` | Image d'exécutable natif |
+
+## Répertoire de travail et chemins
+
+Le répertoire de travail du conteneur est `/work`, donc le répertoire de configuration par défaut est
+`/work/conf`. Chaque chemin relatif dans [Chemins](/reference/config/paths) se résout en dessous.
+
+| Chemin hôte | Chemin conteneur | Objet |
+| :--- | :--- | :--- |
+| `./conf` | `/work/conf` | Les quatre fichiers de configuration |
+| `./data` | `/work/data` | Enregistrements d'appel en mode fichier, et le magasin d'accusés de livraison |
+| `./logs` | `/work/logs` | Logs applicatifs, SMPP et d'accès |
+
+```text
+fireflo-runtime/
+  conf/
+    credentials.yml
+    smsg.properties
+    routingTable.conf
+    rates.conf
+  data/
+  logs/
+```
+
+## Ports
+
+| Port | Objet |
+| :--- | :--- |
+| `8080` | API HTTP, Swagger UI, JSON OpenAPI |
+| `9000` | Interface de gestion — `/ops/*` et `/q/metrics` |
+| `27777` | Port listener du démarrage rapide ; dépend de `outSms.instance.<name>.srv.port` |
+
+<Warning>
+Publiez `9000` sur la loopback uniquement, comme `-p 127.0.0.1:9000:9000`. Il porte l'état des binds,
+les profondeurs de files et les noms de fournisseurs, et les [deux
+tokens](/reference/config/operational-endpoint) sont la seule chose devant lui.
+</Warning>
+
+## Exécuter
+
+```bash
+docker run -d --name fireflo \
+  -e QUARKUS_LOG_FILE_ENABLE=true \
+  -e QUARKUS_LOG_CONSOLE_ENABLE=false \
+  -e QUARKUS_LOG_FILE_PATH=/work/logs/smsg.log \
+  -e QUARKUS_LOG_FILE_SMPPCLIENT_PATH=/work/logs/smppclient.log \
+  -e QUARKUS_LOG_FILE_SMPPSERVER_PATH=/work/logs/smppserver.log \
+  -e QUARKUS_HTTP_ACCESS_LOG_DIRECTORY=/work/logs \
+  -p 8080:8080 \
+  -p 127.0.0.1:9000:9000 \
+  -p 27777:27777 \
+  -v ./conf:/work/conf \
+  -v ./data:/work/data \
+  -v ./logs:/work/logs \
+  edgeservers/fireflo:latest
+```
+
+## Vérifications de démarrage
+
+<Steps>
+  <Step title="Le conteneur est up">
+    `docker ps` le montre en marche plutôt qu'en redémarrage.
+  </Step>
+  <Step title="L'API HTTP répond">
+    `http://localhost:8080/swagger-ui` et `http://localhost:8080/openapi.json`.
+  </Step>
+  <Step title="S'il n'a pas démarré">
+    Lisez `logs/smsg.log` d'abord, puis `smppclient.log` et `smppserver.log`. Une passerelle sans
+    table de routage ne démarre pas du tout, et le dit en nommant une structure interne plutôt que la
+    ligne manquante — voir [Première configuration](/platform/install/first-configuration).
+  </Step>
+</Steps>
+
+Les variables de log sont listées sous [Journalisation](/reference/config/logging).

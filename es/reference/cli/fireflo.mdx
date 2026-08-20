@@ -1,0 +1,210 @@
+---
+title: "fireflo"
+description: "Cada verbo, cuáles de ellos necesitan una pasarela en ejecución y los tres que rechazan en lugar de proceder."
+---
+
+`scripts/fireflo` es la línea de comandos del operador. Habla con tres cosas diferentes según el
+verbo, y saber cuál es la mayor parte de saber cómo usarlo.
+
+| Grupo | Habla con | Necesita una pasarela en ejecución |
+| :--- | :--- | :--- |
+| `db`, `bootstrap`, `import`, `show` | La base de datos directamente | No |
+| `send` | El puerto de **mensajes**, como haría un cliente | Sí |
+| todo lo demás | El puerto **operacional**, 9000 por defecto | Sí |
+
+<Warning>
+`show` lee la base de datos, que **no es lo mismo que lo que la pasarela está haciendo**. En modo archivo no está
+leyendo esas tablas en absoluto; en modo base de datos mantiene una captura en caché y relee en un sondeo.
+
+Para lo que realmente está vigente (incluyendo si el whitelisting llegó a cargar) usa `health`.
+</Warning>
+
+## Base de datos y offline
+
+```bash
+fireflo db test        # alcanzable, autenticada, migrada, permitida, responde. Por separado
+fireflo db info        # versiones aplicadas y pendientes
+fireflo db validate    # ¿las migraciones aplicadas aún coinciden con los archivos?
+fireflo db migrate     # aplica lo que está pendiente    (necesita FIREFLO_DB_MIGRATE=true)
+fireflo db repair      # realinea el historial de Flyway con los archivos
+```
+
+`info` y `validate` **no** necesitan el flag de habilitar escritura. Leer la versión del esquema no cambia
+nada, y necesitar un flag antes de poder mirar sería una trampa en medio de un incidente.
+
+### bootstrap
+
+```bash
+fireflo bootstrap [--port N]
+```
+
+Escribe lo mínimo que una base de datos nueva necesita para arrancar: una tabla de enrutamiento `default`, una tabla `MESSAGE` vacía
+para que entre un proveedor, un listener en 27777, y un login SMPP cuya contraseña genera e
+imprime **una vez**.
+
+No escribe nada más a propósito. Sin proveedor, porque uno necesita un host y credenciales que nadie puede
+adivinar; sin tarifas, porque un precio inventado factura silenciosamente donde uno ausente aparece sin precio. Ambas
+ausencias se nombran en su salida final.
+
+<Note>
+`bootstrap` rechaza en el momento en que encuentra una tabla de enrutamiento, un worker o un login, así que no puede sobrescribir un
+despliegue en ejecución. No hay flag que lo obligue.
+</Note>
+
+### import
+
+```bash
+fireflo import all --dry-run                          # parsea, reporta, no escribe nada
+FIREFLO_CONFIG_IMPORT=true fireflo import all --replace
+```
+
+Los sujetos son `all` (predeterminado), `rates`, `routing`, `credentials`. Flags: `--dry-run`, `--replace`,
+`--replace-filters`, `--prune`, `--rates-file`, `--routing-file`, `--currency`.
+
+**Ejecuta el dry run y léelo.** Clasifica cada ámbito de tarifa como un coste de proveedor o un precio de cuenta
+y nombra los que no puede clasificar como ninguno. Que es cómo un ámbito que cargará y coincidirá silenciosamente
+con nada se atrapa antes de que lo haga.
+
+<Warning>
+**Las credenciales tienen un rechazo que las demás no.** Un import que no produzca ninguna credencial usable se rechaza
+incondicionalmente, con o sin flag. Un `app_credential` vacío más `FIREFLO_CONFIG_SOURCE=db` rechaza
+cada bind y cada llamada REST a la vez, y nada en los logs nombra la causa.
+</Warning>
+
+Códigos de salida: `0` bien, `1` la migración falló, `2` rechazado sin tocar nada. Así que un pipeline de despliegue
+puede distinguir un flag faltante de una migración rota.
+
+### show
+
+```bash
+fireflo show config [pattern]     workers     worker <name>
+fireflo show routing              rates [scope]
+fireflo show account [id]         whitelist [id]      rejected [id]
+```
+
+`whitelist` imprime las cuatro puertas en el orden en que aplican, luego lo que está aprobado. `rejected` es lo
+que fue rechazado en las últimas 24 horas, y por qué.
+
+## Enviar un mensaje
+
+```bash
+fireflo send <from> <to> <text>
+```
+
+Pasa por la API HTTP exactamente como haría un cliente. Necesita `FIREFLO_SEND_LOGIN` y
+`FIREFLO_SEND_PASSWORD`.
+
+## Operacional
+
+```bash
+fireflo health          # estado en vivo
+fireflo version         # qué release está EJECUTÁNDOSE, preguntado a la pasarela
+fireflo verify          # ¿está este despliegue realmente funcionando?
+fireflo reload          # relee configuración sin un reinicio
+```
+
+`version` pregunta a la pasarela en lugar de a los archivos en disco. Un artefacto que se construyó pero nunca se
+reinició es toda la razón para preguntar.
+
+`verify` comprueba en el orden que hace que el primer fallo sea el informativo: el artefacto está
+completo, Java es lo suficientemente nuevo, el puerto de mensajes responde, el puerto operacional coincide con la
+configuración que elegiste, y los dos tokens son genuinamente separados. Termina diciendo si puede
+enviar todavía, que no es la misma pregunta que si está en ejecución.
+
+<Note>
+**Código de salida 4 de `verify`** significa que el despliegue es sólido pero los datos propios de esta instalación no lo son. Por
+ejemplo, no hay nada configurado a lo que enrutar. `0` bien, `1` falló, `2` rechazado o mal usado.
+</Note>
+
+### Crédito
+
+```bash
+fireflo credit release [account]
+```
+
+Devuelve el crédito prepago RESERVADO no gastado para que el siguiente mensaje relea el saldo.
+
+<Warning>
+**Este es el único trozo de estado de runtime que `reload` no puede reconstruir.** El crédito se entrega en bloques y
+permanece gastable hasta usarse, así que corregir un saldo a mano no surte efecto hasta que esto se ejecute. No
+quita nada. El bloque es reservable de nuevo inmediatamente.
+</Warning>
+
+### Colas
+
+```bash
+fireflo queue dump [worker] [limit]
+```
+
+Lista los mensajes esperando, no solo cuántos: cuenta, producto, destino, número de reintentos y antigüedad.
+Responde "de quién es este tráfico" cuando una cola está profunda. Solo lectura: no se saca nada de una cola y
+no se reordena nada. Predeterminado 20 por cola, máximo 500.
+
+No hay texto de mensaje en la salida, por la misma regla que lo mantiene fuera de los registros de llamadas por defecto.
+
+### Uso y retención
+
+```bash
+fireflo usage rollup [--catch-up]     # resume cdr_submit en usage_daily
+fireflo usage purge                   # borra los registros de llamada pasada la retención
+```
+
+<Warning>
+`usage purge` **rechaza toda la ejecución** si algún día que borraría no tiene rollup, y nombra los días.
+No una advertencia. Borrar un día sin resumir destruye el registro de consumo permanentemente, sin nada
+capaz de reconstruirlo. Necesita `FIREFLO_CDR_PURGE=true`.
+
+`rollup` es deliberadamente un comando separado. Un purge que silenciosamente hiciera rollup primero significaría que un bug de rollup
+se descubre por el comando que borra la evidencia.
+</Warning>
+
+### Conexiones
+
+```bash
+fireflo test-bind <vendor>                      # marca una vez y reporta
+fireflo disconnect <listener> <session-id>      # descarta un bind
+fireflo capture start|stop|status <worker> <session-id> [seconds]
+fireflo capture txt|pcap <worker> <session-id> > file
+```
+
+Los ids de sesión vienen de `fireflo health`. Son el propio contador del listener, así que chocan entre
+listeners y se reinician con la pasarela.
+
+<Note>
+`disconnect` **termina una conexión; no retira el permiso.** Un cliente saludable vuelve a hacer bind en
+segundos a menos que también deshabilites su login.
+</Note>
+
+Las capturas contienen contenido de mensajes y números de destino. Están acotadas y retenidas solo en memoria:
+la captura se detiene sola y se descarta quince minutos después, descargada o no. Esto reemplaza activar
+`log.pdus` para un worker entero, que escribía los PDUs de cada sesión a un archivo de log compartido.
+
+### Los seis verbos de control
+
+| Verbo | Efecto |
+| :--- | :--- |
+| `enable` | Arrancarlo ahora |
+| `disable` | Detenerlo ahora |
+| `suspend` | Dejar de aceptar; drena la cola de vuelta al router |
+| `resume` | Empezar a aceptar de nuevo |
+| `hold` | Seguir aceptando pero dejar de enviar; la cola crece |
+| `release` | Empezar a enviar de nuevo |
+
+### Purgar datos de ejemplo
+
+```bash
+fireflo purge seed <traffic-lane|india-dlt|all> [--with-traffic]
+fireflo purge --reset-database
+```
+
+`purge seed` ejecuta el script down emparejado y nada más. No hay búsqueda de cosas que *parezcan
+como* datos de prueba, porque en una base de datos de configuración así es como borras un cliente.
+
+`--reset-database` vacía cada tabla, de vuelta al estado justo después de `db migrate`. Rechaza a menos que
+`FIREFLO_DB_RESET=true`, rechaza mientras la pasarela es alcanzable, y te pide que escribas el nombre de la
+base de datos.
+
+## Entorno
+
+Consulta [Variables de entorno](/reference/cli/environment) para la lista completa, y
+[El endpoint operacional](/reference/config/operational-endpoint) para los dos tokens.

@@ -1,0 +1,75 @@
+---
+title: "Webhooks y el almacén de acuses"
+description: "Cómo la pasarela llama a endpoints de cliente, qué aspecto tiene un acuse reenviado y dónde se mantiene el estado de correlación."
+---
+
+## Salida
+
+Aplica tanto a `dlr_url` en un envío como a `forward.mo.url` en un conector.
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` o `always`. |
+| `smsg.webhook.schemes` | `https,http` | Esquemas que la pasarela llamará. |
+| `smsg.webhook.private.targets` | `allow` | `deny` rechaza objetivos privados, loopback y link-local. |
+| `smsg.webhook.retries` | `10` | Intentos antes de que el acuse sea abandonado. |
+| `smsg.webhook.retry.interval.ms` | `120000` | Espera entre intentos. |
+| `smsg.webhook.timeout.ms` | `5000` | Timeout de conexión y petición. |
+
+<Warning>
+`smsg.webhook.redirects` **cambió de seguir redirecciones a no seguirlas.** Es el ajuste
+del que dependen los demás: una vez que se sigue una redirección, la dirección que se comprobó no es la dirección
+que se accede. Un endpoint que dependía de una redirección ahora falla ruidosamente en lugar de irse silenciosamente
+a otro sitio.
+</Warning>
+
+`private.targets` es `allow` por defecto para que los despliegues que hacen POST a una aplicación en su propia red
+sigan funcionando. Establece `deny` donde los clientes son externos.
+
+<Note>
+Resuelve el host y luego se conecta, así que un nombre que responda diferente en medio lo derrota. Sube el
+coste en lugar de cerrar el agujero. Las reglas de firewall de salida son las que lo cierran.
+</Note>
+
+Con el presupuesto de reintentos predeterminado, un endpoint inalcanzable ocupa un hilo virtual durante veinte minutos.
+
+## Reenvío de acuses
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.dlr.forward.format` | `json` | `json` hace POST de un body JSON; `kannel` emite un GET simple con `%s`/`%d` sustituidos en la URL registrada. |
+| `smsg.dlr.forward.fields.vendor` | `false` | Si el acuse JSON nombra el proveedor que tomó el mensaje. |
+
+<Warning>
+`kannel` lleva información **solo** donde la URL registrada tiene placeholders para ella. Una URL sin
+ellos recibe una petición sin nada dentro, y nada reporta un problema. Ese fallo silencioso es por lo que
+`json` es el predeterminado.
+</Warning>
+
+`vendor` está apagado por defecto porque revela tu suministrador a tu cliente, en un endpoint que ellos
+controlan. Habitualmente sensible comercialmente.
+
+El payload está documentado en [Acuses de recibo](/developers/receive/delivery-receipts).
+
+## El almacén de acuses de recibo
+
+Estado de correlación para mensajes esperando un acuse, y acuses retenidos para un cliente SMPP desconectado.
+**El único estado persistente fuera de PostgreSQL.**
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.dlr.store.path` | `data/dlr-mvstore.db` | Ubicación del archivo del almacén. |
+| `smsg.dlr.retention.days` | `7` | Cuánto tiempo se recuerda un mensaje enviado. |
+| `smsg.dlr.correlation.days` | `3` | Cuánto tiempo un id de mensaje del proveedor aún puede correlacionarse de vuelta. |
+| `smsg.dlr.expiry.check.minutes` | `60` | Intervalo de barrido. |
+
+La ruta previamente solo se podía establecer como una propiedad de sistema `-D fireflo.dlr.db.path`. Eso aún se
+honra cuando `smsg.dlr.store.path` está sin establecer, así que un despliegue existente no se relocaliza al actualizar.
+
+<Note>
+**`smsg.dlr.correlation.days` acota `smsg.cdr.deadline.hours`.** Pasada la ventana de correlación un
+acuse ya no puede coincidir con su envío, así que esperar más solo retrasa la misma
+respuesta. El barrendero de expiración deriva su tope de este valor en lugar de retener una constante propia,
+así que ampliar la ventana sube el tope y estrecharla lo baja. Un deadline por encima del tope se sujeta
+y se registra.
+</Note>

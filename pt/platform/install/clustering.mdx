@@ -1,0 +1,95 @@
+---
+title: "Rodando como cluster"
+description: "Um registro de decisão. A resposta curta é não, não hoje. E aqui está exatamente o que quebra."
+---
+
+<Warning>
+**Status: um registro de decisão, não um item de roadmap.** Nada nesta página está implementado. Ela
+existe para que a próxima pessoa a perguntar "podemos rodar dois destes?" receba uma resposta real em
+vez de redescobrir as restrições pelo fonte.
+</Warning>
+
+**Não, não hoje.** Duas instâncias contra um mesmo banco descartarão a maior parte dos delivery
+receipts, e até recentemente duplicariam o crédito de cada top-up pré-pago. O que se segue é o porquê,
+e o que seria necessário.
+
+Para gateways independentes em um mesmo host — o que funciona — veja
+[Várias instâncias](/platform/install/multiple-instances).
+
+## O que já é seguro para cluster
+
+Mais do que você esperaria. O caminho de envio foi construído sem pensar em cluster e mesmo assim
+está correto entre instâncias.
+
+| | Por que se sustenta |
+| :--- | :--- |
+| **IDs de mensagens não colidem** | `msg.serial` é um UUID aleatório em todos os três locais de geração, então chaves de call-record são globalmente únicas sem ordinal de nó |
+| **Crédito pré-pago não fica negativo** | O crédito é reservado em blocos com um `UPDATE` condicional atômico, e então gasto a partir da memória. Duas instâncias reservando simultaneamente são serializadas por row locking; a perdedora pega um bloco menor |
+| **Call records não se duplicam no caminho normal** | `cdr_submit` insere com `ON CONFLICT ... DO NOTHING` |
+| **Configuração converge** | O poller é estritamente somente-leitura e não escreve nada de volta, então toda instância chega ao mesmo estado independentemente |
+
+## O que quebra
+
+### Dinheiro e registros
+
+| Problema | Consequência |
+| :--- | :--- |
+| ~~Os polls de recharge e transfer rodavam em toda instância sem row lock e sem guard de re-apply~~ **Corrigido em 0.7.3** — os selects usam `FOR UPDATE SKIP LOCKED`, a marcação carrega `AND NOT applied`, e uma entrada é reivindicada antes de o dinheiro se mover | Era: um top-up de 100 unidades creditava N × 100. Dinheiro sendo criado do nada. Reproduzido em 2×, depois corrigido |
+| O **CDR expiry sweeper** roda em toda instância sem `ON CONFLICT`, e `cdr_final` não tem chave única em `(gateway_msg_id, part_no)` | Linhas `EXPIRED` duplicadas espalham o join de profit-and-loss e **inflam a receita reportada** |
+| O **file CDR sink** faz append em um arquivo por dia | Duas JVMs compartilhando um diretório de dados intercalam flushes de buffer no meio de linha e o corrompem. Só morde quando o sink é `file` |
+
+### Perda de mensagens
+
+Toda correlação de receipt vive em um armazenamento **local ao nó**.
+
+- Um receipt chegando em uma instância que não submeteu a mensagem não encontra nada, é **descartado
+  com uma única linha de log**, e não produz nenhum receipt para o cliente, nenhum webhook e nenhuma
+  linha `cdr_final`. Com N instâncias isso é aproximadamente (N−1)/N de todos os receipts.
+- O armazenamento adquire um **file lock exclusivo**. A segunda instância a subir no mesmo caminho
+  falha, a falha é capturada, logada em WARN, e ela **silenciosamente continua sem persistência
+  alguma** — então "duas instâncias compartilhando um diretório de dados" parece idêntico a
+  "saudável".
+- Receipts não empurrados são estacionados localmente, então um cliente reconectando em uma instância
+  diferente nunca os recebe.
+- Sessões conectadas são rastreadas por JVM, então uma instância não pode saber que um cliente está
+  conectado em outro lugar.
+
+### Mensagens concatenadas, concretamente
+
+Segmentos chegando em instâncias diferentes nunca se reagrupam. Para uma mensagem de três segmentos
+dividida dois-e-um entre duas instâncias:
+
+- cada instância responde `ESME_ROK` e **cobra** pelos segmentos que recebeu;
+- cada uma espera o `reassembling.timeoutMillis` expirar, 30 segundos por padrão;
+- cada uma então transmite seus segmentos como **fragmentos órfãos** carregando um cabeçalho de
+  concatenação para uma mensagem que nunca vai se completar.
+
+O aparelho os mantém até que seu próprio timer expire e tipicamente não mostra nada. **O cliente é
+cobrado pelos três.** O único rastro é um aviso `message.parts.incomplete` por instância, nenhum dos
+quais sabe que o outro existe.
+
+<Note>
+A sessão SMPP de um cliente é normalmente sticky no nível TCP, então isto morde em reconexão no meio
+de uma mensagem, em rebalance do load balancer, e em clientes mantendo vários binds que espalham
+segmentos entre eles.
+
+Whitelisting de conteúdo ainda se aplica ao que cada instância envia — o caminho de timeout é
+checado por conteúdo — então a falha é de entrega e cobrança, não de enforcement.
+</Note>
+
+### Degradado mas não perdido
+
+TPS de fornecedor, rate limits de ingress, sampling de throughput e cursores de grupo de roteamento
+são todos **por processo**. N instâncias enviam até **N × a taxa contratada** para uma operadora.
+
+Isso é uma guarda contra um sender desgovernado, não uma quota distribuída — veja
+[Limits](/reference/config/limits).
+
+## O que seria necessário
+
+Em linhas gerais: mover correlação de receipts e reassembly para storage compartilhado, dar a
+`cdr_final` uma chave única e um upsert, e tornar o sweeper leader-elected ou idempotente. Cada um é
+tratável; nenhum foi feito.
+
+Até lá, escale **verticalmente**, e use várias instâncias independentes onde o tráfego possa ser
+particionado por cliente.

@@ -1,0 +1,107 @@
+---
+title: "La base de datos"
+description: "Qué te compra PostgreSQL, aplicar el esquema, y por qué db migrate solo deja un gateway que no arrancará."
+---
+
+PostgreSQL es **opcional**. Deja `FIREFLO_DB_URL` sin establecer y FireFlo corre sobre archivos, con los call records
+escritos en `data/cdr/`.
+
+## Qué te compra
+
+| Funcionalidad | Necesita base de datos |
+| :--- | :--- |
+| Rating, enrutamiento por menor coste, call records | No |
+| El **barrido de expiración** de CDR | **Sí**. Consulta registros sin resultado |
+| **Crédito prepago** | **Sí**. El crédito solo puede entrar a través de la base de datos |
+| Whitelisting | **Sí** |
+| Que el panel de control edite algo | **Sí**. En modo archivo no hay nada que editar |
+
+La mitad de solo lectura del panel funciona sin ella; simplemente no tiene nada que cambiar.
+
+## Crearla
+
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+
+## Aplicar el esquema
+
+`FIREFLO_DB_MIGRATE=true` migra al arrancar, lo cual es conveniente para una primera vez y equivocado para una
+actualización. Ata un cambio de esquema a un arranque de proceso y no te da forma de ver lo que se aplicaría
+antes.
+
+```bash
+scripts/fireflo db test        # alcanzable, autenticado, migrado, permitido, respondiendo
+scripts/fireflo db info        # qué está aplicado, qué está pendiente
+scripts/fireflo db validate    # las migraciones aplicadas siguen coincidiendo con los archivos
+scripts/fireflo db migrate     # aplicar lo pendiente
+```
+
+`info` y `validate` **no** necesitan el flag que habilita escritura. Leer la versión del esquema no cambia
+nada, y necesitar un flag antes de poder mirar sería una trampa en mitad de un incidente.
+
+<Warning>
+**Las migraciones son solo hacia adelante.** No hay scripts de deshacer, así que revertir un cambio de esquema significa
+restaurar una copia de seguridad. Haz una antes de migrar una base de datos que te importe.
+</Warning>
+
+## `db migrate` solo no es suficiente
+
+Este es el que pilla a la gente, y el fallo es sonoro en lugar de elegante.
+
+`db migrate` crea las tablas y deja **cada una de ellas vacía**. Sin tabla de enrutamiento el
+gateway no arranca en absoluto:
+
+```
+no default routing table in new targets!
+```
+
+Eso nombra una estructura interna en lugar de la fila que falta, así que se lee como un bug. No lo es.
+Significa que la base de datos está vacía.
+
+[`fireflo bootstrap`](/platform/install/first-configuration) escribe lo mínimo que arrancará.
+
+## La línea base consolidada
+
+El esquema es un archivo, `V1.19.0__baseline.sql`, **generado en lugar de fusionado a mano**: los originales
+se aplicaron a una base de datos de trabajo, se volcaron con `pg_dump --schema-only`, y el volcado se verificó
+aplicándolo a una segunda base de datos y comparando ambas. Los cambios posteriores continúan en `V1.20.0`.
+
+Está numerado a la **versión más alta** que reemplaza, no a la más baja, deliberadamente. Un despliegue que
+se detuvo a mitad trataría una línea base con número menor como ya aplicada y migraría a un no-op,
+perdiendo silenciosamente lo que viniera después. En `1.19.0` intenta aplicar y falla en la primera
+tabla que ya existe. Recuperable, donde la versión silenciosa corrompe por omisión.
+
+### Actualizar un despliegue que aplicó los originales
+
+La historia de Flyway aún los nombra a todos, así que `db validate` falla hasta que el registro se realinea: un
+checksum cambiado, el resto ya no resolubles. Un comando lo arregla, y reescribe la **historia**
+en lugar del esquema:
+
+```bash
+FIREFLO_DB_MIGRATE=true scripts/fireflo db repair
+```
+
+<Warning>
+**Termina de aplicar cualquier migración pendiente antes de correr `repair`.** Repair sobre una base de datos parcialmente
+migrada hace que parezca completa cuando no lo es.
+</Warning>
+
+## Actualizar, en orden
+
+<Steps>
+  <Step title="Para el gateway" />
+  <Step title="Mira, luego aplica">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+  </Step>
+  <Step title="Arranca la nueva versión" />
+</Steps>
+
+El comando corre contra la disposición `lib/` del artefacto JVM, así que un despliegue nativo migra desde la
+imagen JVM o cualquier host con un JDK.
+
+Las claves y tablas están en [Configuración de base de datos](/reference/config/database).

@@ -1,0 +1,113 @@
+---
+title: "Sender IDs"
+description: "Approuver les sender IDs qu'un compte peut utiliser, ce que l'approbation tamponne sur le fil, et pourquoi un sender ID approuvé peut toujours être refusé par l'opérateur."
+---
+
+Une ligne dans `app_header` est un sender ID approuvé, comparé **sans tenir compte de la casse**, limité à un compte et un produit. Sur plusieurs marchés un sender ID commercial est un enregistrement plutôt qu'une chaîne que le client choisit. L'opérateur a approuvé `ACMEIN` pour une entreprise et s'attend à ce que le trafic qui le porte lui appartienne.
+
+## Approuvé n'est pas la même chose que livrable
+
+Une approbation fait deux travaux, et ils échouent indépendamment. Elle décide si le message est **mis en correspondance** à ce gateway, et elle porte les TLV qui sont **tamponnés** sur le message à la sortie. Sous DLT, l'identifiant d'entité que l'opérateur exige.
+
+<Warning>
+**Rien d'approuvé signifie rien de tamponné, donc une voie DLT refuse tout.** Sans ligne correspondante il n'y a pas de tampon, le `submit_sm` atteint le vendeur sans identifiant d'entité ou de template, et le vendeur le rejette. Avec un statut SMPP dans le bloc 192–196, qui concerne toujours les TLV.
+
+`tlvCount=0` sur les lignes de trace le confirme. C'est la cause la plus courante d'une voie qui refuse chaque message alors que la configuration propre du compte semble correcte. Parce qu'à ce gateway elle *l'est* : le refus vient de l'opérateur.
+</Warning>
+
+Le **rapport de couverture TLV** du panel existe exactement pour cela. Par ligne approuvée, il nomme quelles balises obligatoires ne seront fournies par rien, et pourquoi :
+
+| Raison | Ce que ça veut dire |
+| :--- | :--- |
+| `nothingSupplies` | Ni la ligne ni aucun login dans la portée ne porte la balise. |
+| `someLogins` | Certains logins la portent et d'autres non, elle échoue donc par intermittence. |
+| `notStamped` | La ligne la porte, mais le `whitelist.tlvs.mode` de ce listener est `off`. |
+| `notChecked` | La ligne la porte, mais cette liste n'est pas vérifiée, donc rien n'est mis en correspondance ni tamponné. |
+| `unparseable` | Un token sans balise. `PEID=…` n'a pas de tiret bas, il ne tamponne donc rien. |
+| `emptyValue` | La balise est nommée sans valeur, et une valeur vide ne tamponne rien. |
+| `vendorDrops` | Quelque chose la fournit, et le vendeur vers lequel ça route ne l'enregistre pas. |
+
+<Note>
+C'est un **rapport, jamais un garde-fou**. Un login n'est pas lié à un listener et les règles de route choisissent le vendeur, donc rien ici ne peut être certain qu'un message donné atteint un listener donné. Refuser un enregistrement dessus bloquerait des configurations qui fonctionnent. Et chaque phrase qu'il produit dit qu'un client envoyant lui-même la balise rend la question inutile.
+</Note>
+
+`vendorDrops` mérite d'être lu deux fois : une balise que le vendeur n'a pas enregistrée est jetée à la sortie, *après* que l'enregistrement d'appel l'ait déjà notée comme présente. L'enregistrement montre qu'elle est envoyée et le fil ne la porte pas. Voir [TLV sur une connexion](/platform/connections/tlvs).
+
+## Portée : compte, produit, et optionnellement un login
+
+Une ligne est par `(account, product)`, avec un produit vide signifiant chaque produit. Une liste spécifique au produit est fusionnée **par-dessus** la liste tous produits du compte. Les deux sont unifiés, pas choisis entre.
+
+`system_id` restreint davantage. **NULL signifie chaque login du compte**, ce que chaque ligne signifiait avant que la colonne existe. Un déploiement non touché correspond exactement comme avant et aucune rétro-remplissage n'a été nécessaire. Deux logins sur le même compte peuvent détenir le même sender ID.
+
+<Warning>
+**Un login sans ses propres lignes et sans lignes à portée du compte ne peut rien envoyer une fois l'application activée.** Lier une approbation à un login n'ajoute pas seulement de la spécificité. Elle retire cette ligne de tous les autres logins du compte.
+
+La page du compte avertit quand toutes les approbations d'un compte sont liées à des logins et qu'un login est laissé sans aucune. Le trafic dont le login est inconnu obtient les lignes à portée du compte et rien d'autre, ce qui est fail-closed volontairement : un appelant qui n'a pas passé de login ne doit pas recevoir d'approbations données à quelqu'un de spécifique.
+</Warning>
+
+## Qui propose et qui approuve
+
+<Steps>
+<Step title="Le client demande">
+Depuis le portail. Tout ce qu'un client écrit atterrit en `PENDING`, avec sa propre note attachée. Sous DLT, sa référence d'enregistrement. Le gateway ne sert une ligne que quand elle est `enabled` **et** `APPROVED`, donc une demande est stockée, visible des deux côtés, et inerte.
+</Step>
+<Step title="Un opérateur décide">
+Approuver ou refuser, sur la page du compte ou sur la liste inter-comptes. Un refus garde la ligne et porte une raison montrée au client. C'est pourquoi il n'y a pas de refus en masse, seulement d'approbation en masse.
+</Step>
+<Step title="Il entre en service au prochain sondage">
+Pas de reconnexion. Voir ci-dessous.
+</Step>
+</Steps>
+
+`status` et `enabled` sont des colonnes séparées faisant des travaux séparés. Approuver écrit `status` et enregistre le relecteur. Décocher écrit `enabled = false` et laisse `status` tranquille : **retirer quelque chose n'est pas le désapprouver**, et une ligne retirée remise en service ne devrait pas avoir besoin d'être approuvée à nouveau.
+
+<Warning>
+**Modifier une inscription approuvée la suspend.** Changer le sender ID, la note de demande ou le login remet la ligne à `PENDING` et efface la relecture précédente, donc l'inscription est hors service jusqu'à ce que quelqu'un l'approuve à nouveau.
+
+C'est le principe plutôt qu'un effet de bord. Un client ne doit pas pouvoir changer ce qui a été approuvé et continuer d'envoyer sous l'approbation. Et cela a un bord tranchant : une faute de frappe arrête son trafic. Les formulaires arment une confirmation avant l'écriture.
+</Warning>
+
+## Les TLV qu'un client peut proposer mais pas définir
+
+Les deux tables d'inscription portent deux colonnes TLV.
+
+| Colonne | Lue par le gateway |
+| :--- | :--- |
+| `tlvs` | Oui. C'est ce qui est tamponné sur le fil. |
+| `requested_tlvs` | **Non.** Le portail l'écrit ; le loader sélectionne `tlvs`. |
+
+Sous `replace` le tampon écrase ce que le client a affirmé, et **cet écrasement est l'approbation**. Un client qui pourrait écrire la colonne servie pourrait affirmer l'inscription de quelqu'un d'autre tout en envoyant un libellé approuvé, et l'enregistrement d'appel rapporterait alors la valeur qu'il a choisie comme approuvée. Ce comportement est fixé par un test, il ne dérivera donc pas.
+
+Le bénéfice est pour le client : une proposition ne change rien de ce qui est servi, donc contrairement à une modification du sender ID elle ne suspend **pas** la ligne. Une inscription approuvée continue de fonctionner pendant qu'un opérateur considère la proposition. Accepter déplace la valeur et tamponne l'opérateur comme son propriétaire ; rejeter efface la demande et laisse `tlvs` exactement comme il était. Ni l'un ni l'autre ne touche `status`.
+
+## Ce que le panel refuse de stocker
+
+| Règle | Pourquoi |
+| :--- | :--- |
+| Non vide | Il n'y a rien à approuver. |
+| Au plus 64 caractères | Le champ n'avait aucun plafond du tout, et un sender ID de plusieurs mégaoctets atteindrait la file de relecture et serait lu par le loader whitelist à chaque sondage de configuration. |
+| Pas d'espace aux deux bouts | Comparé exactement, et une espace de fin est invisible partout où c'est montré. |
+| ASCII imprimable seulement | La comparaison est insensible à la casse, et plier la casse d'autres alphabets dépend de la locale du serveur. La même ligne correspondrait sur un déploiement et pas sur un autre. |
+
+<Note>
+64 est généreux plutôt que correct. SMPP plafonne `source_addr` à 21 octets, donc tout ce qui dépasse ne peut pas être livré sur un bind. Mais refuser à 21 ici refuserait aussi les modifications de lignes déjà existantes, et « vous ne pouvez pas livrer ceci » est une décision différente de « vous ne pouvez pas enregistrer ceci ».
+</Note>
+
+## Approuver n'exige pas de reconnexion
+
+La whitelist est relue lors du sondage de configuration et chaque snapshot porte une génération. **Une session SMPP bindée depuis des semaines récupère un sender ID nouvellement approuvé sans se reconnecter.** Ce qui compte, parce que le client dont le trafic est refusé est généralement au téléphone pendant qu'on l'approuve.
+
+```bash
+fireflo reload
+```
+
+l'applique maintenant plutôt qu'au prochain sondage. Il prend le token admin. Voir [La CLI fireflo](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Templates de contenu" href="/platform/customers/templates">
+L'autre moitié de la même approbation, et la grammaire des espaces réservés.
+</Card>
+<Card title="Déployer le whitelisting" href="/platform/customers/whitelisting-rollout">
+Rapporter avant d'appliquer, et les diagnostics sur `/ops/health`.
+</Card>
+</CardGroup>

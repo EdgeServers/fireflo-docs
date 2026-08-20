@@ -1,0 +1,127 @@
+---
+title: "Versionado y actualización"
+description: "Qué releases existen, qué te dice un número de versión, y las cinco cosas que comprobar antes de tomar uno nuevo."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+FireFlo usa versionado semántico estándar. Lo que te importa es lo que un número de versión promete y
+qué comprobar antes de tomar uno.
+
+## Qué significa el número
+
+| Cambio | Significa |
+| :--- | :--- |
+| **Major**. `1.0.0` → `2.0.0` | Un cambio disruptivo. Espera leer las notas y cambiar algo. |
+| **Minor**. `0.7.0` → `0.8.0` | Nueva capacidad. El comportamiento existente se pretende que sobreviva, pero **los valores por defecto pueden moverse**. Ver abajo. |
+| **Patch**. `0.7.3` → `0.7.4` | Un arreglo. El tipo más seguro de tomar, y normalmente la razón para tomarlo pronto. |
+
+Tus notas de release acompañan cada build. Son la lista autoritativa de qué cambió; esta página trata
+sobre qué buscar en ellas.
+
+## Releases
+
+El par actual es <Versions />.
+
+| Gateway | Panel de control | Fecha | De qué trataba el release |
+| :--- | :--- | :--- | :--- |
+| **0.7.4** | 0.7.4.1 | 2026-08-20 | Tres defectos en el camino de crédito prepago |
+| **0.7.3** | 0.7.3.3 | 2026-08-19 | Cuentas postpago, estados de cuenta y cierre de periodo |
+| **0.7.2** | 0.7.2.1 | 2026-08-19 | Placeholders de plantilla ampliados para aceptar nombres y frases |
+| **0.7.1** | 0.7.1.1 | 2026-08-19 | Emparejamiento de plantillas. Una plantilla aprobada estaba rechazando cada mensaje |
+| **0.7.0** | 0.7.0.1 | 2026-08-19 | Mensajes concatenados de extremo a extremo, y el defecto de facturación de segmentos |
+
+<Note>
+**0.7.0 es donde esta tabla empieza, no donde FireFlo empieza.** Releases anteriores existen y están en
+servicio; sus notas están disponibles desde [support@fireflo.au](mailto:support@fireflo.au). La historia
+publicada empieza aquí porque 0.7.0 abrió la línea de trabajo de facturación en la que el producto está actualmente.
+</Note>
+
+Dos cosas que la tabla no te dirá por sí sola.
+
+**La columna de panel de control muestra la revisión más nueva para ese release de gateway.** El cuarto número es
+una revisión solo del panel y se mueve por sí sola. 0.7.3 tuvo tres de ellas. Cualquier versión de panel cuyos primeros
+tres números coincidan con el gateway es un par válido; el panel comprueba esto en runtime y lo dice cuando
+no coincide.
+
+**Cinco releases de gateway en dos días no es un error.** 0.7.0 abrió un trozo de trabajo de facturación, y
+cada release después cerró algo que el anterior expuso. Un defecto de facturación de segmentos, luego el
+emparejamiento de plantillas del que dependía, luego la gramática de placeholders, luego el trabajo de postpago, luego tres
+defectos en el camino de crédito. Los releases se agrupan cuando se está trabajando en una costura; así es como se ve.
+
+## Antes de actualizar
+
+El patrón que merece la pena interiorizar: **los cambios que duelen son los silenciosos.** Un cambio disruptivo de API
+se anuncia; un valor por defecto cambiado no.
+
+<AccordionGroup>
+
+<Accordion title="Lee las notas de release por valores por defecto cambiados">
+Un valor por defecto que se mueve cambia el comportamiento en cada despliegue que nunca estableció el valor. Que son la mayoría
+de ellos. Estas son las entradas que hay que leer con atención, más que las nuevas funcionalidades.
+</Accordion>
+
+<Accordion title="Comprueba si algo se movió entre puertos">
+Habilitar el puerto de gestión **movió** `/q/metrics` de 8080 a 9000. Un job de Prometheus aún apuntando
+al viejo obtiene `404` en lugar de fallar sonoramente, así que un dashboard se lee como un sistema tranquilo en lugar
+de un monitor roto.
+</Accordion>
+
+<Accordion title="Comprueba si se incluye una migración de base de datos">
+Las migraciones son **solo hacia adelante**. No hay migración de bajada, así que el camino de rollback es un restore en lugar de
+una migración inversa. Toma la copia de seguridad antes, no después.
+</Accordion>
+
+<Accordion title="Comprueba si el comportamiento de los recibos cambió">
+La semántica de recibos ha cambiado dos veces de formas que fueron invisibles hasta que un cliente lo notó. `level`
+solía leer siempre `2`, así que `ACCEPTD` se reportaba como un resultado; y el `User-Agent` en llamadas
+webhook cambió del valor por defecto del JDK a `FireFlo/<version>`, que importa a cualquier receptor con una
+lista de permitidos.
+</Accordion>
+
+<Accordion title="Decide si es necesario un aviso a clientes">
+Si las cifras que un cliente puede ver van a cambiar, necesitan que se les diga antes de que pase. Con el número, la
+dirección y la fecha. Consulta [Avisos a clientes](/platform/migrating/customer-notices).
+</Accordion>
+
+</AccordionGroup>
+
+## Emparejamiento de versiones
+
+El gateway publica su versión en ejecución en `/ops/health`, y el panel de control muestra tanto la suya
+como la del gateway.
+
+<Warning>
+**Un par desemparejado se marca deliberadamente.** El panel se degrada en lugar de romperse cuando habla
+con un gateway más viejo. Una columna simplemente cae de sus consultas. Pero una funcionalidad que aparece ausente
+por una brecha de versión se ve exactamente como una funcionalidad que está rota.
+
+Comprueba el par antes de investigar cualquier cosa que "debería estar ahí y no está".
+</Warning>
+
+## Reportar problemas
+
+Todo va a [support@fireflo.au](mailto:support@fireflo.au). Lo que cambia es cómo lo enmarcas:
+
+| | Incluye |
+| :--- | :--- |
+| **Un bug reproducible** | El par de versiones, qué hiciste, qué pasó, y un serial de mensaje que lo muestra |
+| **Una pregunta o ayuda de setup** | Lo que estás intentando lograr, no solo el error. La respuesta suele ser un enfoque diferente |
+| **Cualquier cosa sensible a seguridad** | **Dilo en el asunto.** No adjuntes logs o configuración sin redactar a un primer correo; te diremos dónde enviarlos |
+
+<Warning>
+**Redacta antes de compartir.** Credenciales, system IDs, direcciones IP, números de teléfono y contenido de mensajes
+aparecen todos en configuración y logs. `fireflo` redacta lo que puede; una línea de log copiada a mano es tu
+propia responsabilidad.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Avisos a clientes" icon="envelope" href="/platform/migrating/customer-notices">
+    Cuando un release cambia lo que un cliente ve.
+  </Card>
+  <Card title="Migrar un despliegue" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Viniendo de Jasmin o Kannel.
+  </Card>
+</CardGroup>

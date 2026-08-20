@@ -1,0 +1,129 @@
+---
+title: "Routage au moindre coût"
+description: "Comment une table marquée ->function(LCR) choisit le fournisseur le moins cher au lieu de la première règle qui correspond, et le nom de fonction mal orthographié qui route en premier-correspondant tout en donnant l'apparence de router selon le prix."
+---
+
+## La table qui n'a jamais été au moindre coût
+
+<Warning>
+**Un nom de fonction écrit et non reconnu retombe sur `NORMAL`.** `->function(LRC)` est une
+transposition que n'importe qui peut faire, et la table route alors en premier-correspondant alors que
+son auteur croit qu'elle route selon le prix. Chaque tarif fournisseur qu'elle contient est ignoré, et
+chaque message part vers la règle qui se trouve en haut.
+
+Le système journalise `routing.table.unknown-function` et continue de fonctionner. Ce repli est
+délibéré : refuser à cet endroit refuserait tout l'ensemble de tables, et un nom mal tapé ne devrait
+pas mettre le routage hors service. Vérifiez le nom caractère par caractère, et vérifiez le journal.
+</Warning>
+
+Il existe exactement deux fonctions, `NORMAL` et `LCR`. Une table qui ne déclare aucune fonction est
+`NORMAL`.
+
+<Note>
+Une troisième fonction, `RC`, a été supprimée dans `V1.28.0`. Elle figurait dans l'énumération, elle
+était autorisée par la contrainte de base de données, et elle était décrite dans le panneau. Or aucun
+branchement ne l'utilisait, donc une table réglée sur `RC` routait comme `NORMAL` alors que toutes les
+surfaces qu'un opérateur pouvait consulter disaient autre chose. Les lignes existantes sont réécrites
+en `NORMAL`, ce qu'elles faisaient déjà.
+</Note>
+
+## Ce qui change
+
+```ini
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+Une table `NORMAL` s'arrête à la première règle qui correspond, ce qui fait de l'ordre du fichier la
+priorité. Une table `LCR` parcourt **toutes** les règles, traite les correspondances comme des
+alternatives plutôt que comme une chaîne de repli, et laisse le seul tarif dans `rates.conf` décider.
+
+<Warning>
+**L'ordre des règles n'a aucune importance à l'intérieur d'une table LCR.** Déplacer une règle vers le
+haut ne la rend pas préférée, et placer un attrape-tout en premier ne masque rien de ce qui suit. Si
+vous réorganisez les règles ici pour changer le comportement, vous modifiez le mauvais fichier. Ce sont
+les tarifs de coût qui décident.
+</Warning>
+
+| Dans une table `NORMAL` | Dans une table `LCR` |
+| :--- | :--- |
+| La première correspondance l'emporte | Chaque correspondance est un candidat |
+| L'ordre est la priorité | L'ordre n'a aucune signification |
+| Un attrape-tout au-dessus des autres les tue | Rien n'est masqué, donc les avertissements `unreachable-rules` et `no-catch-all` ne s'appliquent pas |
+| Une règle peut enchaîner sur une autre table | Les règles qui pointent vers une autre table sont **ignorées** |
+
+## Comment un gagnant est choisi
+
+<Steps>
+  <Step title="Toutes les règles de la table sont parcourues">
+    Aucune sortie anticipée. Une règle dont la cible est une autre table est ignorée avec un
+    avertissement. Un coût imbriqué ne peut pas être comparé, et router à un prix inconnu serait pire
+    que ne pas y router.
+  </Step>
+  <Step title="Les fournisseurs morts disparaissent">
+    Une cible qui est en panne, suspendue ou qui n'accepte pas est ignorée, de sorte que le suivant
+    moins cher porte le trafic. C'est le même signal qu'utilise un groupe ; voir
+    [Fournisseurs](/platform/connections/vendors) pour les quatre états.
+  </Step>
+  <Step title="Les survivants sont tarifés">
+    Chaque candidat restant est tarifé pour le produit de ce message par rapport au côté **coût** de
+    [rates.conf](/reference/files/rates-conf). Le moins cher l'emporte.
+  </Step>
+  <Step title="Un candidat sans tarif est le dernier recours">
+    Un fournisseur sans tarif de coût correspondant est mis de côté et utilisé uniquement si rien
+    d'autre ne correspond, en journalisant `No candidate in least-cost table … has a rate`.
+  </Step>
+</Steps>
+
+<Note>
+**Une ligne de tarif manquante dégrade plutôt qu'elle ne bloque.** Refuser de router un message non
+tarifé transformerait une ligne oubliée dans `rates.conf` en panne ; la préférer enverrait tout par le
+fournisseur le moins configuré. Le dernier recours est la seule réponse qui n'est ni l'un ni l'autre.
+
+Il vaut tout de même la peine d'être alerté, car un fournisseur qui gagne du trafic sur un tarif
+manquant le gagne à une marge inconnue. Voir [Comment fonctionne la tarification](/platform/billing/how-pricing-works).
+</Note>
+
+## Deux choses refusées d'emblée
+
+Les deux sont refusées au chargement, en bloc, car aucune n'a d'état partiel qui route de la façon que
+quiconque avait prévue. L'ensemble de tables cesse de se mettre à jour jusqu'à ce que ce soit corrigé.
+
+<AccordionGroup>
+  <Accordion title="Un groupe de fournisseurs à l'intérieur d'une table LCR">
+    Le moindre coût choisit par le prix et un groupe choisit par la politique. Étendre les membres en
+    candidats tarifés écarterait silencieusement la politique, et un groupe pondéré n'a aucun sens à
+    donner à une comparaison de prix.
+
+    Utilisez l'un ou l'autre dans une table donnée : un groupe si vous voulez du failover et un partage
+    proportionnel, une table LCR si vous voulez le fournisseur vivant le moins cher.
+  </Accordion>
+  <Accordion title="Un nom qui est à la fois un groupe et une table, ou à la fois un groupe et un worker">
+    La résolution est table, puis groupe, puis worker, donc l'un des deux serait silencieusement
+    inaccessible. Renommez l'un d'eux.
+  </Accordion>
+</AccordionGroup>
+
+## Copier-et-continuer n'a pas de sens ici
+
+`+copied` marque une règle comme « ajouter cette cible et continuer à parcourir ». Une table LCR
+parcourt déjà toute la table puis choisit un candidat le moins cher, il n'y a donc rien qu'une copie
+puisse contourner. Le panneau le dit plutôt que de laisser le drapeau paraître significatif.
+
+## Diagnostiquer un choix
+
+`outSms.routing.trace`, réglé sur un numéro de série ou un identifiant de compte, explique quelles
+règles ont correspondu. La sélection elle-même — quel candidat a gagné et à quel tarif — est
+journalisée sous `outSms.routing.debug`, qui n'est utilisable que sur une passerelle inactive ; voir
+[Comment fonctionne le routage](/platform/routing/how-it-works).
+
+Si une table LCR envoie tout vers un seul fournisseur, vérifiez dans cet ordre :
+
+- Le nom de la fonction est-il orthographié `LCR` ?
+- Les autres candidats ont-ils bien un tarif de coût, pour **le produit de ce message** ?
+- Les autres candidats acceptent-ils ? Un fournisseur qui est bindé mais non transmettable est ignoré.
+
+Les tarifs sont configurés séparément ; voir [rates.conf](/reference/files/rates-conf) et
+[routingTable.conf](/reference/files/routing-table).

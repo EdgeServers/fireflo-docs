@@ -1,0 +1,95 @@
+---
+title: "Ajustes que cada worker tiene"
+description: "Los ajustes base que un proveedor y un listener comparten: reintentos, throughput, colas, filtros, acciones de fallo y suspensión."
+---
+
+Cada worker (proveedor o listener) se configura a través de
+`outSms.instance.<name>.<key>`, recurriendo a `outSms.default.<key>` y luego al predeterminado codificado
+de abajo. Consulta [Niveles de propiedades](/reference/config/paths).
+
+## Throughput y reintentos
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `maxRetries` | `1` | `submit_sm` **total** que este proveedor puede recibir para un mensaje, no por paso de enrutamiento. `0` es ilimitado. |
+| `tps` | `0` | Transacciones por segundo. `0` es sin medir. |
+| `threadCount` | `1` | Hilos worker. |
+| `queue.honourPriorities` | `false` | Si un mensaje de mayor prioridad adelanta. |
+| `queue.name` | `""` | Comparte una cola entre workers nombrándola. |
+
+<Warning>
+`maxRetries` **antes acotaba solo los reintentos dentro del worker**, y cada viaje por el router entregaba
+una asignación nueva. Con esta lectura de `1` junto a un `outSms.routing.maxAttempts` de 20, un proveedor
+podía ver aproximadamente 100 PDUs por un único mensaje. Ahora es un total.
+
+Si estás actualizando desde antes de ese arreglo y habías ajustado en torno al viejo comportamiento, revisa este valor.
+</Warning>
+
+## Estado de ejecución
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `pause` | `false` | Seguir aceptando, dejar de enviar. La cola crece. |
+| `suspend` | `false` | Dejar de aceptar; la cola drena de vuelta al router para que el tráfico se re-enrute. |
+| `pause.sleep.ms` | `1000` | Intervalo de sondeo mientras está pausado. |
+
+Estos son los dos estados detrás de los verbos `hold`/`release` y `suspend`/`resume` en
+[el CLI](/reference/cli/fireflo) y los controles de tráfico del panel.
+
+## Acciones de fallo
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `fail.action.worker.type` | `SLEEP` o `RE_ENQUEUE_WORKER` | Depende de si el manejo de mensajes es síncrono. |
+| `fail.action.router.type` | `RE_ENQUEUE_ROUTER` | Qué ocurre cuando el worker devuelve el mensaje. |
+| `fail.action.worker.sleep` | `1000` / `0` | Milisegundos antes de reintentar internamente. Existe para evitar un bucle ocupado cuando un worker está mal configurado. |
+| `fail.action.router.sleep` | `2000` / `0` | Lo mismo, antes de devolver al router. |
+| `fail.action.delayed.delay` | `5000` | Cuánto tiempo un mensaje que entra a la cola de retraso espera antes de poder ser enviado de nuevo. |
+
+## Política de suspensión
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `suspension.policy` | `SUSPEND` | Qué hace la pasarela a un worker que sigue fallando. |
+| `suspension.stopMessages.ms` | `-1` | Cuánto tiempo dejar de enviar. `-1` es nunca. |
+| `suspension.disable.ms` | `-1` | Cuánto tiempo deshabilitar. `-1` es nunca. |
+
+## Alertas y KPIs
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `alert.maxPending` | `0` (ilimitado) | Umbral de mensajes pendientes. |
+| `alert.maxRejected` | `0` (ilimitado) | Umbral de mensajes rechazados. |
+| `alert.maxQueueSize` | `0` (ilimitado) | Umbral de profundidad de cola. |
+| `kpi.enabled` | `false` | Si el muestreo de KPI se ejecuta. |
+| `kpi.period.minutes` | `60` | Ventana de muestreo, máximo 120. |
+| `kpi.volume` | `100` | Mensajes antes de que se forme un veredicto. |
+| `kpi.fail.statuses` | `""` | Estados que cuentan como fallo para propósitos de KPI. |
+
+## Filtros
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `filters.beforeDoMessage` | `""` | Se ejecuta antes de que el mensaje sea manejado. |
+| `filters.afterDoMessageSuccess` | `""` | Se ejecuta tras un éxito. |
+| `filters.afterDoMessageFailure` | `""` | Se ejecuta tras un fallo. |
+
+<Warning>
+Un worker cuyos filtros todos fallan al resolver arranca **sin filtros**, en lugar de rechazar arrancar.
+Revisa el informe de carga. Consulta [Filtros](/platform/routing/filters).
+</Warning>
+
+## Mapeo de caracteres y diagnósticos
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `charmapper.enabled` | `true` | Si el mapeo de caracteres se ejecuta. |
+| `charmapper` | `""` | El mapeo a aplicar. |
+| `debug` | `false` | Logging verboso del worker. |
+| `print.msgs` | `false` | **Escribe cuerpos de mensajes al log.** |
+
+<Warning>
+`print.msgs`, y los flags hermanos en los workers cliente y servidor, escriben credenciales, números de teléfono
+y contenido de mensajes a los logs. Prefiere una [captura](/platform/operations/capture). Acotada, en memoria,
+una sesión, auto-expira.
+</Warning>

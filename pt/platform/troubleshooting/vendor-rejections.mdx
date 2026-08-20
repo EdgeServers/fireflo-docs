@@ -1,0 +1,104 @@
+---
+title: "Rejeições de fornecedor"
+description: "Um fornecedor bound recusando todo submit_sm parece saudável por todo ângulo que o roteamento se importa. O command_status é a única coisa que diz por quê."
+---
+
+Esta é a falha que mais desperdiça tempo, porque **um fornecedor recusando toda mensagem parece
+perfeitamente saudável**: as sessões estão up, a fila drena, `acceptsMessages()` é true.
+
+A mensagem é aceita, roteada, submetida, recusada, re-enfileirada, e descartada em
+`outSms.routing.maxAttempts`. E o drop diz `reason=maxAttempts`, que descreve o sintoma e não a
+causa.
+
+## Onde a causa de fato está
+
+`message.submit.response`, que carrega o `command_status` do fornecedor:
+
+```
+message.submit.response worker=smppclient.vendor1 status=196 (ESME_RINVOPTPARAMVAL: the vendor
+rejected a TLV value -- on an India DLT lane, usually a wrong or unstamped entity or template id)
+```
+
+O mesmo valor está no card do fornecedor no painel e em `/ops/health` como `last_submit_error`, com
+`submit_rejected` contando. Então uma rota recusando tudo fica visível sem precisar ler um log.
+
+## O que os códigos comuns significam
+
+| Status | Mnemônico | Significado | Retry? |
+| ---: | :--- | :--- | :--- |
+| 10 | `ESME_RINVSRCADR` | Sender ID recusado — não aprovado, tamanho errado, ou TON/NPI errado | não |
+| 11 | `ESME_RINVDSTADR` | Destino recusado — cheque formato e código de país | não |
+| 14 | `ESME_RINVPASWD` | Senha errada para essa conta de fornecedor | não |
+| 20 | `ESME_RMSGQFUL` | Fila do fornecedor está cheia — desacelere | sim |
+| 67 | `ESME_RINVESMCLASS` | `esm_class` inválido, muitas vezes os bits de UDH ou de message-mode | não |
+| 69 | `ESME_RSUBMITFAIL` | Recusado sem razão dada | sim |
+| 88 | `ESME_RTHROTTLED` | Enviando rápido demais — reduza o `tps` deste fornecedor | sim |
+| 100 | `ESME_RX_T_APPN` | Aplicação do fornecedor recusou temporariamente | sim |
+| 192 | `ESME_RINVOPTPARSTREAM` | O stream de TLVs está malformado | não |
+| 193 | `ESME_ROPTPARNOTALLWD` | O fornecedor não permite um dos TLVs enviados | não |
+| 194 | `ESME_RINVPARLEN` | Um TLV está com o tamanho errado | não |
+| 195 | `ESME_RMISSINGOPTPARAM` | Um TLV obrigatório não foi enviado — em DLT, o entity ou template id | não |
+| 196 | `ESME_RINVOPTPARAMVAL` | Um valor de TLV foi rejeitado — em DLT, um id errado ou não estampado | não |
+
+O gateway carrega a tabela completa, e escreve a frase em inglês simples ao lado de todo código que
+reconhece. Um código fora dela loga como **`vendor-specific`**, de propósito: fornecedores usam os
+próprios, e inventar um nome mandaria você procurar uma entrada de spec que não existe.
+
+## O bloco 192–196 é sempre sobre TLVs
+
+Se uma rota começa a recusar tudo com um destes cinco, olhe os TLVs da mensagem, não o roteamento.
+Três coisas os fornecem, compondo nesta ordem:
+
+<Steps>
+  <Step title="O default.tlvs.submit do próprio fornecedor">
+    `outSms.instance.<name>.default.tlvs.submit`
+  </Step>
+  <Step title="Os defaultTlvs da credencial">
+    Valores por cliente.
+  </Step>
+  <Step title="O carimbo do whitelist">
+    Para um sender header ou template **aprovado**.
+  </Step>
+</Steps>
+
+**A causa mais comum é a terceira.** Nada aprovado significa nada carimbado, então uma rota DLT
+recebe um submit sem entity ou template id e recusa. `tlvCount=0` nas linhas de trace confirma.
+
+**A segunda mais comum é um default malformado.** O formato é `<name>_<tag>=<value>`. Escrever
+`PEID=1101778070000018542` em vez de `peid_0x1400=1101778070000018542` parseia para nada, e o TLV é
+descartado com apenas um `WARN`:
+
+```bash
+grep -i "default tlv" /var/log/fireflo/fireflo.log
+```
+
+<Warning>
+Um default malformado é o mais difícil desses de enxergar, porque a configuração **parece
+aplicada**. Está presente na configuração, o gateway subiu limpo, e a única evidência de que não fez
+nada é um WARN no carregamento e um `tlvCount` menor do que você esperava.
+</Warning>
+
+## Um fornecedor, muito mais submits do que você configurou
+
+Se um fornecedor reporta muito mais submits rejeitados do que mensagens enviadas, os dois tetos de
+retentativa estão se compondo: o orçamento de retentativas do fornecedor é gasto *dentro* de uma
+tentativa de roteamento, e uma recusa devolve a mensagem para o roteador, que tem seu próprio teto
+de tentativas. Com um único fornecedor configurado, re-rotear manda direto de volta e gasta um
+orçamento novo.
+
+<Tip>
+Observe `submit_rejected` contra `submitted` no card do fornecedor. Uma razão bem acima de um é essa
+composição, não um problema de fornecedor. E vale detectar, porque cada um desses PDUs é tráfego que
+sua carrier vê.
+</Tip>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="TLVs na prática" icon="tags" href="/platform/connections/tlvs">
+    De onde vem uma tag e o que sobrescreve o quê.
+  </Card>
+  <Card title="Filas e retentativas" icon="rotate" href="/platform/routing/queues-and-retries">
+    Tetos de tentativa, backoff e o que uma re-enfileirada custa.
+  </Card>
+</CardGroup>

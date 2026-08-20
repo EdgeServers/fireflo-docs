@@ -1,0 +1,107 @@
+---
+title: "Atualizando"
+description: "A ordem, o que uma atualização não toca, e por que os dois componentes andam juntos."
+---
+
+## Antes de começar
+
+```bash
+scripts/fireflo verify        # está saudável AGORA
+scripts/fireflo db info       # quais migrations estão pendentes
+```
+
+Leia as release notes. `update` **nunca toca no diretório de configuração**, que é o que o torna
+seguro. E significa que uma chave de configuração nova introduzida por uma release não é adicionada
+ao seu arquivo.
+
+<Warning>
+**Faça um backup do banco.** Migrations são unidirecionais; não há scripts de undo.
+</Warning>
+
+## A ordem
+
+<Steps>
+  <Step title="Pare o gateway">
+    `SIGTERM`, não `SIGKILL`. Um shutdown limpo devolve crédito pré-pago reservado não gasto; um
+    `kill -9` o deixa preso até que [`fireflo credit release`](/reference/cli/fireflo) seja
+    executado.
+  </Step>
+  <Step title="Aplique migrations deliberadamente">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+    Em vez de deixar `FIREFLO_DB_MIGRATE=true` fazer no startup, o que amarra uma mudança de schema
+    a um start de processo e não mostra nada antes.
+  </Step>
+  <Step title="Atualize o artefato">
+```bash
+sudo ./scripts/fireflo-install update
+```
+    Substitui `/opt/fireflo` e nada mais.
+  </Step>
+  <Step title="Atualize o painel">
+```bash
+sudo ./scripts/fireflo-panel-install update
+```
+  </Step>
+  <Step title="Verifique">
+```bash
+scripts/fireflo verify
+scripts/fireflo version      # o que está RODANDO, não o que está em disco
+```
+  </Step>
+</Steps>
+
+<Note>
+`version` pergunta ao gateway em vez dos arquivos. **Um artefato que foi construído mas nunca teve
+restart nele é a razão inteira para perguntar** — o jar em disco e o processo servindo tráfego são
+perguntas diferentes.
+</Note>
+
+## Ambos os componentes andam juntos
+
+A versão do painel repete a release do gateway contra a qual foi construído em seus três primeiros
+números.
+
+| Gateway | Painel |
+| :--- | :--- |
+| `0.7.3` | `0.7.3.1` |
+
+O painel checa o par em runtime e reporta um mismatch na tela. Um par descasado não está
+necessariamente quebrado — mas significa que o painel está descrevendo um gateway contra o qual não
+foi construído, e um recurso adicionado no mais novo pode estar faltando ou renderizado incorretamente.
+
+## O que uma atualização substitui
+
+| Substituído | Nunca substituído |
+| :--- | :--- |
+| `/opt/fireflo` — o artefato | `/etc/fireflo` — configuração e o arquivo de ambiente |
+| O build do painel | `panel.env` |
+| | `/var/lib/fireflo` — o armazenamento de recibos, CDRs em arquivo |
+
+## Fazendo rollback
+
+```bash
+sudo ./scripts/fireflo-install rollback
+```
+
+Restaura o artefato anterior.
+
+<Warning>
+**Rollback restaura o artefato, não o schema.** Se a release da qual você está voltando aplicou uma
+migration, o artefato antigo roda contra o schema mais novo. Isso geralmente funciona — o schema é
+aditivo — mas não é garantido, e é por isso que o backup importa.
+</Warning>
+
+## Lendo o `verify`
+
+| Exit | Significa |
+| :--- | :--- |
+| `0` | Sólido, e capaz de enviar |
+| `1` | Algo falhou |
+| `2` | Recusado ou mal usado |
+| `4` | **Deployment sólido, os dados desta instalação não** |
+
+Exit 4 depois de uma atualização geralmente significa que um domínio de configuração ficou vazio —
+vale checar antes de concluir que a atualização quebrou alguma coisa.

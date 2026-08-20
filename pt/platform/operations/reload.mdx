@@ -1,0 +1,78 @@
+---
+title: "Reload sem restart"
+description: "Três coisas diferentes são chamadas de 'o cache' e só uma precisa de um comando — mais o motivo pelo qual um saldo corrigido não entra em vigor imediatamente."
+---
+
+| O quê | Como recarrega |
+| :--- | :--- |
+| **Configuração** — logins, roteamento, tarifas, settings, whitelist | `./scripts/fireflo reload`. Todo snapshot em cache é reconstruído a partir do banco. |
+| **Rate limits de ingress** | **Nada a fazer.** O limiter relê a taxa da conta a cada mensagem, então uma mudança se aplica à próxima. |
+| **Crédito pré-pago reservado** | `./scripts/fireflo credit release [account]` — veja abaixo. |
+
+Apenas o primeiro é o que as pessoas geralmente querem dizer, e apenas o terceiro é surpreendente.
+
+## Configuração recarrega sozinha de qualquer jeito
+
+O gateway faz poll por mudanças no banco. `reload` existe porque o poll está até trinta segundos
+atrasado, o que é lento demais quando você está observando.
+
+<Warning>
+**Uma mudança feita no painel não faz nada se o gateway está lendo um arquivo para aquele domínio.**
+
+Cheque `config_sources` em `/ops/health` — ele reporta por domínio se properties, credentials,
+routing e rates vêm de `database` ou `file`. O sintoma de errar isso é "minha edição não aplicou",
+que manda as pessoas olharem para a edição em vez da fonte.
+</Warning>
+
+## Crédito não é configuração
+
+`reload` não toca nele, e este é o que pega as pessoas.
+
+O gateway reserva crédito em **blocos** — movendo dinheiro de `account_balance.balance` para
+`reserved` e mantendo o bloco em memória. É isso que mantém o caminho da mensagem fora do banco.
+
+**Então corrigir um saldo à mão não entra em vigor até que o bloco já entregue seja usado.** Uma
+conta configurada como zero continua enviando.
+
+```bash
+./scripts/fireflo credit release acct-in-2001
+```
+
+`credit release` devolve o restante **não gasto** de cada bloco para `balance` e escreve uma linha
+`RELEASE` no ledger, para que a próxima mensagem reserve contra a cifra corrigida.
+
+<Tip>
+**Não tira nada.** O que é devolvido é imediatamente reservável de novo, e a porção já gasta continua
+gasta — `balance + reserved` é inalterado por um release.
+
+Omitir a conta libera todas. Isso é certo depois de uma correção em massa e é desperdício caso
+contrário, já que a próxima mensagem de toda conta então paga por uma reserva nova.
+</Tip>
+
+## O mesmo comando depois de um crash
+
+Um `kill -9` deixa preso o que estava reservado. O dinheiro está **estacionado, não perdido** —
+`balance + reserved` ainda bate — e `credit release` é como volta.
+
+Um shutdown limpo faz isso sozinho.
+
+## O que um reload não faz
+
+- **Não reinicia workers.** Um worker que falhou o bind faz retry em sua própria agenda; um listener
+  que não conseguiu pegar sua porta faz retry no próximo poll ou reload sem precisar de restart.
+- **Não limpa estado de runtime** configurado por `disable`, `suspend` ou `hold`. Estes estão
+  deliberadamente fora da configuração para poderem agir imediatamente — e revertem no restart em vez
+  de no reload.
+- **Não muda o que uma sessão conectada tem permissão de fazer.** Uma mudança de taxa se aplica a
+  sessões SMPP já conectadas em cerca de 200 ms; não requer que refaçam bind.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    Os verbos que agem imediatamente em vez de num poll.
+  </Card>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocos, reservas, e por que o saldo atrasa.
+  </Card>
+</CardGroup>

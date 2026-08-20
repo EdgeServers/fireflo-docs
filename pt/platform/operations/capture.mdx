@@ -1,0 +1,137 @@
+---
+title: "Capturando uma sessão"
+description: "Respondendo a pergunta 'o que este cliente está realmente enviando' para uma sessão, sob demanda — com as duas coisas que o arquivo não vai te dizer."
+---
+
+Responder *o que este cliente está realmente enviando* costumava significar definir `log.pdus` em um
+**worker inteiro**, que escreve os PDUs decodificados de todas as sessões em um log compartilhado que
+o timer de cleanup mantém por quinze dias.
+
+Uma capture faz o mesmo para **uma sessão**, sob demanda, e leva o resultado embora consigo.
+
+```bash
+fireflo capture start smppserver.smpp 3 120
+fireflo capture status smppserver.smpp 3
+fireflo capture txt   smppserver.smpp 3 > session-3.txt
+fireflo capture pcap  smppserver.smpp 3 > session-3.pcap
+fireflo capture stop  smppserver.smpp 3
+```
+
+As mesmas cinco ações estão na interface de gerenciamento, todas atrás de `smsg.ops.admin.token`.
+
+## O que ela contém, e por que isso é o token admin
+
+**Tudo, decodificado: corpos de mensagem, números de destino, TLVs.**
+
+Esse é o ponto — uma capture que deixasse o conteúdo de fora não poderia responder a pergunta pela
+qual se inicia uma. É também por isso que estas precisam do token **admin** em vez do token de
+leitura, e por que o `.txt` diz isso em seu próprio cabeçalho.
+
+<Warning>
+**Uma capture de fornecedor deixada rodando através de uma reconexão vai conter sua própria senha
+naquela operadora.**
+
+Em um listener, uma sessão só existe depois de seu bind, então uma capture iniciada agora não conterá
+a senha do cliente a menos que ele faça re-bind enquanto ela roda. Em uma conexão de **fornecedor** o
+worker reconecta em sua própria agenda, e o bind que ele envia carrega as credenciais *deste
+gateway*.
+</Warning>
+
+## O que ela custa
+
+Nada mensurável, que é a regra sob a qual o recurso foi construído.
+
+O tap é **uma leitura de campo volatile por PDU** em sessões que não estão sendo capturadas. Na sessão
+capturada ele faz um `offer` limitado em uma fila de handoff e retorna; uma thread separada faz toda
+a formatação e codificação, então nada caro roda na thread de I/O do Netty.
+
+Medido em um listener de loopback a ~32 000 TPS — cerca de trinta vezes uma sessão real ocupada — uma
+capture sob carga permaneceu dentro do ruído entre execuções do baseline sem capture, com `dropped`
+em zero.
+
+<Tip>
+Se a fila de handoff chegar a encher, ela **descarta e conta** em vez de bloquear. `dropped` aparece
+no status, no cabeçalho do `.txt` e no painel — porque uma capture com perdas que diz isso é um
+diagnóstico, enquanto uma que silenciosamente omite PDUs te faz concluir que um cliente nunca enviou
+algo que ele enviou.
+</Tip>
+
+## Limites, e nada tocando em disco
+
+| Limite | Padrão | Máximo |
+| :--- | ---: | ---: |
+| Duração | 60s | 300s |
+| PDUs | 20 000 | 200 000 |
+| Bytes | 8 MB | 32 MB |
+| Captures simultâneas | 3 | 3 |
+| Mantida após parar | 15 minutos | — |
+
+Qualquer que seja o teto atingido primeiro para a capture e **diz qual** — `stopped_because` carrega
+uma frase como `reached the 8388608 byte limit`. Um arquivo truncado sem explicação é um fato errado
+sobre o cliente.
+
+Captures vivem **apenas em memória**. O serviço roda sob `ProtectSystem=strict`, então um arquivo
+teria que ficar no diretório de dados como conteúdo de cliente em texto plano; um buffer limitado que
+expira faz a história de retenção ser *"quinze minutos, aplicados"* em vez de *"até alguém
+lembrar"*. Uma quarta capture simultânea é recusada com `409`.
+
+## O framing do pcap é sintético
+
+O `.pcap` abre no Wireshark e seu dissector de SMPP o lê — mas **os headers IPv4 e TCP ao redor de
+cada PDU são fabricados**.
+
+O que é capturado são PDUs decodificados, re-encodados, não os bytes que estavam no fio. Endereços e
+portas são os reais da sessão; números de sequência, janelas e flags são construídos para fazer o
+stream reassemble.
+
+<Warning>
+**Não leia o `.pcap` como evidência sobre comportamento TCP.** Leia como evidência sobre SMPP.
+
+E uma consequência de tapear PDUs decodificados: **um PDU que falha ao decodificar nunca é
+capturado.** Se um cliente envia um submit malformado, o decoder o rejeita antes do tap e a capture
+não mostra nada onde o tráfego estava. O log do gateway carrega o erro do decoder nesse caso.
+</Warning>
+
+## Em uma porta não-padrão, diga ao Wireshark que é SMPP
+
+O Wireshark registra o dissector SMPP na TCP **2775**. Uma sessão em qualquer outra porta — um
+fornecedor na 2779, um segundo listener na 27778 — é dissecada como TCP puro, e o filtro SMPP então
+não casa com **nada**.
+
+Isso parece exatamente um arquivo corrompido, então descarte antes:
+
+```bash
+tshark -r capture.pcap -d tcp.port==2779,smpp -Y smpp
+```
+
+Na GUI: **Analyze → Decode As…**, adicionando a porta com SMPP como protocolo. A porta no arquivo é a
+real da sessão, então `tcpdump -r capture.pcap -n | head -1` te diz que número usar.
+
+<Tip>
+**Uma forma rápida de distinguir um problema de porta de um real:** `tcpdump -r capture.pcap -n | wc
+-l` conta os pacotes, e a contagem de linhas com `-Y smpp` deve casar exatamente. Igual significa que
+todo PDU foi dissecado; zero significa que o dissector nunca foi aplicado.
+
+Verificado contra TShark 3.6.2 em uma capture de fornecedor de 48 PDUs: 48 entrando, 48 dissecados,
+`submit_sm` pareado com `submit_sm_resp` por número de sequência, bodies e destinos legíveis, sem
+pacotes malformados.
+</Tip>
+
+## Sessões de fornecedor
+
+Captures funcionam da mesma forma em uma conexão de fornecedor, que é por que toda sessão reporta um
+`session_id` em ambos os tipos.
+
+Esse id **não** significa que um bind de fornecedor pode ser derrubado — disconnect ainda responde
+`409` para um worker de fornecedor, porque a guarda é o tipo de worker, não a presença de um id.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Tokens and access" icon="key" href="/platform/operations/tokens-and-access">
+    Por que isto precisa do token admin e health não.
+  </Card>
+  <Card title="Worker control" icon="sliders" href="/platform/operations/worker-control">
+    Disable, suspend e hold.
+  </Card>
+</CardGroup>

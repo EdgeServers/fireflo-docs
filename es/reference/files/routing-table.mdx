@@ -1,0 +1,123 @@
+---
+title: "routingTable.conf"
+description: "La gramática de reglas en cuatro partes, encadenamiento de tablas, grupos de proveedores, tablas LCR y los dos errores de los que el parser no te salvará."
+---
+
+Recargado en caliente. Las ediciones aplican en unos 200 ms sin reinicio.
+
+## Una regla son cuatro partes separadas por dos puntos
+
+```
+Target:Attribute:Operator:Value
+```
+
+`Target` es una instancia de worker (`vendor1`, `smppserver.smpp`), un **grupo**, u otra tabla a la que encadenar
+(`MESSAGE`).
+
+Las reglas se evalúan **de arriba a abajo dentro de una tabla**, y la primera coincidencia gana.
+
+<Warning>
+**Una regla mal formada falla toda la recarga** y la tabla anterior se retiene. Revisa el log para
+`Error parsing new routing table` tras editar. La pasarela sigue funcionando con la tabla vieja, así que
+nada parece incorrecto hasta que te preguntas por qué tu cambio no hizo nada.
+</Warning>
+
+## Los dos errores de los que el parser no te salvará
+
+**`==` es un operador numérico.** Usa `equals` para cadenas:
+
+```
+vendor1:from:equals:MyBrand      correcto
+vendor1:from:==:MyBrand          falla al parsear
+```
+
+**`matches` está anclado, `startsWith` es literal.** `^61.*` coincide con un número completo; un simple `61`
+no. Y `startsWith` compara texto literal. Una expresión regular pasada a él no coincide con nada, silenciosamente.
+
+## Una tabla mínima
+
+```ini
+# Punto de entrada. Tipos de mensaje: 0=texto, 10=binario, 11=UCS-2, 14=flash,
+# 17=push, 18=acuse de recibo.
+[default]
+MESSAGE:type:==:0
+MESSAGE:type:==:11
+MESSAGE:type:==:14
+MESSAGE:type:==:17
+MESSAGE:type:==:10
+smppserver.smpp:type:==:18
+
+[MESSAGE]
+vendor2:to:startsWith:614          # enruta móvil AU a vendor2
+vendor2:from:equals:MyBrand        # enruta un sender ID
+vendor2:product:equals:premium     # enruta un producto
+vendor1::default:                  # el catch-all, ÚLTIMO
+```
+
+<Warning>
+**El catch-all va al final.** Por encima de otras reglas hace que todo debajo sea inalcanzable, y
+nada te avisa. Las reglas parsean bien, simplemente nunca se ejecutan.
+</Warning>
+
+`product` viene del `system_type` en el bind SMPP del cliente, recurriendo al `product` de la
+credencial. Los llamantes HTTP siempre usan el valor de la credencial.
+
+## Grupos de proveedores
+
+Un grupo es otro nombre al que una regla puede enviar. En lugar de nombrar un proveedor, la regla nombra un grupo y
+el grupo elige un miembro. **Saltándose cualquiera que esté suspendido o no aceptando**, que es el failover
+que una regla de objetivo único no puede hacer.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Política | Elige |
+| :--- | :--- |
+| `round-robin` *(predeterminado)* | El siguiente miembro por turno |
+| `weighted` | En proporción a los pesos |
+| `failover` | Siempre el primer miembro activo, en el orden escrito |
+
+<Warning>
+**Los bloques de grupo deben ir antes de la primera cabecera `[table]`.** Dentro de un bloque de tabla, una línea
+de miembro no coincide con nada y se descarta silenciosamente.
+
+Un peso lo lee solo `weighted`. Establecer uno en los otros dos no cambia nada, y la pasarela
+lo dice en WARN en lugar de dejarte creer que está ocurriendo un reparto.
+</Warning>
+
+## Tablas de enrutamiento por menor coste
+
+Una tabla marcada `->function(LCR)` se comporta diferente: en lugar de detenerse en la primera regla coincidente,
+**cada** regla coincidente es candidata y el proveedor con la tarifa más barata en `rates.conf` gana.
+
+El orden de las reglas es por tanto irrelevante en una tabla LCR. Las reglas son alternativas, no una cadena de fallback.
+
+- Los proveedores caídos o no aceptando se omiten, así que el siguiente más barato lleva el tráfico.
+- Un proveedor **sin tarifa coincidente** se usa solo si nada más coincide, así que una línea de tarifa faltante
+  degrada en lugar de bloquear.
+- Las reglas que apuntan a otra tabla se **ignoran** dentro de una tabla LCR.
+
+Consulta [Enrutamiento por menor coste](/platform/routing/least-cost).
+
+## Filtros
+
+Una regla puede referenciar un filtro nombrado de la biblioteca de filtros en lugar de deletrear sus condiciones inline.
+
+<Warning>
+**Un filtro faltante o deshabilitado omite cada regla que lo referencia**, en lugar de cargar la regla
+con menos condiciones. Descartar una condición haría que la regla coincidiera con *más* tráfico, así que fallar de esa
+forma sería silencioso y enrutaría cosas equivocadas.
+
+Por eso deshabilitar un filtro puede hacer que una regla parezca coincidir con **menos**, y por eso el arreglo nunca es
+"solo quitar la condición".
+</Warning>
+
+En modo base de datos este archivo no se lee tras el arranque; los mismos datos viven en `app_route_table`,
+`app_route_rule` y sus tablas de condición. Consulta [Base de datos](/reference/config/database).

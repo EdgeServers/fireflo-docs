@@ -1,0 +1,95 @@
+---
+title: "rates.conf"
+description: "A gramática de tarifa, o que um escopo significa em cada lado do trade, e o escopo reservado que precifica contas que você ainda não criou."
+---
+
+A mesma gramática de [`routingTable.conf`](/reference/files/routing-table), com o valor por unidade
+onde routing coloca o target.
+
+```
+Amount:Attribute:Operator:Value
+```
+
+Regras são agrupadas sob um cabeçalho `[scope]` e avaliadas de cima para baixo **dentro dele**. O
+primeiro match vence, então regras específicas ficam acima do catch-all.
+
+## Um escopo é um lado do trade
+
+| Escopo | Significa |
+| :--- | :--- |
+| Um nome de instância de **fornecedor** | O que aquele fornecedor cobra de você — **custo** |
+| Um id de **conta** | O que você cobra daquele cliente — **preço** |
+| `[*]` | Precifica **qualquer conta sem regras próprias**, incluindo contas criadas depois |
+
+<Warning>
+`[*]` é **só do lado de venda**. Um fornecedor nunca herda dele, então um custo sem regra fica
+desconhecido em vez de silenciosamente virar o preço de venda. Que reportaria uma margin de zero em
+tráfego que você está de fato pagando.
+</Warning>
+
+Nada no schema distingue um escopo de fornecedor de um escopo de conta; o gateway distingue pelo
+lookup que pergunta. `fireflo import --dry-run` classifica todo escopo e **nomeia os que não consegue
+classificar como nenhum dos dois**. É assim que um escopo que carrega e casa com nada em silêncio é
+detectado.
+
+## Valores
+
+Decimal, no máximo **4** casas decimais. Parseado exatamente, nunca por floating point, então
+`0.0450` significa `0.0450`.
+
+<Note>
+`smsg.money.scale` controla com quantas casas um **total** é publicado. Tarifas por mensagem sempre
+mantêm quatro, porque `0.0450` mostrado como `0.05` é 11% de erro em toda mensagem. Veja
+[Rating](/reference/config/rating).
+</Note>
+
+## Condições
+
+Atributos são os do engine de roteamento: `to`, `from`, `body`, `product`, `systemId`, `owner_id`,
+`type` e o resto. `matches` é uma expressão regular e está **ancorada**. `^61.*` casa com um número
+inteiro, um `61` puro não.
+
+Combine condições com `~~`, que precisa aparecer nas **três** posições:
+
+```
+0.0800:product~~to:equals~~matches:premium~~^61[0-9]{9}$
+```
+
+## O catch-all
+
+```ini
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+```
+
+<Warning>
+**Sem um `default`, uma mensagem que não casa com nada é registrada como uma tarifa UNKNOWN, não
+como grátis.** Esse é o desfecho honesto, e significa que a mensagem é entregue e billada a ninguém
+até você notar. `smsg.rating.unrated.refuse` transforma isso em recusa.
+</Warning>
+
+## Forma trabalhada
+
+```ini
+# O que vendor1 cobra de nós
+[vendor1]
+0.0310:to:matches:^61[0-9]{9}$
+0.0400::default:
+
+# O que acct-1001 paga a nós
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+
+# Toda conta sem regras próprias
+[*]
+0.0500::default:
+```
+
+Custo e preço vivem no mesmo arquivo e são a mesma gramática, que é por que o painel de controle
+agrupa como **What we pay** e **What we charge** em vez de misturar em uma lista.
+
+Em modo de banco este arquivo não é lido depois do startup; os mesmos dados vivem em
+`app_rate_rule` e suas tabelas de condição. Veja [Banco de dados](/reference/config/database) e
+[Como funciona o pricing](/platform/billing/how-pricing-works).

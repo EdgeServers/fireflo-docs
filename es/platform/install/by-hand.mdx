@@ -1,0 +1,164 @@
+---
+title: "Instalar a mano"
+description: "Ubuntu 24.04 desde cero: los dos runtimes que Ubuntu no incluye, la disposición, y lo que una actualización puede y no puede reemplazar."
+---
+
+Lo que [`fireflo-install`](/platform/install/one-command) automatiza. Lee esto si estás empaquetando
+FireFlo tú mismo, o si un paso del instalador falló y necesitas saber qué estaba haciendo.
+
+## Requisitos previos
+
+- **Java 25.** El build apunta a release 25 y **no correrá en 21**.
+- **PostgreSQL 14 o más nuevo.** Opcional para el gateway solo en modo archivo; requerido para el panel de
+  control, crédito prepago, whitelisting, y registros de llamada en una tabla.
+- **RabbitMQ**, solo si los mensajes enviados deben sobrevivir a un reinicio del gateway. Sin él la cola está en
+  memoria y un reinicio pierde todo lo que no haya llegado a un proveedor.
+- Un usuario de servicio sin shell de login.
+
+## La parte incómoda de esta plataforma
+
+Dos de los tres runtimes **no** son lo que trae Ubuntu:
+
+| Necesitas | Ubuntu 24.04 trae | Haz |
+| :--- | :--- | :--- |
+| Java 25 | `openjdk-21` | Añade Adoptium |
+| Node 22 | `nodejs` 18 | Añade NodeSource |
+| PostgreSQL 14+ | PostgreSQL 16 | `apt install postgresql` |
+
+<Steps>
+  <Step title="Paquetes base">
+```bash
+sudo apt update
+sudo apt install -y wget curl gpg apt-transport-https ca-certificates ufw nginx postgresql
+```
+  </Step>
+  <Step title="Java 25 desde Adoptium">
+```bash
+sudo mkdir -p /etc/apt/keyrings
+wget -qO- https://packages.adoptium.net/artifactory/api/gpg/key/public \
+  | sudo tee /etc/apt/keyrings/adoptium.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] \
+https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/adoptium.list
+sudo apt update && sudo apt install -y temurin-25-jdk
+java -version        # debe imprimir 25
+```
+  </Step>
+  <Step title="Node 22 desde NodeSource">
+Next.js 16 no corre en el Node 18 de Ubuntu. Esto es para el panel de control.
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version       # debe imprimir v22 o más nuevo
+```
+  </Step>
+  <Step title="Usuario de servicio y directorios">
+```bash
+sudo useradd --system --home-dir /opt/fireflo --shell /usr/sbin/nologin fireflo
+sudo install -d -o fireflo -g fireflo /opt/fireflo /etc/fireflo /var/lib/fireflo /var/log/fireflo
+sudo chmod 750 /etc/fireflo
+```
+  </Step>
+  <Step title="Base de datos">
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+Mantén la contraseña fuera del historial del shell. Escríbela directamente en el archivo de entorno.
+  </Step>
+</Steps>
+
+## Disposición
+
+La configuración se mantiene **fuera del** directorio del artefacto, así que una actualización puede reemplazar el artefacto
+por completo sin tocar nada que hayas editado.
+
+```text
+/opt/fireflo/            propiedad de fireflo, REEMPLAZADO al actualizar
+  quarkus-run.jar
+  lib/  app/  quarkus/
+  bin/fireflo            el CLI del operador, se mantiene fuera de lo que reemplaza una actualización
+
+/etc/fireflo/            propiedad de fireflo, NUNCA reemplazado al actualizar
+  fireflo.env            entorno, incluyendo la contraseña de la base de datos. chmod 600
+  smsg.properties        workers y ajustes         \
+  credentials.yml        logins                     |  solo modo archivo
+  routingTable.conf      enrutamiento               |
+  rates.conf             tarifas                   /
+
+/var/lib/fireflo/        el almacén de recibos, y CDRs cuando no hay base de datos
+/var/log/fireflo/        logs
+```
+
+<Warning>
+**El artefacto es un directorio, no un archivo.** `quarkus-run.jar` no correrá sin los directorios `lib/`, `app/`
+y `quarkus/` a su lado. Copiar solo el jar produce un proceso que arranca y luego
+no encuentra sus clases.
+</Warning>
+
+## El archivo de entorno
+
+`chmod 600`. Contiene la contraseña de la base de datos y ambos tokens operacionales.
+
+```bash
+export FIREFLO_CONF_DIR=/etc/fireflo
+export FIREFLO_DB_URL=jdbc:postgresql://localhost:5432/fireflo
+export FIREFLO_DB_USER=fireflo
+export FIREFLO_DB_PASSWORD=...
+export FIREFLO_CONFIG_SOURCE=file
+export QUARKUS_HTTP_PORT=8080
+export FIREFLO_OPS_PORT=9000
+```
+
+<Warning>
+Establece `FIREFLO_CONF_DIR` a una **ruta absoluta**. Un valor relativo, incluyendo el `conf` por defecto,
+se resuelve contra el directorio de trabajo del proceso, así que una unit con `WorkingDirectory=/opt/fireflo` lee
+`/opt/fireflo/conf/`, que no es donde editaste nada.
+</Warning>
+
+## Puertos
+
+| Puerto | Lleva | Exponer a |
+| :--- | :--- | :--- |
+| 8080 | La API REST | Clientes |
+| 27777 | Binds SMPP | Clientes |
+| 9000 | `/ops/*` y `/q/metrics` | **Loopback, o solo tu propia red** |
+| 3000 | El panel de control | Detrás de TLS |
+
+## systemd
+
+Dos ajustes importan más que el resto:
+
+```ini
+# una sesión SMPP conectada es la conexión de un cliente, así que detén deliberadamente en lugar de abruptamente
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# un descriptor de archivo por sesión de cliente conectada, más las conexiones de proveedor
+LimitNOFILE=65535
+```
+
+<Warning>
+`SIGTERM` en lugar de `SIGKILL` no es una cortesía. Un apagado limpio devuelve el **crédito prepago reservado**
+no gastado; un `kill -9` lo deja varado hasta que se ejecute [`fireflo credit release`](/reference/cli/fireflo).
+</Warning>
+
+## Retención de logs, que ahora te pertenece
+
+Nada en el gateway elimina `httpapi.log`. Quarkus lo rota diariamente y mantiene cada archivo para siempre.
+`fireflo-install` escribe una regla `tmpfiles.d` precisamente para esto. **Instalar a mano significa escribir una
+tú mismo, o aceptar un crecimiento sin límites.** Consulta [Logging](/reference/config/logging).
+
+## Verificar
+
+```bash
+scripts/fireflo verify
+```
+
+Y comprueba que los dos tokens son realmente separados. Leer con el token admin debe **404**:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $FIREFLO_OPS_ADMIN_TOKEN" \
+  http://localhost:9000/ops/health      # esperar 404
+```

@@ -1,0 +1,115 @@
+---
+title: "Réglages fournisseur"
+description: "Chaque clé par fournisseur : hôtes, nombre de binds, keep-alives, classification des retry, TLVs et gestion des MO."
+---
+
+Un **fournisseur** est une connexion sortante vers celui qui porte votre trafic. Les clés sont
+réglées comme `outSms.instance.<name>.<key>` — voir [Niveaux de propriétés](/reference/config/paths).
+Chaque worker a aussi [les réglages de base](/reference/smpp/worker-base).
+
+## Connexion
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `host` | `localhost` | Hôte SMSC principal. |
+| `port` | `27777` | Port SMSC principal. |
+| `systemId` | — | Le system id utilisé pour se bind. |
+| `password` | `psms` | Le mot de passe de bind. |
+| `extra.hosts` | `""` | Paires `host:port` supplémentaires à bind **en parallèle**, séparées par virgules. |
+| `backup.hosts` | `""` | Paires `host:port` utilisées **si le principal échoue**. |
+
+## Nombres de binds
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `connections.transceivers` | `1` | Binds transceiver. |
+| `connections.transmitters` | `0` | Binds transmitter. |
+| `connections.receivers` | `0` | Binds receiver. |
+
+Les nombres s'appliquent à travers normal, `extra.hosts` et `backup.hosts`.
+
+<Note>
+Une session peut porter du trafic sortant si c'est un **transceiver**, ou un **transmitter** sur
+une session client. Un fournisseur en receiver-only se bind avec succès et n'envoie rien — c'est
+pourquoi le panneau rapporte `bound_transmittable` séparément de `bound`. S'ils diffèrent, c'est la
+raison.
+</Note>
+
+## Keep-alive et timeouts
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `request.tout` | `30000` | Millisecondes d'attente d'une réponse. |
+| `enquire.link.interval.millis` | `30000` | Intervalle de keep-alive. |
+| `enquire.link.noTrafficOnly` | `false` | N'envoyer des keep-alives que quand il n'y a pas eu d'autre trafic. |
+
+## Classification des retry
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `status.retry.worker` | `20,88` | Codes de statut qui déclenchent un retry **local** chez ce fournisseur. |
+| `status.retry.router` | `""` | Codes de statut qui repoussent le message au routeur pour une autre route. |
+| `status.retry.router.removeHlr` | `true` | Retirer les infos de routage réseau au repousser. |
+
+<Warning>
+`maxRetries` borne le **total** des `submit_sm` qu'un message peut coûter chez ce fournisseur, à
+travers les retries internes au worker et les re-routages du routeur. Avant que ce soit vrai, une
+valeur de `1` combinée à 20 tentatives de routage signifiait qu'un fournisseur pouvait voir
+environ 100 PDUs pour un message. Le basculement vers un fournisseur *différent* démarre un
+nouveau budget.
+</Warning>
+
+`ESME_RSUBMITFAIL` (`0x45`, décimal 69) est traité comme **permanent** : une ligne refusée avec ce
+code échoue à la première réponse plutôt qu'après une vingtaine. Les opérateurs qui l'utilisent
+pour signifier une surcharge transitoire sont réintégrés par fournisseur avec
+`status.retry.worker = 20,88,69`.
+
+## Accusés
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `request.dlrs` | `true` | Si `registered_delivery` est mis sur chaque `submit_sm` vers ce fournisseur. |
+
+<Note>
+L'éteindre signifie que ce fournisseur cesse de rapporter des résultats, donc chaque message qui
+passe par lui finit comme `EXPIRED` à l'échéance plutôt que DELIVERED ou FAILED — et votre taux de
+livraison pour ce fournisseur devient insignifiant plutôt que nul.
+</Note>
+
+## TLVs
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `registered.tlvs.submit` | `""` | TLVs à ajouter sur `submit_sm`, sous forme `tagName_tag`. |
+| `registered.tlvs.mo` | `""` | TLVs à extraire des MO entrants. |
+| `registered.tlvs.dlr` | `""` | TLVs à extraire des accusés. |
+| `default.tlvs.submit` | `""` | Défauts `tagName_tag=value`, appliqués **uniquement là où le message ne porte aucune valeur** pour ce tag. En déclarer un enregistre son tag. |
+| `mandatory.tlvs.submit` | `""` | Tags sans lesquels ce fournisseur n'acceptera pas un message. |
+
+<Warning>
+Le `mandatory.tlvs.submit` côté fournisseur est vérifié contre ce qui va réellement sur le fil —
+après `default.tlvs.submit`, et après que `registered.tlvs.submit` a filtré. Un message auquel il en
+manque un est refusé avec un accusé FAILED, un remboursement et une ligne `cdr_rejected`. **Il n'est
+pas re-routé.**
+
+Exiger un tag qui n'est pas aussi dans `registered.tlvs.submit` ne peut jamais être satisfait, et
+c'est averti au chargement.
+</Warning>
+
+## Messages entrants
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `forward.mo.url` | `""` | Webhook pour MO entrants. |
+| `forward.mo.format` | `JSON` | `JSON` ou `FORM`. |
+| `mo.route` | `false` | Si un MO entrant est aussi mis sur la file du routeur, pour pouvoir atteindre la session bindée d'un client. |
+
+<Warning>
+`mo.route` est **éteint par défaut** car une passerelle dont la dernière règle de routage est un
+attrape-tout re-soumettrait autrement ses propres messages entrants directement vers un fournisseur.
+
+Indépendant de `forward.mo.url` : avec les deux réglés, chaque MO est transféré **et** routé.
+</Warning>
+
+Voir [Webhooks](/reference/config/webhooks) pour les réglages de sortie qui gouvernent le
+transfert.

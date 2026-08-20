@@ -1,0 +1,147 @@
+---
+title: "Como o roteamento funciona"
+description: "O que o router faz entre aceitar uma mensagem e entregá-la a um fornecedor, e por que um erro de roteamento aparece como tráfego faltante em vez de como um erro."
+---
+
+## A edição que aparentemente não fez nada
+
+<Warning>
+**Uma regra malformada falha o reload inteiro, e a tabela anterior é retida.** Uma linha ruim não
+desabilita uma regra — ela rejeita o conjunto de tabelas inteiro, e o gateway segue roteando contra a
+configuração que já estava servindo.
+
+Nada parece errado: o tráfego continua fluindo, o arquivo em disco diz o que você quis, e o único
+rastro é `Error parsing new routing table` em ERROR no log. Cheque depois de toda edição.
+</Warning>
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`routingTable.conf` é hot reloaded — uma edição se aplica em cerca de 200 ms, sem restart. Essa
+velocidade é exatamente por que o caso de tabela retida é fácil de perder: não há restart para
+notar, então "minha mudança não fez nada" é o sintoma inteiro.
+
+## O que o router faz com uma mensagem
+
+<Steps>
+  <Step title="A submissão é respondida primeiro">
+    O gateway envia `submit_sm_resp`, ou o `200` do REST, **antes** de o roteamento rodar. O cliente
+    já foi informado de que a mensagem foi aceita, e cobrado por ela.
+  </Step>
+  <Step title="A mensagem vai para a fila do router">
+    Trabalho aceito espera aqui. Veja [Queues and retries](/platform/routing/queues-and-retries).
+  </Step>
+  <Step title="A tabela `default` é varrida">
+    Regras são tentadas de cima para baixo e **o primeiro match ganha**. Uma regra pode enviar a um
+    fornecedor, a um grupo de fornecedores, ou a outra tabela.
+  </Step>
+  <Step title="O worker escolhido a pega">
+    A mensagem é enfileirada na fila daquele fornecedor e sai na velocidade que o fornecedor
+    permite.
+  </Step>
+</Steps>
+
+Como o passo 1 acontece antes do passo 3, uma falha de roteamento **não pode** ser reportada ao
+cliente como um erro de submit. Ela só pode aparecer depois, como um delivery receipt e uma linha em
+`cdr_rejected`.
+
+## Tabelas são um grafo, não uma lista
+
+Uma regra cujo alvo nomeia outra tabela encadeia nela, então `default → MESSAGE → cheapest` é uma
+forma comum. Duas coisas limitam a recursão:
+
+| Limite | Comportamento |
+| :--- | :--- |
+| Checagem de ciclo no load | `a → b → a`, ou uma tabela nomeando a si mesma, é **recusada inteira**. O log nomeia o caminho e o conjunto de tabelas anterior permanece em serviço. |
+| `outSms.routing.maxTableDepth` (padrão `16`) | Limita por quantas tabelas uma mensagem pode encadear em runtime. Atingir o limite loga `routing.table.too-deep` e deixa a mensagem sem destino a partir daquela regra. |
+
+Uma tabela alcançada duas vezes por caminhos diferentes não é um ciclo: `default → a → c` junto com
+`default → b → c` carrega normalmente.
+
+## As duas coisas que carregam e depois se comportam mal em silêncio
+
+Ambas aparecem em `/ops/health` sob `routing_warnings`, e cada uma é logada uma vez quando aparece
+pela primeira vez em vez de a cada publicação.
+
+| Aviso | O que significa |
+| :--- | :--- |
+| `no-catch-all` | Toda regra em uma tabela `NORMAL` é estreitada, então uma mensagem que não case com nenhuma é reenfileirada, retentada e descartada em `outSms.routing.maxAttempts` — minutos depois, sem nada ligando o descarte à tabela. |
+| `unreachable-rules` | Uma regra que casa com tudo está acima de outras. A tabela para no primeiro match, então as regras abaixo dela nunca rodaram. |
+
+<Warning>
+**O catch-all pertence ao final.** Colocado acima de outras regras ele faz tudo abaixo dele
+inalcançável, e nada recusa a tabela — as regras parseiam perfeitamente, elas simplesmente nunca
+rodam. Um catch-all é uma regra que estreita nada: `vendor1::default:` em um arquivo, ou uma regra
+sem condições e sem filtros no banco.
+
+Uma regra carregando um filtro **não** é um catch-all, por mais que pareça um. Veja
+[Filters](/platform/routing/filters).
+</Warning>
+
+## Quando mensagens somem
+
+<Note>
+Antes de editar qualquer regra, descarte as três causas que não são de roteamento. Apenas
+`reason = 'maxAttempts'` em `cdr_rejected` significa roteamento; `headerNotApproved`,
+`templateNotMatched`, `missingMandatoryTlv`, `insufficientCredit` e `filtered` todos significam que
+a mensagem foi recusada antes de o roteamento ser alcançado. Veja
+[Nothing is delivered](/platform/troubleshooting/nothing-is-delivered).
+</Note>
+
+Estas linhas estão em WARN ou ERROR e não precisam de flag de debug:
+
+| Linha de log | Causa |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | A regra nomeia algo que não é nem tabela, nem grupo, nem worker. Não envia nada. |
+| `routing.rule.broken cause=target-not-accepting` | O alvo existe mas está suspenso ou desligando. Frequentemente temporário — cheque o [fornecedor](/platform/connections/vendors). |
+| `routing.rule.broken cause=group-all-dead` | Nenhum membro do grupo está aceitando. O scan continua para a próxima regra. |
+| `message.routing.miss.first action=requeue` | A mensagem não casou com nenhuma regra habilitada. |
+| `message.dropped reason=maxAttempts` | A mensagem desistiu. Uma por mensagem; a linha acima dela diz por quê. |
+
+<Warning>
+**`routing.rule.broken` é logado uma vez por regra, não uma vez por mensagem**, e o contador só
+reseta quando uma nova tabela é publicada. Um log quieto portanto não é prova de que o problema está
+corrigido — é igualmente consistente com "já reportado".
+
+Observe a contagem `routing_rules_broken` em `/ops/health`, que é o mesmo fato como número.
+</Warning>
+
+## Perguntando por que uma mensagem não casou
+
+```properties
+outSms.routing.trace = acct-1001
+```
+
+Aceita **um serial de mensagem ou um id de conta**. Toda regra contra a qual essa mensagem é testada
+então loga qual condição falhou e o que a mensagem realmente carregava:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Aplica-se ao vivo, então configure durante o incidente e limpe depois. Vazio — o padrão — custa uma
+leitura volatile por regra.
+
+<Warning>
+**Isto não é `outSms.routing.debug`.** Aquele loga toda regra de toda mensagem e renderiza o objeto
+inteiro da mensagem para fazer isso, o que o torna inutilizável nas taxas em que perguntas de
+roteamento são realmente feitas. É útil apenas em um gateway ocioso reproduzindo um único envio.
+</Warning>
+
+## Próximo
+
+<CardGroup cols={2}>
+  <Card title="Writing rules" icon="pen" href="/platform/routing/writing-rules">
+    A gramática de quatro partes, os operadores que mentem, e grupos de fornecedores.
+  </Card>
+  <Card title="Least-cost routing" icon="coins" href="/platform/routing/least-cost">
+    Onde a ordem das regras deixa de significar algo.
+  </Card>
+  <Card title="Filters" icon="filter" href="/platform/routing/filters">
+    Condições nomeadas, e por que desabilitar uma estreita uma regra até nada.
+  </Card>
+  <Card title="Queues and retries" icon="layer-group" href="/platform/routing/queues-and-retries">
+    O que já está pago e sentado na memória.
+  </Card>
+</CardGroup>

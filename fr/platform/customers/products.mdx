@@ -1,0 +1,98 @@
+---
+title: "Produits"
+description: "Ce qu'un produit sélectionne : le tarif, la route et si le trafic est vérifié du tout. Et pourquoi un produit non défini envoie des messages gratuitement."
+---
+
+Un **product** est une étiquette sur un login. Il est utilisable dans la table de routage, il sélectionne le tarif, et il décide si les sender IDs et le contenu d'un compte sont vérifiés. Il est aussi optionnel, et le cas optionnel est le coûteux.
+
+## Un produit non défini est un état supporté qui envoie gratuitement
+
+Laisser `product` hors d'un login est une configuration légale. Il correspond à `product:isNull:` dans la table de routage et il n'est tarifé que par des règles de tarification qui elles-mêmes n'ont aucun produit.
+
+**Cette dernière clause est tout le piège.** Une règle sans produit s'applique à chaque produit, mais un *message* sans produit ne voit **que** les règles qui n'en ont aucun. Ce ne sont pas deux orthographes de « n'importe quel ».
+
+<Warning>
+**Sur un déploiement dont toutes les règles de tarification portent un produit, un message sans produit ne correspond à rien.** Il est laissé sans tarif, et un message sans tarif n'est jamais facturé. La tarification s'exécute avant le débit, donc `chargeCredit` le saute entièrement. Le message est livré et facturé à personne.
+
+Rien ne le refuse et rien ne lève d'erreur. Il y a une ligne au niveau `debug`, ce qui est tout le signal que du trafic est offert.
+</Warning>
+
+Deux paramètres le ferment, tous deux désactivés par défaut :
+
+| Paramètre | Portée | Effet |
+| :--- | :--- | :--- |
+| `conf.product.required` | par listener SMPP | Refuse un **bind** dont le produit résolu est vide, ou ne nomme aucune ligne activée dans `app_product`. Statut `0x0000040F`. |
+| `smsg.restapi.product.required` | ingress REST | Refuse une **soumission** de la même façon, avec `403`. `/secure/rate` l'applique aussi, pour qu'un devis ne puisse pas tarifer du trafic qu'un envoi refusera. |
+| `smsg.rating.unrated.refuse` | global, côté vente uniquement | Refuse tout message qu'aucune règle de tarif côté vente ne tarife. `0x00000418` sur SMPP, `403` sur REST. |
+
+Le routage au moindre coût tolère volontairement toujours un vendeur sans tarif **de coût**. C'est une question différente de savoir si le client peut être facturé, et transformer une ligne de tarif vendeur oubliée en panne serait pire que la chose que cela évite.
+
+## Pourquoi le contrôle est l'appartenance, pas la non-vacuité
+
+`system_type` sur un bind SMPP **surcharge** le produit du login, et c'est du texte libre validé nulle part ailleurs.
+
+Donc un client qui bind `prem` quand le produit est `premium` passe parfaitement tout test de non-vacuité, et atterrit exactement dans l'état sans tarif ci-dessus. Seul le contrôle du nom contre le catalogue l'attrape. C'est ce que `conf.product.required` fait, et pourquoi ce n'est pas simplement « product doit être défini ».
+
+HTTP n'a pas de bind et donc pas de surcharge : là le `product` du login est la seule source.
+
+<Warning>
+**La configuration par fichier n'a pas de catalogue, donc seule la moitié non-vacuité est appliquée.** `app_product` est une table de la base ; un gateway qui tourne sur fichiers, ou dont la base est injoignable, ne peut pas vérifier l'appartenance du tout. Un nom de produit non reconnu est **accepté**, et un WARN nommant le paramètre et la valeur est journalisé une fois par bind.
+
+La tolérance est délibérée. Refuser chaque bind parce qu'une requête a échoué est une panne bien pire que celle que ceci évite. Mais cela signifie que le paramètre est plus faible que son nom sur exactement les déploiements qui n'ont pas de catalogue à vérifier.
+</Warning>
+
+Avant d'activer l'un ou l'autre, lisez le rapport pré-vol sur la page **Servers** du panel : il liste les logins qui cesseraient de se connecter. Notez ce qu'il ne peut pas voir. Pour un login SMPP il vérifie le repli du login, donc un client qui bind un `system_type` mal orthographié n'y apparaîtra pas.
+
+La page **Pricing** porte l'autre pré-vol : le trafic des 24 dernières heures qui n'avait aucun prix, nommé par compte et produit. C'est précisément ce que `smsg.rating.unrated.refuse` commencerait à refuser. Il compte les messages dont le CDR n'a pas de `price_rule_id`, donc une règle délibérément à `0` n'y est pas. Une route gratuite reste gratuite et continue d'envoyer.
+
+## La ligne du catalogue
+
+| Colonne | Signification |
+| :--- | :--- |
+| `name` | La clé primaire. Trimée, non vide, et comparée **exactement**. `OTP` et `otp` sont deux produits. |
+| `label`, `description` | Pour le panel. |
+| `enabled` | Si le gateway compte cela comme un produit qu'il vend. |
+| `whitelist_enabled` | Défaut `true`. `false` exempte le trafic de ce produit des contrôles de sender ID et de contenu. |
+
+## Exempter un produit du whitelisting
+
+```sql
+UPDATE app_product SET whitelist_enabled = false WHERE name = 'otp';
+```
+
+Ou *Products → Edit → Check sender IDs and content*. La question « ceci doit-il être validé ? » appartient généralement à ce qui est vendu plutôt qu'à chaque client qui l'achète. Les mots de passe à usage unique sur un shortcode n'ont pas de sender ID enregistré à vérifier. Et sans cela, chaque compte sur ce produit aurait besoin de sa propre ligne de politique le disant.
+
+Trois règles surprennent :
+
+- **Un produit exempt surcharge le compte.** Un compte réglé sur `ENFORCE` envoie toujours librement sous un produit exempt.
+- **Aucun produit n'est pas exempt.** Le trafic ne nommant aucun produit du tout est vérifié. Sinon la façon de sortir d'une whitelist serait d'arrêter d'envoyer un `system_type`.
+- **Un produit inconnu n'est pas exempt.** Un nom sans ligne dans `app_product` est vérifié. C'est une faute de frappe dans un login bien plus souvent qu'une intention.
+
+<Warning>
+**Une approbation classée sous un produit exempt ne protège rien.** Le gateway retourne `OFF` pour ce produit avant toute fusion, donc la ligne est stockée, visible et jamais consultée. Le panel compte les produits exempts quand il décide si passer un compte à `ENFORCE` est sûr. Sinon le garde-fou contre la construction d'une panne laisserait passer un compte dont toutes les approbations sont inertes.
+</Warning>
+
+Retirer un produit de la liste (`enabled = false`) met aussi fin à son exemption : les produits exempts sont lus comme `enabled AND NOT whitelist_enabled`. Cette direction est la sûre. Le trafic commence à être vérifié plutôt qu'à s'arrêter. Mais elle peut commencer à refuser des sender IDs que personne n'a approuvés, donc retirez un produit exempt de la liste délibérément plutôt que par rangement.
+
+## Nommer un produit sur un envoi REST
+
+Un appelant REST peut envoyer `product` sur `/secure/send`, `/secure/sendbatch` et `/secure/rate`, et il n'est accepté **que** depuis un login dont `allowedProducts` le nomme.
+
+| | |
+| :--- | :--- |
+| Champ omis | Le `product` du login lui-même s'applique. Aucun appelant existant n'est affecté. |
+| Pas de `allowedProducts` | Le champ est refusé : `403 This login may not send on '<product>'.` C'est chaque login jusqu'à ce qu'un opérateur en opte un. |
+| Valeur sur la liste | Accepté, et le message est **tarifé** dessus. Vérifiez `cdr_submit`, pas la réponse qui semble identique de toute façon. |
+| Le propre produit du login | Toujours autorisé, et n'a pas besoin d'être listé. |
+| Sur la liste, absent de `app_product` | Toujours refusé, avec l'autre message. Deux questions séparées : ce login peut-il le nommer, puis le vendons-nous. |
+
+Une liste blanche plutôt qu'un champ simple pour la même raison que tout le reste sur cette page : le produit sélectionne le tarif, donc un appelant libre de nommer son propre produit est libre de choisir son propre prix.
+
+<CardGroup cols={2}>
+<Card title="Comment fonctionne la tarification" href="/platform/billing/how-pricing-works">
+Où chaque côté est tarifé, et ce que signifie un montant inconnu.
+</Card>
+<Card title="Déployer le whitelisting" href="/platform/customers/whitelisting-rollout">
+Les quatre interrupteurs, et l'ordre dans lequel ils s'appliquent.
+</Card>
+</CardGroup>

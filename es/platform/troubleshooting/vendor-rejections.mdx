@@ -1,0 +1,104 @@
+---
+title: "Rechazos del proveedor"
+description: "Un proveedor conectado rechazando cada submit_sm parece saludable desde todos los ángulos que le importan al enrutamiento. El command_status es lo único que dice por qué."
+---
+
+Este es el fallo que hace perder más tiempo, porque **un proveedor rechazando cada mensaje parece
+perfectamente saludable**: las sesiones están activas, la cola se drena, `acceptsMessages()` es true.
+
+El mensaje se acepta, enruta, envía, rechaza, vuelve a encolar y se descarta en
+`outSms.routing.maxAttempts`. Y el descarte dice `reason=maxAttempts`, que describe el síntoma
+en lugar de la causa.
+
+## Dónde está realmente la causa
+
+`message.submit.response`, que lleva el `command_status` del proveedor:
+
+```
+message.submit.response worker=smppclient.vendor1 status=196 (ESME_RINVOPTPARAMVAL: the vendor
+rejected a TLV value -- on an India DLT lane, usually a wrong or unstamped entity or template id)
+```
+
+El mismo valor está en la tarjeta del proveedor en el panel y en `/ops/health` como `last_submit_error`, con
+`submit_rejected` contándolos. Así que una ruta rechazando todo es visible sin leer un log en
+absoluto.
+
+## Qué significan los códigos comunes
+
+| Estado | Mnemónico | Significado | ¿Reintentar? |
+| ---: | :--- | :--- | :--- |
+| 10 | `ESME_RINVSRCADR` | Sender ID rechazado. No aprobado, longitud incorrecta, o TON/NPI erróneo | no |
+| 11 | `ESME_RINVDSTADR` | Destino rechazado. Revisa el formato y código de país | no |
+| 14 | `ESME_RINVPASWD` | Contraseña incorrecta para esta cuenta de proveedor | no |
+| 20 | `ESME_RMSGQFUL` | La cola del proveedor está llena. Ralentiza | sí |
+| 67 | `ESME_RINVESMCLASS` | `esm_class` inválido, a menudo los bits de UDH o modo de mensaje | no |
+| 69 | `ESME_RSUBMITFAIL` | Rechazado sin razón dada | sí |
+| 88 | `ESME_RTHROTTLED` | Enviando demasiado rápido. Baja el `tps` de este proveedor | sí |
+| 100 | `ESME_RX_T_APPN` | La aplicación del proveedor lo rechazó temporalmente | sí |
+| 192 | `ESME_RINVOPTPARSTREAM` | El stream de TLV está mal formado | no |
+| 193 | `ESME_ROPTPARNOTALLWD` | El proveedor no permite uno de los TLVs enviados | no |
+| 194 | `ESME_RINVPARLEN` | Un TLV tiene la longitud incorrecta | no |
+| 195 | `ESME_RMISSINGOPTPARAM` | Un TLV requerido no fue enviado. En DLT, el id de entidad o plantilla | no |
+| 196 | `ESME_RINVOPTPARAMVAL` | Un valor de TLV fue rechazado. En DLT, un id incorrecto o sin sellar | no |
+
+La pasarela lleva la tabla completa, y escribe la frase en inglés claro junto a cada código que
+reconoce. Un código fuera de ella se registra como **`vendor-specific`**, deliberadamente: los proveedores usan los suyos propios,
+e inventar un nombre te enviaría a buscar una entrada de especificación que no existe.
+
+## El bloque 192–196 siempre trata de TLVs
+
+Si una ruta empieza a rechazar todo con uno de esos cinco, mira los TLVs del mensaje, no el
+enrutamiento. Tres cosas los suministran, componiendo en este orden:
+
+<Steps>
+  <Step title="El default.tlvs.submit del propio proveedor">
+    `outSms.instance.<name>.default.tlvs.submit`
+  </Step>
+  <Step title="defaultTlvs de la credencial">
+    Valores por cliente.
+  </Step>
+  <Step title="El sello del whitelist">
+    Para una cabecera de remitente o plantilla **aprobada**.
+  </Step>
+</Steps>
+
+**La causa más común es la tercera.** Nada aprobado significa nada sellado, así que una ruta DLT recibe
+un envío sin id de entidad o plantilla y lo rechaza. `tlvCount=0` en las líneas de traza lo confirma.
+
+**La segunda más común es un default mal formado.** El formato es `<name>_<tag>=<value>`. Escribir
+`PEID=1101778070000018542` en lugar de `peid_0x1400=1101778070000018542` parsea a nada, y el
+TLV se descarta con solo un `WARN`:
+
+```bash
+grep -i "default tlv" /var/log/fireflo/fireflo.log
+```
+
+<Warning>
+Un default mal formado es el más difícil de estos de ver, porque el ajuste **parece aplicado**. Está
+presente en la configuración, la pasarela arrancó limpiamente, y la única evidencia de que no hizo nada es
+un WARN al cargar y un `tlvCount` que es más bajo de lo que esperas.
+</Warning>
+
+## Un proveedor, muchos más envíos que los que configuraste
+
+Si un proveedor reporta muchos más envíos rechazados que mensajes enviaste, los dos techos de reintento se
+componen: el presupuesto de reintentos del propio proveedor se gasta *dentro* de un intento de enrutamiento, y un rechazo devuelve
+el mensaje al router, que tiene su propio techo de intentos. Con un solo proveedor configurado,
+re-enrutar lo devuelve directamente y gasta un presupuesto nuevo.
+
+<Tip>
+Vigila `submit_rejected` contra `submitted` en la tarjeta del proveedor. Una ratio muy por encima de uno es esta
+composición, no un problema del proveedor. Y vale la pena capturarlo, porque cada uno de esos PDUs es
+tráfico que tu operador ve.
+</Tip>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="TLVs en la práctica" icon="tags" href="/platform/connections/tlvs">
+    De dónde viene un tag y qué sobrescribe a qué.
+  </Card>
+  <Card title="Colas y reintentos" icon="rotate" href="/platform/routing/queues-and-retries">
+    Techos de intentos, backoff y qué cuesta un requeue.
+  </Card>
+</CardGroup>

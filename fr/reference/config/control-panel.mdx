@@ -1,0 +1,71 @@
+---
+title: "Environnement du panneau de contrôle"
+description: "Toutes les variables de panel.env, celles qui sont requises, et les deux qui décident si les clients peuvent se connecter du tout."
+---
+
+Le panneau de contrôle est un processus séparé avec son propre fichier d'environnement — `panel.env`,
+installé par `fireflo-panel-install` et **jamais remplacé par une mise à jour**.
+
+<Note>
+Il **n'est pas sur le chemin des messages**. Un panneau en panne vous coûte la capacité de faire des
+changements, pas la capacité d'envoyer.
+</Note>
+
+## Requis
+
+| Variable | Requis | Description |
+| :--- | :--- | :--- |
+| `AUTH_SECRET` | oui | Signe le cookie de session. Le changer déconnecte tout le monde. |
+| `AUTH_URL` | oui en production | Origine publique du panneau. Non défini, une déconnexion redirige vers localhost. |
+| `NODE_ENV` | oui | `production`. Décide si le cookie de session est marqué secure, donc il est défini pour le **build** comme pour l'exécution. |
+| `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` | oui | Il n'y a pas de table utilisateur — **ces deux constituent tout le compte opérateur.** Roulez-les avec `fireflo-panel-install passwd`. |
+| `METRICS_DATABASE_URL` | oui | Connexion en lecture seule pour les enregistrements d'appel et les métriques. |
+| `CDR_EXPORT_DIR` | oui | Où sont écrits les exports CSV préparés. |
+| `PORT` | non | Port d'écoute, défaut `3000`. |
+
+## Se connecter à la passerelle
+
+| Variable | Nécessaire pour | Description |
+| :--- | :--- | :--- |
+| `CONFIG_DATABASE_URL` | l'édition | Connexion en lecture-écriture pour les tables de configuration. Non défini, le panneau signale chaque domaine de configuration comme non éditable plutôt que d'échouer à la première sauvegarde. |
+| `GATEWAY_OPS_URL` | santé en direct | Le port de **gestion** (9000), pas celui de messagerie. |
+| `GATEWAY_OPS_TOKEN` | santé en direct | Doit correspondre à `smsg.ops.token`. |
+| `GATEWAY_OPS_ADMIN_TOKEN` | les contrôles | Doit correspondre à `smsg.ops.admin.token`. Sans lui, le panneau peut lire l'état de la passerelle mais pas le changer. |
+| `GATEWAY_API_URL` | le playground | Le port de **messagerie**. |
+| `NEXT_PUBLIC_APP_VERSION` | non | Affiché à côté de la version de la passerelle, pour qu'une paire discordante soit visible. Injecté au build. |
+
+<Warning>
+`GATEWAY_API_URL` pointé vers le port ops produit des 404 sur chaque appel du playground — le miroir
+de pointer `GATEWAY_OPS_URL` vers le port de messagerie. Les deux sont des ports différents qui
+portent des choses différentes.
+</Warning>
+
+<Warning>
+Sous `--vhost`, `CDR_EXPORT_DIR` doit aussi se trouver dans une racine `BindPaths=`. **Cet échec est
+silencieux** — les exports sont préparés puis ne peuvent pas être lus.
+</Warning>
+
+## Le mail de connexion du portail client
+
+Un client se connecte via un lien magique. Avec ces variables non définies, **aucun client ne peut se
+connecter du tout** — le portail dit que le lien ne peut être envoyé plutôt que d'échouer
+silencieusement, mais personne n'entre.
+
+| Variable | Défaut | Description |
+| :--- | :--- | :--- |
+| `MIS_PANEL_BASE_URL` | *(non défini)* | Origine vers laquelle le lien pointe. Non défini, le lien est construit relatif. |
+| `FIREFLO_SMTP_HOST` | *(non défini)* | Requis. Si ceci ou l'adresse d'expéditeur ne sont pas définis, aucun lien n'est envoyé. |
+| `FIREFLO_SMTP_FROM` | *(non défini)* | Requis, comme ci-dessus. |
+| `FIREFLO_SMTP_PORT` | `587` | |
+| `FIREFLO_SMTP_USER` / `FIREFLO_SMTP_PASSWORD` | *(non défini)* | Omettez les deux pour un relais non authentifié. |
+| `FIREFLO_SMTP_SECURE` | *(du port)* | TLS implicite. |
+
+<Note>
+`FIREFLO_SMTP_SECURE` est **parsé comme un oui ou un non**, pas testé pour sa présence — c'était
+autrefois ce dernier, ce qui faisait que `FIREFLO_SMTP_SECURE=0` signifiait « oui ». Une valeur
+non reconnaissable retombe désormais sur le port et journalise.
+</Note>
+
+Voir [Installer le panneau de contrôle](/platform/install/control-panel) pour la façon dont ces
+variables sont dérivées à l'installation, et [Accès au portail](/platform/customers/portal-access)
+pour le côté opérateur consistant à faire connecter un client.
