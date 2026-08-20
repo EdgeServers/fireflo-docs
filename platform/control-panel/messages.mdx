@@ -1,0 +1,119 @@
+---
+title: "Messages"
+description: "Every message the gateway handled, and the per-message view that shows what a customer sent, what was stamped on it, and what actually reached the carrier."
+---
+
+The screen you will open most. Every message, searchable, with a detail view that reconstructs one
+message end to end.
+
+## Finding one
+
+Filters apply when you press **Search**, not as you type, and they travel in the address bar — so a
+filtered view can be bookmarked or pasted to a colleague and they will see what you saw.
+
+The always-visible row: **Period**, **Outcome**, **To number** (matches from the start),
+**Message id** (exact), and **Message text** (contains). **More filters** adds account, bind name,
+vendor, product, ingress, and from-number.
+
+**Awaiting a receipt** is listed first among outcomes rather than alphabetically. On a healthy busy
+gateway it is the largest group, and it is what people are usually looking for.
+
+<Note>
+**Message text search finds nothing unless the gateway is recording message content**, which is off
+by default. An empty result may mean the text is not kept rather than that nothing matched. See
+`smsg.cdr.body` in [the configuration reference](/reference/config/paths).
+</Note>
+
+### One row per message, or one per attempt
+
+The **Rows** control decides the grain, and it changes what the numbers mean:
+
+| Setting | A row is |
+| :--- | :--- |
+| **One row per message** *(default)* | What the customer sent |
+| **Every attempt and segment** | What the gateway did — including retries and long-message segments |
+
+A long message that split into three, retried twice at the vendor, is one row on the first setting
+and several on the second. If a count looks too high, check this control before concluding anything.
+
+## Columns
+
+Seven by default: submitted, to, from, account, vendor, billed, outcome. The chooser groups roughly
+thirty more under **Message**, **Route**, **Money** and **Outcome** — including cost, margin, both
+rate rules, receipt state and error code.
+
+<Warning>
+**An empty cell and a blank cell are different, and the distinction matters on the TLV columns.**
+
+*Nothing recorded* means the message never reached a vendor, or went to a non-SMPP one. *Recorded as
+empty* means the vendor was asked and carried none. Reading the first as the second sends you looking
+for a stamping fault that never happened.
+</Warning>
+
+Column choices are kept in your browser. A link you share carries your filters, never your columns.
+
+## Exporting
+
+**Export these results** prepares a CSV in the background, kept for seven days.
+
+The export deliberately **carries every column whatever you chose on screen**. Two people exporting
+the same filters must get the same file, because spreadsheets address columns by letter and a
+personal column choice would quietly change what `H` means.
+
+## One message, end to end
+
+Opening a row reconstructs everything recorded about that message: route, money, a timeline of every
+attempt, every delivery receipt, the text if it was kept, and the TLVs.
+
+A summary line gives parts, attempts and receipts. Read the notes beneath it — they explain results
+that otherwise look like faults:
+
+- **You asked for a segment id.** A long message is sent as several SMPP messages and acknowledged
+  once each, so the gateway issued an id per part. All of them find this record.
+- **More than one receipt for part one.** Allowed. Every other view shows the earliest; the timeline
+  shows them all.
+- **Only part one carries money.** Later segments are written unrated with no amounts, so the blank
+  money cells beside them are correct rather than missing.
+
+### What a receipt actually said
+
+Each receipt shows the SMPP mnemonic with its plain-English meaning, and then the part people need:
+whether it **closed the message**, was **a later outcome, not the one that was billed**, or was
+**progress** that left the message open.
+
+Where the gateway recorded what the customer asked for, it is shown alongside. Where it did not, the
+page says so explicitly — that is not the same as the customer asking for nothing.
+
+### The TLV story
+
+The most useful part of the page, and the reason to come here rather than to the message list.
+
+One row per tag seen at any stage, with three value columns — **Received**, **Resolved**, **Sent** —
+and a verdict:
+
+| Verdict | Means |
+| :--- | :--- |
+| **Unchanged** | Arrived and went out as it came |
+| **Replaced** | An account default, approved sender ID or template replaced what was sent |
+| **Added** | Not sent by the customer — added by a default, sender ID or template |
+| **Dropped** | The vendor does not list this tag as one it sends, so it never went |
+| **Vendor default** | The vendor supplied it; the message carried no value |
+| **Vendor overrode** | The vendor sent something different from what the message carried |
+
+**Dropped** and **Vendor overrode** are the two that cost you a delivery, and they are the two the
+page colours. Where either occurs it tells you where to look: only tags on a vendor's send list reach
+the carrier.
+
+<Note>
+A dash means *not present at that stage*. A middot means *not recorded* — and where the wire is
+unknown, **no verdict claims anything about it**. That is the honest state for a message that never
+reached a vendor, went to a non-SMPP vendor, or predates the gateway recording it.
+</Note>
+
+## What is not here
+
+A call record stores no message metadata, no external id, none of the user-defined fields, and
+neither the expiry nor the deferred-delivery time. The in-flight state is not recorded either — only
+the outcome. Those live on the message while it is being handled and are gone once it is.
+
+If you need the body, it is kept only when the gateway is configured to keep it.

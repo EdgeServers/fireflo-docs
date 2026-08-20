@@ -1,7 +1,9 @@
 ---
 title: "Versioning and upgrading"
-description: "What a version number tells you, and the five things to check before you take a new release."
+description: "Which releases exist, what a version number tells you, and the five things to check before you take a new one."
 ---
+
+import { Versions } from '/snippets/versions.mdx';
 
 FireFlo uses standard semantic versioning. What matters to you is what a version number promises and
 what to check before you take one.
@@ -16,6 +18,36 @@ what to check before you take one.
 
 Your release notes accompany each build. They are the authoritative list of what changed; this page is
 about what to look for in them.
+
+## Releases
+
+The current pair is <Versions />.
+
+| Gateway | Control panel | Date | What the release was about |
+| :--- | :--- | :--- | :--- |
+| **0.7.4** | 0.7.4.1 | 2026-08-20 | Three defects on the prepaid credit path |
+| **0.7.3** | 0.7.3.3 | 2026-08-19 | Postpaid accounts, statements and period close |
+| **0.7.2** | 0.7.2.1 | 2026-08-19 | Template placeholders widened to accept names and phrases |
+| **0.7.1** | 0.7.1.1 | 2026-08-19 | Template matching — an approved template was refusing every message |
+| **0.7.0** | 0.7.0.1 | 2026-08-19 | Concatenated messages end to end, and the segment billing defect |
+
+<Note>
+**0.7.0 is where this table starts, not where FireFlo starts.** Earlier releases exist and are in
+service; their notes are available from [support@fireflo.au](mailto:support@fireflo.au). Published
+history begins here because 0.7.0 opened the line of billing work the product is currently on.
+</Note>
+
+Two things the table will not tell you on its own.
+
+**The control panel column shows the newest revision for that gateway release.** The fourth number is
+a panel-only revision and moves on its own — 0.7.3 had three of them. Any panel version whose first
+three numbers match the gateway is a valid pair; the panel checks this at runtime and says so when it
+does not.
+
+**Five gateway releases inside two days is not a mistake.** 0.7.0 opened a piece of billing work, and
+each release after it closed something the previous one exposed — a segment billing defect, then the
+template matching it depended on, then the placeholder grammar, then the postpaid work, then three
+defects on the credit path. Releases cluster when a seam is being worked; that is what it looks like.
 
 ## Before you upgrade
 

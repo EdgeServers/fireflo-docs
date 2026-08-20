@@ -1,0 +1,69 @@
+---
+title: "Usage"
+description: "Volume and delivery by account, with the one arithmetic choice that stops a busy afternoon reading as a collapse."
+---
+
+How much traffic went out, whether it arrived, and who sent it. Volume and delivery lead; money is
+the last column rather than the headline — the commercial question is answered on
+[Revenue](/platform/control-panel/revenue).
+
+The range picker offers **24 hours**, **7 days** or **30 days** and **defaults to 7 days**, which is
+the one place in the panel that does not default to 24 hours. A day is the unit a usage question gets
+asked in, and a single day of hourly buckets cannot show you a weekday-to-weekend shape.
+
+## The figures
+
+Four cards — **Sent**, **Delivered**, **Failed**, **Delivery rate** — with the rate card noting how
+many messages are still awaiting a receipt.
+
+<Warning>
+**The delivery rate is delivered over what has settled, not over what was sent.**
+
+Dividing by sent would count every message still in flight as a failure. The rate would collapse
+every busy afternoon and recover by itself overnight, and nobody could tell a real delivery problem
+from ordinary traffic.
+
+So a rate of 98% means 98% *of the messages that have an outcome*. Messages still waiting are counted
+in **Sent**, and in **Pending** in the table, and are in neither half of the rate.
+</Warning>
+
+## Traffic
+
+Delivered and failed stacked per day against volume on the left, and the delivery rate as a line
+against a fixed 0–100% axis on the right.
+
+Two deliberate choices worth knowing:
+
+- **Messages still awaiting a receipt are counted in the totals but not drawn.** Today would
+  otherwise always read as a spike of unknowns.
+- **A day with nothing settled has no rate at all**, and the line breaks rather than dropping to
+  zero. A gap is "no evidence"; a zero would be "everything failed".
+
+## By account
+
+Heaviest sender first: **Account · Sent · Delivered · Failed · Pending · Rate · Billed**.
+
+Each account links through to that customer, where the same question is answered for them alone.
+
+Traffic that named no account appears as a greyed **no account** — not an error, and not an account
+whose name is empty. It is traffic that arrived without one, which usually means a login with no
+account attached, and is worth chasing because it prices and bills differently.
+
+## Usage against the statement
+
+This screen counts messages. A customer's [statement](/platform/billing/statements) counts money, and
+is billed on submission rather than delivery — so the delivered figure here keeps moving after a
+statement is cut while the invoiced amount does not.
+
+They are not meant to agree on delivery. They are meant to agree on **sent**.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Revenue" icon="coins" href="/platform/control-panel/revenue">
+    The same traffic, valued.
+  </Card>
+  <Card title="Usage rollups and retention" icon="database" href="/platform/billing/usage-and-retention">
+    The daily rollup this screen falls back on, and what the purge deletes.
+  </Card>
+</CardGroup>

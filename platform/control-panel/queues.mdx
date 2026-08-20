@@ -1,0 +1,89 @@
+---
+title: "Queues"
+description: "What has been accepted and not yet sent — and why a calm-looking router queue can mean a broker backlog rather than a quiet platform."
+---
+
+**Messages the gateway has accepted and not yet sent. Nothing here is charged twice or lost — but a
+queue that only grows is a customer waiting.**
+
+The screen reads live, re-reading every few seconds, and can be paused. A search box narrows what is
+listed by account, sender, destination, product or vendor, and a **Retries only** toggle separates
+"more arrived than we could send" from "the vendor is refusing".
+
+## The broker and the router are different queues
+
+<Warning>
+**A backlog on the message broker shows up as a *flat* router queue.**
+
+Once the in-process queue passes its highwater mark the consumer stops pulling, so the router queue
+stops growing and looks calm — while messages pile up on the broker behind it.
+
+If the router queue is suspiciously steady and customers are reporting delays, read the broker card
+first.
+</Warning>
+
+The broker card is always shown, even where there is no broker, because *not configured* and
+*configured and not answering* are entirely different facts and both would otherwise render as
+nothing.
+
+| State | What it means |
+| :--- | :--- |
+| **No broker configured** | The default. REST submissions go straight to the router queue |
+| **Not answering** | Publishes are falling back in-process; whatever is on the broker is stranded |
+| **Nothing draining it** | Messages are queued and no consumer is attached. Not slowness — nothing is reading them |
+
+<Note>
+When the broker is unreachable its depth reads **unknown**, never zero. A stranded queue that
+displayed "0 waiting" would be the most dangerous number on the screen.
+</Note>
+
+## The in-process queues
+
+One card per queue, each saying what it holds:
+
+| Kind | Holds |
+| :--- | :--- |
+| **Waiting to be routed** | Accepted, not yet assigned to a vendor. One queue for the whole gateway |
+| **Waiting for the vendor** | Routed, waiting for that vendor's session to take them |
+| **Scheduled retries** | Sending failed; queued to try again |
+
+Each card offers a reading of its own contents, and these are the sentences to act on:
+
+- **Mostly retries** — the vendor is failing, not merely slow. Adding capacity will not help.
+- **All first attempts, all from one account** — one sender's volume, not a vendor fault.
+- **All first attempts, spread across senders** — more arrived than is being drained.
+
+That reading disappears when you filter, deliberately: a retries-only view cannot honestly pronounce
+on the mix.
+
+The table shows when each message was queued, its account, product, addresses, size and encoding,
+whether it is a first attempt or a retry, its target, and — on a retry queue — when it is next due.
+
+<Note>
+**Filtering never changes a queue's depth.** The depth stays the real number and the list below it
+narrows. "3 matches" among "412 waiting" means three of the listed sample matched, not that only
+three of that customer's messages are queued.
+</Note>
+
+## Why the message text is not shown
+
+Deliberately absent, and not kept in call records either. Operating the gateway never requires
+reading a customer's message, so the size and encoding stand in for it — enough to tell a
+three-segment Unicode message from a short GSM one without reading anybody's mail.
+
+## An empty screen is the good outcome
+
+**No in-process queues** means every message that arrived has already been handed to a vendor. That
+is what a healthy gateway looks like at rest, and it is why this screen is not a dashboard — you come
+here when something else has already told you to.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Queues and retries" icon="rotate" href="/platform/routing/queues-and-retries">
+    How retry scheduling and the attempt ceiling work.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Bind state and queue depth from the gateway itself.
+  </Card>
+</CardGroup>

@@ -1,0 +1,115 @@
+---
+title: "Finding your way around"
+description: "A map of the operator sidebar, what each group is for, and the six screens that have no menu entry at all."
+---
+
+The control panel is the operator's half of FireFlo. Your customers never see it — they get
+[the portal](/developers/portal/signing-in), which shows them their own traffic and nothing of yours.
+
+Nothing here is required to run the gateway. The gateway reads its configuration from a database or
+from files and would keep carrying traffic if the panel were switched off entirely. What the panel
+gives you is a way to change that configuration without hand-editing, and a way to see what happened
+without writing SQL.
+
+## The sidebar
+
+<AccordionGroup>
+
+<Accordion title="Overview — the first screen">
+Traffic, delivery and failures across the whole gateway, over 24 hours, 7 days or 30 days. Start
+here in an incident; it is the only screen that answers "is anything wrong" without you having to
+name the thing you suspect.
+
+See [the dashboard](/platform/control-panel/dashboard).
+</Accordion>
+
+<Accordion title="Gateway — the things that carry traffic">
+| Menu item | For |
+| :--- | :--- |
+| **Messages** | Every message, searchable, with a detail view per message |
+| **Vendors** | Outbound connections — who you buy from |
+| **Servers** | Inbound listeners — how customers connect to you |
+| **Accounts** | Your customers, and everything hung off them |
+| **Pricing** | Tariffs, both what you charge and what you are charged |
+| **Diagnostics** | Logs and configuration read from the gateway's own machine |
+
+**Vendor** and **server** are the two halves of the same idea, and mixing them up is the most common
+early mistake — see [connections](/platform/connections/vendors).
+</Accordion>
+
+<Accordion title="Configuration — rules the gateway applies">
+**Filters** are reusable conditions that routing rules and tariffs both draw on. **TLVs** is the
+catalogue of SMPP optional parameters, including ones your customers have proposed and you have not
+yet approved.
+</Accordion>
+
+<Accordion title="Assets — what customers may send">
+**Headers** are sender IDs; **Templates** are approved wording. Both are the operator side of what
+customers request in their portal, and both are only enforced where you have switched enforcement on.
+</Accordion>
+
+<Accordion title="Reports — what happened, and what it was worth">
+| Menu item | Answers |
+| :--- | :--- |
+| **Refused** | What was turned away before it became traffic |
+| **Queues** | What is waiting right now |
+| **Receipts** | How well each vendor reports outcomes |
+| **Usage** | Volume and delivery, by account |
+| **Revenue** | Billed, cost and margin |
+</Accordion>
+
+</AccordionGroup>
+
+## The screens with no menu entry
+
+Six screens exist that the sidebar never lists. They are reached from other screens, which is fine
+once you know and baffling until you do.
+
+| Screen | Reached from | What it is |
+| :--- | :--- | :--- |
+| **Live health** | The heart icon in the header | Binds, queue depth and in-flight receipts, right now |
+| **Runtime** | "Runtime detail" on the Overview health strip | Memory, processor and connection capacity |
+| **Routing** | The Vendors screen | Routing tables, rules and vendor groups |
+| **Products** | The Servers screen | The product catalogue, and per-product rates |
+| **Message detail** | Any row on Messages | One message end to end, including its TLVs |
+| **Sign-in** | Signing out, or an expired session | The operator sign-in form |
+
+<Note>
+**Runtime and Live health answer different questions and are easy to confuse.** Live health is *what
+is true right now* — which vendors are bound, how deep the queues are. Runtime is *whether the
+software has room to keep working* — memory, processor, file descriptors. A gateway can be perfectly
+healthy on one and in trouble on the other.
+</Note>
+
+## Inside an account
+
+Opening an account gives you seven tabs, and they are genuinely different subjects rather than
+sections of one page:
+
+| Tab | Holds |
+| :--- | :--- |
+| **Overview** | Traffic and delivery for this customer alone |
+| **Settings** | Who they are, whether they are listed, and where they sit in a reseller tree |
+| **Logins** | Their SMPP and HTTP credentials |
+| **Approvals** | Sender IDs and templates they have requested |
+| **Billing** | Credit, the ledger, and reconciliation |
+| **Tariff** | What this customer is charged |
+| **Statement** | What they owe for a period |
+
+The header above the tabs shows either **Balance** or **Limit**, never both — prepaid accounts hold a
+balance, postpaid accounts have a credit limit, and reading one as the other is the misreading that
+costs money.
+
+<Warning>
+**The Billing tab is the only place in FireFlo where credit is created, and a top-up cannot be
+undone.** Read [the Billing tab](/platform/control-panel/accounts-billing) before you use it.
+</Warning>
+
+## Signing in
+
+Operator sign-in is a username and password held in the panel's own configuration — there is no user
+table, and no way to add a second operator from inside the panel. See
+[the control panel's configuration](/reference/config/control-panel).
+
+Sessions are per browser. Signing in on a laptop does not sign you in on a phone, and signing out
+ends only the session you are using.
