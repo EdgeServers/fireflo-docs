@@ -1,0 +1,132 @@
+---
+title: "The Billing tab"
+description: "The only place in FireFlo where credit is created, and the only write in the panel that cannot be undone — plus the ledger, and a reconciliation that deliberately refuses to fix anything."
+---
+
+Open an account and choose **Billing**. Four cards: what the account holds, how to add to it, whether
+the credit adds up, and every movement.
+
+<Warning>
+**Adding credit cannot be undone from the panel.** There is no "remove credit" and no reversal.
+Undoing a top-up would need a negative adjustment entry, and that does not exist.
+
+The form asks you to confirm the amount and the reference before it writes. Read the confirmation
+rather than clicking through it — it is the last point at which the number is still yours to change.
+</Warning>
+
+## What the account holds
+
+Prepaid accounts show **Available**. Postpaid accounts show a **Credit limit** — what they may run
+up before the gateway refuses them, which is the same refusal a prepaid account gets when it runs
+out. The two are never given the same name.
+
+<Note>
+**Reserved is not a hold that shrinks as messages go out.** It is credit that has been moved out of
+the balance, and it only ever grows until it is released.
+
+Seeing it climb on a busy account is correct. Seeing it sit on an idle one means credit was stranded
+by an unclean stop, and it is returned by releasing held credit — nothing is lost either way, because
+balance plus reserved is conserved.
+</Note>
+
+A missing balance row reads as **No balance row — not zero, absent**, which is a different and more
+consequential state: a top-up against an account with no row is left pending rather than credited.
+**Open for credit** creates the row at zero.
+
+Currency is not asked for. There is one currency per platform, taken from the gateway, and FireFlo
+never converts — a balance in anything else could never be spent against a price. The field appears
+only when the panel cannot read the platform currency at all.
+
+## Adding credit
+
+Three fields: **Amount**, **Reference**, and an optional **Note**.
+
+Once a valid amount is typed the form echoes back exactly what will be stored, because money is held
+to four decimal places and a misplaced decimal is the expensive mistake here.
+
+<Warning>
+**The reference is the replay guard, not a memo.** A receipt or transaction id is what stops the same
+payment being credited twice, and the database can only enforce that when it is set.
+
+It is required for exactly that reason. Do not put a description there — put the thing that uniquely
+identifies the payment.
+</Warning>
+
+Confirming is two steps on purpose. Pressing Enter in a field does nothing, and the button arms into
+a confirmation naming the amount, the currency and the reference before it will write.
+
+After it saves, **the balance does not move immediately**. The panel writes a recharge entry and the
+gateway applies it on its next configuration poll, within about thirty seconds. A balance that has
+not changed yet is not a failure.
+
+## Switching between prepaid and postpaid
+
+The same card switches billing mode, and warns before saving either way:
+
+- **To postpaid** — the account stops spending its balance. Anything already reserved stays reserved
+  until it is released.
+- **To prepaid** — the limit is cleared and the account spends its balance again. Usage since the
+  last bill is still owed.
+
+<Warning>
+**A postpaid credit limit of zero is not unlimited — it is no credit**, and the account would be
+unable to send anything. The form refuses it rather than accepting a setting that silently stops a
+customer.
+</Warning>
+
+**Switch credit off** leaves an account sending until the block it already holds runs out, then
+stops. It is not instant.
+
+## Does the credit add up?
+
+Two identities over the account's whole lifetime: every unit credited is still in the balance or
+reserved against it, and what was reserved covers what was spent.
+
+It does not run on its own — press **Reconcile**. Two figures come back. **Unexplained** is the
+residual, and the one worth acting on. **Reserved, not yet spent** is normal on an account that is
+sending.
+
+Beneath them, a plain-language account of everything that did not balance. The distinctions that
+matter:
+
+| Verdict | Means |
+| :--- | :--- |
+| **Pending credit** | Top-ups the gateway has not applied yet. Not a problem — wait a poll |
+| **Credit lost** | Credited, and in neither balance nor reserved |
+| **Credit minted** | Held, with no top-up or transfer accounting for it — the more serious direction |
+| **Charged without reserving** | Consumption is real, the reservation is not |
+| **Held unspent** | Stranded by an unclean stop. Released by hand, not lost |
+| **Missing rollup** | Days with no usage rollup — still counted here, but from records the purge deletes |
+| **Unrated** | Messages sent with no price. On postpaid, revenue nobody invoiced |
+
+<Note>
+**There is no "fix it" button, deliberately.** Reconciliation never writes an adjusting entry.
+
+A residual is the part nobody could explain, and posting an adjustment for it would balance the books
+by hiding the cause. It is also always lifetime-scoped, never a period — an identity that holds over
+a month but not over the account's life has not held.
+</Note>
+
+## Money in and out
+
+Every recharge and transfer, searchable by reference, note or type, sortable and paged.
+
+By default the ledger lists only entries a person or the billing system wrote. The gateway's own
+credit reservations are hidden and counted instead — roughly one every twenty messages, each moving
+credit between two columns of one row and netting to zero. **Show them** reveals the lot.
+
+The **State** column carries the part people miss: **Pending** means the gateway has not applied it
+yet. Where an account has no balance row, a positive entry says either that it is waiting for the row
+and will credit itself the moment it exists, or that it was applied before the row went missing and
+nothing can now say what it credited.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="How prepaid credit works" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocks, reservations and what the gateway does when credit runs out.
+  </Card>
+  <Card title="Postpaid accounts" icon="file-invoice" href="/platform/billing/postpaid">
+    Billing in arrears against a limit.
+  </Card>
+</CardGroup>

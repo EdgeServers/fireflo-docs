@@ -24,6 +24,22 @@
             ]
           },
           {
+            "group": "The control panel",
+            "pages": [
+              "platform/control-panel/finding-your-way",
+              "platform/control-panel/dashboard",
+              "platform/control-panel/messages",
+              "platform/control-panel/usage",
+              "platform/control-panel/revenue",
+              "platform/control-panel/accounts-billing",
+              "platform/control-panel/refused",
+              "platform/control-panel/queues",
+              "platform/control-panel/receipt-quality",
+              "platform/control-panel/runtime-metrics",
+              "platform/control-panel/diagnostics"
+            ]
+          },
+          {
             "group": "Install and run",
             "pages": [
               "platform/install/one-command",
@@ -82,22 +98,17 @@
               "platform/billing/statements",
               "platform/billing/cdrs",
               "platform/billing/usage-and-retention",
-              "platform/billing/revenue",
               "platform/billing/faq"
             ]
           },
           {
             "group": "Operations",
             "pages": [
-              "platform/operations/dashboard",
               "platform/operations/live-health",
-              "platform/operations/runtime-metrics",
               "platform/operations/prometheus-grafana",
               "platform/operations/worker-control",
               "platform/operations/queues",
-              "platform/operations/receipt-quality",
               "platform/operations/capture",
-              "platform/operations/diagnostics",
               "platform/operations/reload",
               "platform/operations/tokens-and-access",
               "platform/operations/generating-traffic",
@@ -125,7 +136,9 @@
           },
           {
             "group": "Project",
-            "pages": ["platform/project/releases"]
+            "pages": [
+              "platform/project/releases"
+            ]
           }
         ]
       },
@@ -190,7 +203,9 @@
           },
           {
             "group": "Migrating",
-            "pages": ["developers/migrating/from-jasmin"]
+            "pages": [
+              "developers/migrating/from-jasmin"
+            ]
           }
         ]
       },
@@ -255,7 +270,9 @@
           },
           {
             "group": "Management API",
-            "pages": ["reference/management/endpoints"]
+            "pages": [
+              "reference/management/endpoints"
+            ]
           },
           {
             "group": "Data model",
@@ -282,29 +299,121 @@
     }
   },
   "redirects": [
-    { "source": "/docs/01-architecture", "destination": "/platform/architecture" },
-    { "source": "/docs/02-docker-deployment", "destination": "/platform/quickstart" },
-    { "source": "/docs/03-auth-security", "destination": "/platform/connections/credentials" },
-    { "source": "/docs/04-smpp-configuration", "destination": "/reference/smpp/server" },
-    { "source": "/docs/05-routing-engine", "destination": "/platform/routing/how-it-works" },
-    { "source": "/docs/06-http-api", "destination": "/reference/api/overview" },
-    { "source": "/docs/07-webhooks", "destination": "/developers/receive/delivery-receipts" },
-    { "source": "/docs/08-monitoring-observability", "destination": "/platform/operations/prometheus-grafana" },
-    { "source": "/docs/09-configuration-reference", "destination": "/reference/config/paths" },
-    { "source": "/docs/10-troubleshooting", "destination": "/platform/troubleshooting/first-checks" },
-    { "source": "/docs/11-release-process", "destination": "/platform/project/releases" },
-    { "source": "/docs/12-features-roadmap", "destination": "/platform/project/releases" },
-    { "source": "/docs/13-rating-and-cdr", "destination": "/platform/billing/how-pricing-works" },
-    { "source": "/docs/14-migrating-from-jasmin", "destination": "/platform/migrating/from-jasmin-or-kannel" },
-    { "source": "/docs/15-message-queueing", "destination": "/platform/routing/queues-and-retries" },
-    { "source": "/docs/16-sending-sms", "destination": "/developers/send/one-message" },
-    { "source": "/docs/17-whitelisting", "destination": "/platform/customers/sender-ids" },
-    { "source": "/docs/18-deploying-on-a-server", "destination": "/platform/install/by-hand" },
-    { "source": "/docs/19-generating-traffic", "destination": "/platform/operations/generating-traffic" },
-    { "source": "/docs/20-installing", "destination": "/platform/install/one-command" },
-    { "source": "/docs/21-clustering", "destination": "/platform/install/clustering" },
-    { "source": "/docs/22-throughput-baseline", "destination": "/platform/operations/throughput" },
-    { "source": "/docs/23-customer-notices", "destination": "/platform/migrating/customer-notices" },
-    { "source": "/docs/DocumentationMap", "destination": "/" }
+    {
+      "source": "/docs/01-architecture",
+      "destination": "/platform/architecture"
+    },
+    {
+      "source": "/docs/02-docker-deployment",
+      "destination": "/platform/quickstart"
+    },
+    {
+      "source": "/docs/03-auth-security",
+      "destination": "/platform/connections/credentials"
+    },
+    {
+      "source": "/docs/04-smpp-configuration",
+      "destination": "/reference/smpp/server"
+    },
+    {
+      "source": "/docs/05-routing-engine",
+      "destination": "/platform/routing/how-it-works"
+    },
+    {
+      "source": "/docs/06-http-api",
+      "destination": "/reference/api/overview"
+    },
+    {
+      "source": "/docs/07-webhooks",
+      "destination": "/developers/receive/delivery-receipts"
+    },
+    {
+      "source": "/docs/08-monitoring-observability",
+      "destination": "/platform/operations/prometheus-grafana"
+    },
+    {
+      "source": "/docs/09-configuration-reference",
+      "destination": "/reference/config/paths"
+    },
+    {
+      "source": "/docs/10-troubleshooting",
+      "destination": "/platform/troubleshooting/first-checks"
+    },
+    {
+      "source": "/docs/11-release-process",
+      "destination": "/platform/project/releases"
+    },
+    {
+      "source": "/docs/12-features-roadmap",
+      "destination": "/platform/project/releases"
+    },
+    {
+      "source": "/docs/13-rating-and-cdr",
+      "destination": "/platform/billing/how-pricing-works"
+    },
+    {
+      "source": "/docs/14-migrating-from-jasmin",
+      "destination": "/platform/migrating/from-jasmin-or-kannel"
+    },
+    {
+      "source": "/docs/15-message-queueing",
+      "destination": "/platform/routing/queues-and-retries"
+    },
+    {
+      "source": "/docs/16-sending-sms",
+      "destination": "/developers/send/one-message"
+    },
+    {
+      "source": "/docs/17-whitelisting",
+      "destination": "/platform/customers/sender-ids"
+    },
+    {
+      "source": "/docs/18-deploying-on-a-server",
+      "destination": "/platform/install/by-hand"
+    },
+    {
+      "source": "/docs/19-generating-traffic",
+      "destination": "/platform/operations/generating-traffic"
+    },
+    {
+      "source": "/docs/20-installing",
+      "destination": "/platform/install/one-command"
+    },
+    {
+      "source": "/docs/21-clustering",
+      "destination": "/platform/install/clustering"
+    },
+    {
+      "source": "/docs/22-throughput-baseline",
+      "destination": "/platform/operations/throughput"
+    },
+    {
+      "source": "/docs/23-customer-notices",
+      "destination": "/platform/migrating/customer-notices"
+    },
+    {
+      "source": "/docs/DocumentationMap",
+      "destination": "/"
+    },
+    {
+      "source": "/platform/operations/dashboard",
+      "destination": "/platform/control-panel/dashboard"
+    },
+    {
+      "source": "/platform/operations/runtime-metrics",
+      "destination": "/platform/control-panel/runtime-metrics"
+    },
+    {
+      "source": "/platform/operations/receipt-quality",
+      "destination": "/platform/control-panel/receipt-quality"
+    },
+    {
+      "source": "/platform/operations/diagnostics",
+      "destination": "/platform/control-panel/diagnostics"
+    },
+    {
+      "source": "/platform/billing/revenue",
+      "destination": "/platform/control-panel/revenue"
+    }
   ]
 }

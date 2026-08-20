@@ -1,0 +1,101 @@
+---
+title: "Refused"
+description: "Messages the gateway would not send and why — including the three refusals that happen after the customer was told yes, and therefore carry a message id and a refund."
+---
+
+**Messages the gateway would not send, and why.** The first screen to open when a customer says
+nothing is arriving.
+
+Most refusals happened at the door: nothing was sent and nothing was charged. Three did not, and the
+difference is the most important thing on this page.
+
+## Refused at the door, or refused after acceptance
+
+<Warning>
+**Three reasons happen after the customer was told yes** — *never routed*, *vendor refused it* and
+*dropped by a filter*.
+
+Those messages were accepted, charged and in two cases actually sent. They carry a **message id**,
+they appear in the call records, and **their charge was refunded**. Everything else on this page was
+turned away before it became traffic at all.
+
+The **Stage** filter separates the two, and it is the filter to reach for when reconciling a
+customer's count against your own.
+</Warning>
+
+## The reasons
+
+Summary cards lead the page — one per reason, with a count for the whole window. They do not shift as
+you page, and clicking one filters to it.
+
+| Reason | Usually means |
+| :--- | :--- |
+| **Sender ID not approved** | The sender is not on the account's approved list for that product |
+| **Content not approved** | The body matched no approved template — one changed word is enough |
+| **Out of credit** | Prepaid credit would not cover it |
+| **Required parameter missing** | A TLV the ingress requires was absent, and nothing supplied it |
+| **Rate limit exceeded** | Over the account's messages per second |
+| **Product not sold** | The login named a product with no enabled catalogue row |
+| **No price configured** | No sell-side rate matched, and the gateway refuses rather than send unbilled |
+| **Product not allowed for this login** | The login may not name that product |
+| **Queue full** | The router queue was at capacity and refused rather than growing the heap |
+| **Could not be queued** | Accepted by the checks, but could not be handed on — usually the broker |
+| **Never routed** | *After acceptance.* No enabled rule matched; refunded |
+| **Vendor refused it** | *After acceptance.* The carrier rejected the submit; refunded |
+| **Dropped by a filter** | *After acceptance.* A routing filter stopped it; refunded |
+
+<Note>
+**"Out of credit" immediately after a gateway restart can appear on a funded account**, while credit
+is being reserved for the first time. One message reports it and the next succeeds. Persisting past
+the first few sends is a real shortage.
+</Note>
+
+Two reasons deserve their own note. **Content not approved** is an exact comparison outside the
+placeholders — a single changed word refuses. And on **vendor refused it**, the carrier's own numeric
+status sits beside the row; the 192–196 family is always about TLVs, which on an India DLT lane
+usually means a missing or unstamped entity or template id.
+
+An empty summary says so plainly, and adds the check worth making first: if you expected refusals and
+see none, confirm enforcement is switched on at all — **an unloaded whitelist allows everything by
+design**.
+
+## Finding one
+
+The wide net is **Anything**, which looks inside account, sender, destination, product, login,
+refusal detail and message excerpt at once. Narrower filters exist for account, destination, bind
+name, product, ingress, listener, from-number and message id.
+
+**Carrier status** takes the carrier's number in decimal — 69 is the generic "refused and will not
+say why" — and only vendor refusals carry one.
+
+## The table
+
+Nine columns by default: refused, why, vendor said, account, product, from, to, via, message. The
+chooser adds the English reason, the refusal detail, whether it was charged and refunded, the vendor
+code name, and the row and message ids.
+
+The **message excerpt** — the first 160 characters — is kept **unconditionally**, unlike the body on
+a call record. A content refusal cannot be diagnosed without seeing what was sent, so this is the one
+place message text is always available.
+
+<Note>
+A dash under **Parts** means the message was refused before its segments were counted — not zero
+parts. **Data coding** does show `0`, which is real: that is GSM 7-bit.
+</Note>
+
+## Exporting
+
+Prepared in the background, kept seven days, and — as on Messages — it **carries every column plus
+the plain-English reason and carrier code**, whatever you chose on screen. These files are read by
+people with no panel open.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Why a message was refused" icon="circle-question" href="/platform/troubleshooting/refusals">
+    Working back from a refusal to its cause.
+  </Card>
+  <Card title="Vendor rejections" icon="triangle-exclamation" href="/platform/troubleshooting/vendor-rejections">
+    What each carrier status code means.
+  </Card>
+</CardGroup>
