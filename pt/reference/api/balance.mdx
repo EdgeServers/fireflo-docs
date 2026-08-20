@@ -1,0 +1,84 @@
+---
+title: "GET /secure/balance"
+description: "O que sobrou na conta em que este login fatura. E por que a contagem de mensagens é sempre ND."
+---
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+Sem parâmetros.
+
+## Os dois campos
+
+| Campo | Significado |
+| :--- | :--- |
+| `balance` | Dinheiro na conta em que este login fatura. `"ND"` quando o crédito pré-pago não é habilitado. |
+| `sms_count` | **Sempre `"ND"`** — not determined. |
+
+<Tip>
+**`sms_count` é `"ND"` por design, não por omissão.** O Jasmin reporta uma cota de mensagens
+pré-pagas; o FireFlo não tem esse contador, porque crédito é dinheiro, e quantas mensagens ele
+compra depende de onde elas vão.
+
+Em vez de inventar um número, o campo diz que não está determinado.
+</Tip>
+
+## Qual conta
+
+Aquela em que o **login fatura** — `app_credential.account_id`, não o nome do login. Vários logins
+na mesma conta reportam todos o mesmo saldo e gastam todos o mesmo crédito.
+
+## Um saldo positivo ainda pode recusar uma mensagem
+
+<Warning>
+O crédito é reservado em **blocos** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
+vinte mensagens por padrão. E as recargas são **assíncronas**.
+
+Então uma mensagem que chega enquanto a próxima reserva está sendo feita recebe `402` mesmo que
+este endpoint reporte saldo positivo. **É transitório; o retry tem sucesso.**
+
+O tamanho do bloco não deixa crédito preso: uma reserva cai do bloco, para o piso, e por fim para a
+única mensagem que pediu, então uma conta gasta cada unidade que tem.
+</Warning>
+
+## Não faça polling disso por mensagem
+
+É uma leitura de banco de dados, não diz nada sobre se *essa* mensagem vai ser aceita, e dobra seu
+volume de requisições.
+
+Faça polling em um cronograma para alertas, e deixe um `402` ser seu sinal por mensagem.
+
+## Casas decimais
+
+`balance` é exibido com `smsg.money.scale` casas decimais — `0` a `4`, padrão `4`. A Índia usa `2`.
+
+**O armazenamento nunca muda**: os valores são inteiros de décimos de milésimos. Isso é só
+apresentação.
+
+Taxas em [`/secure/rate`](/reference/api/rate) sempre mantêm quatro casas independentemente disso,
+porque uma tarifa mostrada como `0.05` em vez de `0.0450` erra 11% em cada mensagem.
+
+## Erros
+
+Apenas os compartilhados. Veja [Erros da API](/reference/api/errors).
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Saldo e cotações" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Usando este junto de `/secure/rate`.
+  </Card>
+  <Card title="Crédito pré-pago" icon="coins" href="/platform/billing/prepaid-credit">
+    O lado do operador: blocos, ledger e a identidade monetária.
+  </Card>
+</CardGroup>

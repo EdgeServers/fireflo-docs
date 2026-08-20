@@ -1,0 +1,104 @@
+---
+title: "Nada se entrega"
+description: "Cuando cdr_rejected dice maxAttempts. Las cinco líneas de log que nombran la causa, los dos números de cola que importan y el flag de traza que usar en lugar del que parece correcto."
+---
+
+Has pasado por [primeras comprobaciones](/platform/troubleshooting/first-checks) y la razón de rechazo
+es `maxAttempts`. Ese es el único valor que genuinamente significa enrutamiento.
+
+## El log nombra la causa
+
+Cada una de estas está a WARN o ERROR y no necesita activar ningún flag de debug.
+
+| Línea de log | Causa |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | La regla nombra algo que no es ni una tabla de enrutamiento ni un worker. No envía nada. |
+| `routing.rule.broken cause=target-not-accepting` | El objetivo existe pero está suspendido o apagándose. A menudo temporal. Revisa el proveedor. |
+| `message.routing.miss.first action=requeue` | El mensaje no coincidió con ninguna regla habilitada. Catch-all faltante o mal ubicado, o una condición que no puede ser verdadera. |
+| `Error parsing new routing table` (ERROR) | La tabla entera fue rechazada. La pasarela conservó la **anterior**, o no tiene ninguna si esto ocurrió al arranque. |
+| `message.dropped reason=maxAttempts attempts=… limit=…` | El mensaje se rindió. La razón encima dice por qué. |
+
+<Warning>
+**`routing.rule.broken` se registra una vez por regla, no una vez por mensaje**, y el contador se reinicia solo
+cuando se publica una nueva tabla de enrutamiento.
+
+Así que tras arreglar una regla, mira si la línea **reaparece** en lugar de si se mantiene ausente. Un
+log silencioso no prueba nada. `routing_rules_broken` en `/ops/health` es el mismo hecho como un número, y
+es la forma fiable de distinguir "arreglado" de "ya reportado".
+</Warning>
+
+## Dos cosas que descartar antes de editar cualquier regla
+
+<AccordionGroup>
+
+<Accordion title="¿Hay algún proveedor conectado?">
+Un catch-all perfecto apuntando a un proveedor desconectado no entrega nada y parece exactamente
+un bug de enrutamiento.
+
+```bash
+fireflo verify
+```
+
+Responde en palabras: *"N vendor(s) configured, none bound — nothing can be sent yet."*
+</Accordion>
+
+<Accordion title="¿Falta o está deshabilitado un filtro?">
+Una regla que hace referencia a uno se **omite por completo** en lugar de cargarse con menos condiciones. Porque
+descartar condiciones silenciosamente *ampliaría* la regla.
+
+Busca `Skipping … filter '…' is missing or disabled`. Si eso vació la tabla `default`, toda la
+configuración de enrutamiento es rechazada y estás en el caso de ERROR anterior.
+</Accordion>
+
+</AccordionGroup>
+
+## Por qué una regla no coincidió
+
+Seis causas, y las últimas dos son la mayoría de las sorpresas:
+
+- Las reglas se evalúan de arriba a abajo; una tabla NORMAL se detiene en la primera coincidencia.
+- El fallback debe estar al **final**. Un catch-all por encima de otras reglas hace que todo debajo
+  sea inalcanzable. La página de enrutamiento del panel advierte sobre ambos casos.
+- Los nombres de atributos deben coincidir con los de la referencia de enrutamiento.
+- Las comparaciones de cadenas distinguen mayúsculas y minúsculas a menos que se use `equalsIgnoreCase`.
+- **`startsWith` compara texto literal.** Una expresión regular escrita en él nunca puede ser verdadera.
+  Usa `matches`. El panel avisa; un archivo editado a mano no.
+- **Un campo sin valor no coincide con ningún operador positivo**, `isNull` exceptuado. `product:equals:premium` no
+  coincide con un mensaje que no lleva producto. Pero `product:!equals:premium` sí.
+
+## Rastrear un mensaje
+
+Establece `outSms.routing.trace` a un solo serial de mensaje o id de cuenta. Cada regla contra la que ese mensaje se
+prueba entonces registra qué condición falló y qué llevaba realmente el mensaje:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Se aplica en vivo. Establécelo durante el incidente, límpialo después. Dejado vacío cuesta una lectura volátil
+por regla.
+
+<Warning>
+**No recurras a `outSms.routing.debug`.** Registra cada regla de cada mensaje y renderiza todo el
+objeto mensaje para hacerlo. Treinta llamadas `String.replace` encadenadas por línea. Así que es inusable a las
+tasas donde realmente se hacen las preguntas de enrutamiento. Es útil solo en una pasarela ociosa reproduciendo un
+solo envío.
+</Warning>
+
+## Los dos números de cola
+
+| En `/ops/health` | Qué significa un valor distinto de cero |
+| :--- | :--- |
+| **`routing_failed_queue`** | Mensajes aparcados por un fallo de enrutamiento *inesperado*. **Sin CDR ni acuse.** Solo se drenan si `outSms.enqueueFailedRouting` está establecido, así que en la configuración ordinaria estos son mensajes perdidos. **Alerta sobre él.** |
+| **`routing_retry_queue`** | Mensajes esperando `outSms.routing.retryBackoffMillis`. Números pequeños son ordinarios bajo reintento; un número que se mantiene alto es una tabla de enrutamiento que no cubre el tráfico que llega. |
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Cómo funciona el enrutamiento" icon="route" href="/platform/routing/how-it-works">
+    Tablas, reglas y el orden en que resuelven.
+  </Card>
+  <Card title="Rechazos del proveedor" icon="circle-xmark" href="/platform/troubleshooting/vendor-rejections">
+    Cuando el proveedor está conectado y rechaza cada envío.
+  </Card>
+</CardGroup>

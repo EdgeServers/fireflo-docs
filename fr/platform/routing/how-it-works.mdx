@@ -1,0 +1,120 @@
+---
+title: "Comment fonctionne le routage"
+description: "Ce que fait le routeur entre l'acceptation d'un message et sa remise à un fournisseur, et pourquoi une erreur de routage apparaît comme du trafic manquant plutôt que comme une erreur."
+---
+
+## La modification qui semblait ne rien faire
+
+<Warning>
+**Une règle mal formée fait échouer tout le rechargement, et la table précédente est conservée.** Une ligne incorrecte ne désactive pas une seule règle : elle rejette l'ensemble complet des tables, et la passerelle continue à router selon la configuration qu'elle servait déjà.
+
+Rien ne paraît anormal : le trafic continue de circuler, le fichier sur le disque dit ce que vous vouliez dire, et la seule trace est `Error parsing new routing table` au niveau ERROR dans le journal. Vérifiez sa présence après chaque modification.
+</Warning>
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`routingTable.conf` est rechargé à chaud : une modification s'applique en environ 200 ms, sans redémarrage. Cette rapidité est précisément la raison pour laquelle le cas de la table conservée est facile à manquer. Il n'y a pas de redémarrage à remarquer, donc « ma modification n'a rien fait » est le seul symptôme.
+
+## Ce que fait le routeur pour un message
+
+<Steps>
+  <Step title="La soumission reçoit d'abord une réponse">
+    La passerelle envoie `submit_sm_resp`, ou le `200` REST, **avant** que le routage ne s'exécute. Le client a déjà été informé que le message a été accepté, et facturé pour cela.
+  </Step>
+  <Step title="Le message va dans la file du routeur">
+    Le travail accepté attend ici. Voir [Files et nouvelles tentatives](/platform/routing/queues-and-retries).
+  </Step>
+  <Step title="La table `default` est analysée">
+    Les règles sont essayées de haut en bas et **la première correspondance l'emporte**. Une règle peut envoyer vers un fournisseur, vers un groupe de fournisseurs, ou vers une autre table.
+  </Step>
+  <Step title="Le worker choisi le prend">
+    Le message est mis en file d'attente sur la file de ce fournisseur et part à la vitesse que le fournisseur autorise.
+  </Step>
+</Steps>
+
+Parce que l'étape 1 se produit avant l'étape 3, un échec de routage **ne peut pas** être signalé au client comme une erreur de soumission. Il ne peut apparaître que plus tard, sous forme d'un accusé de réception de livraison et d'une ligne dans `cdr_rejected`.
+
+## Les tables sont un graphe, pas une liste
+
+Une règle dont la cible nomme une autre table s'enchaîne vers elle, donc `default → MESSAGE → cheapest` est une forme ordinaire. Deux éléments bornent la récursion :
+
+| Borne | Comportement |
+| :--- | :--- |
+| Vérification de cycle au chargement | `a → b → a`, ou une table se nommant elle-même, est **refusée en bloc**. Le journal nomme le chemin et l'ensemble de tables précédent reste en service. |
+| `outSms.routing.maxTableDepth` (défaut `16`) | Limite le nombre de tables qu'un message peut enchaîner à l'exécution. L'atteindre consigne `routing.table.too-deep` et laisse le message sans destination depuis cette règle. |
+
+Une table atteinte deux fois par des chemins différents n'est pas un cycle : `default → a → c` en parallèle de `default → b → c` se charge normalement.
+
+## Les deux choses qui se chargent puis dysfonctionnent en silence
+
+Les deux apparaissent sur `/ops/health` sous `routing_warnings`, et chacune est consignée une seule fois lors de sa première apparition, plutôt qu'à chaque publication.
+
+| Avertissement | Ce que cela signifie |
+| :--- | :--- |
+| `no-catch-all` | Toutes les règles d'une table `NORMAL` sont restreintes, donc un message qui ne correspond à aucune est remis en file, réessayé et supprimé à `outSms.routing.maxAttempts`. Cela se produit des minutes plus tard, sans rien reliant la suppression à la table. |
+| `unreachable-rules` | Une règle qui correspond à tout est placée au-dessus d'autres. La table s'arrête à la première correspondance, donc les règles en dessous n'ont jamais été exécutées. |
+
+<Warning>
+**Le catch-all doit être placé en dernier.** Placé au-dessus d'autres règles, il rend tout ce qui se trouve en dessous inaccessible, et rien ne refuse la table. Les règles s'analysent parfaitement, elles ne s'exécutent simplement jamais. Un catch-all est une règle qui ne restreint rien : `vendor1::default:` dans un fichier, ou une règle sans conditions et sans filtres dans la base de données.
+
+Une règle portant un filtre **n'est pas** un catch-all, aussi ressemblante à un catch-all qu'elle puisse paraître. Voir [Filtres](/platform/routing/filters).
+</Warning>
+
+## Quand les messages disparaissent
+
+<Note>
+Avant de modifier une règle, écartez les trois causes qui ne relèvent pas du routage. Seul `reason = 'maxAttempts'` dans `cdr_rejected` désigne le routage ; `headerNotApproved`, `templateNotMatched`, `missingMandatoryTlv`, `insufficientCredit` et `filtered` signifient tous que le message a été refusé avant même d'atteindre le routage. Voir [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered).
+</Note>
+
+Ces lignes sont au niveau WARN ou ERROR et n'ont besoin d'aucun indicateur de débogage :
+
+| Ligne de journal | Cause |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | La règle nomme quelque chose qui n'est ni une table, ni un groupe, ni un worker. Elle n'envoie rien. |
+| `routing.rule.broken cause=target-not-accepting` | La cible existe mais est suspendue ou en cours d'arrêt. Souvent temporaire. Vérifiez le [fournisseur](/platform/connections/vendors). |
+| `routing.rule.broken cause=group-all-dead` | Aucun membre du groupe n'accepte. L'analyse continue vers la règle suivante. |
+| `message.routing.miss.first action=requeue` | Le message n'a correspondu à aucune règle activée. |
+| `message.dropped reason=maxAttempts` | Le message a abandonné. Une ligne par message ; la ligne au-dessus dit pourquoi. |
+
+<Warning>
+**`routing.rule.broken` est consigné une fois par règle, pas une fois par message**, et le compteur ne se réinitialise que lorsqu'une nouvelle table est publiée. Un journal silencieux n'est donc pas une preuve que le problème est corrigé. Il est tout aussi cohérent avec « déjà signalé ».
+
+Surveillez plutôt le compteur `routing_rules_broken` sur `/ops/health`, qui exprime le même fait sous forme d'un nombre.
+</Warning>
+
+## Demander pourquoi un message n'a pas correspondu
+
+```properties
+outSms.routing.trace = acct-1001
+```
+
+Prend **un numéro de série de message ou un identifiant de compte**. Chaque règle contre laquelle ce message est testé consigne alors quelle condition a échoué et ce que le message contenait réellement :
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Cela s'applique en direct : activez-le pendant l'incident et effacez-le après. Vide, ce qui est la valeur par défaut, cela coûte une lecture volatile par règle.
+
+<Warning>
+**Ceci n'est pas `outSms.routing.debug`.** Ce dernier consigne chaque règle de chaque message et rend l'objet message complet pour le faire, ce qui le rend inutilisable aux débits où les questions de routage se posent réellement. Il n'est utile que sur une passerelle inactive reproduisant un seul envoi.
+</Warning>
+
+## Suite
+
+<CardGroup cols={2}>
+  <Card title="Écriture des règles" icon="pen" href="/platform/routing/writing-rules">
+    La grammaire en quatre parties, les opérateurs qui mentent, et les groupes de fournisseurs.
+  </Card>
+  <Card title="Routage au moindre coût" icon="coins" href="/platform/routing/least-cost">
+    Là où l'ordre des règles cesse d'avoir un sens.
+  </Card>
+  <Card title="Filtres" icon="filter" href="/platform/routing/filters">
+    Conditions nommées, et pourquoi en désactiver une restreint une règle à rien.
+  </Card>
+  <Card title="Files et nouvelles tentatives" icon="layer-group" href="/platform/routing/queues-and-retries">
+    Ce qui est déjà payé et attend en mémoire.
+  </Card>
+</CardGroup>

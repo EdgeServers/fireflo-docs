@@ -1,0 +1,122 @@
+---
+title: "Filters"
+description: "Condiciones nombradas y reutilizables compartidas entre enrutamiento y rating. Y por qué un filter faltante o deshabilitado elimina las reglas que lo referencian en lugar de ampliarlas."
+---
+
+## Deshabilitar un filter hace que sus reglas emparejen menos, no más
+
+<Warning>
+**Un filter faltante o deshabilitado se salta cada regla que lo referencia**, en lugar de cargar la regla con
+menos condiciones.
+
+Eso es lo opuesto a la respuesta intuitiva, y es deliberado. Una regla es una conjunción, así que
+*quitar* una condición hace que empareje **más** tráfico: quita un filter `au_mobile` de una regla y
+empieza a enviar el mundo entero a ese proveedor, con éxito, sin nada en el log que sugiera un
+problema. Saltar la regla falla en la única dirección segura. Los mensajes caen a la siguiente regla
+en lugar de al proveedor equivocado.
+</Warning>
+
+Así que el efecto observable de apagar un filter es que sus reglas dejan de emparejar nada en absoluto, y
+su tráfico aterriza en cualquier regla que siga. Un proveedor diferente, o un precio diferente.
+
+```
+Skipping … filter '…' is missing or disabled
+```
+
+## Qué es un filter para el gateway
+
+**Una expansión en tiempo de carga, no una indirección en runtime.** Un filter se expande a exactamente las condiciones que
+contiene, y esas se añaden a las condiciones de cada regla que lo referencia. La prueba real de una regla es:
+
+```
+sus propias condiciones AND las condiciones de cada filter referenciado
+```
+
+Los filters estrechan una regla. Nunca la reemplazan ni la aflojan. Nada se resuelve por mensaje, así que emparejar
+cuesta lo mismo que si las condiciones se hubieran escrito en línea.
+
+<Note>
+Los filters viven en la base de datos (`app_filter`, `app_filter_condition`) y se comparten con rating, que
+es el objetivo: nombra un predicado una vez, tarifa y enruta con la misma definición. La gramática de archivo no tiene
+sintaxis para ellos, así que `scripts/fireflo import routing` deja `app_route_rule_filter` vacía. Consulta
+[routingTable.conf](/reference/files/routing-table).
+</Note>
+
+## Una regla con filter no es un catch-all
+
+<Warning>
+Como las condiciones del filter se pliegan en las condiciones propias de la regla en carga, **una regla que lleva un filter
+se reporta correctamente como no siendo un catch-all**. Por más que parezca un fallback.
+
+Este es el caso que merece la pena conocer: una regla que *parecía* el catch-all de la tabla llevaba un filter,
+emparejaba casi nada, y ninguna superficie en ningún lado lo decía hasta que los mensajes ya habían caído. La
+tabla se reporta bajo `no-catch-all` en `/ops/health`; consulta
+[Cómo funciona el enrutamiento](/platform/routing/how-it-works).
+</Warning>
+
+Un catch-all real es una regla sin condiciones **y sin filters**, colocada al final.
+
+## Un filter vacío cuenta como deshabilitado
+
+Un filter sin condiciones guarda y carga, que es lo que permite construir uno una condición a la vez.
+La respuesta del gateway tampoco es la intuitiva: un filter vacío se añade al conjunto de *deshabilitados*,
+así que cada regla que lo referencia se salta.
+
+Rechazar un filter vacío es el mismo razonamiento que rechazar uno faltante: un filter que no estrecha
+nada ampliaría cada regla que lo lleva.
+
+## La red de seguridad, y por qué no es una vía de escape
+
+<Warning>
+**Si saltar deja la tabla `default` sin reglas, toda la recarga de enrutamiento se rechaza y las
+tablas anteriores se conservan**, registrando `no default routing table in new targets!`.
+
+Ese es el resultado seguro. Deshabilitar un filter del que cada regla depende no vacía tu enrutamiento.
+Pero también significa que **deshabilitar un filter no es una forma de retirar una ruta**: el cambio parecerá
+no haber tenido efecto en absoluto, porque el gateway sigue sirviendo la última configuración buena.
+
+Borra o deshabilita la *regla* en su lugar.
+</Warning>
+
+Por la misma razón un filter referenciado no puede borrarse mientras las reglas aún apuntan a él. El panel
+de control muestra el conteo de referencias tanto en reglas de rating como de enrutamiento antes de dejarte cambiar uno.
+El enrutamiento es la mitad donde la consecuencia es "los mensajes dejan de enviarse" en lugar de "los mensajes se
+tarifican diferentemente".
+
+## Comprobar uno antes de cambiarlo
+
+<Steps>
+  <Step title="Lee el conteo">
+    **Filters** en el panel lista cuántas reglas de tarifa y cuántas reglas de enrutamiento referencian cada
+    filter. Deshabilitar un filter usado por cuatro reglas de enrutamiento elimina cuatro reglas del snapshot en ejecución.
+  </Step>
+  <Step title="Mira qué atrapa el tráfico en su lugar">
+    Para cada regla que se saltaría, encuentra la siguiente regla en la misma tabla que el tráfico
+    emparejaría. Ese proveedor es a dónde va el tráfico.
+  </Step>
+  <Step title="Confirma que la recarga tomó">
+    Después de guardar, comprueba `routing_warnings` en `/ops/health` y el log para
+    `Error parsing new routing table`. Una recarga rechazada mantiene la tabla anterior y parece que
+    no pasó nada.
+  </Step>
+</Steps>
+
+## Los filter workers son algo diferente
+
+Una regla también puede apuntar a un **filter worker**. Un worker por el que pasa el mensaje en lugar de un
+destino. Devuelve un veredicto, y el router actúa sobre él:
+
+| Veredicto | Qué pasa |
+| :--- | :--- |
+| `DROP` | El mensaje se reembolsa si se cobró, se cierra como `DROPPED`, y se registra en `cdr_rejected` con `reason=filtered`. |
+| `RETRY` / `REENQUEUE` | El mensaje se aparca durante `outSms.routing.retryBackoffMillis` y se enruta de nuevo. Cada requeue **cuenta contra `outSms.routing.maxAttempts`**, así que un filter usado para throttling eventualmente descarta en lugar de retener un mensaje para siempre. |
+
+<Note>
+`RESCHEDULE` nunca se ha implementado y cae a re-enqueue, diciéndolo una vez por mensaje.
+
+Un mensaje descartado se reembolsa y se reporta; un mensaje retenido para siempre no. Que es por qué contar
+el requeue es el trato intencionado en lugar de un descuido.
+</Note>
+
+Los filters nombrados y los filter workers comparten una palabra y nada más: uno estrecha una regla en tiempo de carga, el
+otro inspecciona mensajes en tiempo de ejecución.

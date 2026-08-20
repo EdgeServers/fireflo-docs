@@ -1,0 +1,106 @@
+---
+title: "Authentification"
+description: "HTTP Basic, pourquoi un identifiant SMPP est refusé et les deux 401 qui signifient des choses différentes."
+---
+
+Tout ce qui se trouve sous `/secure/` utilise l'authentification HTTP Basic, avec votre login comme
+nom d'utilisateur. `/ping` n'en demande aucune.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+Ou directement l'en-tête, si votre client ne le construit pas pour vous :
+
+```
+Authorization: Basic <base64 of login:password>
+```
+
+## Les identifiants vont dans l'en-tête, nulle part ailleurs
+
+`username` et `password` en tant que champs du corps ne sont **pas ignorés**. Ils reviennent en
+`400 Unknown argument`. Ce refus est habituellement le premier signe d'une charge utile copiée
+depuis une autre passerelle.
+
+## Un identifiant SMPP ne peut pas utiliser cette API
+
+Cela prend les gens au dépourvu parce que le refus ne le dit pas. Un `403 Authentication failure`
+couvre les trois cas : login inconnu, mot de passe incorrect et *login du mauvais type*.
+
+<Tip>
+Si un login fonctionne en SMPP et renvoie `403` ici, vérifiez son **type** avant son mot de passe.
+Les identifiants sont typés `HTTP` ou `SMPP` et les deux ne sont pas interchangeables. Un même
+login ne peut pas faire les deux.
+</Tip>
+
+## Les deux 401
+
+Ils signifient des choses différentes, et la distinction mérite un branchement :
+
+| Réponse | Signification |
+| :--- | :--- |
+| `{"message":"Authentication required"}` | Aucun en-tête `Authorization`. Comporte `WWW-Authenticate: Basic realm="fireflo"`. |
+| `{"message":"Invalid token"}` | Un en-tête qui n'est pas Basic, n'est pas du Base64 valide ou ne contient pas de deux-points. |
+
+Exécuté sur une passerelle en production :
+
+```http
+GET /secure/balance          (no header)
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="fireflo"
+{"message":"Authentication required"}
+
+GET /secure/balance          (Authorization: Bearer xyz)
+HTTP/1.1 401 Unauthorized
+{"message":"Invalid token"}
+```
+
+**401 signifie que vous ne vous êtes pas identifié. 403 signifie que vous l'avez fait, mais que
+l'identification n'a pas été acceptée.** Il vaut la peine de câbler les deux séparément dans votre
+supervision : un pic soudain de 401 est habituellement un déploiement qui a perdu une variable
+d'environnement, un pic soudain de 403 un mot de passe roté ou une IP déplacée.
+
+## Listes d'IP autorisées
+
+Si votre login en a une, une requête provenant d'ailleurs renvoie `403 Authorization failure`. Un
+message différent de l'échec d'identifiants ci-dessus, ce qui permet de distinguer les deux dans un
+log.
+
+C'est l'opérateur de votre passerelle qui définit cela. Il vaut la peine de demander si une liste
+est configurée avant de déplacer votre intégration vers une nouvelle infrastructure.
+
+## L'authentification passe avant tout le reste
+
+Confirmé en production : un POST sans identifiants **et** avec un corps illisible renvoie l'erreur
+d'authentification, pas l'erreur de parsing.
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Warning>
+**Corrigez les identifiants avant de déboguer une charge utile.** Un `401` ou un `403` ne vous dit
+rien sur la validité du reste de votre requête, car rien en aval de l'authentification n'a été
+exécuté.
+</Warning>
+
+## Garder le mot de passe en sécurité
+
+- Lisez-le depuis l'environnement ou un coffre à secrets, jamais depuis le code source.
+- Il n'est pas roté automatiquement pour vous. S'il fuit, demandez à votre opérateur de le changer.
+- **Un chemin inconnu sous `/secure/` renvoie `401`, pas `404`**, de sorte que l'API ne confirme
+  pas à un appelant non authentifié quels endpoints existent. Ne bâtissez pas de découverte au-dessus
+  des codes de statut.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Erreurs de l'API" icon="triangle-exclamation" href="/reference/api/errors">
+    Chaque statut, et ceux qui méritent une nouvelle tentative.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    Premier message dans quatre langages.
+  </Card>
+</CardGroup>

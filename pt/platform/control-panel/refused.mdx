@@ -1,0 +1,101 @@
+---
+title: "Recusadas"
+description: "Mensagens que o gateway não enviou e por quê. Incluindo as três recusas que acontecem depois que o cliente ouviu sim, e que portanto carregam um message id e um reembolso."
+---
+
+**Mensagens que o gateway não enviou, e por quê.** A primeira tela a abrir quando um cliente diz
+que nada está chegando.
+
+A maioria das recusas aconteceu na porta: nada foi enviado e nada foi cobrado. Três não, e a
+diferença é a coisa mais importante desta página.
+
+## Recusada na porta, ou recusada depois da aceitação
+
+<Warning>
+**Três motivos acontecem depois que o cliente ouviu sim** — *never routed*, *vendor refused it* e
+*dropped by a filter*.
+
+Essas mensagens foram aceitas, cobradas e em dois casos efetivamente enviadas. Elas carregam um
+**message id**, aparecem nos call records, e **sua cobrança foi reembolsada**. Todo o resto nesta
+página foi barrado antes de virar tráfego.
+
+O filtro **Stage** separa os dois, e é o filtro a que recorrer ao reconciliar a contagem de um
+cliente contra a sua.
+</Warning>
+
+## Os motivos
+
+Cards de resumo lideram a página — um por motivo, com uma contagem para toda a janela. Eles não
+se movem enquanto você pagina, e clicar em um filtra para ele.
+
+| Motivo | Geralmente significa |
+| :--- | :--- |
+| **Sender ID not approved** | O sender não está na lista aprovada da account para aquele product |
+| **Content not approved** | O corpo não casou com nenhum template aprovado — uma palavra alterada basta |
+| **Out of credit** | Crédito prepaid não cobriria |
+| **Required parameter missing** | Um TLV que a entrada exige estava ausente, e nada o forneceu |
+| **Rate limit exceeded** | Acima das mensagens por segundo da account |
+| **Product not sold** | O login nomeou um product sem linha habilitada no catálogo |
+| **No price configured** | Nenhum rate do lado de venda casou, e o gateway recusa em vez de enviar sem faturar |
+| **Product not allowed for this login** | O login não pode nomear aquele product |
+| **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap |
+| **Could not be queued** | Aceita pelas verificações, mas não pôde ser entregue — geralmente o broker |
+| **Never routed** | *Após aceitação.* Nenhuma regra habilitada casou; reembolsado |
+| **Vendor refused it** | *Após aceitação.* A operadora rejeitou o submit; reembolsado |
+| **Dropped by a filter** | *Após aceitação.* Um filtro de roteamento a parou; reembolsado |
+
+<Note>
+**"Out of credit" imediatamente após um restart do gateway pode aparecer em uma conta fundeada**,
+enquanto o crédito está sendo reservado pela primeira vez. Uma mensagem o reporta e a próxima
+funciona. Persistir além dos primeiros envios é uma escassez real.
+</Note>
+
+Dois motivos merecem sua própria nota. **Content not approved** é uma comparação exata fora dos
+placeholders — uma única palavra alterada recusa. E em **vendor refused it**, o próprio status
+numérico da operadora fica ao lado da linha; a família 192–196 é sempre sobre TLVs, o que em uma
+lane DLT indiana geralmente significa um entity ou template id ausente ou não carimbado.
+
+Um resumo vazio diz isso claramente, e adiciona a verificação que vale a pena fazer primeiro: se
+você esperava recusas e não vê nenhuma, confirme se a aplicação está ligada — **um whitelist não
+carregado permite tudo por design**.
+
+## Encontrando uma
+
+A rede ampla é **Anything**, que olha dentro de account, sender, destino, product, login,
+detalhe da recusa e trecho da mensagem de uma vez. Filtros mais estreitos existem para account,
+destino, bind name, product, ingress, listener, from-number e message id.
+
+**Carrier status** recebe o número da operadora em decimal — 69 é o genérico "recusou e não vai
+dizer por quê" — e apenas recusas de vendor carregam um.
+
+## A tabela
+
+Nove colunas por padrão: refused, why, vendor said, account, product, from, to, via, message. O
+selecionador adiciona o motivo em inglês, o detalhe da recusa, se foi cobrada e reembolsada, o
+nome do código do vendor, e os ids da linha e da mensagem.
+
+O **trecho da mensagem** — os primeiros 160 caracteres — é mantido **incondicionalmente**, diferente
+do corpo em um call record. Uma recusa de conteúdo não pode ser diagnosticada sem ver o que foi
+enviado, então este é o único lugar onde o texto da mensagem está sempre disponível.
+
+<Note>
+Um traço em **Parts** significa que a mensagem foi recusada antes que seus segmentos fossem contados
+— não zero partes. **Data coding** de fato mostra `0`, que é real: isso é GSM 7-bit.
+</Note>
+
+## Exportando
+
+Preparado em background, mantido sete dias, e — como em Messages — **carrega toda coluna mais o
+motivo em inglês e o código da operadora**, qualquer que seja sua escolha em tela. Esses arquivos
+são lidos por pessoas sem painel aberto.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Por que uma mensagem foi recusada" icon="circle-question" href="/platform/troubleshooting/refusals">
+    Trabalhando de trás para frente a partir de uma recusa até sua causa.
+  </Card>
+  <Card title="Rejeições de vendor" icon="triangle-exclamation" href="/platform/troubleshooting/vendor-rejections">
+    O que cada código de status da operadora significa.
+  </Card>
+</CardGroup>

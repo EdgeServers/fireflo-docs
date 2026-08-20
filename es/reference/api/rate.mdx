@@ -1,0 +1,94 @@
+---
+title: "GET /secure/rate"
+description: "Lo que costaría un mensaje. No envía nada, no cobra nada y no cuenta contra ningún límite de tasa."
+---
+
+La única verificación previa realmente gratuita de la API.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**El coste es `unit_rate × submit_sm_count`.**
+
+## Parámetros
+
+| Parámetro | Tipo | Obligatorio | Por defecto | Notas |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | **sí** | — | El precio varía por país y red, así que esto no es opcional. |
+| `content` | string | no | — | Aquí solo importa su longitud: decide el número de segmentos. |
+| `coding` | integer | no | `0` | Cambia cuántos segmentos ocupa el mismo texto, así que cambia el precio. |
+| `product` | string | no | el producto de su login | Tarifica contra un producto distinto, desde la misma lista permitida que usa un envío. |
+| `from` | string | no | — | **Aceptado, y no afecta al precio.** |
+
+## `submit_sm_count` es el número de segmentos
+
+Así es como se entera de que un mensaje que creía uno son en realidad tres, antes de pagarlo.
+
+| Codificación | Un mensaje | Cada segmento de uno más largo |
+| :--- | ---: | ---: |
+| GSM-7 | 160 caracteres | 153 |
+| UCS-2 | 70 caracteres | 67 |
+
+<Tip>
+**Llame a esto con contenido generado por el usuario antes de enviarlo.** Una comilla curva `’`
+fuerza todo el mensaje a UCS-2 y triplica el número de segmentos, y nada en la ruta de envío lo
+señala. El mensaje sale correctamente, solo que tres veces más caro.
+</Tip>
+
+## No cuesta nada
+
+- No envía nada.
+- No cobra nada.
+- **No cuenta contra ningún límite de tasa**, así que no consumirá el throughput que necesita
+  para envíos reales.
+
+## Las tarifas muestran siempre cuatro decimales
+
+A diferencia de un **total**, que respeta `smsg.money.scale`, una tarifa mantiene cuatro
+decimales sea cual sea el valor de ese ajuste.
+
+<Warning>
+`0.0450` mostrado como `0.05` es **un 11 % de desviación en cada mensaje**, y un cliente que
+calculara su factura desde una cotización estaría equivocado. Las exportaciones CSV mantienen
+cuatro por el mismo motivo: una hoja de cálculo suma esa columna.
+</Warning>
+
+## Errores particulares de este endpoint
+
+| Estado | `message` | Cuándo |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument to is not found.` | `to` ausente o en blanco. |
+| 403 | `This login may not send on '<product>'.` | Nombró un producto que su operador no ha permitido para este login. |
+
+**La lista permitida de `product` es la misma que usa un envío**, deliberadamente. Una cotización
+y un envío no pueden discrepar sobre qué puede nombrar.
+
+## Qué no puede decirle
+
+- **Si el mensaje sería aceptado.** La aprobación de sender ID, la coincidencia de plantillas y
+  el saldo se comprueban todos en el momento del envío, no aquí.
+- **Si sería entregado.** Eso es un acuse.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Codificación y segmentos" icon="text-width" href="/developers/send/encoding-and-segments">
+    Por qué el mismo texto cuesta importes distintos.
+  </Card>
+  <Card title="Consultar su saldo" icon="wallet" href="/reference/api/balance">
+    Lo que queda por gastar.
+  </Card>
+</CardGroup>

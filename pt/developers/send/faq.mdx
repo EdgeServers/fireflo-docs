@@ -1,0 +1,93 @@
+---
+title: "FAQ de envio"
+description: "As perguntas que aparecem quando as mensagens começam a fluir. Custo, codificação, ids, duplicidades e agendamento."
+---
+
+<AccordionGroup>
+
+<Accordion title="Por que uma mensagem custou três?">
+Você é cobrado por segmento. Uma mensagem com mais de 160 caracteres GSM-7 (ou mais de **70** se
+qualquer coisa nela força UCS-2) é dividida, e cada segmento é cobrado.
+
+A causa mais comum de uma triplicação inesperada é um único apóstrofo tipográfico `’` colado de um
+documento, que força a mensagem inteira para UCS-2. Chame `/secure/rate` para ver `submit_sm_count`
+antes de enviar.
+</Accordion>
+
+<Accordion title="Recebi um 200 e a mensagem nunca chegou">
+`200` significa *aceito para roteamento*, não entregue. A resposta de submissão é enviada antes do
+roteamento rodar.
+
+Peça um recibo de entrega e trate-o como o desfecho. Sem ele, você não tem como distinguir entregue
+de descartada, e o dashboard do seu provedor também não tem, para suas próprias mensagens.
+</Accordion>
+
+<Accordion title="Posso enviar a mesma mensagem duas vezes por acidente?">
+Sim. Não existe **chave de idempotência** em `/secure/send`. Um retry após um timeout envia uma
+segunda mensagem e cobra por ela.
+
+Se você repete automaticamente, repita apenas em `429` e `500`. Um `500` é seguro porque a cobrança
+é revertida; um timeout *não* é seguro, porque a mensagem pode muito bem ter sido aceita e você
+simplesmente não viu a resposta.
+
+Para qualquer coisa financeira ou visível ao usuário, mantenha sua própria chave de deduplicação e
+verifique antes de enviar.
+</Accordion>
+
+<Accordion title="Para que serve o messageId?">
+Correlação, e nada mais. Ele aparece em cada recibo de entrega como `id`, no registro de chamada e
+na busca do seu provedor. É o único valor que vale guardar contra o seu próprio registro.
+
+Não é um status. Buscá-lo de volta não é como você descobre o desfecho; o recibo é.
+</Accordion>
+
+<Accordion title="Por que meu validity_period é rejeitado?">
+É um **inteiro em minutos**, não uma string de duração. `60` está certo, `"1h"` é `400`.
+
+Uma especificação mais antiga tipa como string. Se seu cliente foi gerado a partir dela, é daí que
+isso vem.
+</Accordion>
+
+<Accordion title="Posso agendar uma única mensagem?">
+Não em `/secure/send`. O agendamento fica em `/secure/sendbatch` como `batch_config.schedule_at`, e
+um batch de uma mensagem é um jeito perfeitamente razoável de agendar uma mensagem.
+
+`sdt` em um envio único é passado à operadora sem alteração e **não é validado nem atuado pelo
+gateway**. Não use como mecanismo de agendamento.
+</Accordion>
+
+<Accordion title="Meu batch foi aceito e nada aconteceu">
+A resposta de `sendbatch` confirma apenas aceitação. Ela não traz ids por mensagem nem resultados
+por mensagem. Estes chegam na sua `errback_url`.
+
+**Chaves desconhecidas em `batch_config` são ignoradas, não recusadas**, então um `errback_url` mal
+escrito perde cada resultado silenciosamente. Teste enviando deliberadamente uma mensagem que você
+sabe que vai falhar.
+</Accordion>
+
+<Accordion title="Preciso me auto-limitar?">
+Em um batch, não. Batches se ajustam sozinhos à fila do roteador.
+
+Em envios comuns, sim: sua conta tem um limite de mensagens por segundo, e ultrapassá-lo retorna
+`429` **sem `Retry-After`**. Faça backoff exponencial com jitter; um intervalo fixo entre vários
+workers os ressincroniza no próximo pico.
+</Accordion>
+
+<Accordion title="Posso enviar para vários números em uma chamada?">
+Sim, de duas formas. Um batch aceita um array `messages`, e o `to` de qualquer mensagem pode ser um
+array de destinos, o que multiplica.
+
+A expansão é limitada a **10 000** mensagens por batch. 100 mensagens, cada uma com 200
+destinatários, dá 20 000 e é recusado.
+</Accordion>
+
+<Accordion title="Por que o valor do meu custom_tlvs nunca chega à operadora?">
+Três causas prováveis, em ordem:
+
+1. **Você escreveu um decimal nu.** `1401` é a tag `0x0579`, não `0x1401`. Faz parse, envia e é
+   ignorado pela operadora, sem erro em lugar nenhum.
+2. **O listener não declara a tag.** Tags não declaradas são descartadas no ingresso.
+3. **Algo sobrescreveu.** Um stamp de whitelist em modo `replace` foi feito para vencer.
+</Accordion>
+
+</AccordionGroup>

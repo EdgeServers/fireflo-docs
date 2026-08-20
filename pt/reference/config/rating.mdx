@@ -1,0 +1,90 @@
+---
+title: "Rating, CDRs e crédito"
+description: "Moeda e escala monetária, onde call records são escritos, quanto tempo se espera por um desfecho, e as chaves de pré-pago e pós-pago."
+---
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.rates.currency` | `""` | Registrada em mensagens tarifadas. FireFlo nunca converte. |
+| `smsg.money.scale` | `4` | Casas decimais com que um **total** é publicado. 0–4. |
+| `smsg.cdr.sink` | `auto` | `auto`, `postgres`, `file` ou `none`. |
+| `smsg.cdr.directory` | `data/cdr` | Localização do sink de arquivo. |
+| `smsg.cdr.deadline.hours` | `48` | Espera antes de registrar um desfecho como `EXPIRED`. |
+| `smsg.cdr.body` | `off` | `off`, `excerpt` (160 caracteres) ou `full`. Se o conteúdo da mensagem é registrado. |
+| `smsg.cdr.interim.retention.days` | `30` | Por quanto tempo `cdr_interim` mantém receipts de progresso. |
+| `smsg.balance.enabled` | `false` | Fazer enforcement de crédito pré-pago. PostgreSQL apenas. |
+| `smsg.balance.block.min.messages` | `20` | Quantas mensagens uma reserva de crédito deve cobrir. |
+| `smsg.balance.ledger.blocks` | `true` | Se contabilidade de `RESERVE`/`RELEASE` é escrita em `balance_ledger`. |
+| `smsg.balance.postpaid.enabled` | `false` | Fazer enforcement de limites de crédito em contas marcadas como `POSTPAID`. |
+| `smsg.billing.zone` | `UTC` | O fuso em que um **dia de billing** começa. Só banco. Veja abaixo. |
+
+## `smsg.money.scale` se aplica a totais, não a tarifas
+
+Acima de 4 é recusado, porque valores são guardados como décimos-milésimos.
+
+**Tarifas** por mensagem e exports CSV sempre mantêm quatro casas independente desta configuração.
+`0.0450` mostrado como `0.05` é 11% de erro em toda mensagem. Ok para um saldo, ruinoso para uma
+tarifa.
+
+## `smsg.cdr.deadline.hours` é limitado pela janela de correlação
+
+Limitado por `smsg.dlr.correlation.days`, que é 70 horas no padrão. Depois da janela de correlação um
+receipt não pode mais ser casado com sua submissão, então esperar mais só atrasa a mesma resposta. Um
+deadline acima do limite é clamado e logado. Veja [Store de delivery receipt](/reference/config/webhooks).
+
+## `smsg.balance.block.min.messages` é o piso que vincula
+
+Crédito é reservado em **blocos** e gasto de um contador em memória, então não há escrita em banco no
+caminho da mensagem. Esta chave diz quantas mensagens um bloco deve valer.
+
+Substituiu um piso denominado em moeda como o vinculante, porque `smsg.balance.block.min` é um valor
+e um valor não sabe quantas mensagens compra. A qualquer preço realista o padrão antigo comprava uma
+ou duas, o que colocava uma conta ociosa de volta no banco na segunda mensagem e a recusava enquanto
+uma recarga estava em trânsito.
+
+<Note>
+Uma conta enviando ativamente segura então até `20 × price` em `reserved` que nada mais consegue
+gastar. Nada se perde. `balance + reserved` é conservado, e um shutdown limpo devolve. Um `kill -9`
+deixa preso até [`fireflo credit release`](/reference/cli/fireflo) rodar.
+</Note>
+
+## `smsg.billing.zone` é lido só do banco
+
+A única chave aqui lida de `app_config` em vez de `smsg.properties` ou do ambiente, e de propósito. O
+rollup noturno fatia `usage_daily` nela e o painel de controle fatia a cauda ao vivo de `cdr_submit`
+nela; se as duas discordam, um pedaço de um dia é contado duas vezes ou nenhuma. Uma variável de
+ambiente no host do gateway é invisível para o painel, então não poderia ser a origem compartilhada.
+
+```sql
+INSERT INTO app_config (key, value) VALUES ('smsg.billing.zone', 'Asia/Kolkata')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+```
+
+`FIREFLO_BILLING_ZONE` continua honrada como fallback para implantações que a definiram antes de a
+chave existir.
+
+## O que um call record contém
+
+CDRs carregam endereços de destino e origem, porque rating e resolução de disputa precisam, e nunca
+carregam credenciais.
+
+<Warning>
+**Contêm conteúdo de mensagem só quando você liga.** `smsg.cdr.body` vem `off`. Ligar significa que
+corpos de mensagem são retidos pela janela de retenção e podem ser lidos por qualquer um com acesso
+ao painel ou ao banco. Aplique a mesma política que você aplica ao access log.
+</Warning>
+
+## Unidades de billing em batch
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.restapi.billing.units` | `segment` | `message` ou `segment`. Se uma mensagem multipart é cobrada uma vez ou por parte. |
+
+<Warning>
+Definido como `message`, um cliente enviando mensagens de três segmentos paga por uma e você paga sua
+carrier por três. `segment` é o padrão por essa razão.
+</Warning>
+
+Veja [Como funciona o pricing](/platform/billing/how-pricing-works) para o modelo, e
+[Crédito pré-pago](/platform/billing/prepaid-credit) e [Pós-pago](/platform/billing/postpaid) para os
+dois modos de enforcement.

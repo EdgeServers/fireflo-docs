@@ -1,0 +1,80 @@
+---
+title: "Mensajes entrantes"
+description: "Mensajes enviados *hacia* su número: cómo le llegan, los marcadores, y por qué se configuran en el vendor y no por usted."
+---
+
+Un **MO** (mobile-originated) es un mensaje que un terminal envía *hacia* un número de su propiedad.
+Una respuesta a una alerta, un `STOP`, una palabra clave entrante.
+
+## Este no es suyo para configurar
+
+A diferencia de un `dlr_url`, que fija por mensaje, el reenvío de MO se configura **en el worker del
+vendor que recibe el tráfico**, por quien opere la pasarela.
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+outSms.instance.testRoute.forward.mo.format = JSON
+```
+
+Así que si los mensajes entrantes no le llegan, la solución es una conversación con su proveedor,
+no un cambio en su código. Dos cosas que merece la pena preguntarles: si `forward.mo.url` está
+configurado en el worker correcto, y si el número que espera está mapeado a su cuenta.
+
+## Qué llega
+
+Un **`POST`**, en formato `JSON` o `FORM`. La misma regla de éxito `200`–`399` y el mismo presupuesto
+de reintentos que los acuses de entrega: 10 intentos, con 120 segundos entre ellos, timeout de 5
+segundos.
+
+La URL puede llevar marcadores. Los valores se codifican para URL antes de sustituirse:
+
+| Marcador | Valor |
+| :--- | :--- |
+| `%p` | Dirección origen: el terminal |
+| `%P` | Dirección destino: su número |
+| `%a` | Texto del mensaje |
+| `%t` | Timestamp |
+| `%i` | Identificador de pasarela entrante |
+| `%I` | Centro de mensajes |
+| `%o` | Valor de data coding |
+
+<Warning>
+**`%p` es el remitente y `%P` es el destino.** El caso es la única diferencia entre ellos, y
+confundirlo produce un sistema que funciona perfectamente hasta que alguien intenta responder al
+número que registró.
+</Warning>
+
+## La titularidad tiene que resolverse
+
+Un mensaje entrante llega a la pasarela con un número de destino y ninguna cuenta asociada. La
+pasarela mapea ese número a una cuenta antes de poder reenviar nada.
+
+Si el mapeo falta, el mensaje es **unmapped**: llega, se registra y no se reenvía a ninguna parte.
+No hay error del lado suyo que observar, porque nada estuvo nunca dirigido a usted en lo que
+respecta al enrutamiento.
+
+<Tip>
+Al probar un nuevo número entrante, envíe un mensaje y pida a su proveedor que confirme que se
+resolvió a su cuenta en lugar de aterrizar sin mapear. Esa comprobación separa "mi endpoint está
+roto" de "el número nunca fue mío".
+</Tip>
+
+## Depuración
+
+El detalle completo de entrada requiere `print.mos = true` en la pasarela, **temporalmente**. Esa
+salida contiene el contenido del mensaje y ambas direcciones, así que es sensible y no es algo que
+deje puesto.
+
+Su proveedor tendrá que hacerlo, y merece la pena pedírselo en lugar de suponer, ya que la
+alternativa es inferir una ruta entrante a partir de su ausencia.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    La dirección saliente, que sí controla por mensaje.
+  </Card>
+  <Card title="FAQ de recepción" icon="circle-question" href="/developers/receive/faq">
+    Orden, duplicados y qué hacer con un acuse ausente.
+  </Card>
+</CardGroup>

@@ -1,0 +1,118 @@
+---
+title: "Tablas de configuración"
+description: "Las tablas de las que la pasarela lee su configuración, agrupadas por lo que controlan. Y los cuatro dominios que conmutan juntos."
+---
+
+Con `FIREFLO_CONFIG_SOURCE=db`, la pasarela lee **cuatro dominios** desde PostgreSQL en lugar de archivos:
+propiedades, credenciales, enrutamiento y tarifas.
+
+<Warning>
+**Los cuatro conmutan juntos.** Hay una clave, y cubre todos los dominios. Las variables por dominio
+más antiguas han desaparecido y ahora rechazan el arranque.
+
+`config_sources` en `/ops/health` reporta a qué resolvió realmente cada dominio, que es lo que hay que
+comprobar cuando una edición del panel parece no hacer nada.
+</Warning>
+
+## Cuentas, logins y productos
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_account` | La identidad de facturación. `account_id` es el ámbito de tarificación **y** la clave de crédito prepago |
+| `app_credential` | Logins, tipo `HTTP` o `SMPP`. **No intercambiables** |
+| `app_product` | Productos, y si cada uno aplica whitelisting |
+| `app_login_token` | Tokens magic-link de un solo uso para el portal del cliente |
+
+<Warning>
+**Crear una credencial no crea una fila `account_balance`.** Un `RECHARGE` para una cuenta
+sin ella no acredita nada y permanece pendiente.
+</Warning>
+
+## Dinero
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `account_balance` | `balance`, `reserved`, `currency`, `billing_mode`, `credit_limit` |
+| `balance_ledger` | Cada movimiento: `RECHARGE`, `TRANSFER`, `RESERVE`, `RELEASE`, `BILL` |
+| `app_rate`, `app_rate_rule`, `app_rate_rule_condition`, `app_rate_rule_filter` | La tarifa |
+
+`balance` tiene **exactamente un escritor**: el sondeo de recarga de la pasarela. El panel escribe filas del libro mayor y
+nunca la columna balance.
+
+<Tip>
+Los tipos de entrada se dividen en tres trabajos: `RECHARGE`/`TRANSFER` mueven dinero adentro, `RESERVE`/`RELEASE` lo
+mueven entre dos columnas de la misma fila y neteando a cero, y `BILL` es **inerte**. El sondeo nunca
+lo selecciona, así que los atrasos nunca entran a `balance`.
+</Tip>
+
+## Enrutamiento
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_route`, `app_route_table` | Tablas y sus reglas |
+| `app_route_rule`, `_condition`, `_filter` | Una regla, sus condiciones, sus filtros |
+| `app_route_group`, `app_route_group_member` | Grupos de proveedores y política de selección (V1.29.0) |
+| `app_filter`, `app_filter_condition` | La biblioteca de filtros compartida |
+
+**Una regla que referencia un filtro faltante o deshabilitado se omite por completo** en lugar de cargarse con menos
+condiciones. Descartar condiciones silenciosamente *ampliaría* la regla.
+
+## Aprobaciones y TLVs
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_whitelist_policy` | Por cuenta y producto: apagado, reporte o aplicar |
+| `app_header` | Sender IDs aprobados, con sus TLVs |
+| `app_template` | Plantillas de contenido aprobadas, con sus TLVs |
+| `app_tlv_definition` | El catálogo de TLV del operador |
+| `app_tlv_suggestion` | Tags propuestos por el cliente esperando aprobación |
+
+Tanto `app_header` como `app_template` llevan un estado de aprobación (V1.19.0). **Solo las filas `APPROVED` se
+cargan.** Una fila pendiente se comporta exactamente como si no existiera.
+
+## Workers y ajustes
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_worker` | Proveedores y listeners |
+| `app_worker_property` | Sus ajustes por instancia |
+| `app_config` | Propiedades `smsg.*` |
+
+La resolución de tres niveles es `outSms.instance.<name>.<key>` → `outSms.default.<key>` → el predeterminado
+codificado. **No todo ajuste puede acotarse a un listener.** Uno que no puede lee silenciosamente un global
+que nadie establece.
+
+## Auditoría
+
+| Tabla | Contiene |
+| :--- | :--- |
+| `app_customer_access_log` | Acceso al portal del cliente (V1.20.0) |
+
+El acceso del operador se registra a un archivo en la carpeta de datos del panel en lugar de a esta tabla.
+
+## Las migraciones son solo hacia adelante
+
+Flyway, `V1.19.0__baseline.sql` en adelante. **No hay migración hacia atrás.** La ruta de rollback es una
+restauración, así que toma el backup antes de aplicar, no después.
+
+```bash
+fireflo db test        # cinco comprobaciones de conexión graduadas
+fireflo verify         # ¿tiene sentido la configuración?
+```
+
+<Tip>
+Cambiar a modo `db` contra un esquema **vacío** no cae a archivos. El cargador publica
+el conjunto vacío. Y para credenciales eso significa que cada bind y cada llamada REST se rechazan a la vez. Ejecuta
+`fireflo import` primero.
+</Tip>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Tablas de registros de llamada" icon="database" href="/reference/data/cdr-tables">
+    La mitad de tráfico y dinero del esquema.
+  </Card>
+  <Card title="Configuración de base de datos" icon="sliders" href="/reference/config/database">
+    Conectar la pasarela, y el interruptor de modo db.
+  </Card>
+</CardGroup>

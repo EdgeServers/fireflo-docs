@@ -1,0 +1,98 @@
+---
+title: "Accusés et messages entrants"
+description: "deliver_sm porte deux choses différentes, et les distinguer est la première tâche de tout récepteur SMPP."
+---
+
+Sur un bind transceiver ou receiver, `deliver_sm` arrive depuis la passerelle. Il porte **deux
+choses différentes**, et votre handler doit les séparer avant tout le reste.
+
+| `esm_class` | C'est | Contient |
+| :--- | :--- | :--- |
+| Bits d'accusé de livraison positionnés | Un **accusé** pour un message que vous avez envoyé | L'`id`, un état et des compteurs |
+| Sinon | Un **message entrant** depuis un combiné | Le vrai texte de quelqu'un |
+
+<Warning>
+**Ne traitez pas un accusé comme un message entrant.** Un récepteur naïf qui transfère chaque
+`deliver_sm` vers une boîte de réception applicative livre `id:… sub:001 dlvrd:001 stat:DELIVRD` à
+un humain, et — pire — ne parvient habituellement pas non plus à clore l'enregistrement que
+l'accusé était là pour clore.
+</Warning>
+
+## Lire un accusé
+
+Le corps suit le format conventionnel :
+
+```
+id:7a2a5b6c-… sub:001 dlvrd:001 submit date:2608190859 done date:2608190859 stat:DELIVRD err:000
+```
+
+`id` est l'id de message issu de votre `submit_sm_resp`. C'est la clé de corrélation, et la seule.
+
+`stat` est l'état brut : `DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`,
+`REJECTD`, `FAILED`, `BUFFRED`, `SEEN`. `EXPIRED`, `REJECTD` et `UNDELIV` sont tous facturés comme
+des échecs mais signifient des choses différentes.
+
+<Tip>
+**`ACCEPTD` et `BUFFRED` ne sont pas des issues.** Un autre accusé suit. Si vous avez demandé les
+notifications intermédiaires avec le bit 4 de `registered_delivery`, votre handler doit attendre un
+état final plutôt que de clore sur le premier accusé.
+</Tip>
+
+## Trois segments, trois accusés
+
+Par défaut, vous obtenez un accusé par `submit_sm` envoyé, chacun citant l'id qui vous a été remis.
+Votre fournisseur peut ramener cela à un seul avec `conf.dlr.multipart` réglé sur `first` ou
+`last`, qui porte les vrais totaux `sub:`/`dlvrd:`.
+
+**Chaque accusé rapporte la même issue** quel que soit le choix, parce que les segments sortants
+sont agrégés avant qu'un accusé ne soit construit. Il n'y a donc rien à rapprocher entre eux :
+prenez-en un et ignorez le reste, ou demandez à votre fournisseur d'en envoyer un seul.
+
+## Messages entrants
+
+Un `deliver_sm` sans les bits d'accusé est un vrai message envoyé à votre numéro par quelqu'un.
+
+La passerelle doit résoudre **quel compte possède le numéro de destination** avant de pouvoir vous
+le router. Si ce mappage manque, le message est enregistré et livré nulle part. Et il n'y a rien
+d'observable de votre côté, car du point de vue du routage il ne vous a jamais été adressé.
+
+<Tip>
+En mettant en service un nouveau numéro entrant, envoyez un message et faites confirmer par votre
+fournisseur qu'il a bien été résolu vers votre compte plutôt que d'avoir atterri non mappé. Cela
+sépare "mon handler est cassé" de "ce numéro n'a jamais été le mien", qui sont sinon
+indiscernables.
+</Tip>
+
+## Répondre
+
+Répondez à chaque `deliver_sm` par un `deliver_sm_resp`. Un PDU non répondu consomme un créneau de
+fenêtre côté passerelle, et suffisamment de PDUs non répondus font caler la session d'une manière
+qui ressemble à la passerelle ayant cessé d'envoyer.
+
+## Si les accusés n'arrivent jamais
+
+<Steps>
+  <Step title="Votre bind peut-il recevoir ?">
+    Un bind transmitter-only ne le peut pas. C'est la cause la plus fréquente et la plus facile à
+    manquer, parce que l'envoi fonctionne parfaitement.
+  </Step>
+  <Step title="En avez-vous demandé ?">
+    `registered_delivery` à `0x00` signifie aucun. Certaines librairies le mettent à zéro par
+    défaut.
+  </Step>
+  <Step title="Le vendor en produit-il ?">
+    Si votre fournisseur a `request.dlrs` désactivé pour le vendor qui transporte votre trafic,
+    rien ne rapporte jamais d'issue et chaque message se règle en `EXPIRED` à sa date limite.
+  </Step>
+</Steps>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Soumettre" icon="paper-plane" href="/developers/smpp/submitting">
+    `registered_delivery` et son mapping vers les niveaux d'accusé.
+  </Card>
+  <Card title="FAQ SMPP" icon="circle-question" href="/developers/smpp/faq">
+    Fenêtres, throttling, reconnexions et sessions stale.
+  </Card>
+</CardGroup>

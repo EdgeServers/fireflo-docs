@@ -1,0 +1,97 @@
+---
+title: "Réglages communs à chaque worker"
+description: "Les réglages de base qu'un fournisseur et un listener partagent : retries, débit, files, filtres, actions d'échec et suspension."
+---
+
+Chaque worker — fournisseur ou listener — est configuré à travers
+`outSms.instance.<name>.<key>`, en repli sur `outSms.default.<key>` puis sur le défaut codé
+ci-dessous. Voir [Niveaux de propriétés](/reference/config/paths).
+
+## Débit et retries
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `maxRetries` | `1` | **Total** de `submit_sm` que ce fournisseur peut recevoir pour un message, pas par passe de routage. `0` est illimité. |
+| `tps` | `0` | Transactions par seconde. `0` est sans mesure. |
+| `threadCount` | `1` | Threads worker. |
+| `queue.honourPriorities` | `false` | Si un message de plus haute priorité passe devant. |
+| `queue.name` | `""` | Partager une file entre workers en la nommant. |
+
+<Warning>
+`maxRetries` **ne bornait auparavant que les retries internes au worker**, et chaque passage par le
+routeur distribuait un nouveau budget. Avec cette lecture, `1` combiné à un `outSms.routing.maxAttempts`
+de 20, un fournisseur pouvait voir environ 100 PDUs pour un seul message. C'est maintenant un total.
+
+Si vous mettez à niveau depuis avant ce correctif et que vous aviez réglé les paramètres autour de
+l'ancien comportement, revérifiez cette valeur.
+</Warning>
+
+## État d'exécution
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `pause` | `false` | Continuer à accepter, cesser d'envoyer. La file grossit. |
+| `suspend` | `false` | Cesser d'accepter ; la file se vide vers le routeur pour que le trafic se re-route. |
+| `pause.sleep.ms` | `1000` | Intervalle de poll pendant la pause. |
+
+Ce sont les deux états derrière les verbes `hold`/`release` et `suspend`/`resume` dans
+[la CLI](/reference/cli/fireflo) et les contrôles de trafic du panneau.
+
+## Actions d'échec
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `fail.action.worker.type` | `SLEEP` ou `RE_ENQUEUE_WORKER` | Dépend de si la gestion des messages est synchrone. |
+| `fail.action.router.type` | `RE_ENQUEUE_ROUTER` | Ce qui se passe quand le worker rend le message. |
+| `fail.action.worker.sleep` | `1000` / `0` | Millisecondes avant de réessayer en interne — existe pour éviter une boucle busy quand un worker est mal configuré. |
+| `fail.action.router.sleep` | `2000` / `0` | Idem, avant de rendre au routeur. |
+| `fail.action.delayed.delay` | `5000` | Combien de temps un message entrant dans la file de délai attend avant de pouvoir être renvoyé. |
+
+## Politique de suspension
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `suspension.policy` | `SUSPEND` | Ce que la passerelle fait à un worker qui échoue continuellement. |
+| `suspension.stopMessages.ms` | `-1` | Combien de temps cesser d'envoyer. `-1` signifie jamais. |
+| `suspension.disable.ms` | `-1` | Combien de temps désactiver. `-1` signifie jamais. |
+
+## Alertes et KPI
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `alert.maxPending` | `0` (illimité) | Seuil de messages en attente. |
+| `alert.maxRejected` | `0` (illimité) | Seuil de messages rejetés. |
+| `alert.maxQueueSize` | `0` (illimité) | Seuil de profondeur de file. |
+| `kpi.enabled` | `false` | Si l'échantillonnage KPI tourne. |
+| `kpi.period.minutes` | `60` | Fenêtre d'échantillonnage, maximum 120. |
+| `kpi.volume` | `100` | Messages avant qu'un verdict soit formé. |
+| `kpi.fail.statuses` | `""` | Statuts qui comptent comme un échec pour les besoins KPI. |
+
+## Filtres
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `filters.beforeDoMessage` | `""` | Exécuter avant que le message soit traité. |
+| `filters.afterDoMessageSuccess` | `""` | Exécuter après un succès. |
+| `filters.afterDoMessageFailure` | `""` | Exécuter après un échec. |
+
+<Warning>
+Un worker dont tous les filtres échouent à se résoudre démarre **sans filtres**, plutôt que de
+refuser de démarrer. Vérifiez le rapport de chargement — voir [Filtres](/platform/routing/filters).
+</Warning>
+
+## Mappage de caractères et diagnostics
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `charmapper.enabled` | `true` | Si le mappage de caractères tourne. |
+| `charmapper` | `""` | Le mappage à appliquer. |
+| `debug` | `false` | Journalisation verbeuse du worker. |
+| `print.msgs` | `false` | **Écrit les corps de messages dans le log.** |
+
+<Warning>
+`print.msgs`, et les drapeaux frères sur les workers client et serveur, écrivent des identifiants,
+des numéros de téléphone et le contenu des messages dans les logs. Préférez une
+[capture](/platform/operations/capture) — bornée, en mémoire, une session,
+auto-expirante.
+</Warning>

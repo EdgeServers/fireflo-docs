@@ -1,0 +1,89 @@
+---
+title: "Varias instancias en un host"
+description: "Una palabra nombra la instancia de un cliente a ambos instaladores, y el aislamiento que compra un virtualhost."
+---
+
+Despliegues separados en un host: uno por cliente, o uno por entorno. **No un clúster**: son
+gateways independientes con sus propias bases de datos y su propio tráfico. Para saber por qué varias instancias
+contra *una* base de datos no funciona, consulta [Clustering](/platform/install/clustering).
+
+## Un nombre, dos productos
+
+```bash
+sudo ./scripts/fireflo-install       install --tenant websmsc
+sudo ./scripts/fireflo-panel-install install --tenant websmsc
+```
+
+`--tenant` es toda la idea: **la misma palabra nombra la misma instancia a ambos instaladores**. Un nombre
+por cliente, dos productos.
+
+| | Ruta | Unit |
+| :--- | :--- | :--- |
+| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
+| Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+
+## En update es una búsqueda, no una disposición
+
+Esta es la parte que evita el error caro.
+
+```bash
+sudo ./scripts/fireflo-install update --tenant websmsc
+```
+
+En `update`, `service` y `rollback`, `--tenant` **encuentra** la instalación con ese nombre y usa sus propias
+rutas, unit, cuenta y puertos.
+
+<Warning>
+Sin eso, una actualización apuntada por olvidar un flag detendría una unit que puede no existir, reemplazaría un
+directorio que pertenece a otra instancia, y habilitaría un segundo servicio contra la misma base de datos.
+
+Una unit cuyo `WorkingDirectory=` nombra una instalación diferente se **rechaza, antes de detener nada**.
+</Warning>
+
+## Puertos
+
+```bash
+--smpp-port-range 27777-27800
+```
+
+Da una banda y el instalador toma el siguiente puerto de listener libre, para que la instancia dos no colisione con
+la instancia uno. `--http-port` y `--ops-port` también se establecen por instancia.
+
+Ambos instaladores releen los puertos del archivo de entorno en `update`, así que una instancia en
+puertos no por defecto deja de fallar su propio verify al final de cada actualización.
+
+## Un virtualhost
+
+```bash
+sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc
+```
+
+Pone la instancia bajo un home por cliente: `/home/websmsc/gateway`, con el panel en
+`/home/websmsc/panel`.
+
+**Qué compra:** ambas units generadas montan un **tmpfs sobre `/home`** y solo vinculan de vuelta ese único
+virtualhost, así que un gateway no puede ver el directorio home de ningún otro cliente.
+
+<Warning>
+Bajo `--vhost`, el `CDR_EXPORT_DIR` del panel también debe estar dentro de una raíz `BindPaths=`. **Ese fallo
+es silencioso.** Las exportaciones se preparan y luego no pueden leerse.
+</Warning>
+
+<Note>
+`--vhost` **solo**, sin `--tenant`, mantiene su significado plano anterior, así que los paneles ya instalados
+bajo `/home/<name>` se alcanzan exactamente como antes. Esa compatibilidad es deliberada: una actualización no debe
+reubicar una instalación en marcha.
+</Note>
+
+Los tres flags de directorio (`--app-dir`, `--conf-dir`, `--data-dir`) siguen ganando sobre cualquier esquema
+dondequiera que se den.
+
+## Lo que cada instancia necesita por su cuenta
+
+| | ¿Compartido? |
+| :--- | :--- |
+| Base de datos | **No**. Una por instancia |
+| Puertos de listener, HTTP y ops | **No** |
+| Tokens operacionales | **No**. Generados por instalación |
+| Cuenta de servicio | Opcional, `--user` |
+| Host, paquetes, Java, Node | Sí |

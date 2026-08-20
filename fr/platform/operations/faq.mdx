@@ -1,0 +1,82 @@
+---
+title: "FAQ opérations"
+description: "Les tableaux de bord qui ne montrent rien, les changements qui ne s'appliquent pas, et les nombres qui ressemblent à des problèmes mais n'en sont pas."
+---
+
+<AccordionGroup>
+
+<Accordion title="Mon tableau de bord obtient 404 de /ops/health">
+Vérifiez le token des deux côtés **avant** de supposer que le gateway est en panne.
+
+Un `smsg.ops.token` non défini désactive l'endpoint et répond `404`. Un **mauvais** token obtient le même `404` plutôt qu'un `401`, délibérément. Pour qu'un appelant ne puisse pas dire s'il y a ici quelque chose pour lequel il vaut la peine de trouver un token.
+</Accordion>
+
+<Accordion title="Prometheus a cessé de collecter après une mise à niveau">
+Activer le port de gestion **déplace** `/q/metrics` de 8080 à 9000. Un job encore pointé sur 8080 obtient des `404` plutôt que d'échouer bruyamment, donc le tableau de bord se lit comme un système silencieux plutôt qu'un moniteur cassé.
+
+Changez la cible de scrape en même temps que la mise à niveau.
+</Accordion>
+
+<Accordion title="J'ai changé un paramètre dans le panel et rien ne s'est passé">
+Vérifiez `config_sources` sur `/ops/health`. Il rapporte, par domaine, si les propriétés, les identifiants, le routage et les tarifs viennent de `database` ou de `file`.
+
+**Un changement dans le panel ne fait rien si le gateway lit un fichier pour ce domaine.** Le symptôme fait chercher les gens sur la modification plutôt que sur la source.
+
+Si la source est bonne, le sondage a jusqu'à trente secondes de retard. `./scripts/fireflo reload` l'applique maintenant.
+</Accordion>
+
+<Accordion title="J'ai corrigé le solde d'un compte et il a continué d'envoyer">
+Le crédit est réservé en **blocs** et dépensé depuis la mémoire. Une correction ne prend effet que lorsque le bloc déjà remis est consommé. Un compte mis à zéro continue d'envoyer.
+
+`./scripts/fireflo credit release <account>` restitue le reste non dépensé pour que le prochain message réserve contre le chiffre corrigé. Il ne retire rien.
+</Accordion>
+
+<Accordion title="Un worker a disparu de /ops/health">
+Il a été désactivé. `disable` retire un worker de health entièrement, ce qui ressemble à un crash si vous ne l'avez pas fait vous-même.
+
+`suspend` est celui qui garde le worker visible tout en retirant le trafic.
+</Accordion>
+
+<Accordion title="Compter le tableau sessions donne le mauvais nombre">
+**Au plus 20 sessions par worker apparaissent dans `/ops/health`**, quoi que dise `sessions_total`. Health est sondé constamment et un listener avec cinq cents binds envoyait cinq cents lignes à chaque fois.
+
+Utilisez `bound`, ou `sessions_total`. Pour voir l'ensemble complet, paginez l'endpoint sessions.
+</Accordion>
+
+<Accordion title="tps_measured est absent plutôt qu'à zéro">
+Absent signifie **non mesuré** ; zéro signifie bindé, comptant et ne bougeant rien. Ce qui est un blocage.
+
+C'est absent pour les deux premières fenêtres après le démarrage, parce qu'une lecture d'un compteur cumulatif est une baseline et pas encore un taux. Une alerte traitant absent comme zéro se déclenche à chaque redémarrage.
+</Accordion>
+
+<Accordion title="Une file qui croît est-elle toujours un problème ?">
+Non. **File du routeur plate pendant qu'une file vendeur croît** signifie que le routage suit et que le vendeur est la contrainte. C'est une question de rythme, pas de gateway.
+
+Les deux qui croissent signifient que l'ingress dépasse le routage. Une file pleine de `retries` **non nuls** signifie que les mêmes messages reviennent, ce qui est un problème vendeur et empire si vous ajoutez de la capacité.
+</Accordion>
+
+<Accordion title="Devrais-je augmenter maxAttempts quand les messages tombent ?">
+Probablement pas. Cela a été mesuré et ça n'aide pas. Augmenter `maxAttempts` 20 → 60 avec un backoff 500 ms a changé la perte de 217 à 227 messages et a rendu le débit légèrement pire.
+
+**Rythmez plutôt vers le vendeur.** Régler le `tps` de ce vendeur à ce qu'il peut vraiment prendre a amené le même run à zéro perdu, zéro `ESME_RMSGQFUL`, et exactement 1.00 submits par message.
+</Accordion>
+
+<Accordion title="Puis-je vider une file bloquée ?">
+Il n'y a délibérément pas de `queue flush`. Jeter une file détruit des messages qui ont été acceptés, facturés et promis à un client.
+
+Utilisez `suspend`. Il draine la file de ce vendeur vers le routeur pour que le routage puisse choisir un autre vendeur.
+</Accordion>
+
+<Accordion title="Les accusés de réception sont envoyés à un opérateur comme des nouveaux messages">
+Une règle de routage `type == 18` manquante. Les accusés tombent sur le catch-all, atteignent un worker vendeur, et sont soumis en amont comme nouveau trafic sortant. Que vous payez.
+
+`conf/routingTable.conf` a toujours porté cette règle ; la base non, et **en mode base, la base gagne.**
+</Accordion>
+
+<Accordion title="Combien de log est-il sûr de laisser activé ?">
+`message.trace.mode = all` a produit **226 MB de log pour un run de 20 000 messages**. Excellent pour une enquête, ruineux comme défaut.
+
+Idem pour `log.pdus`. Et il contient les mots de passe de bind et les corps de message. Utilisez plutôt une capture de session : bornée, en mémoire, et expirant en quinze minutes.
+</Accordion>
+
+</AccordionGroup>

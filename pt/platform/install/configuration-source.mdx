@@ -1,0 +1,99 @@
+---
+title: "Escolhendo uma fonte de configuração"
+description: "Arquivo ou banco, o único interruptor que move todos os quatro domínios, e por que import é uma porta de mão única para a qual você ainda deve guardar os arquivos."
+---
+
+A configuração vem de arquivos ou do PostgreSQL. **Um interruptor move todos os quatro domínios
+juntos** — credenciais, propriedades, roteamento e tarifas.
+
+```bash
+FIREFLO_CONFIG_SOURCE=file   # os quatro arquivos no diretório conf
+FIREFLO_CONFIG_SOURCE=db     # app_credential, app_config + app_worker, app_route_*, app_rate_rule
+```
+
+<Warning>
+**Isto substituiu quatro chaves separadas.** `smsg.credentials.source`, `smsg.routing.source`,
+`smsg.rates.source` e `smsg.properties.source`, e suas variáveis `FIREFLO_*_SOURCE`, não fazem mais
+nada. E o gateway **se recusa a iniciar** enquanto uma delas ainda estiver definida, em vez de
+reverter aquele domínio para arquivo silenciosamente.
+</Warning>
+
+## Qual escolher
+
+| | Arquivo | Banco |
+| :--- | :--- | :--- |
+| Editado por | Um editor de texto, ou gerência de configuração | O painel de controle |
+| Aplicado em | ~200 ms, num file watch | Um intervalo de poll, 30 s por padrão |
+| Painel pode editar | **Não** — não há o que editar | Sim |
+| Sob controle de versão | Naturalmente | Precisa de disciplina separada |
+| Várias instâncias | Cada uma precisa dos arquivos | Compartilhado |
+
+Nenhum é mais suportado que o outro. `fireflo import` move entre eles.
+
+## Movendo arquivos para o banco
+
+```bash
+scripts/fireflo import all --dry-run                        # parse, reporta, não escreve nada
+FIREFLO_CONFIG_IMPORT=true scripts/fireflo import all --replace
+```
+
+Ele faz parse de `rates.conf`, `routingTable.conf` e `credentials.yml` **com os parsers que o gateway
+já usa**, para que ninguém escreva à mão INSERT statements por causa de uma casa decimal ou uma senha.
+
+<Note>
+**Rode o dry run e leia.** Ele classifica cada escopo de tarifa como custo de fornecedor ou preço de
+conta e nomeia os que ele consegue classificar como **nenhum dos dois** — que é como um escopo que
+carrega e silenciosamente não casa com nada é pego antes de fazer isso.
+</Note>
+
+Os assuntos são `all` (padrão), `rates`, `routing`, `credentials`.
+
+<Warning>
+**Credenciais têm uma recusa que as outras não têm.** Um import que resulte em nenhuma credencial
+utilizável é recusado incondicionalmente, com flag ou sem. Um `app_credential` vazio mais
+`FIREFLO_CONFIG_SOURCE=db` recusa todo bind e toda chamada REST de uma vez, e nada nos logs nomeia a
+causa.
+
+O relatório também lista entradas que o parser descarta — uma credencial SMPP sem senha, ou o
+perdedor de uma chave de lookup duplicada — que o gateway pularia com um warning e nenhum erro.
+</Warning>
+
+## Importar sozinho não muda nada
+
+O gateway continua lendo os arquivos até que reinicie com `FIREFLO_CONFIG_SOURCE=db`. **Esse também é
+o rollback, então guarde os arquivos.**
+
+<Warning>
+**Importe cada assunto antes de virar a chave, não apenas aquele em que você estava trabalhando.** O
+switch move todos os quatro domínios de uma vez, e credenciais não são tão baratas de reverter quanto
+o resto: reverter pricing muda preços; reverter credenciais faz **cada sessão conectada
+reconectar**.
+</Warning>
+
+`--replace` sobrescreve os escopos e tabelas que o arquivo nomeia; qualquer coisa que ele não nomeie é
+deixada em paz, a menos que você também passe `--prune`.
+
+## Exit codes
+
+| Código | Significa |
+| :--- | :--- |
+| `0` | Tudo bem |
+| `1` | A migração falhou |
+| `2` | Recusado sem tocar em nada |
+
+Essa divisão é o que permite uma pipeline de deploy distinguir uma flag faltando de uma migração
+quebrada.
+
+## O que muda depois que você está em modo `db`
+
+- Todo file watcher se aposenta. `credentials.yml`, `routingTable.conf` e `rates.conf` não são lidos
+  depois do startup.
+- **`smsg.properties` ainda é lido no startup**, porque o switch de fonte e o datasource precisam vir
+  de algum lugar.
+- Uma mudança leva até um intervalo de poll; uma **leitura que falha retém** a configuração anterior
+  em vez de zerá-la.
+- Editar `app_config` retunes workers em execução — `tps`, `maxRetries`, `pause`, TLVs registrados —
+  e definir `outSms.instance.<x>.enable` como false **para aquele fornecedor** dentro de um intervalo.
+- Deletar uma linha reverte a chave para o próximo tier, não para não-definido.
+
+Use [`fireflo reload`](/platform/operations/reload) quando você não quiser esperar o poll.

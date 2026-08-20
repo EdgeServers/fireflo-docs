@@ -1,0 +1,128 @@
+---
+title: "Throughput"
+description: "Um baseline medido, a linha única de configuração que cortou perda em 92%, e a alavanca que parecia óbvia e não fez nada."
+---
+
+Estes são números reais de uma execução real, não projeções. Leia as ressalvas antes de citar
+qualquer um deles — a bancada usou um SMSC de teste, e a descoberta mais útil é sobre isso.
+
+## O baseline
+
+| Execução | Mensagens | Resultado |
+| :--- | ---: | :--- |
+| Quente, janela 100 × 1 tx | 2 000 | ~840 msg/s, pico da fila do router 4, **0 perdidas** |
+| Burst, janela 500 × **4 tx** | 20 000 | fila do fornecedor até 7 987, **2 528 perdidas (12,6%)** |
+| Burst, janela 500 × **1 tx** | 20 000 | fila do fornecedor até 8 042, **217 perdidas (1,1%)**, 752 msg/s |
+| Burst, `vendor1.tps = 300` | 20 000 | **0 perdidas, 0 `RMSGQFUL`, 1,00 submits/msg** |
+
+**O burst corrigido é o que se deve comparar contra trabalhos futuros: 752 msg/s entregues, 98,9% de
+sucesso, 26,3 s para 20 000 mensagens.**
+
+## O router nunca foi o gargalo
+
+`fireflo_router_queue` marcou **0** durante todo o burst de 20 000 mensagens e teve pico de 18 em
+toda outra execução.
+
+Mensagens estavam sendo roteadas tão rápido quanto chegavam; depois se acumulavam na fila do
+**worker do fornecedor**, que atingiu 7 987. Tudo que limitava o throughput estava a jusante do
+código de roteamento.
+
+<Tip>
+Esta é a forma de diagnóstico mais útil de reconhecer. **Fila do router estável enquanto a fila de um
+fornecedor cresce** significa que o gateway está bem e o fornecedor é a restrição — adicionar threads
+de router ou tunar roteamento não muda nada.
+</Tip>
+
+## A linha única que cortou perda em 92%
+
+O primeiro burst perdeu 2 528 mensagens, cada uma `message.dropped reason=maxAttempts attempts=20
+limit=20`, com 151 985 tentativas de submit para 24 000 mensagens aceitas — cerca de seis cada.
+
+A conexão do fornecedor nunca caiu. **Isto não era conectividade.** O SMSC de teste parou de
+responder rápido o bastante sob burst, submits expiraram, o worker fez retry, e mensagens que usaram
+todas as 20 tentativas de roteamento foram abandonadas.
+
+Re-executando com `transceivers = 1` — mesmas mensagens, mesma janela, mesmas threads de router:
+
+| | 4 transceivers | 1 transceiver |
+| :--- | ---: | ---: |
+| Entregues | 21 472 (87,4%) | **19 783 (98,9%)** |
+| Descartadas no teto | 2 528 | **217** |
+| Tentativas de submit por mensagem | ~6,3 | **4,1** |
+| Pico da fila do fornecedor | 7 987 | 8 042 |
+
+A fila ainda atingiu 8 042 e o router ainda nunca ficou atrás, então a *forma* da execução foi
+idêntica. O que mudou é que uma sessão única não provoca o que quer que o SMSC de teste faça quando
+over-sessioned.
+
+<Warning>
+**O primeiro burst mediu os limites do SMSC de teste, não do gateway.** Fica no registro porque o
+contraste é a coisa mais útil que o exercício produziu — e porque "perdemos 12% de um burst" é
+exatamente o tipo de número que é citado sem sua causa.
+</Warning>
+
+## A alavanca que parecia óbvia e não fez nada
+
+Uma versão anterior do baseline dizia que o fix para o 1,1% residual era aumentar
+`outSms.routing.maxAttempts` e `outSms.routing.retryBackoffMillis`, argumentando que uma mensagem
+sobrevive apenas cerca de dois segundos de um fornecedor não aceitando.
+
+**Isso foi medido e está errado.**
+
+| Configuração | Perdidas | Throughput |
+| :--- | ---: | ---: |
+| maxAttempts 20, backoff padrão | 217 (1,1%) | 752 msg/s |
+| **maxAttempts 60, backoff 500 ms** | 227 (1,1%) | 720 msg/s |
+
+Sem melhoria, e marginalmente mais lento. Mais retries contra um fornecedor que não está aceitando
+é mais carga sobre a coisa já recusando.
+
+**O que consertou foi `vendor1.tps = 300`** — pacear o gateway ao que o fornecedor realmente
+conseguia receber. Zero perdidas, zero `ESME_RMSGQFUL`, e exatamente 1,00 submits por mensagem.
+
+<Tip>
+A lição geral: **quando um fornecedor é a restrição, pace até ele em vez de empurrar mais forte
+contra ele.** Uma razão de submits-por-mensagem acima de 1 é o número que te diz em qual situação
+você está.
+</Tip>
+
+## O que medir no seu próprio deployment
+
+<Steps>
+  <Step title="Fila do router contra fila do fornecedor">
+    Router estável, fila do fornecedor crescendo = o fornecedor é o limite. Ambas crescendo =
+    ingress ultrapassando o roteamento.
+  </Step>
+  <Step title="Submits por mensagem">
+    1,00 é saudável. Qualquer coisa materialmente acima disso são retries, e retries são capacidade
+    de fornecedor desperdiçada.
+  </Step>
+  <Step title="Contagem de ESME_RMSGQFUL">
+    Não-zero significa que você está empurrando mais forte do que a outra ponta aceita.
+  </Step>
+  <Step title="Perda no teto de tentativas">
+    `message.dropped reason=maxAttempts` é o estado final de tudo acima.
+  </Step>
+</Steps>
+
+## Ressalvas
+
+- **Um SMSC de teste não é uma operadora.** As duas execuções de burst foram limitadas pelo
+  simulador, não pelo FireFlo.
+- **A variação entre execuções foi maior que o efeito da configuração de janela.** Aumentar
+  `windowSize` 100 → 500 e transceivers 1 → 4 produziu 337 e 910 msg/s em duas execuções de
+  configuração *idêntica*, contra 500 e 840 do baseline. **Esta bancada não pode resolver esse
+  efeito** — o que é uma afirmação sobre a medição, não uma evidência de que a janela não importa.
+- **`message.trace.mode = all` produziu 226 MB de log** para uma execução de 20 000 mensagens. Útil
+  para uma investigação, ruinoso como padrão.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Queues" icon="layer-group" href="/platform/operations/queues">
+    Distinguindo um problema de volume de um problema de fornecedor.
+  </Card>
+  <Card title="Generating traffic" icon="flask" href="/platform/operations/generating-traffic">
+    Produzindo carga para medir contra.
+  </Card>
+</CardGroup>

@@ -1,0 +1,115 @@
+---
+title: "Relevés et clôture d'une période"
+description: "Pourquoi une période clôturée n'est jamais réécrite, pourquoi la ligne BILL ne bouge pas d'argent, et ce que devient à la place un remboursement tardif."
+---
+
+Un relevé est l'usage d'un client sur une période. **Clôturer** une période transforme cela d'une
+requête vive en un fait enregistré.
+
+## Une période clôturée est immuable
+
+La clôture écrit une ligne `BILL` enregistrant ce qui a été facturé. **Elle n'est jamais
+réécrite.**
+
+Un remboursement qui arrive ensuite, un accusé tardif, un taux corrigé après coup — aucun d'eux ne
+refait la période clôturée. Le panneau re-exécute le résumé, le compare au chiffre stocké, et
+affiche la différence comme un **avoir sur la période suivante**.
+
+<Warning>
+**C'est la raison entière d'être de la clôture** plutôt que le relevé étant simplement une requête
+vive.
+
+Refaire silencieusement une période clôturée détruit la capacité du client à réconcilier : la
+facture qu'il a payée le mois dernier cesse de correspondre à la facture que le panneau montre ce
+mois-ci, sans que rien nulle part n'enregistre que cela a bougé ni pourquoi.
+</Warning>
+
+## La ligne `BILL` ne bouge pas d'argent
+
+`delta` enregistre le montant facturé — négatif, parce que c'est ce que le compte a consommé. Mais
+la ligne est **inerte**.
+
+Le sondage de rechargement du gateway ne sélectionne que `RECHARGE` et `TRANSFER`, donc **rien
+n'applique jamais un `BILL`**. L'arriéré n'entre jamais dans `account_balance.balance`, qui
+conserve sa contrainte de non-négativité et son sens unique : de l'argent disponible à dépenser.
+
+Ce à quoi la ligne *est* structurellement nécessaire, c'est la fenêtre. La ligne `BILL` la plus
+récente — `max(created_at) WHERE entry_type = 'BILL'` — est le début de la période non facturée —
+donc **la clôture est ce qui restitue la marge de manœuvre d'un compte postpayé.**
+
+<Tip>
+Cette connexion mérite d'être retenue : un client postpayé qui a cessé de pouvoir envoyer attend
+peut-être simplement que vous clôturiez sa période. Rien n'est cassé ; la facture n'a pas été
+coupée.
+</Tip>
+
+## Clôturer deux fois est un conflit, pas une deuxième facture
+
+La référence est déterministe :
+
+```
+bill:<accountId>:<label>
+```
+
+`uq_balance_ledger_ref` est unique là où non null, donc la même période ne peut pas être clôturée
+deux fois.
+
+**Déterministe à dessein** — deux opérateurs cliquant en même temps doivent entrer en collision,
+et une requête retentée ne doit pas produire de doublon. Le label est `YYYY-MM` ou une plage de
+dates, et ne peut pas contenir de deux-points, donc le *dernier* deux-points sépare la référence,
+et un id de compte contenant des deux-points fait toujours l'aller-retour.
+
+## À partir de quoi un relevé est calculé
+
+La facture est une **fonction pure de `cdr_submit` sur une fenêtre semi-ouverte**. Elle ne lit
+jamais le compteur postpayé, ne lit jamais `account_balance`, et ne lit jamais le grand livre.
+
+Donc la seule chose qui peut rendre une facture fausse est une ligne `cdr_submit` manquante ou en
+trop.
+
+<Warning>
+Une fois qu'une période est plus ancienne que `FIREFLO_CDR_KEEP_DAYS`, les lignes à partir
+desquelles elle a été calculée ont disparu. Le chiffre `BILL` stocké et `usage_daily` sont alors
+le seul enregistrement — c'est pourquoi la purge refuse de supprimer un jour dont rien n'a fait le
+résumé.
+</Warning>
+
+## Fenêtres semi-ouvertes
+
+Une période couvre `[start, end)` — début inclus, fin exclue. Un message à exactement minuit sur
+la frontière appartient à la période **suivante**, et appartient à exactement une.
+
+C'est la propriété qu'il vaut la peine de vérifier dans toute requête que vous écrivez vous-même :
+`BETWEEN` en SQL est inclusif aux deux extrémités et comptera deux fois un message à la frontière
+sur deux relevés.
+
+## L'ordre qui fonctionne
+
+<Steps>
+  <Step title="Laissez la période se terminer">
+    Les chiffres facturables sont définitifs au moment où le jour est fini — la facturation est
+    sur `submitted`.
+  </Step>
+  <Step title="Revoyez avant de clôturer">
+    Le résumé est une requête vive jusqu'à ce que vous la clôturiez. C'est le dernier point
+    auquel une correction est une édition plutôt qu'un avoir.
+  </Step>
+  <Step title="Clôturez">
+    Une ligne `BILL`, idempotente sur la référence.
+  </Step>
+  <Step title="Laissez les corrections ultérieures être des avoirs">
+    Elles sont visibles, attribuables, et atterrissent sur la période suivante plutôt que
+    d'altérer silencieusement un chiffre que le client a déjà payé.
+  </Step>
+</Steps>
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Postpayé" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Limites de crédit, et pourquoi la clôture restitue de la marge de manœuvre.
+  </Card>
+  <Card title="Usage et rétention" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    Ce qui survit après la purge des enregistrements d'appels.
+  </Card>
+</CardGroup>

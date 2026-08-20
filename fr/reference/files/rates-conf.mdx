@@ -1,0 +1,97 @@
+---
+title: "rates.conf"
+description: "La grammaire des tarifs, ce que signifie un scope de chaque côté de la transaction, et le scope réservé qui tarifie les comptes que vous n'avez pas encore créés."
+---
+
+La même grammaire que [`routingTable.conf`](/reference/files/routing-table), avec le montant par
+unité là où le routage met la cible.
+
+```
+Amount:Attribute:Operator:Value
+```
+
+Les règles sont groupées sous un en-tête `[scope]` et évaluées de haut en bas **à l'intérieur**. La
+première correspondance l'emporte, donc les règles spécifiques vont au-dessus de l'attrape-tout.
+
+## Un scope est un côté de la transaction
+
+| Scope | Signifie |
+| :--- | :--- |
+| Un nom d'instance de **fournisseur** | Ce que ce fournisseur vous facture — **coût** |
+| Un id de **compte** | Ce que vous facturez à ce client — **prix** |
+| `[*]` | Tarifie **tout compte sans règles propres**, y compris les comptes créés plus tard |
+
+<Warning>
+`[*]` est **côté vente uniquement**. Un fournisseur n'en hérite jamais, donc un coût sans règle
+reste inconnu plutôt que de devenir silencieusement le prix de vente — ce qui rapporterait une
+marge de zéro sur du trafic que vous payez en fait.
+</Warning>
+
+Rien dans le schéma ne distingue un scope fournisseur d'un scope compte ; la passerelle les
+distingue par la recherche qui interroge. `fireflo import --dry-run` classe chaque scope et **nomme
+ceux qu'il ne peut classer ni l'un ni l'autre** — c'est ainsi qu'un scope qui se chargera et ne
+correspondra silencieusement à rien est attrapé.
+
+## Montants
+
+Décimal, à 4 décimales au maximum. Parsé exactement, jamais via la virgule flottante, donc
+`0.0450` signifie `0.0450`.
+
+<Note>
+`smsg.money.scale` contrôle avec combien de décimales un **total** est publié. Les tarifs par
+message en gardent toujours quatre, car `0.0450` affiché comme `0.05` est faux de 11 % sur chaque
+message. Voir [Tarification](/reference/config/rating).
+</Note>
+
+## Conditions
+
+Les attributs sont ceux du moteur de routage : `to`, `from`, `body`, `product`, `systemId`,
+`owner_id`, `type` et le reste. `matches` est une expression régulière et est **ancrée** — `^61.*`
+correspond à un numéro entier, un simple `61` non.
+
+Combinez les conditions avec `~~`, qui doit apparaître dans **les trois** positions :
+
+```
+0.0800:product~~to:equals~~matches:premium~~^61[0-9]{9}$
+```
+
+## L'attrape-tout
+
+```ini
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+```
+
+<Warning>
+**Sans un `default`, un message qui ne correspond à rien est enregistré avec un tarif UNKNOWN, pas
+comme gratuit.** C'est le résultat honnête, et cela signifie que le message est livré et facturé à
+personne jusqu'à ce que vous le remarquiez. `smsg.rating.unrated.refuse` en fait un refus à la
+place.
+</Warning>
+
+## Forme travaillée
+
+```ini
+# Ce que vendor1 nous facture
+[vendor1]
+0.0310:to:matches:^61[0-9]{9}$
+0.0400::default:
+
+# Ce que acct-1001 nous paie
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+
+# Chaque compte sans règles propres
+[*]
+0.0500::default:
+```
+
+Coût et prix vivent dans le même fichier et sont la même grammaire, c'est pourquoi le panneau de
+contrôle les groupe comme **Ce que nous payons** et **Ce que nous facturons** plutôt que de les
+mélanger dans une seule liste.
+
+En mode base de données, ce fichier n'est pas lu après le démarrage ; les mêmes données vivent dans
+`app_rate_rule` et ses tables de condition. Voir [Base de données](/reference/config/database) et
+[Comment fonctionne la tarification](/platform/billing/how-pricing-works).

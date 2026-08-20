@@ -1,0 +1,86 @@
+---
+title: "Extractos y límites"
+description: "Dónde vive su historial de uso, qué contiene un call record, y los dos techos que se aplican a su tráfico."
+---
+
+## Su historial de uso
+
+Cada mensaje produce un **call record**: lo que envió, cuándo, cuánto costó y cómo terminó. Su
+extracto es ese historial agregado por período.
+
+Ambos viven en el portal del cliente, no en la API. Véase
+[el portal](/developers/portal/messages-and-statement) para leerlos y exportarlos.
+
+<Tip>
+**No hay un endpoint REST para su historial de mensajes.** `/secure/balance` le da el número
+actual; el portal le da el historial y una exportación CSV. Si necesita historial en sus propios
+sistemas, expórtelo en lugar de intentar reconstruirlo desde los acuses. Los acuses que no
+recibió son exactamente los que faltarían.
+</Tip>
+
+## Qué contiene un registro
+
+| | |
+| :--- | :--- |
+| El mensaje | Destino, sender ID, segmentos, codificación |
+| El dinero | Unit rate, número de segmentos, total |
+| El resultado | Estado final y cuándo se alcanzó |
+| Las TLV | **Las que usted envió**: no lo que un vendor añadió aguas abajo |
+
+Ve su propio lado del mensaje. Qué proveedor lo transportó y qué añadió no es suyo para verlo. Es
+la misma regla que sigue el campo `vendor` en un acuse.
+
+## Segmentos, no mensajes
+
+**Se le factura por segmento.** Un registro muestra el número de segmentos, y el total es el
+unit rate multiplicado por él.
+
+Aquí es donde suele resolverse una factura inesperada: un cuerpo que superó los 160 caracteres
+GSM-7, o una única comilla curva que forzó todo el mensaje a UCS-2 y bajó la capacidad a 70. Véase
+[Codificación y segmentos](/developers/send/encoding-and-segments).
+
+## Los dos techos
+
+Son cosas distintas y producen fallos distintos:
+
+| Límite | Se supera con | Recibe |
+| :--- | :--- | :--- |
+| **Mensajes por segundo** | Enviar demasiado rápido | `429`, o `ESME_RTHROTTLED` sobre SMPP |
+| **Saldo** | Enviar más de lo que ha financiado | `402 Insufficient credit` |
+
+<Warning>
+**Ninguno tiene una cabecera que le diga cuándo reintentar.** No hay `Retry-After` en un `429`.
+Aplique backoff exponencial con jitter, porque un intervalo fijo entre varios workers los
+resincroniza en la siguiente ráfaga.
+
+Y un `402` no debe reintentarse en absoluto. Reintentar no añade saldo; solo convierte una alerta
+en miles.
+</Warning>
+
+## Los rechazos no cuestan nada
+
+Cada rechazo —sender no aprobado, plantilla no coincidente, TLV ausente, saldo insuficiente— le
+deja sin cargo, o con reembolso si el cargo ya se había tomado.
+
+Merece la pena saberlo al conciliar: **el número de mensajes que envió y el número por el que le
+facturaron son cifras legítimamente distintas**, y los rechazos son la diferencia.
+
+El único caso que sorprende es un rechazo de contenido multipart, donde cada segmento fue
+reconocido antes de que el mensaje se descartara. Ve reconocimientos de segmentos que luego se
+reembolsaron.
+
+## Qué significa un `500` para su factura
+
+`500 Cannot send message` revierte todo cargo. Por eso es el único error de servidor seguro de
+reintentar: el reintento cuesta un mensaje, no dos.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Saldo y cotizaciones" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Comprobar saldo y tarificar un mensaje antes de enviarlo.
+  </Card>
+  <Card title="FAQ de facturación" icon="circle-question" href="/developers/billing/faq">
+    Conciliación, reembolsos y mensajes discutidos.
+  </Card>
+</CardGroup>

@@ -1,0 +1,80 @@
+---
+title: "Whitelisting"
+description: "L'interrupteur maître, le opt-out par listener, les trois modes de tamponnage TLV, et les contrôles de tags obligatoires à chaque entrée."
+---
+
+Quels IDs d'expéditeur et corps de message un compte peut utiliser, et ce qui est tamponné sur ceux
+qui correspondent.
+
+| Propriété | Portée | Défaut | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.whitelist.enabled` | globale | `false` | L'interrupteur maître. Éteint signifie que rien n'est chargé et rien n'est vérifié, quoi que dise un listener ou un compte. |
+| `smsg.whitelist.max.variable` | globale | `30` | Combien de caractères un placeholder de template peut représenter. |
+| `conf.whitelist.enabled` | par listener | `true` | Si **ce** listener vérifie. |
+| `whitelist.tlvs.mode` | par listener | *(non défini → le booléen historique)* | `off`, `assign` ou `replace`. |
+| `whitelist.tlvs.replace` | par listener | `false` | Le booléen retiré, encore lu quand `whitelist.tlvs.mode` n'est pas défini. |
+| `smsg.restapi.whitelist.tlvs.mode` | globale | `replace` | Le jumeau REST. |
+| `mandatory.tlvs.submit` | par listener | *(vide)* | Tags qu'un message doit porter après les défauts du credential et tout tampon. |
+| `smsg.restapi.mandatory.tlvs.submit` | globale | *(vide)* | La même chose, pour l'entrée REST. |
+| `mandatory.tlvs.submit` | par **fournisseur** | *(vide)* | Tags sans lesquels ce fournisseur n'acceptera pas un message. |
+
+## `conf.whitelist.enabled` vaut par défaut **on**
+
+C'est donc l'interrupteur maître qui décide. Un listener doit opt *out*.
+
+## `smsg.whitelist.max.variable` élargit chaque template en même temps
+
+<Warning>
+Relever ceci élargit chaque template approuvé sur le déploiement simultanément. C'est la plus grande
+fausse-acceptation que cette conception possède, donc c'est journalisé en INFO et rapporté comme
+`max_variable` sur `/ops/health`.
+</Warning>
+
+Global plutôt que par listener car les templates sont compilés une seule fois au chargement en un
+index par compte. Une valeur hors 1–1000 retombe sur le défaut avec un WARN.
+
+## Les trois modes de tamponnage
+
+| Mode | Ce qu'il fait |
+| :--- | :--- |
+| `off` | Rien n'est tamponné. |
+| `assign` | Remplit un tag **uniquement quand le message ne le porte pas déjà**. |
+| `replace` | Écrase ce que le client a envoyé — et cette écrasement **est** l'approbation. |
+
+<Note>
+**`off` est le défaut exprès.** Défaut à `assign` commencerait à écrire des TLVs sur des paquets
+traversant des listeners qui n'en ont jamais écrit — un changement silencieux de ce qui atteint un
+opérateur.
+
+Le rapport de couverture du panneau de contrôle est ce qui rend `off` découvrable plutôt que
+simplement silencieux : il dit, par ligne approuvée, quels tags obligatoires rien ne fournira.
+</Note>
+
+Le jumeau REST vaut par défaut `replace` à la place, parce que c'est ce que faisait l'entrée REST
+avant que le mode n'existe et qu'une mise à niveau ne doit pas changer le comportement.
+
+## Le contrôle de tags obligatoires côté fournisseur est différent
+
+Le contrôle par listener tourne à l'entrée. Celui par **fournisseur** tourne contre ce qui va
+réellement sur le fil — après `default.tlvs.submit` et après que `registered.tlvs.submit` a filtré.
+
+Un message auquel manque un tag requis là-bas est refusé avec un accusé FAILED, un remboursement et
+une ligne `cdr_rejected`. **Il n'est pas re-routé.** Exiger un tag qui n'est pas aussi dans
+`registered.tlvs.submit` ne peut jamais être satisfait, et c'est averti au chargement.
+
+## Les exemptions par produit vivent dans la base
+
+`app_product.whitelist_enabled = false` exempte ce produit d'emblée. Le panneau en tient compte
+quand il décide si appliquer est sûr — une approbation classée sous un produit exempt ne protège
+rien.
+
+<Warning>
+Chaque clé ci-dessus est vraiment lue par listener. Une clé laissée de côté garde sa forme nue et
+lit un global que personne ne règle, donc elle lit son défaut quelle que soit votre configuration.
+`whitelist.tlvs.replace` était livré ainsi une fois et n'a rien tamponné sur SMPP tant que cela a
+duré.
+</Warning>
+
+Le code de refus pour un tag obligatoire manquant est `0xC3` — voir
+[Codes de statut](/reference/smpp/status-codes). Pour le chemin de déploiement, voir
+[Déployer le whitelisting](/platform/customers/whitelisting-rollout).

@@ -1,0 +1,125 @@
+---
+title: "Avisos ao cliente"
+description: "Contando aos clientes sobre uma mudança que altera os números deles — a regra, a query que encontra quem é afetado, e a razão que quase todo mundo erra."
+---
+
+Algumas releases mudam o que um cliente vê em uma fatura ou no portal. Essas precisam de aviso, e um
+aviso vago é pior do que nenhum.
+
+## A regra
+
+**Diga o número, diga a direção, diga a data.**
+
+Um cliente informado *"algumas cifras podem mudar ligeiramente"* lê isso como ruído e redescobre a
+mudança por uma consulta de finanças três semanas depois. Um cliente informado *"sua fatura de março
+será cerca de 18% maior e aqui está o porquê"* pode planejar.
+
+<Warning>
+**Nunca descreva uma correção como uma melhoria.**
+
+Estes avisos são consertos de defeitos, e em cada caso o cliente estava do lado errado do defeito em
+pelo menos um aspecto. Contornar isso na redação é precisamente o que destrói a confiança que o
+aviso foi enviado para proteger.
+</Warning>
+
+**Envie do próprio endereço da plataforma para o contato de faturamento da conta**, não pelo portal.
+Um banner in-app alcança quem entrar em seguida, que em uma conta máquina-a-máquina é ninguém.
+`app_account.email` é o contato de registro.
+
+## A razão que quase todo mundo erra
+
+Quando um fix faz mensagens retentadas começarem a ser contadas, as cifras do cliente sobem. **O
+tamanho dessa subida não é `retried / total`.**
+
+A cifra antiga era o **tráfego não retentado sozinho** — então o passo do que viam para a verdade é
+medido contra *aquilo*, não contra o total.
+
+```
+o que viam        = não retentado
+o que agora veem  = não retentado + retentado
+a subida          = retentado / não retentado
+```
+
+<Tip>
+**A uma taxa de retry de 20% as cifras sobem 25%, não 20%.** Cite `pct_count_rises`, nunca
+`pct_of_traffic` — são perguntas diferentes e a diferença aumenta conforme a taxa de retry sobe.
+</Tip>
+
+## Encontrando quem é afetado
+
+```sql
+SELECT account_id,
+       count(*)                                                             AS messages,
+       count(*) FILTER (WHERE retry_count > 0)                              AS were_retried,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*), 0), 1)                                      AS pct_of_traffic,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*) FILTER (WHERE retry_count = 0), 0), 1)       AS pct_count_rises,
+       round(100.0 * COALESCE(sum(price) FILTER (WHERE retry_count > 0), 0)
+             / nullif(sum(price) FILTER (WHERE retry_count = 0), 0), 1)     AS pct_spend_rises
+  FROM cdr_submit
+ WHERE part_no = 1 AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id ORDER BY pct_count_rises DESC NULLS LAST;
+```
+
+**Gasto tem sua própria coluna em vez de tomar emprestada a de mensagem**, porque tráfego retentado
+não é precificado como a média — é quaisquer destinos e produtos que estejam falhando. Uma conta cujos
+retries se concentram em uma rota cara vê uma subida de dinheiro maior do que a de mensagens.
+
+`part_no = 1` porque o dinheiro vive inteiramente na parte 1 de uma mensagem concatenada.
+
+## Duas frases que não podem ser suavizadas
+
+Seja o que for reescrito para se adequar à voz da sua plataforma, estas sobrevivem intactas:
+
+<AccordionGroup>
+
+<Accordion title="Suas faturas não são afetadas e não estão sendo reemitidas. Elas sempre estiveram corretas.">
+Quando um fix eleva as cifras *visíveis* de um cliente em direção à sua fatura, os números do cliente
+estavam abaixo do que ele foi cobrado.
+
+Um cliente informado de que seus números estão mudando **sem ser dito qual lado estava errado**
+razoavelmente presume que foi sobrecobrado — e cada um deles pergunta. Dizer isso de antemão é mais
+barato do que responder trinta vezes.
+</Accordion>
+
+<Accordion title="credit_limit = 0 significa sem crédito, não ilimitado.">
+Nunca redigido como "sem limite" em nada enviado para fora.
+
+Não há representação de ilimitado em lugar nenhum do sistema, deliberadamente: um erro de digitação
+que se leia como ilimitado dá de graça um mês de tráfego que ninguém pode faturar.
+</Accordion>
+
+</AccordionGroup>
+
+## Um aviso que funciona
+
+<Steps>
+  <Step title="O que está mudando, em uma frase">
+    Nos termos do cliente — "as contagens de mensagem no seu portal", não "a agregação de CDR".
+  </Step>
+  <Step title="O número, para eles especificamente">
+    Da query acima. Uma cifra por-conta ganha de uma média da plataforma todas as vezes.
+  </Step>
+  <Step title="Qual direção, e se dinheiro se move">
+    Diga explicitamente se as faturas não são afetadas. Assuma que, caso contrário, eles concluirão
+    que foram sobrecobrados.
+  </Step>
+  <Step title="A data em que entra em vigor">
+    Para que possam alinhar com seu próprio período de reporting.
+  </Step>
+  <Step title="O que precisam fazer">
+    Geralmente nada — diga isso, em vez de deixá-los descobrir.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Migrating a deployment" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    As mudanças que precisam de um aviso em primeiro lugar.
+  </Card>
+  <Card title="Statements" icon="file-invoice" href="/platform/billing/statements">
+    Por que um período fechado nunca é reafirmado.
+  </Card>
+</CardGroup>

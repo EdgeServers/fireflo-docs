@@ -1,0 +1,92 @@
+---
+title: "Filas"
+description: "O que foi aceito e ainda não foi enviado. E por que uma fila do router com aparência calma pode significar backlog no broker em vez de uma plataforma tranquila."
+---
+
+**Mensagens que o gateway aceitou e ainda não enviou. Nada aqui é cobrado duas vezes ou perdido —
+mas uma fila que apenas cresce é um cliente esperando.**
+
+A tela lê ao vivo, re-lendo a cada poucos segundos, e pode ser pausada. Uma caixa de busca reduz o
+que é listado por account, sender, destino, product ou vendor, e um toggle **Retries only** separa
+"chegou mais do que conseguimos enviar" de "o vendor está recusando".
+
+## O broker e o router são filas diferentes
+
+<Warning>
+**Um backlog no message broker aparece como uma fila do router *plana*.**
+
+Uma vez que a fila in-process passa da sua marca de água alta, o consumidor para de puxar, então
+a fila do router para de crescer e parece calma — enquanto mensagens se empilham no broker atrás
+dela.
+
+Se a fila do router está suspeitamente estável e clientes estão reportando atrasos, leia o card
+do broker primeiro.
+</Warning>
+
+O card do broker é sempre mostrado, mesmo onde não há broker, porque *not configured* e
+*configured and not answering* são fatos inteiramente diferentes e ambos de outra forma
+renderizariam como nada.
+
+| Estado | O que significa |
+| :--- | :--- |
+| **No broker configured** | O padrão. Submissões REST vão direto para a fila do router |
+| **Not answering** | Publicações estão fazendo fallback in-process; o que está no broker está preso |
+| **Nothing draining it** | Mensagens estão enfileiradas e nenhum consumidor está anexado. Não é lentidão — nada as está lendo |
+
+<Note>
+Quando o broker está inalcançável, sua profundidade lê **unknown**, nunca zero. Uma fila presa que
+mostrasse "0 waiting" seria o número mais perigoso na tela.
+</Note>
+
+## As filas in-process
+
+Um card por fila, cada um dizendo o que contém:
+
+| Tipo | Contém |
+| :--- | :--- |
+| **Waiting to be routed** | Aceitas, ainda não atribuídas a um vendor. Uma fila para o gateway inteiro |
+| **Waiting for the vendor** | Roteadas, esperando a sessão daquele vendor pegá-las |
+| **Scheduled retries** | O envio falhou; enfileiradas para tentar novamente |
+
+Cada card oferece uma leitura do próprio conteúdo, e estas são as frases sobre as quais agir:
+
+- **Mostly retries** — o vendor está falhando, não meramente lento. Adicionar capacidade não ajudará.
+- **All first attempts, all from one account** — volume de um remetente, não falha de vendor.
+- **All first attempts, spread across senders** — chegou mais do que está sendo drenado.
+
+Essa leitura desaparece quando você filtra, deliberadamente: uma visão retries-only não pode
+honestamente pronunciar sobre o mix.
+
+A tabela mostra quando cada mensagem foi enfileirada, seu account, product, endereços, tamanho e
+codificação, se é uma primeira tentativa ou retry, seu alvo, e — em uma fila de retry — quando é a
+próxima devida.
+
+<Note>
+**Filtrar nunca muda a profundidade de uma fila.** A profundidade permanece o número real e a lista
+abaixo é reduzida. "3 matches" entre "412 waiting" significa que três da amostra listada casaram,
+não que apenas três das mensagens daquele cliente estão enfileiradas.
+</Note>
+
+## Por que o texto da mensagem não é mostrado
+
+Deliberadamente ausente, e também não mantido em call records. Operar o gateway nunca requer ler a
+mensagem de um cliente, portanto o tamanho e a codificação a substituem — o suficiente para
+distinguir uma mensagem Unicode de três segmentos de uma GSM curta sem ler a correspondência de
+ninguém.
+
+## Uma tela vazia é o bom desfecho
+
+**No in-process queues** significa que toda mensagem que chegou já foi entregue a um vendor. É como
+um gateway saudável parece em repouso, e é por isso que esta tela não é um dashboard — você vem aqui
+quando algo mais já disse para vir.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Filas e retentativas" icon="rotate" href="/platform/routing/queues-and-retries">
+    Como agendamento de retry e o teto de tentativas funcionam.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Estado de bind e profundidade de fila a partir do próprio gateway.
+  </Card>
+</CardGroup>

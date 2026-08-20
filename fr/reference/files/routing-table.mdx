@@ -1,0 +1,132 @@
+---
+title: "routingTable.conf"
+description: "La grammaire de règle en quatre parties, l'enchaînement de tables, les groupes de fournisseurs, les tables LCR, et les deux erreurs dont le parseur ne vous sauvera pas."
+---
+
+Rechargé à chaud — les éditions s'appliquent en 200 ms environ sans redémarrage.
+
+## Une règle est en quatre parties séparées par deux-points
+
+```
+Target:Attribute:Operator:Value
+```
+
+`Target` est une instance de worker (`vendor1`, `smppserver.smpp`), un **groupe**, ou une autre
+table sur laquelle enchaîner (`MESSAGE`).
+
+Les règles sont évaluées **de haut en bas au sein d'une table**, et la première correspondance
+l'emporte.
+
+<Warning>
+**Une règle mal formée fait échouer tout le rechargement** et la table précédente est conservée.
+Vérifiez le log pour `Error parsing new routing table` après édition — la passerelle continue de
+fonctionner sur l'ancienne table, donc rien ne paraît anormal jusqu'à ce que vous vous demandiez
+pourquoi votre changement n'a rien fait.
+</Warning>
+
+## Les deux erreurs dont le parseur ne vous sauvera pas
+
+**`==` est un opérateur numérique.** Utilisez `equals` pour les chaînes :
+
+```
+vendor1:from:equals:MyBrand      correct
+vendor1:from:==:MyBrand          échec de parsing
+```
+
+**`matches` est ancrée, `startsWith` est littéral.** `^61.*` correspond à un numéro entier ; un
+simple `61` non. Et `startsWith` compare du texte littéral — une expression régulière qu'on lui
+passe ne correspond à rien, silencieusement.
+
+## Une table minimale
+
+```ini
+# Point d'entrée. Types de message : 0=texte, 10=binaire, 11=UCS-2, 14=flash,
+# 17=push, 18=accusé de livraison.
+[default]
+MESSAGE:type:==:0
+MESSAGE:type:==:11
+MESSAGE:type:==:14
+MESSAGE:type:==:17
+MESSAGE:type:==:10
+smppserver.smpp:type:==:18
+
+[MESSAGE]
+vendor2:to:startsWith:614          # route mobile AU vers vendor2
+vendor2:from:equals:MyBrand        # route un ID d'expéditeur
+vendor2:product:equals:premium     # route un produit
+vendor1::default:                  # l'attrape-tout, EN DERNIER
+```
+
+<Warning>
+**L'attrape-tout se met à la fin.** Au-dessus des autres règles, il rend tout ce qui le suit
+inaccessible, et rien ne vous avertit — les règles parsent bien, elles ne s'exécutent tout
+simplement jamais.
+</Warning>
+
+`product` vient du `system_type` sur le bind SMPP du client, retombant sur le `product` du
+credential. Les appelants HTTP utilisent toujours la valeur du credential.
+
+## Groupes de fournisseurs
+
+Un groupe est un autre nom vers lequel une règle peut envoyer. Au lieu de nommer un fournisseur, la
+règle nomme un groupe et le groupe choisit un membre — **en sautant tout membre suspendu ou
+n'acceptant pas**, ce qui est le failover qu'une règle à cible unique ne peut pas faire.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Politique | Choisit |
+| :--- | :--- |
+| `round-robin` *(défaut)* | Le membre suivant à tour de rôle |
+| `weighted` | En proportion des poids |
+| `failover` | Toujours le premier membre en service, dans l'ordre écrit |
+
+<Warning>
+**Les blocs de groupe doivent venir avant le premier en-tête `[table]`.** À l'intérieur d'un bloc de
+table, une ligne de membre ne correspond à rien et est ignorée silencieusement.
+
+Un poids n'est lu que par `weighted`. En définir un sur les deux autres ne change rien, et la
+passerelle le dit en WARN plutôt que de vous laisser croire qu'un partage se produit.
+</Warning>
+
+## Tables de routage au moindre coût
+
+Une table marquée `->function(LCR)` se comporte différemment : au lieu de s'arrêter à la première
+règle qui correspond, **toutes** les règles qui correspondent sont des candidats et le fournisseur
+avec le tarif le moins cher dans `rates.conf` gagne.
+
+L'ordre des règles est donc sans importance dans une table LCR — les règles sont des alternatives,
+pas une chaîne de repli.
+
+- Les fournisseurs en panne ou n'acceptant pas sont ignorés, donc le suivant le moins cher porte le
+  trafic.
+- Un fournisseur **sans tarif correspondant** n'est utilisé que si rien d'autre ne correspond, donc
+  une ligne de tarif manquante dégrade plutôt qu'elle ne bloque.
+- Les règles qui pointent vers une autre table sont **ignorées** à l'intérieur d'une table LCR.
+
+Voir [Routage au moindre coût](/platform/routing/least-cost).
+
+## Filtres
+
+Une règle peut référencer un filtre nommé de la bibliothèque de filtres au lieu d'écrire ses
+conditions en ligne.
+
+<Warning>
+**Un filtre manquant ou désactivé saute chaque règle qui le référence**, plutôt que de charger la
+règle avec moins de conditions. Retirer une condition rendrait la règle correspondante à *plus* de
+trafic, donc échouer ainsi serait silencieux et router les mauvaises choses.
+
+C'est pourquoi désactiver un filtre peut faire correspondre une règle à **moins** de trafic, et
+pourquoi le correctif n'est jamais « simplement retirer la condition ».
+</Warning>
+
+En mode base de données, ce fichier n'est pas lu après le démarrage ; les mêmes données vivent
+dans `app_route_table`, `app_route_rule` et leurs tables de condition. Voir
+[Base de données](/reference/config/database).

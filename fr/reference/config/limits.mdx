@@ -1,0 +1,121 @@
+---
+title: "Limites et refus"
+description: "Capacités de files, plafonds de débit par compte, bornes de lot, et les trois interrupteurs qui transforment une mauvaise configuration silencieuse en une bruyante."
+---
+
+## Limites de files
+
+| Propriété | Portée | Défaut | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | globale | `0` (illimitée) | Le nombre maximal de messages que retiendront la file du routeur et chaque file de worker sortant. |
+| `inQueue.capacity` | par listener | `0` (illimitée) | Le nombre maximal de messages qu'un listener SMPP retiendra en attente d'écriture dans le magasin. |
+
+**Pourquoi elles existent.** La passerelle répond à une soumission *avant* de la router, donc chaque
+message dans ces files a déjà été accepté et facturé. Sans limite, un fournisseur qui cesse
+d'accepter combiné à un listener qui continue d'accepter fait grossir le tas jusqu'à ce que la JVM
+soit tuée — et chaque message en file meurt avec elle, aucun remboursé, aucun enregistré autrement
+que comme PENDING.
+
+**Ce qu'une limite change.** Seules les deux entrées refusent. À l'intérieur de la passerelle, une
+file pleine reste de la contre-pression, et le routeur qui attend sur une file de worker pleine est
+le routeur qui va à la vitesse que le fournisseur peut prendre. À une entrée, il y a un client qui
+maintient une connexion ouverte, donc attendre bloquerait cette session plutôt que de la ralentir :
+
+| Entrée | Quand la file est pleine |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` avec `ESME_RMSGQFUL` (`0x14`). Rien n'est facturé — le refus a lieu avant que le message soit accepté. |
+| REST | `503` avec `queueFull` dans `cdr_rejected`. Tout ce qui a été déjà facturé est remboursé, car le chemin REST facture avant de publier. |
+
+<Note>
+**Choisir un nombre.** Il n'y a pas de défaut car une limite est une affirmation sur votre propre
+trafic et votre propre tas. Trop bas refuse des messages qui auraient été livrés ; trop haut et il ne
+se déclenche jamais avant que la JVM ne le fasse.
+
+Partez de combien de messages vous êtes prêt à retenir pour un fournisseur devenu silencieux, et
+vérifiez d'abord la profondeur sous charge normale — `router_queue` et le `queue_depth` de chaque
+worker sont sur [`/ops/health`](/reference/management/endpoints), avec la limite affichée à côté une
+fois qu'elle est fixée.
+</Note>
+
+## Limites d'entrée HTTP
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.restapi.maxRate.default` | `0` | Messages par seconde par compte de facturation. `0` est illimité. |
+| `smsg.restapi.maxRate.<accountId>` | *(non défini)* | Plafond pour un compte, surchargeant le défaut. |
+| `quarkus.http.limits.max-body-size` | `1M` | Plus grand corps de requête accepté. |
+| `quarkus.http.read-timeout` | `60S` | Combien de temps une requête peut mettre à arriver. |
+| `quarkus.http.idle-timeout` | `30M` | Combien de temps une connexion inactive est maintenue. |
+
+Clé sur le **compte**, pas sur le credential : un compte peut porter plusieurs logins, et une clé par
+login permettrait à un client de relever son propre plafond en en créant un autre.
+
+Le contrôle s'exécute avant que le message soit tarifé ou facturé, donc un message refusé n'est
+jamais facturé. L'appelant reçoit `429`, délibérément pas `403` — rien à propos de la requête ou du
+credential n'est faux.
+
+<Warning>
+Compté **par processus**. Un déploiement multi-instances autorise ce débit sur chaque instance, donc
+le plafond effectif est le débit multiplié par le nombre d'instances. C'est une garde contre un
+émetteur en fuite, pas un quota distribué.
+
+Le listener SMPP a son propre plafond (`conf.maxRate.default`) et les deux ne se suivent pas.
+Réglez les deux quand la limite doit être à l'échelle de la passerelle.
+</Warning>
+
+## Limites de lot
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.restapi.batch.max.messages` | `10000` | Plus grande taille en laquelle un lot peut s'étendre, en comptant les **destinations** plutôt que les entrées. |
+| `smsg.restapi.batch.concurrency` | `4` | Combien de lots tournent en même temps. Dimensionné au démarrage, donc un changement nécessite un redémarrage. |
+| `smsg.restapi.batch.rate.per.second` | `0` | Plafond de vitesse d'alimentation d'un lot dans le routeur. `0` est sans cadence. |
+| `smsg.restapi.batch.queue.highwater` | `100000` | Profondeur de file du routeur à laquelle l'expansion des lots se met en pause et attend qu'elle se vide. |
+
+Même raisonnement que pour les limites de files : la file du routeur est illimitée par défaut et ne
+peut pas repousser, donc un lot non plafonné est une manière d'épuiser le tas.
+
+## Refus de produit et de tarification
+
+Trois interrupteurs, **tous éteints par défaut**, qui transforment une mauvaise configuration
+silencieuse en une bruyante.
+
+| Propriété | Portée | Défaut | Description |
+| :--- | :--- | :--- | :--- |
+| `conf.product.required` | par listener | `false` | Refuse un bind dont le produit résolu est vide ou ne nomme aucune ligne `app_product` activée. |
+| `smsg.restapi.product.required` | globale | `false` | Le jumeau REST, vérifié à la soumission puisqu'il n'y a pas de bind. |
+| `smsg.rating.unrated.refuse` | globale | `false` | Refuse un message qui n'a correspondu à aucune règle de tarif vente, au lieu de l'accepter et de ne rien facturer. |
+
+<Warning>
+Lisez ceci avant d'en activer un : **chacun convertit du trafic qui passe aujourd'hui en trafic qui
+est refusé.**
+</Warning>
+
+**Pourquoi ils existent.** Un produit non défini est un état supporté qui envoie des messages
+gratuitement. `RateSnapshot.rulesFor` court-circuite un produit null vers le seul bucket any-product,
+donc un message sans produit ne peut jamais atteindre une règle avec portée produit. Rien ne
+correspond, le message reste non tarifé, et le débit de crédit retourne tôt. Sur un compte dont
+toutes les règles de tarif portent un produit, c'est la facture entière.
+
+**`system_type` est le trou qu'un contrôle non-vide ne fermerait pas.** Sur un bind SMPP, il se
+résout *au-dessus* du produit du credential et c'est du texte libre validé nulle part, donc un
+client qui bind `prem` au lieu de `premium` passe tout test non-vide et atterrit dans exactement le
+même état non tarifé. C'est pourquoi le contrôle est l'appartenance au catalogue plutôt que la
+présence d'une valeur.
+
+<Note>
+**Le mode fichier n'a pas de catalogue.** `credentials.yml` n'a rien pour en dériver un, donc la
+moitié appartenance est sautée et seule la moitié non-vide s'applique, journalisée une fois par
+chargement de configuration en nommant le listener. C'est le seul endroit où la fonctionnalité est
+plus faible qu'elle en a l'air.
+</Note>
+
+`conf.product.required` est vérifié au **bind**, après authentification, car le produit vit sur le
+contexte de session. `smsg.restapi.product.required` s'applique aussi à `/secure/rate`, pour qu'un
+devis ne puisse pas tarifer un trafic qu'un envoi refuserait.
+
+Avant d'activer l'un ou l'autre drapeau produit, le rapport pré-vol du panneau de contrôle liste
+chaque credential activé qui cesserait de bind. Sa limite honnête est indiquée sur cette page : pour
+SMPP il vérifie le repli du credential, et un `system_type` mal tapé lui est invisible.
+
+Les codes de refus sont `0x40F` et `0x418` — voir [Codes de statut](/reference/smpp/status-codes).

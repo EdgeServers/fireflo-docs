@@ -1,0 +1,86 @@
+---
+title: "Relevés et limites"
+description: "Où vit votre historique d'utilisation, ce que contient un call record, et les deux plafonds qui s'appliquent à votre trafic."
+---
+
+## Votre historique d'utilisation
+
+Chaque message produit un **call record** : ce que vous avez envoyé, quand, ce qu'il a coûté, et
+comment il s'est terminé. Votre relevé est cet historique agrégé par période.
+
+Les deux vivent dans le portail client plutôt que sur l'API. Voir
+[le portail](/developers/portal/messages-and-statement) pour les lire et les exporter.
+
+<Tip>
+Il n'existe **pas d'endpoint REST pour votre historique de messages**. `/secure/balance` vous donne
+le nombre courant ; le portail donne l'historique et un export CSV. Si vous avez besoin de
+l'historique dans vos propres systèmes, exportez-le plutôt que d'essayer de le reconstruire depuis
+les accusés. Ce sont précisément les accusés que vous n'avez pas reçus qui vous manqueraient.
+</Tip>
+
+## Ce que contient un enregistrement
+
+| | |
+| :--- | :--- |
+| Le message | Destination, sender ID, segments, encodage |
+| L'argent | Tarif unitaire, nombre de segments, total |
+| L'issue | État final et l'instant où il a été atteint |
+| Les TLVs | **Ceux que vous avez envoyés** — pas ce qu'un vendor a ajouté en aval |
+
+Vous voyez votre propre côté du message. Quel fournisseur l'a transporté, et ce qu'il y a ajouté,
+ne vous appartient pas. C'est la même règle que celle du champ `vendor` sur un accusé.
+
+## Segments, pas messages
+
+**Vous êtes facturé par segment.** Un enregistrement montre le nombre de segments, et le total est
+le tarif unitaire multiplié par lui.
+
+C'est là que se résout habituellement une facture inattendue : un corps qui a dépassé 160 caractères
+GSM-7, ou une seule apostrophe typographique qui a forcé tout le message en UCS-2 et abaissé la
+capacité à 70. Voir [Encodage et segments](/developers/send/encoding-and-segments).
+
+## Les deux plafonds
+
+Ce sont deux choses différentes qui produisent des échecs différents :
+
+| Limite | Dépassée par | Vous obtenez |
+| :--- | :--- | :--- |
+| **Messages par seconde** | Envoi trop rapide | `429`, ou `ESME_RTHROTTLED` en SMPP |
+| **Crédit** | Envoi supérieur à ce que vous avez financé | `402 Insufficient credit` |
+
+<Warning>
+**Aucun des deux ne fournit d'en-tête indiquant quand réessayer.** Il n'y a pas de `Retry-After`
+sur un `429`. Faites un backoff exponentiel avec du jitter, car un intervalle fixe partagé entre
+plusieurs workers les resynchronise sur la rafale suivante.
+
+Et un `402` ne devrait pas être réessayé du tout. Un retry ne peut pas ajouter de crédit ; il
+transforme juste une alerte en des milliers.
+</Warning>
+
+## Les refus ne coûtent rien
+
+Chaque refus — expéditeur non approuvé, template non correspondant, TLV manquant, crédit
+insuffisant — vous laisse non débité, ou remboursé si le débit avait déjà été pris.
+
+Bon à savoir pour le rapprochement : **le nombre de messages envoyés et le nombre facturé sont
+légitimement différents**, et les refus sont l'écart.
+
+Le cas qui surprend est celui d'un refus de contenu multipart, où chaque segment a été acquitté
+avant que le message soit abandonné. Vous voyez des acquittements pour des segments qui ont ensuite
+été remboursés.
+
+## Ce qu'un `500` signifie pour votre facture
+
+`500 Cannot send message` inverse tout débit. C'est pourquoi c'est la seule erreur serveur sûre à
+réessayer : le retry coûte un message, pas deux.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Solde et devis" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Vérifier le crédit, et tarifer un message avant de l'envoyer.
+  </Card>
+  <Card title="FAQ facturation" icon="circle-question" href="/developers/billing/faq">
+    Rapprochement, remboursements et messages contestés.
+  </Card>
+</CardGroup>

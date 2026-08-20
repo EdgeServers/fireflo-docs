@@ -1,0 +1,118 @@
+---
+title: "Envoyer un message"
+description: "Les champs que vous utiliserez réellement, leur valeur par défaut, et les quatre qui changent ce qu'un message coûte ou s'il est accepté."
+---
+
+Le minimum est deux champs :
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes."
+}
+```
+
+Tout le reste a une valeur par défaut. Le tableau complet est sur
+[`/secure/send`](/reference/api/send). Cette page couvre ceux qui comptent en pratique.
+
+## Les champs courants
+
+| Champ | Défaut | Notes |
+| :--- | :--- | :--- |
+| `to` | — | **Requis.** Format international, entre guillemets. |
+| `content` | — | Requis sauf si vous envoyez `hex_content`. Jamais les deux. |
+| `from` | votre nom de login | Doit être approuvé, sinon `403`. |
+| `coding` | `0` | `8` pour tout ce qui sort du GSM-7. Divise votre capacité par deux. |
+| `dlr` | `no` | `yes` nécessite `dlr_url`. |
+| `dlr_url` | — | Où l'accusé est POSTé. |
+
+## Mettez le destinataire entre guillemets
+
+```json
+"to": "61491570006"    // correct
+"to": 61491570006      // JSON valide, et incorrect
+```
+
+Un numéro sans guillemets est un entier dès que le parseur le voit, donc **tout zéro initial est
+déjà perdu**. La passerelle ne peut pas le retrouver, et le message part vers un autre numéro ou
+nulle part.
+
+## Les quatre champs qui changent une issue
+
+<AccordionGroup>
+
+<Accordion title="from — le sender ID">
+L'omettre utilise votre nom de login, qui sur un compte imposé n'est habituellement **pas**
+approuvé. Donc "ça a marché sans `from` en test" et "ça échoue en production" sont le même fait vu
+deux fois.
+
+Voir [Sender IDs](/developers/send/sender-ids).
+</Accordion>
+
+<Accordion title="coding — ce que ça coûte">
+`0` vous donne 160 caractères. `8` vous en donne 70. Une seule apostrophe typographique dans votre
+texte force l'UCS-2 de toute façon, donc régler `coding` ne vous protège pas du coût. Normaliser
+votre ponctuation, si.
+
+Voir [Encodage et segments](/developers/send/encoding-and-segments).
+</Accordion>
+
+<Accordion title="product — contre quoi c'est tarifé">
+Pas du texte libre. Il tarifie le message contre un produit différent, tiré d'une liste
+d'autorisations que votre fournisseur maintient par login, et **la plupart des logins n'en ont
+aucun**. Nommer un produit non autorisé est `403`.
+
+La même liste régit `/secure/rate`, donc un devis et un envoi ne peuvent pas diverger sur ce que
+vous pouvez nommer.
+</Accordion>
+
+<Accordion title="validity_period — un entier, en minutes">
+Minutes pendant lesquelles l'opérateur doit continuer à essayer. **Un nombre entier, pas une chaîne
+de durée.** Une spécification plus ancienne le type comme une chaîne, et la passerelle refuse cela.
+
+```json
+"validity_period": 60     // correct
+"validity_period": "1h"   // 400
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Demander un accusé
+
+Deux champs, et les deux sont nécessaires. Régler l'un sans l'autre ne fait rien :
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+`dlr_level` choisit quels accusés vous recevez : `1` progression uniquement, `2` l'issue (défaut),
+`3` les deux.
+
+<Warning>
+**Le niveau 1 seul n'envoie pas l'issue.** Un client qui demande `1` et attend un état final
+attend pour toujours. Si vous voulez la progression *et* la réponse, demandez `3`.
+</Warning>
+
+## Envoyer du binaire
+
+`hex_content` prend le corps en octets hexadécimaux, décodés avec le charset de votre `coding`. Un
+nombre impair de caractères est un `400`.
+
+Envoyez `content` ou `hex_content`, jamais les deux.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Chaque champ" icon="list" href="/reference/api/send">
+    Valeurs par défaut, refus et paramètres avancés.
+  </Card>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Plusieurs messages en un appel, et planification.
+  </Card>
+</CardGroup>

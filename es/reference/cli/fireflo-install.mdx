@@ -1,0 +1,81 @@
+---
+title: "fireflo-install"
+description: "Los cinco verbos, las opciones que merece la pena conocer, y qué se niega a tocar cada verbo."
+---
+
+Instala y actualiza la **pasarela**. El panel de control tiene su propio instalador:
+[`fireflo-panel-install`](/reference/cli/fireflo-panel-install).
+
+## Los cinco verbos
+
+| Verbo | Hace | Nunca toca |
+| :--- | :--- | :--- |
+| `check` | ¿Está este host preparado? No cambia nada. | Todo |
+| `install` | Primera instalación: paquetes, usuario de servicio, directorios, artefacto, configuración, base de datos, unit systemd, firewall, smoke test | Un directorio de conf existente: se niega |
+| `update` | Reemplaza **solo el artefacto** | El directorio de conf |
+| `service` | Genera el script de arranque y la unit en una instalación existente, y la arranca | El directorio de conf |
+| `rollback` | Restaura el artefacto anterior | El directorio de conf |
+
+<Warning>
+**`install` se niega cuando ya existe un directorio de configuración**, en lugar de acuñar un
+segundo par de tokens operacionales sobre el primero. Si tiene configuración pero no servicio, el
+verbo que quiere es `service`, no `install`.
+</Warning>
+
+## Opciones que merece la pena conocer
+
+### Layout e identidad
+
+| Opción | Propósito |
+| :--- | :--- |
+| `--tenant NAME` | Nombra esta instancia. En `update`, `service` y `rollback` es una **búsqueda**: se encuentra la instalación con ese nombre y se usan sus propios paths, unit, cuenta y puertos, así que una actualización no puede apuntarse a la instancia equivocada por olvidar una bandera. |
+| `--vhost PATH` | Coloca la instancia en un virtualhost por cliente: `--tenant websmsc --vhost /home/websmsc` da `/home/websmsc/gateway`, con el panel al lado en `/home/websmsc/panel`. |
+| `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Rutas individuales. |
+| `--user` / `--group` / `--service-name` | La cuenta de servicio y el nombre de la unit. |
+
+Ambas units generadas montan un **tmpfs sobre `/home`** y solo vuelven a montar por bind el único
+virtualhost, así que una pasarela no puede ver el directorio home de ningún otro cliente.
+
+### Configuración y base de datos
+
+| Opción | Propósito |
+| :--- | :--- |
+| `--config-source file\|db` | Qué fuente arranca la instancia. |
+| `--db-*` | Detalles de la conexión de base de datos. |
+| `--bootstrap` / `--import` | Poblar una base de datos nueva, o importar una configuración de fichero existente. |
+| `--country` / `--country-code` / `--product` / `--rate` / `--decimals` / `--currency` | La primera tarifa. |
+
+### Comportamiento
+
+| Opción | Propósito |
+| :--- | :--- |
+| `--whitelist` / `--no-whitelist` | Si la comprobación de sender ID y contenido arranca activada. |
+| `--balance` / `--no-balance` | Si se impone el crédito prepago. |
+| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Puertos. Un rango permite al instalador elegir el siguiente puerto libre de listener. |
+| `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ para la ruta REST. |
+| `--log-backups` / `--log-retain-days` | Retención de logs, incluida la regla de `tmpfiles.d` que sega `httpapi.log`. |
+
+### Ejecutarlo
+
+| Opción | Propósito |
+| :--- | :--- |
+| `--yes` | No preguntar. |
+| `--dry-run` | Mostrar qué pasaría. |
+| `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Saltarse una fase. |
+| `--sudo` / `--no-sudo` | Escalada de privilegios. |
+
+<Note>
+**`--dry-run` muestra menos de lo que podría esperar.** No puede reportar qué instalaría un gestor
+de paquetes, ni qué encontraría una migración en una base de datos a la que no se ha conectado.
+Léalo como "las decisiones que tomaría este script", no como "todo lo que cambiaría en este host".
+</Note>
+
+## Lo que no instala
+
+El **panel de control**. Ese es `fireflo-panel-install`, y en un host nuevo ejecuta ambos.
+
+`--log-retain-days` escribe una regla de `tmpfiles.d` que borra logs rotados, sin tocar nunca los
+cuatro en vivo. **Instalar a mano significa organizar eso usted mismo.** Véase
+[Logging](/reference/config/logging).
+
+Véase [Instalación en un comando](/platform/install/one-command) para el recorrido.

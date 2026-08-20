@@ -1,0 +1,120 @@
+---
+title: "Uso y retención"
+description: "Los registros de llamada se borran según una ventana. usage_daily es lo que sobrevive, y la purga se niega a ejecutarse sin ello."
+---
+
+`cdr_submit` parte 1 es el **único** registro por mensaje de lo que se cobró, y se borra una vez
+pasa la ventana de retención.
+
+Sin un resumen eso significa que ningún extracto más antiguo que la ventana puede reemitirse, y el
+lado de consumo de cada conciliación desaparece. Por tanto cada cuenta añeja deriva en una
+discrepancia que nada puede explicar.
+
+## `usage_daily` es ese resumen
+
+Una fila por cuenta, por producto, por **día**.
+
+Diario en lugar de mensual, para que cualquier periodo sea un `SUM` sobre días: un mes de calendario,
+un trimestre, un rango arbitrario. Para siempre, sin una segunda tabla derivada que discrepe.
+
+```bash
+fireflo usage rollup --catch-up
+```
+
+Ejecútelo cada noche. Ejecutarlo dos veces no cambia nada que importe.
+
+## Las cifras facturables son finales; las de entrega no
+
+Esto es lo que hace seguro reejecutar el rollup.
+
+| Columnas | Estables cuando | Por qué |
+| :--- | :--- | :--- |
+| `price_total`, `cost_total` | **Inmediatamente** | La facturación es sobre `submitted`, que deja de moverse cuando lo hace el día |
+| Columnas de entrega | Nunca del todo | Los acuses siguen llegando |
+
+El rollup es idempotente y reformula **solo** las columnas de entrega. El dinero de un día terminado
+queda liquidado en el momento en que se acaba el día.
+
+## Un día de facturación es un día local
+
+`FIREFLO_BILLING_ZONE` decide dónde empieza un día, y se lee de `app_config` para que el rollup y el
+panel concuerden.
+
+<Warning>
+**En UTC, las últimas cinco horas y media de la tarde de un cliente indio caen en la línea del día
+siguiente.** Cada cifra diaria, cada frontera de mes y cada factura queda entonces desviada por ese
+tráfico.
+
+Establezca la zona antes del primer rollup, no después. Reformular días ya resumidos significa
+borrarlos y recomputarlos.
+</Warning>
+
+## La purga se niega a borrar lo que nada ha resumido
+
+```bash
+FIREFLO_CDR_PURGE=true fireflo usage purge
+```
+
+Si cualquier día que borraría **no tiene fila `usage_daily`**, rechaza toda la ejecución y nombra
+los días.
+
+**No es un warning ni un salto.** Borrar un día sin resumir destruye el registro de consumo
+permanentemente, y eso tiene que ser estructuralmente imposible en lugar de una cuestión de ejecutar
+las cosas en el orden correcto.
+
+<Tip>
+`rollup` es deliberadamente un **comando separado**. Una purga que hiciera rollup en silencio
+primero significaría que un bug del rollup se descubre con el comando que borra la evidencia.
+</Tip>
+
+`FIREFLO_CDR_KEEP_DAYS` establece la ventana, por defecto **90**.
+
+## Dos ventanas, dos propósitos
+
+| Tabla | Retenida por | Perderla cuesta |
+| :--- | :--- | :--- |
+| `cdr_submit`, `cdr_final` | `FIREFLO_CDR_KEEP_DAYS`, por defecto 90 | Detalle por mensaje, pero no los totales, si el rollup se ejecutó |
+| `cdr_interim` | `smsg.cdr.interim.retention.days`, por defecto 30 | **Un informe, no una factura**: es historia de calidad de vendor |
+
+`cdr_interim` se poda con su propia ventana más corta precisamente porque responde a una pregunta
+sobre tráfico *reciente*: con qué rapidez informa un vendor, y si informa en absoluto.
+
+## Una política de retención no es opcional
+
+Los registros de llamada contienen **direcciones**: tienen que hacerlo, porque la tarificación y la
+resolución de disputas las necesitan. Si el registro del cuerpo del mensaje está activado, contienen
+también contenido.
+
+<Warning>
+Establezca una política de retención deliberadamente en lugar de heredar el valor por defecto.
+Noventa días de números de destino, y posiblemente de códigos de un solo uso, existen en cada copia
+de seguridad que haga de esa base de datos.
+</Warning>
+
+## Un orden de operaciones que funciona
+
+<Steps>
+  <Step title="Establezca la zona de facturación antes de cualquier tráfico">
+    Decide dónde cae cada frontera de día.
+  </Step>
+  <Step title="Haga rollup cada noche">
+    `fireflo usage rollup --catch-up`, en un cron.
+  </Step>
+  <Step title="Verifique que el rollup cubre la ventana antes de purgar">
+    La purga comprueba esto y rechaza. Pero saber que pasó es mejor que descubrir que rechazó.
+  </Step>
+  <Step title="Purgue con su propia planificación">
+    Tras `FIREFLO_CDR_PURGE=true`, que existe para que no pueda ocurrir por accidente.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Registros de llamada" icon="database" href="/platform/billing/cdrs">
+    Las tres tablas y qué significa cada columna.
+  </Card>
+  <Card title="Extractos" icon="file-invoice" href="/platform/billing/statements">
+    Cerrar un periodo y emitir una factura.
+  </Card>
+</CardGroup>

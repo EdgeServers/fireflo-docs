@@ -1,0 +1,108 @@
+---
+title: "FAQ de instalación"
+description: "Las preguntas que surgen entre un host recién instalado y un gateway funcionando."
+---
+
+<AccordionGroup>
+
+<Accordion title="Configuración por archivo o por base de datos: ¿cuál elijo y puedo cambiar de opinión?">
+Cualquiera. Ninguna está más soportada.
+
+**Archivos** si versionas la configuración y la despliegas con el resto de tu infraestructura.
+**Base de datos** si quieres que el panel de control edite algo. En modo archivo no hay nada que
+editar.
+
+Puedes cambiar de opinión, y `fireflo import` es el camino. **Conserva los archivos**: el gateway los lee
+hasta que reinicie con `FIREFLO_CONFIG_SOURCE=db`, y volver atrás es esa variable de nuevo. Importa cada
+sujeto antes de cambiar, no solo aquel en el que estabas trabajando. El interruptor mueve los cuatro dominios a
+la vez.
+
+Consulta [Elegir una fuente](/platform/install/configuration-source).
+</Accordion>
+
+<Accordion title="¿Por qué el gateway se niega a arrancar sobre una base de datos vacía?">
+Porque no hay tabla de enrutamiento, y un gateway que no puede enrutar no puede hacer nada.
+
+El mensaje nombra una estructura interna en lugar de la fila que falta:
+`no default routing table in new targets!`. Que se lee como un bug y no lo es.
+
+`db migrate` crea las tablas y deja cada una vacía. `fireflo bootstrap` escribe lo mínimo que
+arrancará. Consulta [Primera configuración](/platform/install/first-configuration).
+</Accordion>
+
+<Accordion title="¿Por qué dos tokens operacionales en lugar de uno?">
+Porque leer el estado del gateway no debe llevar la capacidad de detener a un proveedor. Una sonda de monitorización o un
+dashboard de solo lectura obtiene `smsg.ops.token` y puede ver el estado de binds, profundidades de cola y throughput;
+no puede desactivar nada.
+
+**Establecer ambos a la misma cadena no simplifica la configuración. Apaga los controles.**
+Lo mismo hace dejar el token admin sin establecer. En cualquier caso los verbos de control responden 404.
+</Accordion>
+
+<Accordion title="Obtengo un 404 del puerto de gestión. ¿El token está mal o el endpoint está apagado?">
+El gateway no te lo dirá, deliberadamente. Un token equivocado obtiene el mismo 404 que un endpoint deshabilitado,
+así que nada anuncia que hay un secreto que valga la pena adivinar.
+
+Cuatro cosas lo producen: token equivocado, token admin sin establecer, token admin igual al token de lectura, o una ruta
+que no existe. **Comprueba los tokens en ambos lados antes de concluir que el gateway está caído.**
+</Accordion>
+
+<Accordion title="¿Por qué --dry-run muestra menos de lo que esperaba?">
+Reporta las decisiones que el instalador tomaría. No puede reportar lo que un gestor de paquetes traería,
+ni lo que una migración encontraría en una base de datos a la que no se ha conectado.
+
+Léelo como "las elecciones", no "todo lo que cambiaría en este host".
+</Accordion>
+
+<Accordion title="install se niega porque existe un directorio de configuración. ¿Y ahora qué?">
+Usa **`service`**, no `install`.
+
+`install` se niega en lugar de acuñar un segundo par de tokens operacionales encima del primero,
+lo cual dejaría al panel de control autenticándose contra tokens que el gateway ya no tiene. `service`
+genera la unit sobre la configuración existente y la arranca.
+</Accordion>
+
+<Accordion title="¿Puedo correr dos instancias en un host?">
+Sí. Como despliegues **independientes**, cada uno con su propia base de datos y puertos. `--tenant NAME` nombra la
+misma instancia a ambos instaladores, y en `update` es una búsqueda en lugar de una disposición, así que una actualización
+no puede apuntarse a la instancia equivocada olvidando un flag.
+
+Consulta [Varias instancias](/platform/install/multiple-instances).
+
+**Dos instancias contra una base de datos es una pregunta diferente, y la respuesta es no.** La mayoría de los recibos
+de entrega se perderían. Consulta [Clustering](/platform/install/clustering).
+</Accordion>
+
+<Accordion title="Java 25 y Node 22: ¿por qué no los paquetes de la distribución?">
+Ubuntu 24.04 trae `openjdk-21` y Node 18. El build del gateway apunta a release 25 y **no correrá
+en 21**; el panel es Next.js 16, que no correrá en Node 18.
+
+Adoptium y NodeSource, ambos en [Instalar a mano](/platform/install/by-hand).
+</Accordion>
+
+<Accordion title="¿Qué significa el código de salida 4 de verify?">
+**El despliegue está sano; los datos propios de esta instalación no lo están.**
+
+El artefacto está completo, Java es lo bastante nuevo, ambos puertos responden y los tokens son separados. Pero
+no hay nada a lo que enrutar, o no hay pricing, o no hay logins. Es la respuesta esperada inmediatamente después
+de una instalación `--bootstrap` y antes de que añadas un proveedor.
+
+`0` bien, `1` fallado, `2` rechazado o mal usado.
+</Accordion>
+
+<Accordion title="Nada elimina httpapi.log. ¿Es correcto?">
+Sí, y es el único límite que nada en el gateway aplica. Quarkus lo rota diariamente y no ofrece
+ajuste de retención que lo acompañe, así que escribe un archivo por día y conserva cada uno para siempre.
+
+`fireflo-install --log-retain-days` escribe una regla `tmpfiles.d` que elimina archivos rotados, sin nunca
+tocar los cuatro en vivo. **Una instalación construida a mano debe arreglárselas para hacerlo por sí misma.**
+</Accordion>
+
+<Accordion title="¿Necesito RabbitMQ?">
+Solo si los mensajes enviados deben sobrevivir a un reinicio del gateway. Sin él la cola del router está en memoria
+y un reinicio pierde lo que aún no se había entregado a un proveedor.
+
+Todo lo demás funciona sin él.
+</Accordion>
+
+</AccordionGroup>

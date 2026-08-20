@@ -1,0 +1,115 @@
+---
+title: "Límites y rechazos"
+description: "Capacidades de cola, techos de tasa por cuenta, límites de lote y los tres interruptores que convierten una mala configuración silenciosa en una ruidosa."
+---
+
+## Límites de cola
+
+| Propiedad | Ámbito | Predeterminado | Descripción |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | global | `0` (sin límite) | El máximo de mensajes que retendrán la cola del router y la cola de cada worker saliente. |
+| `inQueue.capacity` | por listener | `0` (sin límite) | El máximo de mensajes que un listener SMPP retendrá esperando a ser escritos al almacén de mensajes. |
+
+**Por qué existen.** La pasarela responde a un envío *antes* de enrutarlo, así que cada mensaje en estas
+colas ya ha sido aceptado y cobrado. Sin límite, un proveedor que deja de aceptar más un
+listener que sigue aceptando hace crecer el heap hasta que la JVM es terminada. Y todo mensaje en cola muere
+con ella, ninguno reembolsado, ninguno registrado como algo distinto a PENDING.
+
+**Qué cambia un límite.** Solo los dos ingresos rechazan. Dentro de la pasarela una cola llena sigue siendo
+contrapresión, y el router esperando a una cola de worker llena es el router yendo a la velocidad que el
+proveedor puede aceptar. En un ingreso hay un cliente manteniendo una conexión abierta, así que esperar detendría
+esa sesión en lugar de ralentizarla:
+
+| Ingreso | Cuando la cola está llena |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` con `ESME_RMSGQFUL` (`0x14`). No se cobra nada. El rechazo ocurre antes de que el mensaje sea aceptado. |
+| REST | `503` con `queueFull` en `cdr_rejected`. Cualquier cargo ya realizado se reembolsa, porque la ruta REST cobra antes de publicar. |
+
+<Note>
+**Elegir un número.** No hay predeterminado porque un límite es una declaración sobre tu propio tráfico y
+tu propio heap. Demasiado bajo rechaza mensajes que se habrían entregado; demasiado alto y nunca se dispara
+antes que la JVM.
+
+Empieza por cuántos mensajes estás dispuesto a retener para un proveedor que se ha quedado en silencio, y comprueba la
+profundidad bajo carga normal primero. `router_queue` y el `queue_depth` de cada worker están en
+[`/ops/health`](/reference/management/endpoints), con el límite al lado una vez que se establece uno.
+</Note>
+
+## Límites del ingreso HTTP
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.restapi.maxRate.default` | `0` | Mensajes por segundo por cuenta de facturación. `0` es ilimitado. |
+| `smsg.restapi.maxRate.<accountId>` | *(sin establecer)* | Techo para una cuenta, sobrescribiendo el predeterminado. |
+| `quarkus.http.limits.max-body-size` | `1M` | Cuerpo de petición más grande aceptado. |
+| `quarkus.http.read-timeout` | `60S` | Cuánto puede tardar una petición en llegar. |
+| `quarkus.http.idle-timeout` | `30M` | Cuánto se mantiene una conexión inactiva. |
+
+Indexado por **cuenta**, no por credencial: una cuenta puede tener varios logins, y una clave por login
+dejaría que un cliente subiera su propio techo creando otro.
+
+La comprobación se ejecuta antes de que el mensaje sea tarificado o cobrado, así que un mensaje rechazado nunca se factura. El
+llamante recibe `429`, deliberadamente no `403`. Nada sobre la petición o la credencial está mal.
+
+<Warning>
+Contado **por proceso**. Un despliegue multi-instancia permite esta tasa en cada instancia, así que el
+techo efectivo es la tasa por el número de instancias. Es una salvaguarda contra un remitente descontrolado, no una
+cuota distribuida.
+
+El listener SMPP tiene su propio techo (`conf.maxRate.default`) y los dos no se rastrean entre sí.
+Establece ambos cuando el límite deba ser para toda la pasarela.
+</Warning>
+
+## Límites de lote
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.restapi.batch.max.messages` | `10000` | Lo más grande que un lote puede expandirse, contando **destinos** en lugar de entradas. |
+| `smsg.restapi.batch.concurrency` | `4` | Cuántos lotes se ejecutan a la vez. Dimensionado al arranque, así que un cambio necesita un reinicio. |
+| `smsg.restapi.batch.rate.per.second` | `0` | Techo de cuán rápido se alimenta un lote al router. `0` sin ritmo. |
+| `smsg.restapi.batch.queue.highwater` | `100000` | Profundidad de la cola del router en la que la expansión de lote pausa y espera a que drene. |
+
+Mismo razonamiento que los límites de cola: la cola del router es sin límite por defecto y no puede empujar de vuelta, así que
+un lote sin tope es una forma de agotar el heap.
+
+## Rechazos de producto y tarificación
+
+Tres interruptores, **todos apagados por defecto**, que convierten una mala configuración silenciosa en una ruidosa.
+
+| Propiedad | Ámbito | Predeterminado | Descripción |
+| :--- | :--- | :--- | :--- |
+| `conf.product.required` | por listener | `false` | Rechaza un bind cuyo producto resuelto está en blanco o no nombra ninguna fila `app_product` habilitada. |
+| `smsg.restapi.product.required` | global | `false` | El gemelo REST, comprobado al enviar ya que no hay bind. |
+| `smsg.rating.unrated.refuse` | global | `false` | Rechaza un mensaje que no coincidió con ninguna regla de tarifa de venta, en lugar de aceptarlo y cobrar nada. |
+
+<Warning>
+Lee esto antes de encender cualquiera de ellos: **cada uno convierte tráfico que fluye hoy en tráfico que es
+rechazado.**
+</Warning>
+
+**Por qué existen.** Un producto sin establecer es un estado soportado que envía mensajes gratis.
+`RateSnapshot.rulesFor` cortocircuita un producto nulo al cubo de cualquier producto solo, así que un
+mensaje sin producto nunca puede alcanzar una regla con ámbito de producto. Nada coincide, el mensaje se queda
+sin tarificar, y el cargo de crédito retorna temprano. En una cuenta cuyas reglas de tarifa todas llevan un producto, esa
+es la factura completa.
+
+**`system_type` es el agujero que una comprobación de no-vacío no habría cerrado.** En un bind SMPP resuelve
+*por encima* del producto de la credencial y es texto libre validado en ningún sitio, así que un cliente que conecta con `prem`
+en lugar de `premium` pasa cualquier test de no-vacío y aterriza en exactamente el mismo estado sin tarificar. Por eso
+la comprobación es pertenencia al catálogo en lugar de presencia de un valor.
+
+<Note>
+**El modo archivo no tiene catálogo.** `credentials.yml` no tiene nada de donde derivar uno, así que la mitad de
+pertenencia se omite y solo aplica la mitad de no-vacío, registrado una vez por carga de configuración nombrando el
+listener. Este es el único lugar donde la característica es más débil de lo que suena.
+</Note>
+
+`conf.product.required` se comprueba en el **bind**, tras la autenticación, porque el producto vive en el
+contexto de sesión. `smsg.restapi.product.required` también aplica a `/secure/rate`, así que una cotización no puede
+tarificar tráfico que un envío rechazaría.
+
+Antes de activar cualquier flag de producto, el informe pre-flight del panel de control lista cada credencial habilitada
+que dejaría de hacer bind. Su límite honesto se declara en esa página: para SMPP comprueba el
+fallback de la credencial, y un `system_type` mal escrito es invisible para él.
+
+Los códigos de rechazo son `0x40F` y `0x418`. Consulta [Códigos de estado](/reference/smpp/status-codes).

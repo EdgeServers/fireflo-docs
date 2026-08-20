@@ -1,0 +1,93 @@
+---
+title: "TLVs na prática"
+description: "De onde uma tag pode vir, a ordem em que compõem, e como descobrir quais linhas aprovadas têm tags que nada fornecerá."
+---
+
+A gramática está em [Declarações de TLV](/reference/smpp/tlvs). Leia primeiro se `1400` versus
+`0x1400` for novidade. Esta página é sobre operá-los.
+
+## Uma tag pode vir de quatro lugares
+
+<Steps>
+  <Step title="O submit_sm do cliente">
+    Extraído somente se o `registered.tlvs.submit` do listener a declara. **Tags não declaradas
+    são descartadas**, não passadas adiante.
+  </Step>
+  <Step title="O defaultTlvs da credencial dele">
+    Preenche tags que a mensagem não carregava.
+  </Step>
+  <Step title="O carimbo do whitelist">
+    No modo `assign`, preenche uma tag que a mensagem não tem. No modo `replace`, **sobrescreve**
+    o que o cliente enviou — e essa sobrescrita *é* a aprovação.
+  </Step>
+  <Step title="O default.tlvs.submit do vendor">
+    Preenche qualquer coisa ainda não definida no momento do envio.
+  </Step>
+</Steps>
+
+**Precedência é mensagem > credencial > vendor.** Defaults só preenchem lacunas. A única exceção é
+o carimbo de whitelist no modo `replace`, que deve vencer.
+
+## Duas verificações mandatórias, em pontos diferentes
+
+| Verificação | Roda | Falha |
+| :--- | :--- | :--- |
+| Listener `mandatory.tlvs.submit` | Na entrada, após defaults da credencial e qualquer carimbo | `0xC3` ao cliente |
+| **Vendor** `mandatory.tlvs.submit` | Contra o que efetivamente vai para a wire | Recibo FAILED, reembolso, `cdr_rejected` — **não re-roteado** |
+
+<Warning>
+A verificação de vendor roda **depois** que `registered.tlvs.submit` filtrou. Requerer uma tag que
+não é também registered nunca pode ser satisfeito — o gateway avisa sobre esse par no load, e vale a
+pena ler o log após adicionar uma tag mandatória.
+</Warning>
+
+## Descobrindo o que faltará antes que falte
+
+O relatório de cobertura de TLV do painel de controle diz, **por linha aprovada**, quais tags
+mandatórias nada fornecerá.
+
+Esse relatório é o que torna o modo default de stamping (`off`) descobrível em vez de meramente
+silencioso. Default como `assign` começaria a escrever TLVs em pacotes cruzando listeners que nunca
+escreveram nenhum — uma mudança silenciosa no que chega a uma operadora.
+
+## A falha que efetivamente aconteceu
+
+<Warning>
+Nem toda configuração é lida por listener. Uma que não é mantém sua forma pura e lê um global que
+ninguém configura — portanto retorna seu default codificado não importa como você configure.
+
+`whitelist.tlvs.replace` foi entregue assim uma vez. Lia false em todo listener não importa como fosse
+configurado, portanto TLVs de um template aprovado **nunca eram carimbados em SMPP** — silenciosamente,
+porque não carimbar parece exatamente igual a não ter nada a carimbar.
+
+Se uma configuração de TLV por listener parece não fazer nada, essa é a primeira coisa a verificar.
+</Warning>
+
+## O lado do cliente
+
+Um cliente pode ver os TLVs **que ele enviou** em suas próprias mensagens, e pode propor novas
+definições de tag para um operador aprovar. Ele nunca vê o que um vendor adicionou downstream.
+
+O call record mantém três conjuntos — recebido, enviado e o que o whitelist carimbou — portanto uma
+disputa sobre o que chegou à operadora é respondível em vez de argumentada.
+
+## Um caso trabalhado: DLT indiano
+
+O registered entity id pertence à **credencial**, porque é uma propriedade do cliente e não de
+uma mensagem qualquer:
+
+```yaml
+defaultTlvs:
+  peid_0x1400: "1101234567890123456"
+```
+
+O template id varia por mensagem e é geralmente carimbado pelo whitelist na aprovação, ou fornecido
+pelo cliente:
+
+```properties
+outSms.default.default.tlvs.submit = tmid_0x1402=1102000000000012345
+outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+Com ambos mandatórios, uma mensagem que não resolve nenhum é recusada na entrada com `0xC3` em vez
+de rejeitada pela operadora depois — o que é o ponto de verificar.

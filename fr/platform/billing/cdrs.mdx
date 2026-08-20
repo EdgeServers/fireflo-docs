@@ -1,0 +1,176 @@
+---
+title: "Enregistrements d'appels"
+description: "Trois tables append-only, pourquoi les accusés de progression vivent à l'écart des résultats, et les colonnes qui sont NULL plutôt que zéro."
+---
+
+Trois types d'enregistrements, **tous en append-only**. Rien n'est jamais mis à jour, ce qui rend
+les accusés de livraison concurrents sûrs et permet à un message re-routé de conserver les deux
+tentatives au lieu d'écraser la première.
+
+| Table | Une ligne par |
+| :--- | :--- |
+| **`cdr_submit`** | Segment soumis, écrit lorsqu'il passe sur le fil |
+| **`cdr_final`** | **Résultat**, ajouté lorsqu'il devient connu |
+| **`cdr_interim`** | Accusé de **progression**, qui n'est pas un résultat et ne clôt pas le message |
+
+Elles se joignent sur `(gateway_msg_id, part_no)`. La vue `cdr_pnl` fait une jointure gauche entre
+submit et final, donc les enregistrements sans résultat pour l'instant apparaissent comme
+`PENDING`. **L'exposition en cours reste visible** plutôt que d'être silencieusement exclue de vos
+chiffres.
+
+## Pourquoi les accusés de progression vivent dans leur propre table
+
+Un vendor peut envoyer plusieurs accusés pour un message : `ACCEPTD` lorsqu'il l'accepte, `BUFFRED`
+pendant qu'il retente, puis `DELIVRD` ou un échec. **Seul le dernier est un résultat.**
+
+Chaque lecteur prend la ligne `cdr_final` **la plus ancienne** pour un message. La liste des
+messages, le tableau de bord du portail, les requêtes de revenu et la vue `cdr_pnl` font tous cela.
+Donc écrire les accusés de progression dans `cdr_final` ferait qu'un `ACCEPTD` primerait sur le
+`DELIVRD` qui l'a suivi, dans chaque liste, chaque graphique et le P&L.
+
+Le balayage d'expiration dépend de la même chose : il trouve les messages non résolus par
+anti-jointure sur `cdr_final`, donc un accusé de progression là-dedans ferait paraître un message
+ouvert comme clos et il ne serait jamais revu.
+
+<Warning>
+**Ce n'est pas hypothétique.** Avant 0.6.6, le premier accusé à arriver libérait l'entrée de
+corrélation et écrivait `cdr_final` ; le vrai résultat qui suivait n'avait rien à quoi se rattacher
+et était journalisé comme un accusé pour un message inconnu.
+
+**Un message livré pouvait finir enregistré de façon permanente comme `FAILED`.**
+</Warning>
+
+Les deux tables ont aussi des durées de vie différentes. `cdr_final` est un historique de
+facturation et vit aussi longtemps que le CDR. `cdr_interim` est un historique de *qualité* — à
+quelle vitesse un vendor rapporte, et s'il rapporte — ce qui est une question sur le trafic récent,
+donc il est élagué selon sa propre fenêtre plus courte (`smsg.cdr.interim.retention.days`, par
+défaut 30). **Le perdre coûte un rapport, pas une facture.**
+
+## Les deux côtés du marché
+
+Le taux, les unités et le total sont enregistrés séparément par côté, parce que les deux peuvent
+légitimement facturer des quantités d'unités différentes pour un message. Un vendor facture par
+segment là où vous pouvez facturer par message.
+
+| Colonne | Signification |
+| :--- | :--- |
+| `cost_rate`, `cost_units`, `cost` | Ce que le vendor vous facture |
+| `price_rate`, `billed_units`, `price` | Ce que vous facturez au client |
+| `margin`, `margin_pct` | Stockés, pour que le P&L somme une colonne |
+| `cost_currency`, `price_currency` | Par côté ; FireFlo ne convertit jamais |
+| `cost_rule_id`, `price_rule_id` | Quelle règle de tarif a correspondu, pour l'audit |
+
+<Warning>
+**L'argent inconnu est `NULL`, jamais `0`.** Un taux qui n'a pas pu être déterminé reste
+distinguable d'un message réellement gratuit. Toute requête qui traite `NULL` comme zéro rapportera
+un vendor non tarifé comme du pur profit.
+</Warning>
+
+Pour un message concaténé, **l'argent vit entièrement sur la part 1**, dont le coût couvre déjà
+chaque segment. Les segments ultérieurs sont des lignes de livraison sans argent. Écrire des
+montants sur chaque segment multiplierait les deux côtés par le nombre de segments.
+
+## Un message refusé ne porte pas d'argent
+
+Tout ce qui a atteint un vendor a une ligne `cdr_submit`, accepté ou non. Un message que le vendor
+a refusé est enregistré en entier — identité, timing, vendor, adresses — plus une ligne
+`cdr_final` et une ligne `cdr_rejected` portant le code de statut du vendor.
+
+Mais `price`, `cost` et `margin` sont **null**, parce que le crédit du client a été restitué au
+moment du refus.
+
+<Tip>
+C'est délibéré : chaque requête de revenu somme ces colonnes **sans filtre de résultat**, et un
+prix sur un message remboursé surestimerait les recettes de précisément le trafic qui a été rendu.
+</Tip>
+
+## Les trois colonnes TLV
+
+Trois points sur un même pipeline. Toute question utile est une comparaison entre deux d'entre eux.
+
+| Colonne | Ce qu'elle contient |
+| :--- | :--- |
+| `tlvs_received` | Tels qu'ils sont arrivés, avant tout ajout |
+| `tlvs` | Tels que le gateway les a résolus |
+| `tlvs_sent` | Ce que le vendor a effectivement mis sur le fil |
+
+```
+tlvs_received → tlvs       un compte, sender ID ou template a-t-il remplacé ceux du client ?
+tlvs → tlvs_sent           qu'a ajouté le vendor, et qu'a-t-il retiré ?
+```
+
+La seconde comparaison était auparavant sans réponse. Un tag que le vendor n'a pas enregistré est
+écarté — correctement, c'est le vendor qui décide — mais cela se passait en silence, donc un
+identifiant de template DLT pouvait être présent sur le message, absent du fil, et mentionné nulle
+part au-dessus de DEBUG. Un rejet est maintenant aussi un WARN throttlé nommant le vendor et le
+tag.
+
+`NULL` signifie que rien n'a enregistré la colonne ; `{}` signifie enregistré et il n'y en avait
+aucun. `tlvs_sent` est `NULL` pour tout vendor non-SMPP.
+
+## Le corps du message
+
+Enregistré **seulement si vous l'activez**.
+
+| `smsg.cdr.body` | Stocké |
+| :--- | :--- |
+| `off` *(défaut)* | Rien |
+| `excerpt` | Les 160 premiers caractères |
+| `full` | Le message entier |
+
+Une valeur non reconnue est traitée comme `off`. L'échec qui compte est de stocker du contenu que
+personne n'a demandé à stocker, donc une faute de frappe ne doit pas activer l'enregistrement.
+
+<Warning>
+**C'est un choix délibéré avec des conséquences.** Le contenu est ce qu'un gateway traite de plus
+sensible — codes à usage unique, numéros de comptes, messages personnels — et une fois dans
+`cdr_submit` il vit exactement aussi longtemps que la ligne de facturation et apparaît dans chaque
+sauvegarde de celle-ci.
+
+Il est lisible sur les deux surfaces du panneau, cherchable par sous-chaîne, et **inclus dans les
+exports CSV**, qui est l'endroit par lequel le contenu quitte le plus facilement la plateforme.
+
+`excerpt` est le compromis pour le travail de support : assez pour reconnaître un template, pas la
+totalité du trafic d'un client.
+</Warning>
+
+## Résultats
+
+| État | Signification |
+| :--- | :--- |
+| `DELIVERED` | Le vendor a confirmé la livraison |
+| `FAILED` | Le vendor a rapporté un échec permanent |
+| `EXPIRED` | Aucun accusé avant l'échéance — véritablement **inconnu**, pas connu-mauvais |
+| `DROPPED` | Un filter l'a écarté avant tout vendor |
+| `REJECTED` | Jamais routé ni accepté ; tout débit remboursé |
+
+`dlr_state` conserve la valeur SMPP **brute** aux côtés du résultat grossier, parce que `EXPIRED`,
+`REJECTD` et `UNDELIV` se facturent tous comme des échecs mais méritent d'être distingués.
+
+**Le balayage d'expiration** clôt tout ce qui a dépassé son échéance comme `EXPIRED`, laissant la
+facturation décider ce que vaut un résultat inconnu. L'échéance est plafonnée en-dessous de trois
+jours : au-delà de la fenêtre de corrélation, un accusé ne peut plus être apparié même s'il
+arrive, donc attendre plus longtemps ne peut pas changer la réponse.
+
+## Si un message n'apparaît dans aucune liste
+
+L'écrivain pointe généralement vers une base de données différente de celle du panneau. Vérifiez
+`smsg.cdr.sink` et le `FIREFLO_DB_URL` du gateway par rapport au `METRICS_DATABASE_URL` du panneau
+avant de regarder ailleurs.
+
+<Warning>
+**Les CDR ne contiennent jamais de credentials.** Les adresses sont présentes parce que le pricing
+et la résolution des litiges en ont besoin — traitez les tables et les fichiers en conséquence, et
+définissez une politique de rétention.
+</Warning>
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Usage et rétention" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    Ce qui survit lorsque les enregistrements d'appels sont purgés.
+  </Card>
+  <Card title="Comment fonctionne le pricing" icon="tag" href="/platform/billing/how-pricing-works">
+    Où chaque côté du marché est réglé.
+  </Card>
+</CardGroup>

@@ -1,0 +1,118 @@
+---
+title: "Tabelas de configuração"
+description: "As tabelas de onde o gateway lê configuração, agrupadas pelo que controlam. E os quatro domínios que trocam juntos."
+---
+
+Com `FIREFLO_CONFIG_SOURCE=db`, o gateway lê **quatro domínios** do PostgreSQL em vez de arquivos:
+propriedades, credenciais, roteamento e tarifas.
+
+<Warning>
+**Os quatro trocam juntos.** Há uma única chave, e ela cobre todo domínio. As variáveis mais antigas
+por domínio se foram e agora recusam o startup.
+
+`config_sources` em `/ops/health` reporta o que cada domínio de fato resolveu, que é o que checar
+quando uma edição no painel parece não fazer nada.
+</Warning>
+
+## Contas, logins e produtos
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_account` | A identidade de billing. `account_id` é o escopo de rating **e** a chave de crédito pré-pago |
+| `app_credential` | Logins, tipados `HTTP` ou `SMPP` — **não intercambiáveis** |
+| `app_product` | Produtos, e se cada um faz enforcement de whitelisting |
+| `app_login_token` | Tokens de magic-link de uso único para o portal do cliente |
+
+<Warning>
+**Criar uma credencial não cria uma linha `account_balance`.** Um `RECHARGE` para uma conta sem uma
+credita nada e fica pendente.
+</Warning>
+
+## Dinheiro
+
+| Tabela | Segura |
+| :--- | :--- |
+| `account_balance` | `balance`, `reserved`, `currency`, `billing_mode`, `credit_limit` |
+| `balance_ledger` | Todo movimento: `RECHARGE`, `TRANSFER`, `RESERVE`, `RELEASE`, `BILL` |
+| `app_rate`, `app_rate_rule`, `app_rate_rule_condition`, `app_rate_rule_filter` | A tarifa |
+
+`balance` tem **exatamente um escritor** — o poll de recarga do gateway. O painel escreve linhas de
+ledger e nunca a coluna de balance.
+
+<Tip>
+Os tipos de entrada se dividem em três jobs: `RECHARGE`/`TRANSFER` movem dinheiro para dentro,
+`RESERVE`/`RELEASE` movem entre duas colunas da mesma linha e somam zero, e `BILL` é **inerte**. O
+poll nunca o seleciona, então arrears nunca entram em `balance`.
+</Tip>
+
+## Roteamento
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_route`, `app_route_table` | Tabelas e suas regras |
+| `app_route_rule`, `_condition`, `_filter` | Uma regra, suas condições, seus filtros |
+| `app_route_group`, `app_route_group_member` | Grupos de fornecedor e política de seleção (V1.29.0) |
+| `app_filter`, `app_filter_condition` | A biblioteca compartilhada de filtros |
+
+**Uma regra referenciando um filtro ausente ou desabilitado é pulada inteiramente** em vez de
+carregada com menos condições. Descartar condições silenciosamente *ampliaria* a regra.
+
+## Aprovações e TLVs
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_whitelist_policy` | Por conta e produto: off, report ou enforce |
+| `app_header` | Sender IDs aprovados, com seus TLVs |
+| `app_template` | Templates de conteúdo aprovados, com seus TLVs |
+| `app_tlv_definition` | O catálogo de TLV do operador |
+| `app_tlv_suggestion` | Tags propostas por cliente aguardando aprovação |
+
+`app_header` e `app_template` carregam um status de aprovação (V1.19.0). **Somente linhas `APPROVED`
+são carregadas.** Uma linha pendente se comporta exatamente como se não existisse.
+
+## Workers e settings
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_worker` | Fornecedores e listeners |
+| `app_worker_property` | Suas configurações por instância |
+| `app_config` | Propriedades `smsg.*` |
+
+A resolução de três camadas é `outSms.instance.<name>.<key>` → `outSms.default.<key>` → o padrão
+codificado. **Nem toda configuração pode ser escopada a um listener.** Uma que não pode lê
+silenciosamente um global que ninguém define.
+
+## Auditoria
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_customer_access_log` | Acesso do portal do cliente (V1.20.0) |
+
+Acesso de operador é logado a um arquivo na pasta de dados do painel, não a esta tabela.
+
+## Migrações são só para frente
+
+Flyway, a partir de `V1.19.0__baseline.sql`. **Não há down-migration.** O caminho de rollback é uma
+restauração, então faça backup antes de aplicar, não depois.
+
+```bash
+fireflo db test        # cinco checks graduados de conexão
+fireflo verify         # a configuração faz sentido
+```
+
+<Tip>
+Trocar para modo `db` contra um schema **vazio** não cai de volta para arquivos. O loader publica o
+conjunto vazio, e para credenciais isso significa que todo bind e toda chamada REST é recusada de uma
+vez. Rode `fireflo import` primeiro.
+</Tip>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Tabelas de call record" icon="database" href="/reference/data/cdr-tables">
+    A metade de tráfego e dinheiro do schema.
+  </Card>
+  <Card title="Configuração de banco" icon="sliders" href="/reference/config/database">
+    Conectando o gateway, e a chave de modo db.
+  </Card>
+</CardGroup>

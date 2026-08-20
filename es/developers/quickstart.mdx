@@ -1,0 +1,146 @@
+---
+title: "Quickstart"
+description: "Un mensaje, en cuatro lenguajes, con las tres cosas que lo rechazarán antes de enviarse."
+---
+
+Necesita tres cosas de quien gestione su pasarela: una **URL base**, un **login HTTP** y una
+**contraseña**. Si su login se configuró para SMPP no funcionará aquí. Es una separación
+deliberada, no un bug.
+
+## Enviar un mensaje
+
+<CodeGroup>
+
+```bash curl
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "to": "61491570006",
+    "content": "Your OTP is 4417, valid for 10 minutes."
+  }' \
+  'https://sms.example.com/secure/send'
+```
+
+```javascript Node
+const auth = Buffer.from(`${process.env.SMS_LOGIN}:${process.env.SMS_PASSWORD}`).toString("base64");
+
+const res = await fetch("https://sms.example.com/secure/send", {
+  method: "POST",
+  headers: {
+    Authorization: "Basic " + auth,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    to: "61491570006",
+    content: "Your OTP is 4417, valid for 10 minutes.",
+  }),
+});
+
+const { data, message } = await res.json();
+if (!res.ok) throw new Error(message);
+console.log(data.messageId);
+```
+
+```python Python
+import os, requests
+
+r = requests.post(
+    "https://sms.example.com/secure/send",
+    auth=(os.environ["SMS_LOGIN"], os.environ["SMS_PASSWORD"]),
+    json={"to": "61491570006", "content": "Your OTP is 4417, valid for 10 minutes."},
+)
+r.raise_for_status()
+print(r.json()["data"]["messageId"])
+```
+
+```php PHP
+$ch = curl_init('https://sms.example.com/secure/send');
+curl_setopt_array($ch, [
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_USERPWD => getenv('SMS_LOGIN') . ':' . getenv('SMS_PASSWORD'),
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode([
+    'to'      => '61491570006',
+    'content' => 'Your OTP is 4417, valid for 10 minutes.',
+  ]),
+]);
+
+$out = json_decode(curl_exec($ch), true);
+```
+
+</CodeGroup>
+
+Un éxito trae el id que verá de nuevo en cada acuse:
+
+```json
+{
+  "data": {
+    "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46"
+  }
+}
+```
+
+<Warning>
+**Entrecomille el destino.** `"to": 61491570006` es JSON válido y pierde cualquier cero inicial
+antes de que el parser lo vea. Envíelo siempre como cadena.
+</Warning>
+
+## Compruebe que funciona antes de depurar
+
+Dos llamadas, ninguna de las cuales envía nada ni cuesta nada:
+
+```bash
+# ¿Está viva la pasarela? No se necesitan credenciales.
+curl 'https://sms.example.com/ping'
+
+# ¿Son correctas mis credenciales y tengo saldo?
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+<Tip>
+`/secure/rate` tarifica un mensaje sin enviarlo y no cuenta contra ningún límite de tasa. Es la
+forma más barata de confirmar que un destino es enrutable y está tarificado antes de enviar nada
+real.
+</Tip>
+
+## Las tres cosas que rechazan un primer mensaje
+
+En el orden en que probablemente se las encuentre:
+
+<Steps>
+  <Step title="403 Authentication failure">
+    Contraseña incorrecta, login desconocido, **o un login SMPP**, que no puede usar esta API en
+    absoluto. El mensaje es idéntico en los tres casos.
+  </Step>
+  <Step title="403 not an approved sender ID">
+    Su cuenta tiene la aprobación de sender ID obligatoria y el `from` que envió no está en la
+    lista. Omitir `from` usa su nombre de login, que normalmente tampoco está aprobado.
+  </Step>
+  <Step title="402 Insufficient credit">
+    Prepago, y el saldo no lo cubre. **No se envió nada y no se cobró nada.**
+  </Step>
+</Steps>
+
+## ¿Y después?
+
+Un `200` significa *aceptado para enrutar*, no entregado. La respuesta al envío se emite antes de
+que se ejecute el enrutamiento. Para saber qué ocurrió realmente, pida un acuse:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    El payload, los niveles y cómo correlacionar por `messageId`.
+  </Card>
+  <Card title="Todos los campos" icon="list" href="/reference/api/send">
+    Valores por defecto, rechazos y parámetros avanzados.
+  </Card>
+</CardGroup>

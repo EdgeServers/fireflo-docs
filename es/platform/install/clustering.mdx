@@ -1,0 +1,90 @@
+---
+title: "Ejecutar como clúster"
+description: "Un registro de decisión. La respuesta corta es no, no hoy. Y aquí está exactamente lo que se rompe."
+---
+
+<Warning>
+**Estado: un registro de decisión, no un elemento de la hoja de ruta.** Nada en esta página está implementado. Existe para que
+la próxima persona que pregunte "¿podemos correr dos de estos?" obtenga una respuesta real en lugar de redescubrir las
+restricciones desde el código fuente.
+</Warning>
+
+**No, no hoy.** Dos instancias contra una base de datos perderán la mayoría de los recibos de entrega, y hasta hace
+poco doblaban el crédito en cada recarga prepago. Lo que sigue es por qué, y qué haría falta.
+
+Para gateways independientes en un mismo host, que sí funciona, consulta
+[Varias instancias](/platform/install/multiple-instances).
+
+## Lo que ya es seguro en clúster
+
+Más de lo que esperarías. El camino de envío se construyó sin un clúster en mente y aun así es
+correcto entre instancias.
+
+| | Por qué se sostiene |
+| :--- | :--- |
+| **Los ids de mensaje no colisionan** | `msg.serial` es un UUID aleatorio en los tres sitios de generación, así que las claves de call-record son globalmente únicas sin ordinal de nodo |
+| **El crédito prepago no se sobregira** | El crédito se reserva en bloques con un `UPDATE` condicional atómico, luego se gasta desde memoria. Dos instancias reservando a la vez se serializan por bloqueo de fila; la perdedora coge un bloque más pequeño |
+| **Los call records no se duplican en el camino normal** | `cdr_submit` inserta con `ON CONFLICT ... DO NOTHING` |
+| **La configuración converge** | El poller es estrictamente de solo lectura y no escribe nada de vuelta, así que cada instancia alcanza el mismo estado independientemente |
+
+## Lo que se rompe
+
+### Dinero y registros
+
+| Problema | Consecuencia |
+| :--- | :--- |
+| ~~Los sondeos de recarga y transferencia corrían en cada instancia sin bloqueo de fila y sin protección contra reaplicación~~ **Arreglado en 0.7.3**. Los selects toman `FOR UPDATE SKIP LOCKED`, la marca lleva `AND NOT applied`, y una entrada se reclama antes de que el dinero se mueva | Antes: una recarga de 100 unidades acreditaba N × 100. Dinero creado. Reproducido a 2×, luego arreglado |
+| El **sweeper de expiración de CDR** corre en cada instancia sin `ON CONFLICT`, y `cdr_final` no tiene clave única en `(gateway_msg_id, part_no)` | Filas `EXPIRED` duplicadas expanden el join de pérdidas y ganancias e **inflan los ingresos reportados** |
+| El **sink de CDR por archivo** añade a un archivo por día | Dos JVMs compartiendo un directorio de datos intercalan flushes de buffer a mitad de línea y lo corrompen. Solo muerde cuando el sink es `file` |
+
+### Pérdida de mensajes
+
+Toda la correlación de recibos vive en un almacén **local al nodo**.
+
+- Un recibo que llega a una instancia que no envió el mensaje no encuentra nada, se **descarta con una
+  única línea de log**, y no produce recibo al cliente, ni webhook, ni fila `cdr_final`. Con N
+  instancias eso es aproximadamente (N−1)/N de todos los recibos.
+- El almacén toma un **bloqueo exclusivo de archivo**. La segunda instancia que arranque sobre la misma ruta falla, el
+  fallo se captura, se registra a nivel WARN, y **continúa silenciosamente sin persistencia alguna**. Así que
+  "dos instancias compartiendo un directorio de datos" parece idéntico a "saludable".
+- Los recibos no enviados se aparcan localmente, así que un cliente reconectando a una instancia diferente nunca
+  los recibe.
+- Las sesiones conectadas se rastrean por JVM, así que una instancia no puede saber que un cliente está conectado en otro lado.
+
+### Mensajes concatenados, en concreto
+
+Los segmentos que llegan a instancias diferentes nunca se recombinan. Para un mensaje de tres segmentos partido dos-y-uno
+entre dos instancias:
+
+- cada instancia responde `ESME_ROK` y **cobra** por los segmentos que recibió;
+- cada una espera a que expire `reassembling.timeoutMillis`, 30 segundos por defecto;
+- cada una luego transmite sus segmentos como **fragmentos huérfanos** que llevan una cabecera de concatenación para un
+  mensaje que nunca se completará.
+
+El teléfono los retiene hasta que su propio temporizador expira y típicamente no muestra nada. **Al cliente se le
+factura por los tres.** El único rastro es una advertencia `message.parts.incomplete` por instancia, ninguna
+de las cuales sabe que la otra existe.
+
+<Note>
+La sesión SMPP de un cliente normalmente es adherente a nivel TCP, así que esto muerde en la reconexión a mitad de mensaje,
+en el rebalanceo del load-balancer, y en clientes que mantienen varios binds que reparten segmentos entre ellos.
+
+El whitelisting de contenido aún se aplica a lo que envía cada instancia. El camino del timeout se comprueba de contenido.
+Así que el fallo es de entrega y facturación, no de aplicación.
+</Note>
+
+### Degradado pero no perdido
+
+TPS del proveedor, límites de tasa de ingreso, muestreo de throughput y cursores de grupo de enrutamiento son todos **por proceso**.
+N instancias envían hasta **N × la tasa contratada** a un operador.
+
+Esa es una guardia contra un emisor descontrolado, no una cuota distribuida. Consulta
+[Límites](/reference/config/limits).
+
+## Qué haría falta
+
+En términos generales: mover la correlación de recibos y el reensamblado a almacenamiento compartido, dar a `cdr_final` una clave única y
+un upsert, y hacer que el sweeper sea elegido por líder o idempotente. Cada uno es tratable; ninguno está hecho.
+
+Hasta entonces, escala **verticalmente**, y usa varias instancias independientes cuando el tráfico pueda
+particionarse por cliente.

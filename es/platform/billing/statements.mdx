@@ -1,0 +1,111 @@
+---
+title: "Extractos y cierre de periodo"
+description: "Por qué un periodo cerrado nunca se reescribe, por qué la fila BILL no mueve dinero y en qué se convierte un reembolso tardío."
+---
+
+Un extracto es el uso de un cliente durante un periodo. **Cerrar** un periodo lo convierte de una
+consulta en vivo en un hecho registrado.
+
+## Un periodo cerrado es inmutable
+
+Al cerrar se escribe una fila `BILL` registrando lo facturado. **Nunca se reescribe.**
+
+Un reembolso que llega después, un acuse tardío, una tasa corregida a posteriori: ninguno reformula
+un periodo cerrado. El panel vuelve a ejecutar el resumen, lo compara con la cifra almacenada y
+muestra la diferencia como una **nota de crédito contra el próximo periodo**.
+
+<Warning>
+**Esta es la razón entera por la que existe el cierre**, en lugar de que el extracto sea simplemente
+una consulta en vivo.
+
+Reformular en silencio un periodo cerrado destruye la capacidad del cliente para conciliar: la
+factura que pagó el mes pasado deja de coincidir con la que el panel muestra este mes, sin que nada
+en ningún sitio registre que se movió ni por qué.
+</Warning>
+
+## La fila `BILL` no mueve dinero
+
+`delta` registra el importe facturado, negativo, porque es lo que la cuenta consumió. Pero la fila
+es **inerte**.
+
+El sondeo de recargas de la pasarela selecciona solo `RECHARGE` y `TRANSFER`, por lo que **nada
+aplica nunca un `BILL`**. Los atrasos nunca entran en `account_balance.balance`, que conserva su
+restricción no negativa y su significado único: dinero disponible para gastar.
+
+Para lo que la fila *sí* es portante es para la ventana. La fila `BILL` más reciente
+(`max(created_at) WHERE entry_type = 'BILL'`) es el inicio del periodo sin facturar. Por eso
+**cerrar es lo que devuelve el margen de una cuenta postpago.**
+
+<Tip>
+Esa conexión vale la pena retenerla: un cliente postpago que ha dejado de poder enviar puede
+simplemente estar esperando a que le cierre su periodo. Nada está roto; la factura no se ha cortado.
+</Tip>
+
+## Cerrar dos veces es un conflicto, no una segunda factura
+
+La referencia es determinista:
+
+```
+bill:<accountId>:<label>
+```
+
+`uq_balance_ledger_ref` es único donde no es null, por lo que el mismo periodo no puede cerrarse dos
+veces.
+
+**Determinista a propósito**: dos operadores haciendo clic a la vez deben colisionar, y una petición
+reintentada no debe producir un duplicado. La etiqueta es `YYYY-MM` o un intervalo de fechas y no
+puede contener dos puntos, por lo que el *último* dos puntos vuelve a partir la referencia y un id
+de cuenta que contenga dos puntos sigue siendo round-trip.
+
+## De qué se computa un extracto
+
+La factura es una **función pura de `cdr_submit` sobre una ventana semiabierta**. Nunca lee el
+contador postpago, nunca lee `account_balance` y nunca lee el libro mayor.
+
+Por tanto lo único que puede equivocar una factura es una fila de `cdr_submit` faltante o de más.
+
+<Warning>
+Una vez un periodo es más viejo que `FIREFLO_CDR_KEEP_DAYS`, las filas de las que se computó ya no
+están. La cifra `BILL` almacenada y `usage_daily` son entonces el único registro. Por eso la purga
+se niega a borrar un día que nada ha resumido.
+</Warning>
+
+## Ventanas semiabiertas
+
+Un periodo cubre `[start, end)`: inicio inclusivo, fin exclusivo. Un mensaje justo a medianoche en
+la frontera pertenece al periodo **posterior**, y pertenece a exactamente uno.
+
+Esa es la propiedad que vale la pena comprobar en cualquier consulta que escriba usted mismo:
+`BETWEEN` en SQL es inclusivo en ambos extremos y contará dos veces un mensaje de frontera en dos
+extractos.
+
+## El orden que funciona
+
+<Steps>
+  <Step title="Deje que termine el periodo">
+    Las cifras facturables son finales en el momento en que se acaba el día: la facturación es
+    sobre `submitted`.
+  </Step>
+  <Step title="Revise antes de cerrar">
+    El resumen es una consulta en vivo hasta que lo cierre. Este es el último punto en el que una
+    corrección es una edición en lugar de una nota de crédito.
+  </Step>
+  <Step title="Cierre">
+    Una fila `BILL`, idempotente en la referencia.
+  </Step>
+  <Step title="Deje que las correcciones posteriores sean notas de crédito">
+    Son visibles, atribuibles, y aterrizan en el próximo periodo en lugar de alterar en silencio un
+    número que el cliente ya ha pagado.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Postpago" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Límites de crédito, y por qué cerrar devuelve margen.
+  </Card>
+  <Card title="Uso y retención" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    Qué sobrevive tras purgar los registros de llamada.
+  </Card>
+</CardGroup>

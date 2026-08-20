@@ -1,0 +1,100 @@
+---
+title: "smsg.properties"
+description: "Comment sont déclarées les instances de worker, les trois niveaux de propriétés, et le seul fichier encore lu au démarrage en mode base de données."
+---
+
+Définitions de workers et leurs réglages, plus les propriétés `smsg.*` à l'échelle de la passerelle.
+
+## Déclarer un worker
+
+Chaque worker est un ensemble de propriétés `outSms.instance.<name>.*`. Le `type` décide de ce que
+c'est :
+
+```properties
+# Un listener sur lequel les clients se binderont
+outSms.instance.smpp.type      = smppserver
+outSms.instance.smpp.srv.port  = 27777
+outSms.instance.smpp.enable    = true
+
+# Une connexion sortante vers un opérateur
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+```
+
+<Note>
+`smppclient` et `smppserver` sont les valeurs de configuration. Ce site et le panneau de contrôle
+les appellent **vendor** et **server** partout ailleurs — voir [Concepts](/platform/concepts).
+</Note>
+
+Chaque clé disponible sur chacun est listée sur [Réglages listener](/reference/smpp/server),
+[Réglages fournisseur](/reference/smpp/client) et [Réglages de base](/reference/smpp/worker-base).
+
+## Trois niveaux
+
+```properties
+# niveau 2 : la base que chaque worker hérite
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+
+# niveau 1 : ce worker uniquement, l'emporte sur ci-dessus
+outSms.instance.vendor1.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+La résolution est instance → `outSms.default.*` → le défaut codé dans la table `prms`. Explication
+complète à [Chemins et niveaux de propriétés](/reference/config/paths).
+
+<Note>
+Le mot doublé dans `outSms.default.default.tlvs.submit` est correct. Le premier `default` est le
+niveau de repli ; le second fait partie du nom de propriété `default.tlvs.submit`.
+</Note>
+
+## Propriétés à l'échelle de la passerelle
+
+Tout ce qui est sous `smsg.*` vit aussi ici — tarification, CDR, crédit, whitelisting, limites de
+files, sortie de webhooks, tokens opérationnels. Catalogué par tâche sous
+[Clés de configuration](/reference/config/paths).
+
+```properties
+smsg.config.source        = file
+smsg.rates.currency       = AUD
+smsg.cdr.sink             = auto
+smsg.balance.enabled      = true
+smsg.ops.token            = REPLACE_ME
+smsg.ops.admin.token      = REPLACE_ME_DIFFERENTLY
+```
+
+## Le seul fichier encore lu en mode base de données
+
+En mode `db`, chaque watcher de fichier se met en retrait et `credentials.yml`,
+`routingTable.conf` et `rates.conf` ne sont pas lus après le démarrage.
+
+<Warning>
+**`smsg.properties` est encore lu au démarrage**, car `smsg.config.source` et le datasource
+doivent venir de quelque part avant que la base puisse être consultée.
+
+Cela signifie que l'interrupteur de source et les détails de connexion restent dans ce fichier même
+sur un déploiement entièrement piloté par la base — et un changement de l'un ou l'autre nécessite
+encore un redémarrage.
+</Warning>
+
+Une fois en marche en mode `db`, les réglages de worker viennent de `app_worker_property` et les
+propriétés de passerelle de `app_config`, tous deux projetés sur les mêmes noms de clés. Si une
+clé est définie à la fois dans la table de worker et dans `app_config`, **la table de worker
+l'emporte et le doublon est journalisé**.
+
+## Propriétés de routage et de traçage de messages
+
+```properties
+outSms.routing.maxAttempts = 20
+outSms.routing.trace       = acct-1001
+message.trace.mode         = necessary
+```
+
+<Warning>
+`message.trace.mode` est **global uniquement**. Malgré son apparition dans les tables par
+instance, un `outSms.instance.<name>.message.trace.mode` n'est jamais lu. Réglez-le sans préfixe.
+</Warning>

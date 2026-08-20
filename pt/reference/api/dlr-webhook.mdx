@@ -1,0 +1,120 @@
+---
+title: "O webhook de recibo de entrega"
+description: "O que o gateway envia via POST para o seu dlr_url. Cada campo, os dois formatos e o orçamento de retries."
+---
+
+A única direção em que **você é o servidor**. Peça com `"dlr": "yes"` e um `dlr_url` no envio.
+
+## `json` — o padrão
+
+Um `POST` com `Content-Type: application/json`:
+
+```json
+{
+  "id": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-13T08:58:59.672Z",
+  "done_date": "2026-08-13T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-in-2001",
+  "system_id": "sunrise-http",
+  "parts": 1
+}
+```
+
+## Campos
+
+| Campo | Significado |
+| :--- | :--- |
+| `id` | O `messageId` que o envio retornou. **É por ele que você correlaciona.** |
+| `stat` | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED` ou `SEEN` |
+| `level` | `2` o desfecho, `1` progresso. **Um recibo de nível 1 não significa que a mensagem terminou.** `ACCEPTD` e `BUFFRED` chegam como 1 e outro vem em seguida. |
+| `sub_date` | Quando você submeteu, ISO-8601. Omitido quando desconhecido. |
+| `done_date` | Quando este recibo foi gerado. Em um recibo de nível 2, quando a mensagem terminou. |
+| `to` | O destino, como você informou. |
+| `from` | O sender ID usado. |
+| `operator_msg_id` | A referência da própria operadora, para abrir consulta com ela. |
+| `account_id` | A conta cobrada. |
+| `system_id` | O login que submeteu. |
+| `parts` | Contagem de segmentos. Omitido quando desconhecido. |
+
+**Campos nulos são omitidos em vez de enviados como null**, então um recibo para uma mensagem que
+nunca chegou a um fornecedor não chega cheio de chaves vazias.
+
+Toda chamada traz `User-Agent: FireFlo/<version>`.
+
+<Warning>
+**Não existe campo `err`.** O Jasmin envia um; o resolver do FireFlo recebe apenas o estado de
+entrega, nunca um código de erro, então emitir um seria inventá-lo.
+
+**`vendor` está ausente até seu provedor habilitar.** Ele nomeia qual fornecedor transporta seu
+tráfego, o que é omitido dos clientes por construção em outros lugares.
+</Warning>
+
+## `kannel` — substituição de placeholders
+
+Um `GET` cru contra a URL registrada, com dois placeholders substituídos. **Nada é anexado.**
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%s` | Message id do gateway |
+| `%d` | `1` entregue, `2` falha, `4` buffered, `8` submetida ao SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Uma URL sem placeholders recebe uma requisição carregando absolutamente nada.** Nenhum corpo,
+nenhuma query, nenhum identificador. O endpoint é chamado no horário, retorna `200`, e a integração
+parece "funcionando mas vazia".
+
+Nada no sistema sinaliza isso, porque um callback vazio é indistinguível de um configurado
+corretamente que por acaso não carrega dados.
+</Warning>
+
+O formato é escolhido pelo seu provedor com `smsg.dlr.forward.format`, não por você. `dlr-method` é
+aceito em um envio, mas **não** o seleciona.
+
+## Entrega e retries
+
+| Regra | Valor | Propriedade |
+| :--- | :--- | :--- |
+| Sucesso | HTTP **`200`–`399`** | — |
+| Retries | **10** | `smsg.webhook.retries` |
+| Intervalo | **120 000 ms** | `smsg.webhook.retry.interval.ms` |
+| Timeout | **5 000 ms**, connect e request | `smsg.webhook.timeout.ms` |
+
+<Warning>
+**Um `302` para uma página de login conta como sucesso e engole o recibo.** Assim como qualquer
+`2xx` de um proxy que nunca chegou à sua aplicação. Se os recibos "chegam" mas seu handler nunca
+roda, veja o que está na frente dele.
+</Warning>
+
+A entrega é **at-least-once**. Faça seu handler idempotente em `id` **mais `level`**, não em `id`
+sozinho, já que uma mensagem legitimamente pode produzir um nível 1 e depois um nível 2.
+
+## Quais recibos você recebe
+
+`dlr_level` no envio: `1` só progresso, `2` o desfecho (**padrão**), `3` os dois.
+
+Via SMPP, a mesma escolha é o octeto `registered_delivery`. `0x11` é a forma SMPP de `dlr_level: 3`.
+
+## Todo recibo é registrado
+
+Seja ele encaminhado ou não. **Suprimir um recibo é uma decisão sobre o que te contar, nunca sobre
+o que registrar.** Então "eu nunca recebi um recibo" é sempre respondível pelo seu provedor.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Recibos de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    Construindo contra isso, com a armadilha do nível explicada.
+  </Card>
+  <Card title="Callbacks não chegando" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    Diagnosticando o silêncio.
+  </Card>
+</CardGroup>

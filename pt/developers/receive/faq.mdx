@@ -1,0 +1,89 @@
+---
+title: "FAQ de recebimento"
+description: "Ordenação, duplicidades, recibos faltando e os estados que parecem falhas e não são."
+---
+
+<AccordionGroup>
+
+<Accordion title="Um recibo nunca chegou. Por onde eu começo?">
+Nesta ordem, porque cada passo descarta mais do que o próximo:
+
+1. **Você pediu?** `dlr: "yes"` *e* `dlr_url`. Um sem o outro não faz nada.
+2. **Seu endpoint é alcançável a partir do host do gateway**, não do seu laptop?
+3. **Ele retorna 200–399?** Um `401` atrás de um proxy autenticador é a falha silenciosa mais
+   comum, e um `302` para uma página de login *conta como sucesso* e engole o recibo.
+4. **O fornecedor é pedido para produzir recibos?** Se seu provedor tem `request.dlrs` desligado
+   para esse fornecedor, nada reporta desfecho e toda mensagem termina como `EXPIRED`.
+</Accordion>
+
+<Accordion title="Posso receber o mesmo recibo duas vezes?">
+Sim. A entrega é at-least-once com 10 retries. Se seu endpoint é lento, sofre timeout ou retorna
+`5xx` depois de fazer o trabalho, você é chamado de novo.
+
+**Faça seu handler idempotente em `id` mais `level`.** Não em `id` sozinho: uma mensagem
+legitimamente pode produzir um recibo de nível 1 e depois um de nível 2, e deduplicar por `id`
+descartaria o desfecho.
+</Accordion>
+
+<Accordion title="Os recibos são ordenados?">
+Não. Um recibo de nível 1 e um de nível 2 para a mesma mensagem podem chegar fora de ordem sob
+retry, e recibos de mensagens diferentes não têm ordem nenhuma.
+
+Guarde o estado que você recebe e deixe um nível 2 vencer um nível 1 independentemente da ordem de
+chegada.
+</Accordion>
+
+<Accordion title="O que ACCEPTD significa? Parece final.">
+Não é. `ACCEPTD` e `BUFFRED` são **nível 1**. Progresso, com outro recibo por vir.
+
+Este pegou integrações reais: `level` costumava vir sempre `2`, então o `ACCEPTD` de um fornecedor
+era rotulado como desfecho e os receptores fechavam registros com ele. Se sua integração é anterior
+à correção, trate `level`. Ou simplesmente peça `dlr_level: 2`, o padrão, que envia apenas
+desfechos.
+</Accordion>
+
+<Accordion title="Por que recebi EXPIRED em vez de uma falha?">
+A mensagem atingiu o prazo de validade sem que nenhum desfecho fosse reportado. Geralmente um
+aparelho desligado ou fora de cobertura pelo período inteiro.
+
+Mas **se toda mensagem em uma rota termina como `EXPIRED`, não são os aparelhos**. Significa que
+nada está reportando desfechos, e sua taxa de entrega é sem sentido, e não zero.
+</Accordion>
+
+<Accordion title="Por que três recibos para uma mensagem?">
+Você enviou três `submit_sm`. Uma mensagem longa é dividida em segmentos e, por padrão, cada um
+recebe seu próprio recibo citando o id que você recebeu.
+
+Seu provedor pode reduzir a um. **Todos os recibos reportam o mesmo desfecho** de qualquer forma,
+porque os segmentos são agregados antes de qualquer recibo ser construído.
+</Accordion>
+
+<Accordion title="Uma mensagem longa diz FAILED, mas o destinatário recebeu a maior parte">
+A resolução espera pelo último segmento e reporta o **pior** desfecho, não o primeiro nem o da
+maioria. Uma mensagem que o destinatário não pôde ler por inteiro não é uma entrega.
+
+É deliberado, e faz as taxas de entrega do FireFlo parecerem menores do que gateways que reportam o
+primeiro segmento. Vale saber antes de comparar dois provedores por esse número.
+</Accordion>
+
+<Accordion title="Por que não há código de erro em um recibo de falha?">
+Porque não há um para dar. O Jasmin envia um campo `err`; o resolver do FireFlo recebe apenas o
+estado de entrega e nunca um código de erro, então emitir um seria inventá-lo.
+
+`stat` distingue `UNDELIV`, `REJECTD` e `EXPIRED`, que é a informação que de fato existe.
+</Accordion>
+
+<Accordion title="Um recibo é registrado mesmo que não seja enviado para mim?">
+Sim. **Suprimir um recibo é uma decisão sobre o que te contar, nunca sobre o que registrar.** Os
+desfechos entram no registro de chamada, e os recibos de progresso ficam ao lado, e seu provedor
+pode ver os dois na página de detalhes da mensagem, junto com o que você pediu.
+
+Então "eu nunca recebi um recibo" é sempre respondível, mesmo quando nenhum recibo foi encaminhado.
+</Accordion>
+
+<Accordion title="Posso ver recibos sem rodar um endpoint?">
+Sim. O portal do cliente mostra suas mensagens com o estado final e permite exportá-las. Um endpoint
+é como você reage em tempo real; o portal é como você checa depois.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,130 @@
+---
+title: "Instalar en un comando"
+description: "Lo que pregunta fireflo-install, lo que escribe, y las dos cosas que se niega a hacer."
+---
+
+`fireflo-install` automatiza [el despliegue a mano](/platform/install/by-hand): paquetes, usuario de servicio,
+directorios, artefacto, configuración, base de datos, unit de systemd, firewall, y una prueba de humo al
+final.
+
+Instala solo el **gateway**. El panel de control tiene
+[su propio instalador](/platform/install/control-panel), y en un host recién instalado ejecutas ambos.
+
+## Mira antes de saltar
+
+```bash
+./scripts/fireflo-install check
+```
+
+No cambia nada. Reporta si el host tiene lo que necesita.
+
+## Pregunta primero, luego te muestra las respuestas
+
+`install` recoge lo que necesita, imprime cada decisión sobre la que está a punto de actuar, y espera. Nada se
+escribe hasta que aceptas.
+
+```bash
+sudo ./scripts/fireflo-install install
+```
+
+Añade `--yes` para saltarte la confirmación en una instalación por script, y `--dry-run` para ver las decisiones
+sin hacerlas.
+
+<Note>
+**`--dry-run` muestra menos de lo que parece.** No puede reportar lo que un gestor de paquetes traería,
+ni lo que una migración encontraría en una base de datos a la que no se ha conectado. Léelo como "las decisiones que este
+script tomaría", no "todo lo que cambiaría en este host".
+</Note>
+
+## Los dos rechazos
+
+<Warning>
+**`install` se niega cuando ya existe un directorio de configuración.** No acuñará un segundo par de
+tokens operacionales encima del primero. Lo cual dejaría al panel autenticándose contra
+tokens que el gateway ya no tiene.
+
+Si tienes configuración pero no servicio, el verbo es **`service`**, no `install`.
+</Warning>
+
+<Warning>
+**`update` nunca toca el directorio de configuración.** Ese es el contrato que hace seguras las actualizaciones,
+y significa que una nueva clave de configuración introducida por una release *no* se añade a tu archivo. Lee las
+notas de release.
+</Warning>
+
+## Elegir una fuente en el momento de la instalación
+
+```bash
+sudo ./scripts/fireflo-install install --config-source db --bootstrap
+sudo ./scripts/fireflo-install install --config-source file
+```
+
+`--bootstrap` puebla una base de datos recién creada con lo mínimo que arrancará; `--import` trae una configuración
+de archivo existente en su lugar. Consulta [Elegir una fuente](/platform/install/configuration-source).
+
+## La primera tarifa
+
+```bash
+--country Australia --country-code 61 --product standard \
+--rate 0.0450 --decimals 4 --currency AUD
+```
+
+Sin estos, el gateway arranca sin pricing. Un mensaje que no coincide con ninguna regla de tarifa se registra como
+**UNKNOWN**, no como gratis. Entregado, y sin facturar a nadie.
+
+## Puertos, y una banda
+
+```bash
+--http-port 8080 --ops-port 9000 --smpp-port 27777
+--smpp-port-range 27777-27800
+```
+
+Un rango deja al instalador elegir el siguiente puerto de listener libre, que es lo que hace prácticas varias instancias en
+un host. Consulta [Varias instancias](/platform/install/multiple-instances).
+
+## Los dos tokens
+
+El instalador genera ambos y los escribe al archivo de entorno.
+
+<Warning>
+Deben ser **diferentes**. `smsg.ops.admin.token` sin establecer, o igual a `smsg.ops.token`, deshabilita cada
+verbo de control y responden 404. Indistinguible de un token equivocado. Consulta
+[El endpoint operacional](/reference/config/operational-endpoint).
+</Warning>
+
+## Retención de logs
+
+```bash
+--log-backups 5 --log-retain-days 14
+```
+
+`--log-retain-days` escribe una regla `tmpfiles.d` que elimina logs rotados, sin tocar nunca los cuatro
+en vivo. **Esto es lo único que elimina `httpapi.log`.** Quarkus lo rota diariamente y conserva
+cada archivo para siempre. Una instalación construida a mano debe arreglárselas para hacerlo por sí misma.
+
+## Después de que termine
+
+```bash
+scripts/fireflo verify
+```
+
+Comprueba el artefacto, la versión de Java, el puerto de mensajería, el puerto operacional, y que los dos tokens
+son genuinamente separados. En el orden que hace del primer fallo el informativo. Termina
+diciendo si el despliegue puede **enviar** ya, que es una pregunta distinta de si está
+corriendo.
+
+<Note>
+**El código de salida 4** significa que el despliegue está sano pero sus propios datos no. Por ejemplo, nada está
+configurado para enrutar a. Ese es el resultado esperado inmediatamente después de una instalación `--bootstrap`, antes
+de que añadas un proveedor.
+</Note>
+
+## Los otros verbos
+
+| Verbo | Úsalo cuando |
+| :--- | :--- |
+| `update` | Una nueva release. Reemplaza solo el artefacto. |
+| `service` | Existe configuración, la unit no. |
+| `rollback` | El nuevo artefacto es peor que el viejo. |
+
+Lista completa de opciones en [`fireflo-install`](/reference/cli/fireflo-install).

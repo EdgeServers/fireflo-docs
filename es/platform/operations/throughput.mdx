@@ -1,0 +1,124 @@
+---
+title: "Throughput"
+description: "Una línea base medida, la única línea de configuración que redujo la pérdida en un 92%, y la palanca que parecía obvia y no hizo nada."
+---
+
+Estos son números reales de una ejecución real, no proyecciones. Lee las advertencias antes de citar cualquiera de ellos.
+El rig usó un SMSC de prueba, y el hallazgo más útil es sobre eso.
+
+## La línea base
+
+| Ejecución | Mensajes | Resultado |
+| :--- | ---: | :--- |
+| Warm, window 100 × 1 tx | 2 000 | ~840 msg/s, pico de router queue 4, **0 perdidos** |
+| Burst, window 500 × **4 tx** | 20 000 | vendor queue a 7 987, **2 528 perdidos (12.6%)** |
+| Burst, window 500 × **1 tx** | 20 000 | vendor queue a 8 042, **217 perdidos (1.1%)**, 752 msg/s |
+| Burst, `vendor1.tps = 300` | 20 000 | **0 perdidos, 0 `RMSGQFUL`, 1.00 submits/msg** |
+
+**El burst corregido es el que hay que comparar contra el trabajo futuro: 752 msg/s entregados, 98.9% de éxito,
+26.3 s para 20 000 mensajes.**
+
+## El router nunca fue el cuello de botella
+
+`fireflo_router_queue` marcaba **0** durante todo el burst de 20 000 mensajes y llegó a 18 en cada
+otra ejecución.
+
+Los mensajes se enrutaban tan rápido como llegaban; luego se acumulaban en la cola del **worker de proveedor**,
+que alcanzó 7 987. Todo lo que limitaba el throughput estaba aguas abajo del código de enrutamiento.
+
+<Tip>
+Esta es la forma diagnóstica más útil que reconocer. **Router queue plano mientras una cola de proveedor
+crece** significa que el gateway va bien y el proveedor es la restricción. Añadir hilos de router o
+ajustar el enrutamiento no cambia nada.
+</Tip>
+
+## La línea que redujo la pérdida en un 92%
+
+El primer burst perdió 2 528 mensajes, cada uno `message.dropped reason=maxAttempts attempts=20
+limit=20`, con 151 985 intentos de submit para 24 000 mensajes aceptados. Aproximadamente seis por cada uno.
+
+La conexión de proveedor nunca se cayó. **Esto no era conectividad.** El SMSC de prueba dejó de responder
+lo bastante rápido bajo burst, los submits expiraron, el worker reintentó, y los mensajes que usaron los 20 intentos
+de enrutamiento se abandonaron.
+
+Reejecutando con `transceivers = 1`. Mismos mensajes, misma ventana, mismos hilos de router:
+
+| | 4 transceivers | 1 transceiver |
+| :--- | ---: | ---: |
+| Entregados | 21 472 (87.4%) | **19 783 (98.9%)** |
+| Descartados en el techo | 2 528 | **217** |
+| Intentos de submit por mensaje | ~6.3 | **4.1** |
+| Pico de cola de proveedor | 7 987 | 8 042 |
+
+La cola aún alcanzó 8 042 y el router aún nunca se atascó, así que la *forma* de la ejecución fue
+idéntica. Lo que cambió es que una única sesión no provoca lo que sea que hace el SMSC de prueba cuando
+tiene demasiadas sesiones.
+
+<Warning>
+**El primer burst midió los límites del SMSC de prueba, no los del gateway.** Se mantiene en el registro
+porque el contraste es lo más útil que produjo el ejercicio. Y porque "perdimos el 12% de un
+burst" es exactamente el tipo de número que se cita sin su causa.
+</Warning>
+
+## La palanca que parecía obvia y no hizo nada
+
+Una versión anterior de la línea base decía que el arreglo para el 1.1% residual era subir
+`outSms.routing.maxAttempts` y `outSms.routing.retryBackoffMillis`, razonando que un mensaje
+sobrevive solo unos dos segundos de un proveedor que no acepta.
+
+**Eso se midió y está equivocado.**
+
+| Configuración | Perdidos | Throughput |
+| :--- | ---: | ---: |
+| maxAttempts 20, backoff por defecto | 217 (1.1%) | 752 msg/s |
+| **maxAttempts 60, backoff 500 ms** | 227 (1.1%) | 720 msg/s |
+
+Sin mejora, y marginalmente más lento. Más reintentos contra un proveedor que no acepta es más
+carga sobre la cosa que ya está rechazando.
+
+**Lo que sí lo arregló fue `vendor1.tps = 300`**. Marcar el paso del gateway a lo que el proveedor podía realmente
+tomar. Cero perdidos, cero `ESME_RMSGQFUL`, y exactamente 1.00 submits por mensaje.
+
+<Tip>
+La lección general: **cuando un proveedor es la restricción, marca el paso a él en lugar de empujar más fuerte contra él.**
+Una ratio de submits por mensaje por encima de 1 es el número que te dice en qué situación estás.
+</Tip>
+
+## Qué medir en tu propio despliegue
+
+<Steps>
+  <Step title="Router queue contra vendor queue">
+    Router plano, cola de proveedor creciendo = el proveedor es el límite. Ambos creciendo = el ingreso está superando al
+    enrutamiento.
+  </Step>
+  <Step title="Submits por mensaje">
+    1.00 es saludable. Cualquier cosa materialmente por encima son reintentos, y los reintentos son capacidad de proveedor desperdiciada.
+  </Step>
+  <Step title="Conteo de ESME_RMSGQFUL">
+    Distinto de cero significa que estás empujando más fuerte de lo que el extremo lejano acepta.
+  </Step>
+  <Step title="Pérdida en el techo de intentos">
+    `message.dropped reason=maxAttempts` es el estado final de todo lo anterior.
+  </Step>
+</Steps>
+
+## Advertencias
+
+- **Un SMSC de prueba no es un operador.** Ambas ejecuciones de burst estaban acotadas por el simulador, no por FireFlo.
+- **La dispersión ejecución-a-ejecución fue mayor que el efecto del ajuste de ventana.** Subir `windowSize`
+  100 → 500 y transceivers 1 → 4 produjo 337 y 910 msg/s en dos ejecuciones de configuración *idéntica*,
+  contra 500 y 840 para la línea base. **Este rig no puede resolver ese efecto**. Que es una afirmación
+  sobre la medición, no evidencia de que la ventana no importe.
+- **`message.trace.mode = all` produjo 226 MB de log** para una ejecución de 20 000 mensajes. Útil para una
+  investigación, ruinoso como valor por defecto.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Colas" icon="layer-group" href="/platform/operations/queues">
+    Distinguir un problema de volumen de un problema de proveedor.
+  </Card>
+  <Card title="Generar tráfico" icon="flask" href="/platform/operations/generating-traffic">
+    Producir carga contra la que medir.
+  </Card>
+</CardGroup>

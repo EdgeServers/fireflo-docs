@@ -1,0 +1,115 @@
+---
+title: "Bind"
+description: "Ce qu'il faut demander à votre fournisseur, quel type de bind utiliser, et les limites qui décident combien de sessions vous pouvez tenir."
+---
+
+SMPP est une session TCP persistante. Vous vous connectez une fois, gardez la connexion ouverte, et
+soumettez dessus. C'est pour cela qu'il devance un appel HTTPS par message à volume soutenu.
+
+## Ce dont vous avez besoin
+
+Demandez à votre fournisseur :
+
+| | Notes |
+| :--- | :--- |
+| **Host et port** | Les ports non chiffré et TLS sont habituellement différents |
+| **`system_id`** | Votre login. Doit être un identifiant de type **SMPP** |
+| **`password`** | |
+| **`system_type`** | Souvent vide ; certains fournisseurs exigent une valeur précise |
+| **Type de bind** | Voir ci-dessous |
+| **TON/NPI** | Pour votre adresse source, s'ils en spécifient une |
+
+<Warning>
+**Un identifiant HTTP ne peut pas se binder, et un identifiant SMPP ne peut pas utiliser l'API
+REST.** Les identifiants sont typés, et les deux ne sont pas interchangeables. Demandez-en un de
+chaque si vous avez besoin des deux.
+</Warning>
+
+## Quel type de bind
+
+| Bind | Vous pouvez | À utiliser quand |
+| :--- | :--- | :--- |
+| **Transceiver** | Envoyer et recevoir sur une session | Presque toujours. Le plus simple et le moins de sessions |
+| **Transmitter** | Envoyer uniquement | Vous avez un récepteur séparé, ou votre librairie exige le split |
+| **Receiver** | Recevoir uniquement | Apparié à un transmitter |
+
+<Tip>
+**Un bind receiver-only n'envoie rien et paraît parfaitement sain.** Si votre session est up et
+qu'aucun message ne part, vérifiez le type de bind avant tout le reste. C'est la cause unique la
+plus fréquente de "bound mais rien ne se passe".
+</Tip>
+
+## Les limites qui s'appliquent à vous
+
+C'est votre fournisseur qui les fixe. Savoir qu'elles existent évite de deviner devant un bind
+refusé.
+
+| Réglage | Défaut | Ce qu'il plafonne |
+| :--- | ---: | :--- |
+| `srv.maxConnections` | 1000 | Sessions simultanées totales sur le listener |
+| `srv.maxConnectionsPerIP` | 0 (illimité) | Sessions depuis une IP |
+| `conf.maxConnectionsPerUser.default` | 0 (illimité) | Binds simultanés par compte |
+| `conf.maxPending.default` | 1000 | **Taille de fenêtre**. Requêtes en vol non acquittées |
+| `srv.bindTimeout` | 5000 ms | Combien de temps le serveur attend votre PDU de bind |
+
+**La taille de fenêtre est celle qui façonne votre débit.** C'est le nombre de `submit_sm` que vous
+pouvez avoir en attente sans réponse. Un client qui attend chaque réponse avant d'envoyer la
+suivante est limité par le round-trip time quelle que soit la taille de fenêtre.
+
+## Si votre bind est refusé
+
+Quatre causes, et le refus ne les distingue pas toujours :
+
+<Steps>
+  <Step title="Mauvais type d'identifiant">
+    Un login HTTP. Refusé comme échec d'authentification.
+  </Step>
+  <Step title="Mauvais system_id ou mot de passe">
+    Sensibles à la casse, les deux.
+  </Step>
+  <Step title="Une limite déjà atteinte">
+    Une autre de vos sessions est encore ouverte, y compris une session en état stale que l'autre
+    bout n'a pas encore expirée.
+  </Step>
+  <Step title="Votre IP n'est pas autorisée">
+    Si une liste d'autorisation est configurée, tout le reste peut être correct et le bind échoue
+    quand même.
+  </Step>
+</Steps>
+
+<Tip>
+**Une session stale est la surprise.** Si vous vous reconnectez plus vite que le serveur ne lâche
+votre session précédente, vous vous concurrencez vous-même pour une limite par utilisateur.
+Débinder proprement à l'arrêt, et laisser `enquire_link` détecter un pair mort plutôt que de vous
+reconnecter agressivement.
+</Tip>
+
+## Garder la session vivante
+
+Envoyez `enquire_link` à intervalle régulier. Toutes les 30 secondes est typique. C'est ainsi que
+les deux bouts remarquent une connexion qui est morte sans `FIN`, ce qui est l'issue normale d'un
+timeout NAT ou d'un firewall qui moissonne un flux inactif.
+
+Votre librairie le fait presque certainement pour vous. Confirmez-le, car une session morte mais
+non fermée accepte vos `submit_sm` dans un tampon de socket et les perd.
+
+## Pas d'adresse de bind sur le listener
+
+Bon à savoir si vous demandez à votre fournisseur de restreindre l'accès : **les deux listeners
+bindent chaque interface**, et il n'y a pas de réglage d'adresse de bind. La librairie sous-jacente
+n'a pas cette option.
+
+La restriction d'exposition se fait avec un firewall, un namespace réseau, ou en bindant le
+container sur une seule interface. Si votre fournisseur vous dit qu'un listener est "seulement sur
+l'interface interne", c'est quelque chose qu'il a arrangé autour de la passerelle, pas dedans.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Soumettre des messages" icon="paper-plane" href="/developers/smpp/submitting">
+    `submit_sm`, encodage, et les champs qui comptent.
+  </Card>
+  <Card title="Paramètres du listener" icon="sliders" href="/reference/smpp/server">
+    Chaque propriété de listener et de vendor.
+  </Card>
+</CardGroup>

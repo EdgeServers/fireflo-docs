@@ -1,0 +1,12 @@
+export const GATEWAY_VERSION = "0.7.4";
+export const PANEL_VERSION = "0.7.4.1";
+
+export const Versions = () => (
+  <>passerelle <b>{GATEWAY_VERSION}</b>, panneau de contrôle <b>{PANEL_VERSION}</b></>
+);
+
+{/*
+  The panel's version repeats the gateway release it was built against in its first three numbers —
+  0.7.3.1 pairs with gateway 0.7.3 — and the panel checks the pair at runtime and says so when they
+  disagree. Import these rather than typing a version into a page, so a release bump is one edit.
+*/}

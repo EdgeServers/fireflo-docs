@@ -1,0 +1,104 @@
+---
+title: "Contas postpaid"
+description: "Limites de crédito em vez de saldos. E a separação deliberada entre uma conta exata e uma aplicação aproximada."
+---
+
+Uma conta é **prepaid ou postpaid em um dado momento**, definido por `account_balance.billing_mode`.
+Postpaid fica desligado até que `smsg.balance.postpaid.enabled` seja true, portanto migrar adiciona
+duas colunas e não muda nada até que você diga.
+
+```sql
+UPDATE account_balance
+   SET billing_mode = 'POSTPAID', credit_limit = 500000
+ WHERE account_id = 'acct-1001';
+```
+
+## O que muda
+
+Uma conta postpaid **não é debitada de forma alguma**. Seu `balance` fica em zero, nenhum bloco é
+reservado, e o que ela deve é derivado de `cdr_submit` quando a fatura é preparada.
+
+O que o gateway aplica em vez disso é `credit_limit` — quanto de uso não faturado pode acumular antes
+que a conta seja recusada.
+
+<Warning>
+**`credit_limit = 0` significa sem crédito, não ilimitado.**
+
+Não há representação de ilimitado e não deve haver. Um erro de digitação ou um campo de formulário
+ausente deve falhar de forma fechada: uma conta que não pode enviar nada é um chamado de suporte, e
+uma conta que pode enviar tudo é um mês de tráfego que ninguém pode faturar.
+</Warning>
+
+Bater o limite é **a mesma recusa que ficar sem crédito prepaid** — SMPP `0x402`, HTTP `402`,
+motivo `insufficientCredit`. Deliberadamente: os dois significam "você não pode enviar isto agora",
+e dois status codes fariam todo cliente na plataforma aprender um segundo.
+
+## Conta exata, aplicação aproximada
+
+Estes são dois trabalhos diferentes, e eles deliberadamente não compartilham uma implementação.
+
+<CardGroup cols={2}>
+  <Card title="A verificação de limite" icon="gauge">
+    Lê um **valor em memória** atualizado no mesmo poll de 30 segundos que aplica recharges. Tem
+    permissão de estar desatualizado.
+  </Card>
+  <Card title="A fatura" icon="file-invoice">
+    Uma **função pura de `cdr_submit`** sobre uma janela semiaberta. Nunca lê aquele contador,
+    nunca lê `account_balance`, nunca lê o ledger.
+  </Card>
+</CardGroup>
+
+Portanto, **a única coisa que pode tornar uma fatura errada é uma linha `cdr_submit` ausente ou
+extra.** Nada no caminho de aplicação pode corromper uma fatura.
+
+### A defasagem é enviesada de forma segura
+
+Um poll só pode *apertar* o headroom, nunca aumentá-lo — porque a query não pode ver mensagens
+enviadas enquanto ela estava rodando. Headroom sobe apenas quando a dívida genuinamente encolhe:
+um período fechado, um reembolso caído ou um operador que mudou o limite.
+
+Esse viés é o ponto. **A defasagem recusa cedo demais em vez de tarde demais.**
+
+## Quão longe do limite uma conta pode ir
+
+| Situação | Overshoot |
+| :--- | :--- |
+| Regime permanente, uma instância | **0 mensagens** — o decremento em memória *é* a aplicação |
+| Restart não limpo | No máximo a fila de CDR não flushada, uma vez por restart |
+| Um reembolso que se perdeu | 0, e conservador — recusa cedo demais |
+| Desligada no meio de um período | No máximo um intervalo de poll, e a fatura ainda cobre o resto |
+| N instâncias | Até (N−1) × limit |
+
+A última linha é a que se deve observar se você algum dia rodar mais de um gateway contra um banco de
+dados. Está declarada porque é a que escala, não porque é um problema atual.
+
+<Warning>
+**Nunca fature a partir do contador, e nunca adicione uma linha de ledger por mensagem para tornar
+o billing exato.**
+
+Isso colocaria uma escrita no banco de dados no caminho do dinheiro a milhares por segundo — exatamente
+o que este subsistema existe para evitar — e `cdr_submit` já *é* o registro por mensagem.
+</Warning>
+
+## Escolhendo entre os dois
+
+| | Prepaid | Postpaid |
+| :--- | :--- | :--- |
+| O dinheiro se move | Antes de enviar | Após faturar |
+| Risco que você carrega | Nenhum | Até o credit limit |
+| Recusa | Saldo esgotado | Uso não faturado acima do limite |
+| Carga operacional | Top-ups | Faturamento e cobrança |
+
+Prepaid é o padrão mais seguro para uma nova conta. Postpaid ganha seu risco com clientes cujo
+volume faz top-ups constantes se tornarem um transtorno.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Crédito prepaid" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocos, reservas e a identidade do dinheiro.
+  </Card>
+  <Card title="Statements" icon="receipt" href="/platform/billing/statements">
+    Fechando um período e emitindo a fatura.
+  </Card>
+</CardGroup>

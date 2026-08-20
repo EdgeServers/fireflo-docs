@@ -1,0 +1,121 @@
+---
+title: "TLV personalizadas"
+description: "Parámetros SMPP extra en un envío REST: un objeto, no una lista; decimal salvo que diga hex; y Int8 significa ocho bytes."
+---
+
+Algunos destinos necesitan parámetros que no forman parte de un envío ordinario. El más visible es
+el DLT indio, que exige un identificador de entidad registrada y un identificador de plantilla en
+cada mensaje.
+
+`custom_tlvs` los transporta.
+
+```json
+{
+  "to": "919876543210",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "custom_tlvs": {
+    "0x1400": "1101234567890123456",
+    "tmid_0x1402:Int8": "1102000000000012345"
+  }
+}
+```
+
+## Cuatro reglas, y cada una ha mordido a alguien
+
+<AccordionGroup>
+
+<Accordion title="Es un objeto, no una lista de pares">
+```json
+"custom_tlvs": { "0x1400": "…" }        // correcto
+"custom_tlvs": [{ "tag": "0x1400" }]    // 400
+"custom_tlvs": "0x1400=…"               // 400
+```
+
+El fichero swagger versionado tipa esto como un array. **Es incorrecto:** el parser quiere un
+objeto, y generar un cliente desde esa spec produce un payload que se rechaza en la primera
+llamada.
+</Accordion>
+
+<Accordion title="Un número desnudo es DECIMAL">
+`1401` es decimal 1401, que es la etiqueta `0x0579`. **No** el `0x1401` que casi todo el mundo
+quiere decir.
+
+Este es el peligroso, porque *parsea*. Nada se rechaza: la pasarela envía la etiqueta `0x0579`, el
+operador ignora un parámetro que no reconoce, y el mensaje se entrega sin el valor que se suponía
+que llevaba. No hay error en ninguna parte.
+
+Escriba `0x1401` cuando quiera decir hex. Las etiquetas decimales son legales y algunos
+proveedores las publican así, que es precisamente por qué la pasarela no puede adivinar por usted.
+</Accordion>
+
+<Accordion title="La etiqueta es lo que sigue al ÚLTIMO guion bajo">
+`tmid_0x1401` es la etiqueta `0x1401`. El nombre delante es decoración que la pasarela conserva
+para sus propios logs, y puede contener a su vez guiones bajos. `source_network_id_5120` es la
+etiqueta 5120 decimal.
+
+Un nombre por sí solo no basta. La pasarela compara por el número.
+</Accordion>
+
+<Accordion title="Int8 significa ocho BYTES">
+`:Int8` añadido a una clave fija la codificación de cable. Las anchuras son octetos, siguiendo la
+convención SMPP:
+
+| Token | Octetos |
+| :--- | ---: |
+| `Int1` | 1 |
+| `Int2` | 2 |
+| `Int4` | 4 |
+| `Int8` | 8 |
+| `OctetString` | *por defecto* |
+| `COctetString` | terminado en null |
+
+Leído como *bits*, `Int8` parecería un campo de un byte y el rechazo resultante es
+desconcertante. Un id de plantilla DLT alrededor de 1,4 × 10¹⁸ no cabe en nada menor que ocho
+bytes.
+</Accordion>
+
+</AccordionGroup>
+
+## El nombre del campo conserva su guion bajo
+
+Todos los demás campos de esta API tratan `_` y `-` como el mismo carácter. **`custom_tlvs` no**:
+`custom-tlvs` es `400 Unknown argument`.
+
+## De dónde más puede venir una etiqueta
+
+Usted no es la única fuente, y la suya no siempre gana:
+
+<Steps>
+  <Step title="Su custom_tlvs">
+    Solo se extrae si el listener declara la etiqueta. Las etiquetas no declaradas se **descartan**,
+    no se pasan a través.
+  </Step>
+  <Step title="Los valores por defecto de su credencial">
+    Fijados por su proveedor, rellenando etiquetas que usted no envió. Aquí es donde suele ir un id
+    de entidad DLT, ya que es una propiedad de usted más que de un mensaje en particular.
+  </Step>
+  <Step title="El stamp de la whitelist">
+    En una plantilla aprobada. En modo `replace` esto **sobrescribe** lo que envió, y esa
+    sobrescritura es la aprobación.
+  </Step>
+  <Step title="Los valores por defecto del vendor">
+    Rellenando cualquier cosa aún sin fijar en el momento del envío.
+  </Step>
+</Steps>
+
+<Warning>
+Si una etiqueta que envía nunca llega, la causa más probable es que el listener no la declara.
+Pregunte a su proveedor si está en `registered.tlvs.submit`. Una etiqueta no declarada se descarta
+silenciosamente en el ingress, antes de que se ejecute cualquier otra cosa de esta lista.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Declaraciones de TLV" icon="tags" href="/reference/smpp/tlvs">
+    La gramática completa y los cinco niveles de declaración.
+  </Card>
+  <Card title="Enviar un mensaje" icon="paper-plane" href="/reference/api/send">
+    Cada campo del endpoint.
+  </Card>
+</CardGroup>

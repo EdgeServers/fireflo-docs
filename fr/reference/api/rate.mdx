@@ -1,0 +1,95 @@
+---
+title: "GET /secure/rate"
+description: "Ce que coûterait un message. N'envoie rien, ne débite rien et ne compte contre aucune limite de débit."
+---
+
+La seule vérification pré-envoi véritablement gratuite de l'API.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**Le coût est `unit_rate × submit_sm_count`.**
+
+## Paramètres
+
+| Paramètre | Type | Requis | Défaut | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | **oui** | — | Le prix diffère selon le pays et le réseau, donc ce n'est pas optionnel. |
+| `content` | string | non | — | Seule sa longueur compte ici — elle décide du nombre de segments. |
+| `coding` | integer | non | `0` | Change combien de segments le même texte occupe, donc change le prix. |
+| `product` | string | non | le produit de votre login | Tarifie contre un produit différent, depuis la même liste d'autorisations qu'un envoi utilise. |
+| `from` | string | non | — | **Accepté, et sans effet sur le prix.** |
+
+## `submit_sm_count` est le nombre de segments
+
+C'est ainsi que vous découvrez qu'un message que vous pensiez unique en fait trois, avant de
+payer.
+
+| Encodage | Message unique | Chaque segment d'un plus long |
+| :--- | ---: | ---: |
+| GSM-7 | 160 caractères | 153 |
+| UCS-2 | 70 caractères | 67 |
+
+<Tip>
+**Appelez ceci sur du contenu généré par les utilisateurs avant l'envoi.** Une seule apostrophe
+typographique `’` force tout le message en UCS-2 et triple le nombre de segments, et rien dans la
+voie d'envoi ne le signale. Le message sort correctement, juste trois fois plus cher.
+</Tip>
+
+## Il ne coûte rien
+
+- N'envoie rien.
+- Ne débite rien.
+- **Ne compte contre aucune limite de débit**. Il ne consommera donc pas le débit dont vous avez
+  besoin pour de vrais envois.
+
+## Les tarifs affichent toujours quatre décimales
+
+Contrairement à un **total**, qui honore `smsg.money.scale`, un tarif conserve quatre décimales
+quelle que soit la valeur.
+
+<Warning>
+`0.0450` affiché `0.05` est **11% d'écart sur chaque message**, et un client calculant sa facture
+à partir d'un devis serait dans l'erreur. Les exports CSV conservent quatre décimales pour la
+même raison. Une feuille de calcul somme cette colonne.
+</Warning>
+
+## Erreurs propres à cet endpoint
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument to is not found.` | `to` absent ou vide. |
+| 403 | `This login may not send on '<product>'.` | Vous avez nommé un produit que votre opérateur n'a pas autorisé pour ce login. |
+
+**La liste d'autorisations `product` est la même qu'un envoi utilise**, délibérément. Un devis et
+un envoi ne peuvent pas diverger sur ce que vous pouvez nommer.
+
+## Ce qu'il ne peut pas vous dire
+
+- **Si le message serait accepté.** L'approbation du sender ID, la correspondance de template et
+  le crédit sont tous vérifiés au moment de l'envoi, pas ici.
+- **S'il serait livré.** Cela relève d'un accusé.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Encodage et segments" icon="text-width" href="/developers/send/encoding-and-segments">
+    Pourquoi le même texte coûte des montants différents.
+  </Card>
+  <Card title="Vérifier votre solde" icon="wallet" href="/reference/api/balance">
+    Ce qu'il reste à dépenser.
+  </Card>
+</CardGroup>

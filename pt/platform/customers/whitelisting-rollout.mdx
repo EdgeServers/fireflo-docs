@@ -1,0 +1,173 @@
+---
+title: "Rolling whitelisting out"
+description: "Ligando as checagens de sender ID e conteúdo para um cliente em produção sem tirá-lo do ar — os quatro interruptores, report antes de enforce, e os diagnósticos que dizem o que está realmente rodando."
+---
+
+Whitelisting é fail-closed por design, então ligá-lo para um cliente em produção é a única mudança
+nesta plataforma que pode silenciar uma conta instantaneamente. Tudo abaixo existe para tornar isso
+uma decisão em vez de uma descoberta.
+
+## O diagnóstico mais útil
+
+```bash
+fireflo health
+```
+
+```json
+"whitelist": {
+  "active": true,
+  "generation": 4,
+  "scopes": 12,
+  "header_rejects": 3,
+  "template_rejects": 0,
+  "report_only_would_reject": 41,
+  "enforcing_with_nothing_approved": [],
+  "exempt_products": ["otp"]
+}
+```
+
+<Warning>
+**`active: false` enquanto `smsg.whitelist.enabled` é true significa que o load nunca teve sucesso.**
+Não significa que nada está configurado — significa que nada está sendo checado, em nenhuma conta, por
+mais cuidadosamente que suas políticas estejam definidas.
+
+Essa direção é deliberada: uma checagem fail-closed que disparasse em um load *falho* transformaria um
+soluço de banco em uma indisponibilidade total. Fail-closed se aplica a uma política que foi carregada
+e encontrada vazia, nunca a um subsistema que não conseguiu carregar. Por isso a flag precisa ser lida
+em vez de assumida — um deployment inteiro pode estar silenciosamente desprotegido e parecer idêntico
+a um que está funcionando.
+</Warning>
+
+`exempt_products` é tráfego passando sem checagem de propósito, e é a resposta para "por que isto não
+foi pego?" que nenhuma política da própria conta consegue mostrar.
+
+## Quatro interruptores, e a ordem em que resolvem
+
+Uma mensagem é checada apenas se **todos os quatro** disserem que sim. Estão listados na ordem em que
+o gateway os resolve, que é também a ordem para consultar quando algo não está sendo aplicado.
+
+| Camada | Onde | Off significa |
+| :--- | :--- | :--- |
+| 1. O recurso | `smsg.whitelist.enabled` | Nada é carregado, nada é checado, em lugar nenhum. |
+| 2. O listener | `conf.whitelist.enabled` por listener SMPP | Aquele listener não checa nada. O ingress HTTP não é afetado. |
+| 3. O produto | `app_product.whitelist_enabled` | Toda conta nesse produto é isenta, nos dois ingressos. |
+| 4. A conta | `app_whitelist_policy.header_mode` / `content_mode` | Essa conta não é checada. |
+
+Os três primeiros são interruptores que um operador configura; o quarto é a política em si.
+
+<Note>
+**`conf.whitelist.enabled` vem ligado por padrão**, então o interruptor mestre é o que decide — um
+listener precisa optar por *sair*. Ele existe porque os clientes raramente estão todos em um único
+listener: um listener de tráfego registrado pode aplicar enforcement enquanto um interno ou de teste
+não, sem que isso seja uma propriedade de cada conta.
+
+Aplica-se apenas ao SMPP. O ingress HTTP não tem listener para pendurar isso, então use o produto ou a
+conta lá.
+</Note>
+
+## Report antes de enforce
+
+Cada um de `header_mode` e `content_mode` é `OFF`, `REPORT` ou `ENFORCE`. **`REPORT` é por que isto
+não é um booleano.**
+
+<Steps>
+<Step title="Aprove o que você já conhece">
+Sender IDs e templates para a conta, ou para um produto que é checado. Veja
+[Sender IDs](/platform/customers/sender-ids) e [Content templates](/platform/customers/templates).
+</Step>
+<Step title="Configure a conta para REPORT">
+Toda mensagem é checada, logada como `message.wouldReject` em INFO, e **enviada mesmo assim**. Nada é
+recusado.
+</Step>
+<Step title="Leia report_only_would_reject">
+Ele conta o que `ENFORCE` teria recusado, e é o número a observar. Deixe rodando tempo suficiente para
+cobrir os dias mais lentos do cliente — um template usado uma vez por mês é invisível numa tarde.
+</Step>
+<Step title="Aprove o que o log nomeia, e só então enforce">
+`headerNotApproved` e `templateNotMatched` nomeiam o que estava errado, e a conta à qual pertence.
+</Step>
+</Steps>
+
+Ligar uma whitelist fail-closed para um cliente em produção sem antes ver o que ela teria recusado é
+como uma migração vira uma indisponibilidade.
+
+## Enforcing com nada aprovado
+
+<Warning>
+**Uma lista vazia em `ENFORCE` recusa tudo, e isso está correto** — uma whitelist com nada nela não
+permite nada. Também é quase sempre um setup pela metade, então o gateway diz isso no startup e reporta
+em `/ops/health` como `enforcing_with_nothing_approved`, em vez de deixar que chegue como um ticket de
+suporte.
+</Warning>
+
+O painel de controle recusa o save que criaria isso, contando da mesma forma que o gateway conta. Duas
+coisas tornam isso mais do que uma soma:
+
+- **Produtos isentos não protegem nada.** Um produto com `whitelist_enabled = false` resolve para
+  `OFF` antes de qualquer merge, então uma aprovação arquivada sob ele é armazenada e nunca
+  consultada. Contá-la deixaria passar uma conta cujas aprovações são todas inertes — criando
+  exatamente a indisponibilidade que a guarda existe para prevenir.
+- **Tráfego sem produto é servido apenas pelo escopo da conta.** Nenhuma aprovação com escopo de
+  produto pode alcançá-lo. Então um `ENFORCE` em nível de conta com uma lista de conta vazia
+  interrompe todo login cuja credencial não nomeia produto, por mais aprovações de produto que
+  existam.
+
+O segundo caso é um aviso alto em vez de uma recusa, porque a configuração roda e serve tráfego real.
+Para cobrir tudo, aprove pelo menos uma linha com o produto em branco.
+
+Há uma terceira maneira de construir isso, e é mais recente: um login com **nenhuma linha própria e
+nenhuma linha em nível de conta** não pode enviar nada. A página da conta avisa quando as aprovações
+de uma conta são todas atreladas a login e algum login fica sem nenhuma.
+
+## Aprovado não é o mesmo que aceito
+
+<Warning>
+**Nada aprovado significa nada estampado.** Uma conta cujos sender IDs estejam todos aprovados ainda
+pode ter toda mensagem recusada *pelo fornecedor* se as TLVs que uma operadora exige não estiverem
+sendo supridas — os identificadores de entidade e template sem os quais uma lane DLT não aceitará uma
+mensagem.
+
+O TLV coverage report do painel diz, por linha aprovada, quais tags mandatórias nada suprirá e quais
+fornecedores as descartariam. Leia antes de mudar para `ENFORCE`, não depois: enforce restringe o que
+pode ser enviado, e não faz nada em relação ao que uma operadora exige.
+</Warning>
+
+## O que uma recusa parece
+
+Sobre HTTP, **403** e uma mensagem nomeando o que estava errado:
+
+```json
+{"message": "'SPAMCO' is not an approved sender ID for this account."}
+```
+
+403 em vez de 400: a requisição está bem formada e o chamador é quem diz ser — ele apenas não tem
+permissão para enviar isto.
+
+Sobre SMPP o `submit_sm` é **rejeitado em vez de aceito e descartado**, então o próprio cliente vê a
+falha no momento do submit em vez de inferi-la de um recibo que nunca chega. Veja
+[Status codes](/reference/smpp/status-codes).
+
+Toda recusa é logada com um motivo — `headerNotApproved`, `templateNotMatched` — e a conta à qual
+pertence. Em modo `REPORT` a mesma linha aparece como `message.wouldReject` em INFO e a mensagem sai.
+
+## Aprovar não precisa de reconexão
+
+A whitelist é relida no poll de configuração e cada snapshot carrega uma geração, então uma sessão
+SMPP conectada por semanas capta um sender ID recém-aprovado sem reconectar. Isso importa porque o
+cliente cujo tráfego está sendo recusado geralmente está no telefone enquanto alguém aprova.
+
+```bash
+fireflo reload
+```
+
+aplica imediatamente em vez de esperar pelo poll. Ele exige o token admin — veja
+[The fireflo CLI](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Whitelisting reference" href="/reference/config/whitelisting">
+Cada propriedade, os três modos de stamping, e a checagem mandatória por-fornecedor.
+</Card>
+<Card title="Products" href="/platform/customers/products">
+Isenções, e por que um produto desconhecido é checado em vez de deixado passar.
+</Card>
+</CardGroup>

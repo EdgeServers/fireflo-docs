@@ -1,0 +1,110 @@
+---
+title: "Banco de dados e origem de configuração"
+description: "As variáveis de PostgreSQL, a única chave que move os quatro domínios de configuração, e as tabelas por trás deles."
+---
+
+PostgreSQL é **opcional**. Deixe `FIREFLO_DB_URL` não definido e o FireFlo roda com configuração em
+arquivo e call records escritos em `data/cdr/`.
+
+Só dois recursos exigem banco: a **sweep de expiração de CDR**, que precisa consultar registros sem
+desfecho, e **crédito pré-pago**, já que crédito só entra pelo banco. Rating, roteamento por menor
+custo e CDRs funcionam sem banco. A metade só de leitura do painel de controle também funciona. Mas o
+painel edita configuração, e em modo de arquivo não há o que editar.
+
+## Conexão
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` | *(não definido)* | JDBC url. Não definido significa sem banco. |
+| `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | *(não definido)* | Credenciais. |
+| `FIREFLO_DB_MIGRATE` | `false` | Se o FireFlo pode modificar este schema. Habilita a migração de startup **e** permite `fireflo db migrate`. |
+| `FIREFLO_CONFIG_IMPORT` | `false` | Permite `fireflo import`. |
+
+<Note>
+`FIREFLO_CONFIG_IMPORT` é separada de `FIREFLO_DB_MIGRATE` **de propósito**: uma aplica DDL só para
+frente, a outra substitui as regras que decidem o que os clientes são cobrados. `--dry-run` ignora.
+</Note>
+
+## A chave de origem
+
+Uma chave move todos os domínios de uma vez.
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.config.source` | `file` | `file` ou `db`, para os quatro domínios: credenciais (`app_credential`), propriedades (`app_config` + `app_worker`), roteamento (`app_route_table` + `app_route_rule`) e tarifas (`app_rate_rule`). |
+| `smsg.config.db.poll.seconds` | `30` | Intervalo de poll. |
+
+Definida pelo ambiente como `FIREFLO_CONFIG_SOURCE`.
+
+<Warning>
+**Mudar para `db` contra um schema vazio recusa todo bind e toda chamada REST de uma vez.** O
+carregador de credenciais publica o mapa vazio em vez de ignorá-lo, então não há fallback para o
+arquivo. Preencha o schema com `fireflo import` primeiro.
+</Warning>
+
+<Warning>
+**Atualizando de antes de 0.5.** Esta chave substituiu `smsg.credentials.source`,
+`smsg.routing.source`, `smsg.rates.source` e `smsg.properties.source`, e suas variáveis
+`FIREFLO_*_SOURCE`. Essas chaves não fazem mais nada, então o gateway **recusa iniciar** enquanto uma
+das variáveis ainda estiver definida, em vez de reverter aquele domínio para arquivo em silêncio.
+Substitua as quatro por `FIREFLO_CONFIG_SOURCE`.
+</Warning>
+
+## As tabelas
+
+| Tabela | Segura |
+| :--- | :--- |
+| `app_filter` / `app_filter_condition` | Predicados nomeados e reutilizáveis, compartilhados por roteamento e tarifação |
+| `app_route_table` / `app_route_rule` | Tabelas de roteamento e suas regras |
+| `app_route_rule_filter` / `app_route_rule_condition` | Os filtros referenciados por uma regra e condições inline |
+| `app_rate_rule` / `app_rate_rule_filter` / `app_rate_rule_condition` | O mesmo formato, para tarifas |
+| `app_worker` / `app_worker_property` | Uma linha por fornecedor ou listener, mais suas configurações |
+| `app_credential` | Perfis de autenticação |
+| `app_config` | Tudo que não é propriedade de worker: `smsg.*`, `outSms.default.*`, `outSms.routing.*` |
+
+As propriedades de um worker são projetadas em `outSms.instance.<name>.<key>` e publicadas
+exatamente como linhas de `app_config`, então a camada de fallback e o retuning ao vivo não são
+afetados. **Mantenha uma configuração em um lugar ou no outro.** Se ambos definirem a mesma chave, a
+tabela do worker vence e a duplicata é logada.
+
+<Warning>
+**Um filtro ausente ou desabilitado pula toda regra que o referencia**, em vez de carregar a regra
+com menos condições. Descartar uma condição faria a regra casar com *mais* tráfego, então a falha
+seria silenciosa e rotearia ou taxaria as coisas erradas.
+</Warning>
+
+## O que muda quando você está em modo `db`
+
+- Uma mudança leva até um intervalo de poll, contra por volta de 200 ms para uma edição de arquivo.
+- Uma leitura que falha **mantém** a configuração anterior em vez de zerar.
+- Mudanças são anunciadas exatamente como uma edição de arquivo, então editar `app_config` re-afina
+  workers em execução. `tps`, `maxRetries`, `pause`, TLVs registrados. E setar
+  `outSms.instance.<x>.enable` para false **para aquele fornecedor** dentro de um intervalo.
+- Apagar uma linha reverte a chave para o que a próxima camada segura. Uma variável de ambiente, ou o
+  padrão codificado. Em vez de deixar sem definir.
+- Todo file watcher recua. `conf/smsg.properties` ainda é lido no startup.
+
+`app_route` e `app_rate` do schema pré-normalizado ainda são lidos quando as tabelas normalizadas
+estão vazias, com aviso. Nada é convertido automaticamente. O `rule_line` empacotado não pode ser
+dividido em SQL.
+
+## Versionamento de schema
+
+O schema é um arquivo baseline, `V1.19.0__baseline.sql`, gerado em vez de fundido à mão: os originais
+foram aplicados a um banco temporário, dump feito com `pg_dump --schema-only`, e o dump verificado
+aplicando a um segundo banco e diffando os dois. Mudanças posteriores continuam em `V1.20.0`. Só para
+frente é a regra.
+
+É numerado na **versão mais alta** que substitui, não na mais baixa, de propósito. Uma implantação
+que parou pela metade trataria um baseline de número mais baixo como já aplicado e migraria para um
+no-op, silenciosamente perdendo o que veio depois. Em `1.19.0` ele tenta aplicar e falha na primeira
+tabela que já existe. Recuperável, onde a versão silenciosa corrompe por omissão.
+
+<Warning>
+**Migrações são só para frente.** Não há scripts de undo, então reverter uma mudança de schema
+significa restaurar um backup. Faça um antes de migrar um banco com o qual você se importa.
+</Warning>
+
+Veja [`fireflo db`](/reference/cli/fireflo) para `test`, `migrate`, `info`, `validate` e `repair`, e
+[Escolhendo uma origem de configuração](/platform/install/configuration-source) para o caminho de
+migração entre arquivo e banco.

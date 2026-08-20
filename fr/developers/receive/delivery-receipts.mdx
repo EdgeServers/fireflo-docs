@@ -1,0 +1,132 @@
+---
+title: "Accusés de livraison"
+description: "La charge utile, le niveau qui indique s'il s'agit du dernier mot, et le champ absent tant que votre fournisseur ne l'active pas."
+---
+
+Un accusé de livraison est la manière d'apprendre ce qui est arrivé à un message. **C'est la seule
+manière.** La réponse d'envoi vous dit que le message a été accepté, rien de plus.
+
+Demandez-en un lors de l'envoi :
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+## Ce qui arrive
+
+Un `POST` avec `Content-Type: application/json` :
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-05T08:58:59.672Z",
+  "done_date": "2026-08-05T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "FireFlo",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-1001",
+  "system_id": "acme-http",
+  "parts": 1
+}
+```
+
+`id` est le `messageId` renvoyé par votre envoi. **C'est ainsi que vous corrélez** — il n'y a rien
+d'autre.
+
+Les noms de champs suivent ceux de Jasmin, donc un récepteur écrit pour Jasmin lit ceci sans
+changement. Les champs à null sont omis plutôt qu'envoyés comme null, donc un accusé pour un
+message qui n'a jamais atteint un vendor n'arrive pas rempli de clés vides.
+
+Chaque appel porte `User-Agent: FireFlo/<version>`.
+
+## `level` décide si vous avez terminé
+
+<Warning>
+**Un accusé de niveau 1 n'est pas l'issue.** `ACCEPTD` et `BUFFRED` arrivent tous deux en niveau 1
+et un autre accusé suit. Un récepteur qui clôt son enregistrement sur le premier accusé qu'il voit
+rapportera la mauvaise chose, en permanence.
+</Warning>
+
+| `level` | Signifie | États |
+| ---: | :--- | :--- |
+| `2` | L'issue. Le message est terminé et facturé sur ce point. | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `REJECTD`, `FAILED`, `SEEN`, `UNKNOWN` |
+| `1` | Progression. Un autre accusé suit. | `ACCEPTD`, `BUFFRED` |
+
+Choisissez avec `dlr_level` sur l'envoi : `1` progression uniquement, `2` l'issue (**défaut**), `3`
+les deux.
+
+En SMPP, le même choix est l'octet `registered_delivery`. Les bits 1–0 sélectionnent aucun / tout /
+échec seulement / succès seulement, et le bit 4 (`0x10`) ajoute la notification intermédiaire.
+`0x11` est l'écriture SMPP de `dlr_level: 3`.
+
+<Tip>
+Si vous voulez seulement connaître la réponse finale, la valeur par défaut est déjà correcte et
+vous pouvez ignorer `level` entièrement. Ne branchez dessus que si vous avez demandé `1` ou `3`.
+</Tip>
+
+## `stat` est l'état brut, pas un drapeau de succès
+
+`DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED`,
+`SEEN`.
+
+`EXPIRED`, `REJECTD` et `UNDELIV` sont tous facturés comme des échecs mais signifient des choses
+différentes et valent la peine d'être distingués. L'expiration est un combiné éteint pendant une
+journée ; le rejet est habituellement un refus sur lequel vous pouvez agir.
+
+**Il n'y a pas de champ `err`.** Jasmin en envoie un ; le résolveur de FireFlo reçoit seulement
+l'état de livraison et jamais de code d'erreur, donc en émettre un signifierait l'inventer.
+
+## Le champ `vendor` est absent tant que votre fournisseur ne l'active pas
+
+Il nomme quel fournisseur transporte votre trafic. Les fournisseurs le retiennent ailleurs par
+construction, il est donc désactivé par défaut et activé par déploiement.
+
+`operator_msg_id` n'est **pas** la même divulgation et est toujours envoyé : c'est la référence de
+l'opérateur pour le message, ce que vous citez lors d'une requête de livraison. Il identifie le
+message, pas le fournisseur.
+
+## Livraison, retries et ce qui compte comme succès
+
+| Règle | Valeur |
+| :--- | :--- |
+| Succès | HTTP **`200`–`399`** |
+| Retries | 10 par défaut, à 120 secondes d'intervalle |
+| Timeout | 5 secondes, connexion et requête |
+
+<Warning>
+**Un `302` vers une page de connexion compte comme succès** et avale l'accusé. Idem pour tout `2xx`
+d'un proxy qui n'a jamais atteint votre application. Si les accusés "arrivent" mais votre handler ne
+s'exécute jamais, vérifiez ce qui est en amont.
+</Warning>
+
+## Trois segments, trois accusés
+
+Par défaut, vous obtenez un accusé par `submit_sm` envoyé, chacun citant l'id qui vous a été remis.
+Votre fournisseur peut le ramener à un seul avec `first` ou `last`.
+
+**Chaque accusé rapporte la même issue** quel que soit le choix, parce que les segments sortants
+sont agrégés avant qu'un accusé ne soit construit.
+
+<Tip>
+Un long message partiellement livré est rapporté **FAILED**, pas partiellement livré. La résolution
+attend le dernier segment et rapporte le pire. C'est la réponse honnête, et cela fait paraître les
+taux de livraison plus bas que ceux des passerelles qui rapportent le premier segment.
+</Tip>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Callbacks qui n'arrivent pas" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    La plage de succès, le budget de retries et le piège des placeholders.
+  </Card>
+  <Card title="Gérer les erreurs" icon="code-branch" href="/developers/errors">
+    Construire pour l'accusé plutôt que pour la réponse.
+  </Card>
+</CardGroup>

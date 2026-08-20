@@ -1,0 +1,129 @@
+---
+title: "Binds y listeners"
+description: "Tres fallos distintos que se presentan todos como 'nadie está conectado': un bind saliente rechazado, un bind entrante rechazado y un listener que nunca abrió su puerto."
+---
+
+Tres problemas diferentes con la misma cara. Distínguelos primero, porque las soluciones no comparten nada.
+
+| Síntoma | Qué es |
+| :--- | :--- |
+| Un **proveedor** no muestra sesión | FireFlo no pudo hacer bind *hacia afuera* |
+| Un **cliente** no puede conectarse | FireFlo rechazó su bind |
+| Un cliente no puede conectarse **y no hay rechazo en ningún sitio** | El listener nunca abrió su puerto |
+
+## Distinguir "rechazado" de "nunca alcanzado"
+
+`bound: 0` por sí solo no puede distinguir "nadie conectado ahora mismo" de "nunca se abrió un socket".
+**`last_error` es lo que los separa**, y se limpia en cuanto un bind tiene éxito.
+
+| `last_error` | Significado |
+| :--- | :--- |
+| Un valor | El socket se abrió y el bind fue rechazado: credenciales, system type, IP o un límite de bind |
+| Vacío | El socket nunca se abrió: firewall, DNS, o el extremo remoto está caído |
+
+```bash
+fireflo test-bind vendor1
+```
+
+Marca una vez y te dice cuál, sin esperar el ciclo de reconexión.
+
+<Warning>
+**`test-bind` es rechazado mientras el proveedor ya está conectado**, deliberadamente. Un segundo bind sobre el mismo
+`systemId` puede costarte la sesión en vivo, y muchos operadores permiten solo uno. Úsalo antes de que el tráfico
+dependa del proveedor, o tras suspenderlo.
+</Warning>
+
+## Un proveedor no hace bind
+
+- `host`, `port`, `username` y `password` son correctos.
+- `connections.transceivers`, `connections.transmitters` o `connections.receivers` es **mayor que
+  cero**. Un proveedor con los tres a cero no hace bind y no reporta ningún error.
+- Los ajustes TLS coinciden con lo que requiere el proveedor.
+- El firewall permite tráfico saliente hacia el proveedor.
+- El proveedor ha incluido tu IP de origen en su lista de permitidas, si lo requiere.
+
+<Tip>
+**¿Conectado pero no sale nada?** Compara `bound` con `bound_transmittable`. Una sesión lleva tráfico
+solo si es un **transceiver**, o un **transmitter** en una sesión cliente. Un proveedor solo-receiver
+hace bind perfectamente y no envía nada.
+</Tip>
+
+## El bind de un cliente es rechazado
+
+- La credencial es `type: SMPP`. Una credencial HTTP no puede hacer bind, y el rechazo no lo dice.
+- El cliente está usando el `systemId` y `password` configurados.
+- No se excede ningún límite de conexión: `srv.maxConnections`, `srv.maxConnectionsPerIP`,
+  `conf.maxConnectionsPerUser.default`, o el límite por usuario.
+- Si `allowedIps` está configurado, la IP de origen del bind está en él.
+
+## El listener nunca abrió
+
+Diferente a todos los casos anteriores: no es un bind rechazado, sino un socket que nunca se creó. La
+pasarela se ejecuta normalmente. Enrutamiento, tarificación, facturación y conexiones a proveedores todo activo, systemd reportando
+`active`. Mientras ningún cliente puede conectarse.
+
+**La pasarela no sale cuando un listener no puede tomar su puerto.** Eso es deliberado: un puerto ocupado
+no debe sacar de servicio toda una pasarela, y los listeners TLS o proxy a menudo no están configurados en absoluto.
+Así que la evidencia está en tres sitios en lugar de en el código de salida.
+
+En `/ops/health`:
+
+```json
+{ "name": "smppserver.smpp", "bound": 0,
+  "last_error": "the listener could not take port 22775 because something already holds it -- ...",
+  "last_error_at": "2026-08-11T18:58:47Z" }
+```
+
+En el log:
+
+```
+ERROR [smsg.out.smppserver.smpp] listener.bind.failed listener=smppserver.smpp port=22775 --
+      the listener could not take port 22775 because something already holds it
+```
+
+Y el puerto nombra a quien lo tiene:
+
+```bash
+sudo ss -ltnp | grep 22775
+```
+
+### La causa habitual son dos pasarelas
+
+O bien una segunda instancia configurada en el mismo puerto, o la misma instancia ejecutándose dos veces bajo dos
+nombres de unidad. Que es lo que un `update` con el `--service-name` equivocado solía producir.
+
+<Steps>
+  <Step title="Lista cada unidad">
+    `systemctl list-units 'fireflo*' --all`
+  </Step>
+  <Step title="Compara el PID gestionado con el que tiene el puerto">
+    `systemctl show <unit> -p MainPID`. Una JVM huérfana reteniendo el puerto es una que systemd ya no
+    gestiona.
+  </Step>
+  <Step title="Detén el servicio, mata el huérfano por PID, arráncalo de nuevo">
+    **Por PID, nunca por patrón.** Puede haber otras JVMs en el host, y un kill por patrón ha eliminado
+    servicios no relacionados antes.
+  </Step>
+</Steps>
+
+<Tip>
+Un listener que falló al hacer bind **reintenta en el siguiente sondeo o recarga de configuración**. No necesita
+un reinicio una vez que el puerto esté libre. (Antes de 0.3.4 sí lo necesitaba: el servidor fallido se retenía, así que cada intento posterior
+registraba `not (re)starting` y devolvía.)
+</Tip>
+
+<Warning>
+**Un arranque limpio no es prueba de que todo listener esté activo.** Como la pasarela registra y continúa, la
+ausencia de un error al arranque no significa nada. Comprueba `/ops/health` en su lugar.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Servidores" icon="server" href="/platform/connections/servers">
+    Ajustes de listener y qué hace cada uno.
+  </Card>
+  <Card title="Proveedores" icon="tower-broadcast" href="/platform/connections/vendors">
+    Conexiones salientes, TPS y retención.
+  </Card>
+</CardGroup>

@@ -1,0 +1,116 @@
+---
+title: "Encodage et segments"
+description: "Pourquoi le même message coûte un sur un compte et trois sur un autre. Les tailles de segment exactes, et le caractère qui double discrètement votre facture."
+---
+
+**Vous êtes facturé par segment, pas par message.** Un long message représente plusieurs segments,
+et son encodage décide combien.
+
+## Les chiffres
+
+Tirés des propres constantes de la passerelle, pas de la spécification en général :
+
+| Encodage | `coding` | Message unique | Chaque segment d'un plus long |
+| :--- | ---: | ---: | ---: |
+| **GSM-7** | `0` | 160 caractères | 153 caractères |
+| **UCS-2** | `8` | 70 caractères | 67 caractères |
+
+<Tip>
+L'en-tête de concaténation vous coûte la différence — 7 caractères en GSM-7, 3 en UCS-2 — sur
+chaque segment, ce qui explique que 160 devienne 153 plutôt que de rester 160.
+
+En interne, ce sont des limites en octets : 140 octets pour un unique, 134 octets par segment.
+GSM-7 empaquette sept bits par caractère, UCS-2 utilise deux octets chacun.
+</Tip>
+
+Un message peut faire au plus **255 segments**.
+
+## Le caractère qui double votre facture
+
+**Un seul caractère non GSM-7 force tout le message en UCS-2**, et la capacité tombe de 160 à 70.
+Un message de 150 caractères qui coûtait un segment en coûte désormais trois.
+
+Les coupables habituels, tous invisibles quand vous regardez le texte :
+
+| Ressemble à | Est en réalité |
+| :--- | :--- |
+| `'` | Une apostrophe typographique `’` insérée par un traitement de texte |
+| `-` | Un tiret demi-cadratin `–` |
+| `...` | Un caractère de points de suspension `…` |
+| un espace | Un espace insécable |
+| `é`, `ü` | OK en GSM-7 — ceux-là ne sont **pas** le problème |
+
+<Warning>
+**Les guillemets typographiques sont la cause la plus fréquente d'un triplement inexpliqué du
+coût.** Un texte collé depuis un document, un CMS ou un client de messagerie porte régulièrement
+`’` au lieu de `'`, et rien dans la voie d'envoi ne le signale : le message sort correctement, mais
+trois fois plus cher.
+
+Normalisez la ponctuation avant l'envoi si votre contenu vient d'un endroit où un humain a tapé.
+</Warning>
+
+## Vérifiez le prix avant d'envoyer
+
+`/secure/rate` renvoie le nombre de segments sans rien envoyer :
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+`submit_sm_count` est le nombre de segments. Cela ne coûte rien, n'envoie rien et ne compte contre
+aucune limite de débit. Il est donc raisonnable de l'appeler sur du contenu généré par les
+utilisateurs avant de valider un envoi.
+
+## Régler l'encodage vous-même
+
+`coding` correspond au `data_coding` SMPP et est **passé à l'opérateur inchangé**, il choisit donc
+la manière dont le corps est encodé, pas seulement la manière dont il est compté.
+
+| `coding` | Alphabet |
+| ---: | :--- |
+| `0` | Défaut SMSC |
+| `1` | ASCII |
+| `2` | Octet, non spécifié |
+| `3` | Latin-1 |
+| `4` | Octet |
+| `6` | Cyrillique |
+| `7` | Hébreu |
+| `8` | UCS-2 |
+
+Tout le reste dans 0–14 est accepté et décodé en UTF-8. **15 et au-dessus est un `400`.**
+
+## Ce qu'un client voit quand ça tourne mal
+
+Un message découpé en segments arrive comme un unique message sur un combiné moderne, parce que
+l'en-tête de concaténation lui dit comment le réassembler. Deux modes d'échec valent la peine
+d'être connus :
+
+- **Des segments arrivant dans le désordre ou incomplets** apparaissent comme des messages
+  séparés, souvent avec des fragments d'en-tête visibles. C'est un problème d'opérateur, pas
+  d'encodage.
+- **Un long message partiellement livré est rapporté FAILED**, pas partiellement livré. La
+  résolution attend le dernier segment et rapporte la pire issue. C'est la réponse honnête, et
+  cela abaisse les taux de livraison par rapport aux passerelles qui rapportent le premier segment.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Concaténation" icon="link" href="/platform/connections/concatenation">
+    Comment les segments sont réassemblés, et ce que cela coûte.
+  </Card>
+  <Card title="Tarifer un message" icon="calculator" href="/reference/api/rate">
+    Chaque champ de `/secure/rate`.
+  </Card>
+</CardGroup>

@@ -1,0 +1,105 @@
+---
+title: "Inspecter une file"
+description: "La profondeur vous dit que quelque chose est bloqué ; un dump vous dit quoi. Le seul champ qui sépare un problème de volume d'un problème vendeur. Et pourquoi il n'y a pas de flush."
+---
+
+`/ops/health` dit à quelle profondeur est chaque file. Cela suffit à savoir que quelque chose est bloqué et **ne suffit pas à faire quoi que ce soit à ce sujet** : 4 000 messages en attente sur `vendor1` se lit identiquement que ce soit le batch loupé d'un client ou chaque compte sur la boîte.
+
+```bash
+./scripts/fireflo queue dump
+./scripts/fireflo queue dump vendor1
+./scripts/fireflo queue dump vendor1 100
+```
+
+Un nombre nu est lu comme une **limite** plutôt qu'un nom de worker, donc `queue dump 100` élargit tout. Le défaut est 20 par file, plafond 500. Au-delà la question appartient à `cdr_submit` plutôt qu'à un gateway en direct.
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-09T02:14:07Z",
+    "limit_per_queue": 20,
+    "queues": [
+      {
+        "name": "router", "kind": "router", "depth": 1204, "ordered": true, "returned": 20,
+        "entries": [
+          {
+            "serial": "01JC8…", "account": "acct-in-2001", "product": "in-otp",
+            "from": "SUNOTP", "to": "919876543210",
+            "body_chars": 44, "encoding": "gsm7", "parts": 1,
+            "retries": 0, "priority": 2, "ingress": "http", "target": "in-sim",
+            "queued_at": "2026-08-09T02:14:05Z"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Les quatre types
+
+| `kind` | Contient |
+| :--- | :--- |
+| `router` | Accepté, pas encore routé. **Une file pour tout le gateway.** |
+| `pending` | Routé vers un vendeur, en attente de sa session. Une par worker. |
+| `delayed` | Retries planifiés. `ready_in_ms` dit combien de temps avant que chacun soit éligible. |
+| `broker` | Retenu sur RabbitMQ. **Profondeur seulement.** Voir ci-dessous. |
+
+## `retries` est le champ qui répond à la question
+
+<Tip>
+**Une file pleine de zéros est un problème de volume.** Plus est arrivé que le vendeur peut prendre.
+
+**Une file pleine de retries non nuls est un problème vendeur.** Les mêmes messages reviennent.
+
+Ceux-là demandent des réponses opposées. Ajouter de la capacité à une tempête de retries la rend pire ; suspendre un vendeur qui est juste occupé déplace le backlog quelque part de plus coûteux.
+</Tip>
+
+**`depth` et `returned` sont des questions différentes.** `depth` est toute la file ; `returned` est combien a été listé. Les comparer est comment vous dites si vous voyez le problème ou un coin.
+
+## Pas de texte de message, et pas de drapeau qui en ajoute un
+
+`cdr_submit` exclut le corps par principe. Destination et source sont gardées parce que la tarification et les litiges en ont besoin, le texte non parce qu'exploiter un gateway ne le fait jamais.
+
+Un dump de file hérite de cette règle plutôt que de devenir la seule surface opérateur qui redonne du trafic client en gros.
+
+`body_chars` avec `encoding` distingue un OTP en une partie d'un blast bloqué à six parties, ce qui est la question de diagnostic réellement posée.
+
+## Rien n'est consommé et rien n'est réordonné
+
+Chaque file est parcourue avec son propre itérateur **pendant que le gateway continue de la drainer**. Donc :
+
+- Un message listé peut déjà être parti au moment où vous le lisez.
+- `depth` est échantillonnée après le parcours et peut différer de `entries` de quelques-uns.
+- `ordered` dit si la liste est l'ordre dans lequel le gateway enverra. **False** pour une file de priorité et pour la file de délai.
+
+C'est le compromis honnête. L'alternative est d'arrêter le trafic pour le regarder.
+
+## Une file broker est rapportée mais jamais parcourue
+
+AMQP n'a pas de moyen de regarder un message en file sans le prendre. `basicGet` plus un requeue réordonnerait la file et réinitialiserait les comptes de livraison sur les messages des clients payants pour satisfaire un diagnostic.
+
+Donc la profondeur est rapportée et le dump le dit. **Un broker qui ne répond pas rapporte la profondeur comme inconnue plutôt que comme zéro.** Ce qui compte, parce que zéro est une affirmation et inconnu ne l'est pas.
+
+## Il n'y a délibérément pas de `queue flush`
+
+<Warning>
+Jeter une file détruit des messages qui ont été **acceptés, facturés et promis à un client**.
+
+Pour retirer le trafic d'un vendeur bloqué sans le perdre, utilisez `suspend`. Il draine la file de ce vendeur vers le routeur pour que le routage puisse en choisir un autre.
+</Warning>
+
+## Accès
+
+Le token **de lecture**, pas l'admin. Un dump ne prend rien et ne bouge rien, donc un système de monitoring tenant le secret de surveillance peut le demander.
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Contrôle des workers" icon="sliders" href="/platform/operations/worker-control">
+    Suspendre, retenir, et ce que chacun fait à une file.
+  </Card>
+  <Card title="Files et retries" icon="rotate" href="/platform/routing/queues-and-retries">
+    D'où viennent les retries dans cette colonne.
+  </Card>
+</CardGroup>

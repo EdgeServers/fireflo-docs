@@ -1,0 +1,95 @@
+---
+title: "Runtime"
+description: "Si la pasarela tiene la memoria, procesador y capacidad de conexión para seguir funcionando. Cinco veredictos, cada uno publicado con la regla por la que se alcanzó."
+---
+
+<Warning>
+**Esta página trata de la propia pasarela, no de los mensajes que lleva.** Nada aquí cuenta
+mensajes, entregas o throughput de vendor: eso está en el [dashboard](/platform/control-panel/dashboard)
+y en [Live health](/platform/operations/live-health). Esto es si el software tiene la memoria, la
+potencia de proceso y la capacidad de conexión para seguir haciendo su trabajo.
+</Warning>
+
+Esa separación es todo el diseño. Una pasarela puede estar entregando perfectamente mientras
+silenciosamente se queda sin descriptores de archivo, y puede estar inactiva mientras filtra
+memoria. Ninguno aparece en una cifra de entrega.
+
+## Tendencia reciente
+
+Cuatro sparklines (memoria, procesador, tareas ejecutándose, trabajo esperando) etiquetados **since
+this page opened**. La historia se guarda en la pestaña del navegador y empieza vacía, así que
+genuinamente no puede mostrarle nada de antes de que llegara. Para una vista más larga, apunte un
+sistema de monitorización al endpoint de mediciones propio de la pasarela.
+
+## Los cinco veredictos
+
+Cada tarjeta lleva un badge (**Healthy**, **Worth watching**, **Under pressure** o **Not
+reported**), un resumen, una barra de llenado y dos líneas de prosa: qué significa la lectura, y
+**la regla por la que se alcanzó el badge**.
+
+Publicar la regla es deliberado. Un umbral que no puede ver es un umbral con el que no puede
+discutir, y estos son juicios sobre su plataforma, no leyes de la naturaleza. Si el 70% de
+procesador es normal para su forma de tráfico, la tarjeta está equivocada y usted debería saber
+precisamente cuán equivocada.
+
+| Tarjeta | Healthy | Worth watching | Under pressure |
+| :--- | :--- | :--- | :--- |
+| **Memory** | por debajo del 75% del techo | hasta 90% | por encima del 90% |
+| **Processor** | por debajo del 70% | hasta 90% | por encima del 90% |
+| **Connection capacity** | por debajo del 70% del límite | hasta 85% | por encima del 85% |
+| **API requests** | por debajo de 250 ms de media | hasta 1 segundo | por encima de 1 segundo |
+| **Internal task queue** | por debajo del 70% de slots ocupados, nada esperando | cualquier cosa encolada | — |
+
+### Qué le está diciendo realmente cada una
+
+**Memory.** Memoria que sigue subiendo y nunca cae tras un cleanup es como se ve una fuga. Agótela
+por completo y la pasarela deja de aceptar mensajes. La línea de detalle cuenta las pausas de
+cleanup y el tiempo total pausado.
+
+**Processor.** Uso alto sostenido significa que el throughput está limitado por esta máquina en
+lugar de por el vendor. Los picos breves durante una ráfaga son normales.
+
+**Connection capacity.** Cada sesión SMPP, conexión de base de datos y archivo abierto cuenta
+contra esto.
+
+<Note>
+Alcance el límite de conexión y la pasarela **rechaza nuevas conexiones de vendor y cliente antes
+de que aparezca cualquier otro síntoma**. Nada en el tráfico se ve mal primero. Esta es la tarjeta
+que falla en silencio, y la razón por la que está en la página en absoluto.
+</Note>
+
+**API requests.** Mensajes enviados por HTTP, más las llamadas propias de este panel. Respuestas
+lentas aquí apuntan a la pasarela o su base de datos, no a un vendor. La cifra es una media desde
+que arrancó el proceso: útil para "esto es lento en general", inútil para un pico hace un momento.
+
+**Internal task queue.** El trabajo de fondo propio de la pasarela: escrituras a base de datos,
+manejo de acuses. Trabajo esperando aquí que nunca se despeja significa que llega más rápido de lo
+que puede hacerse, y la línea de detalle le dirá si algo se rechazó directamente, que es trabajo
+que la pasarela no pudo hacer en absoluto.
+
+<Warning>
+**Internal task queue no es un pool de trabajadores.** *Worker* significa una conexión SMPP en todo
+el resto de esta documentación y en todo el resto del panel. Se evita aquí a propósito: los
+lectores que se encontraron la palabra en esta tarjeta fueron a buscar un vendor que nunca estuvo
+involucrado.
+</Warning>
+
+Donde una lectura simplemente no está, la tarjeta lo dice con palabras ("The gateway did not report
+a memory ceiling") en lugar de mostrar un cero que se lee como una medida.
+
+## Las lecturas crudas
+
+Un control, **Show the raw readings**, abre todo lo que la pasarela publica, en los nombres propios
+del software, agrupados por sujeto. Estos son los mismos datos que un sistema de monitorización
+raspara, y están aquí para investigar algo que las tarjetas de arriba no pueden explicar.
+
+Hay un único cuadro de búsqueda a través de cada grupo en lugar de uno por tarjeta, porque cuando
+está buscando generalmente no sabe en qué grupo está la medición: eso es la mayor parte de por qué
+está buscando. Los grupos que no coinciden con nada desaparecen en lugar de dejar cabeceras vacías
+atrás.
+
+El escalón hacia abajo es un escalón a propósito. Una versión anterior dejaba a un lector caer de
+inglés llano a sintaxis de etiquetas crudas en un solo clic, lo que no es divulgación progresiva
+sino un acantilado.
+
+Un pie informa de cuándo leyó la página por última vez, y refresca cada diez segundos.

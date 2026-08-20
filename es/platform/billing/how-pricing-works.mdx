@@ -1,0 +1,156 @@
+---
+title: "Cómo funciona la tarificación"
+description: "Dos lados en cada mensaje, liquidados en momentos distintos. Y la diferencia entre un precio desconocido y uno gratis."
+---
+
+Cada mensaje tiene **dos precios**: lo que cobra al cliente y lo que le cobra el vendor. Se liquidan
+en puntos distintos de la vida del mensaje, y la diferencia es el margen.
+
+## Dónde se liquida cada lado
+
+<CardGroup cols={2}>
+  <Card title="Precio — en la entrada" icon="arrow-right-to-bracket">
+    Por cada `submit_sm` entrante. Depende únicamente de la tarifa del cliente (cuenta, producto,
+    destino), nunca del vendor que se elija finalmente.
+  </Card>
+  <Card title="Coste — en el vendor" icon="arrow-right-from-bracket">
+    Una vez elegida una ruta y dividido el cuerpo, porque solo entonces se conoce el número de
+    segmentos.
+  </Card>
+</CardGroup>
+
+**Cada PDU entrante es una unidad facturable.** Un mensaje concatenado que llega como tres PDUs son
+tres cargos, y nada tiene que predecir el número de segmentos para calcular bien la factura del
+cliente.
+
+El coste se **recomputa en cada intento**. Un mensaje reenrutado tras un NACK va a un vendor
+distinto con un coste distinto, y cada intento se cuesta por separado. Mientras que al cliente se le
+cobra **una vez**, sean cuantos sean los vendors probados.
+
+## La tabla de tasas
+
+Las tasas usan la gramática de enrutamiento con el importe donde el enrutamiento pone el objetivo:
+
+```
+Amount:Attribute:Operator:Value
+```
+
+```properties
+[vendor1]
+0.0450:to:matches:^61[45][0-9]{8}$
+0.0620:to:matches:^61[0-9]{9}$
+0.0900::default:
+
+[acct-1001]
+0.0800:product~~to:equals~~matches:premium~~^61[45][0-9]{8}$
+0.1200::default:
+```
+
+Un `[scope]` es **o bien el nombre de instancia de un vendor** (lo que ese vendor le cobra), **o bien
+un id de cuenta** (lo que usted cobra a ese cliente). Las reglas se evalúan de arriba abajo y **gana
+la primera coincidencia**, por lo que un catch-all va al final.
+
+Los atributos y operadores son los del motor de enrutamiento, así que cualquier cosa por la que
+pueda enrutar la puede tarificar, incluyendo `product` y `systemId`. Combine condiciones con `~~` en
+las tres posiciones.
+
+<Warning>
+**`matches` es una regex y está anclada.** `^61.*` coincide con un número completo; un `61` desnudo
+no.
+
+Y `startsWith` compara **texto literal**: una expresión regular escrita en él nunca puede ser
+verdad, por lo que la regla no tarifica nada y el tráfico cae hacia lo que venga después.
+</Warning>
+
+## El valor por defecto que todo el mundo debería establecer
+
+`[*]` tarifa **cualquier cuenta sin regla propia**:
+
+```properties
+[*]
+0.1200:product:equals:sms
+```
+
+Establézcalo una vez y cada cuenta queda tarificada, incluidas las cuentas creadas después. Las
+reglas propias de una cuenta se prueban primero y sigue ganando la primera coincidencia, así que
+cualquier cosa que lleve vence al valor por defecto, **incluido un catch-all desnudo**, que es lo que
+hace de una tarifa negociada un override en lugar de una sugerencia.
+
+<Warning>
+**Sin un valor por defecto, una cuenta que nadie ha tarificado no es rechazada: envía sin tarifar y
+sin cobrar**, con una línea en `debug`.
+
+Eso es tráfico regalado, no tráfico bloqueado, y es el fallo para el que realmente existe el valor
+por defecto. Establézcalo el primer día.
+</Warning>
+
+**Se aplica solo al precio, nunca al coste.** Un vendor sin reglas de coste se queda como
+*desconocido* en lugar de heredar el precio de venta. De lo contrario, todos los márgenes se
+computarían como cero en lugar de desconocido, y nada lo diría.
+
+`*` está reservado: ninguna cuenta o vendor puede llamarse así.
+
+## Desconocido no es cero
+
+**Una regla que no coincide con nada deja el importe desconocido, nunca cero.** Cero es un precio
+real que significa gratis, y un lado desconocido hace desconocido al margen en lugar de equivocado.
+
+Esta distinción es por lo que un vendor sin tarifar aparece como un hueco en un informe de márgenes
+en lugar de como 100% de beneficio.
+
+## Precisión
+
+Los importes llevan **como máximo cuatro decimales** y se parsean exactamente, nunca por coma
+flotante. Un importe con más precisión se **rechaza en lugar de truncarse**: truncar `0.00001` a
+cero regala tráfico en silencio.
+
+`smsg.money.scale` (`0`–`4`, por defecto `4`) controla con cuántos decimales se muestra un **total**.
+India usa `2`.
+
+<Tip>
+**Las tasas siempre conservan cuatro decimales sin importar el ajuste.** `/secure/rate` informa
+`0.0450`; mostrado como `0.05` eso son 11% de desviación en cada mensaje, y un cliente que compute
+su factura desde una cotización se equivocaría. Las exportaciones CSV conservan cuatro por la misma
+razón: una hoja de cálculo suma esa columna.
+</Tip>
+
+El almacenamiento nunca cambia: los importes son enteros de diezmilésimas. El ajuste es solo de
+presentación y puede cambiarse en cualquier momento.
+
+## Enrutamiento de menor coste
+
+Una tabla marcada `->function(LCR)` elige al vendor más barato en lugar de la primera regla que
+coincide:
+
+```properties
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+La semántica difiere de una tabla normal de una forma que importa:
+
+| | Tabla normal | Tabla LCR |
+| :--- | :--- | :--- |
+| Evaluación | Para en la primera coincidencia | Escanea cada regla |
+| Las coincidencias son | Una cadena de fallback | **Alternativas** |
+| El orden de reglas | Es la prioridad | No lleva significado |
+
+- Los vendors que están caídos o que no aceptan se saltan, así que el siguiente más barato lleva el
+  tráfico.
+- Un vendor **sin tasa coincidente** se usa solo si nada más coincide: una línea de tasa olvidada
+  degrada en lugar de causar un corte.
+- Las reglas que apuntan a otra tabla se **ignoran** dentro de una tabla LCR: un coste anidado no
+  puede compararse, y enrutar a un precio desconocido sería peor.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Tarifas" icon="table" href="/platform/billing/tariffs">
+    Edición de tasas desde el panel y overrides por cuenta.
+  </Card>
+  <Card title="Registros de llamada" icon="database" href="/platform/billing/cdrs">
+    Dónde se registran ambos lados del trato.
+  </Card>
+</CardGroup>

@@ -1,0 +1,65 @@
+---
+title: "Recharger sans redémarrage"
+description: "Trois choses différentes sont appelées « le cache » et une seule nécessite une commande. Plus la raison pour laquelle un solde corrigé ne prend pas effet immédiatement."
+---
+
+| Quoi | Comment ça se rafraîchit |
+| :--- | :--- |
+| **Configuration** — logins, routage, tarifs, paramètres, whitelist | `./scripts/fireflo reload`. Chaque snapshot en cache est reconstruit depuis la base. |
+| **Limites de débit d'ingress** | **Rien à faire.** Le limiteur relit le taux du compte à chaque message, donc un changement s'applique au suivant. |
+| **Crédit prépayé réservé** | `./scripts/fireflo credit release [account]`. Voir ci-dessous. |
+
+Seul le premier est ce que les gens veulent habituellement dire, et seul le troisième est surprenant.
+
+## La configuration se recharge de toute façon
+
+Le gateway sonde les changements de base. `reload` existe parce que le sondage a jusqu'à trente secondes de retard, ce qui est trop lent quand vous regardez.
+
+<Warning>
+**Un changement fait dans le panel ne fait rien si le gateway lit un fichier pour ce domaine.**
+
+Vérifiez `config_sources` sur `/ops/health`. Il rapporte par domaine si les propriétés, les identifiants, le routage et les tarifs viennent de `database` ou de `file`. Le symptôme d'une erreur ici est « ma modification ne s'est pas appliquée », ce qui fait chercher les gens sur la modification plutôt que sur la source.
+</Warning>
+
+## Le crédit n'est pas de la configuration
+
+`reload` ne le touche pas, et c'est celui qui piège les gens.
+
+Le gateway réserve le crédit en **blocs**. Il déplace l'argent de `account_balance.balance` vers `reserved` et tient le bloc en mémoire. C'est ce qui garde le chemin des messages hors de la base.
+
+**Donc corriger un solde à la main ne prend pas effet tant que le bloc déjà remis n'est pas consommé.** Un compte réglé à zéro continue d'envoyer.
+
+```bash
+./scripts/fireflo credit release acct-in-2001
+```
+
+`credit release` restitue le reste **non dépensé** de chaque bloc à `balance` et écrit une ligne `RELEASE` dans le grand livre, pour que le prochain message réserve contre le chiffre corrigé.
+
+<Tip>
+**Il ne retire rien.** Ce qui est restitué est immédiatement réservable à nouveau, et la portion déjà dépensée reste dépensée. `balance + reserved` est inchangé par une release.
+
+Omettre le compte les libère tous. C'est bien après une correction en masse et gaspilleur sinon, puisque le prochain message de chaque compte paye alors pour une nouvelle réservation.
+</Tip>
+
+## La même commande après un crash
+
+Un `kill -9` bloque ce qui était réservé. L'argent est **parqué, pas perdu**. `balance + reserved` s'équilibre toujours. Et `credit release` est comment il revient.
+
+Un arrêt propre le fait tout seul.
+
+## Ce qu'un reload ne fait pas
+
+- **Il ne redémarre pas les workers.** Un worker qui a échoué à binder retente selon son propre calendrier ; un listener qui n'a pas pu prendre son port retente au prochain sondage ou reload sans nécessiter de redémarrage.
+- **Il n'efface pas l'état d'exécution** posé par `disable`, `suspend` ou `hold`. Ceux-là sont délibérément hors de la configuration pour qu'ils puissent agir immédiatement. Et ils reviennent à la normale au redémarrage plutôt qu'au reload.
+- **Il ne change pas ce qu'une session bindée est autorisée à faire.** Un changement de taux s'applique aux sessions SMPP déjà bindées en environ 200 ms ; il ne les oblige pas à se rebinder.
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Contrôle des workers" icon="sliders" href="/platform/operations/worker-control">
+    Les verbes qui agissent immédiatement plutôt qu'à un sondage.
+  </Card>
+  <Card title="Crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocs, réservations, et pourquoi le solde traîne.
+  </Card>
+</CardGroup>

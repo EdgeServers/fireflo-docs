@@ -1,0 +1,84 @@
+---
+title: "FAQ installation"
+description: "Les questions qui surgissent entre un hôte frais et un gateway fonctionnel."
+---
+
+<AccordionGroup>
+
+<Accordion title="Configuration par fichiers ou par base — laquelle choisir, et puis-je changer d'avis ?">
+L'une ou l'autre. Ni l'une ni l'autre n'est plus supportée.
+
+**Fichiers** si vous versionnez la configuration et la déployez avec le reste de votre infrastructure. **Base de données** si vous voulez que le control panel édite quoi que ce soit. En mode fichier il n'y a rien à éditer pour lui.
+
+Vous pouvez changer d'avis, et `fireflo import` est le chemin. **Gardez les fichiers.** Le gateway les lit jusqu'à ce qu'il redémarre avec `FIREFLO_CONFIG_SOURCE=db`, et revenir en arrière est cette variable à nouveau. Importez chaque sujet avant de basculer, pas seulement celui sur lequel vous travailliez. L'interrupteur déplace les quatre domaines d'un coup.
+
+Voir [Choisir une source](/platform/install/configuration-source).
+</Accordion>
+
+<Accordion title="Pourquoi le gateway refuse-t-il de démarrer sur une base vide ?">
+Parce qu'il n'y a pas de table de routage, et un gateway qui ne peut pas router ne peut rien faire.
+
+Le message nomme une structure interne plutôt que la ligne manquante. `no default routing table in new targets!`. Cela ressemble à un bug et ne l'est pas.
+
+`db migrate` crée les tables et les laisse toutes vides. `fireflo bootstrap` écrit le minimum pour démarrer. Voir [Première configuration](/platform/install/first-configuration).
+</Accordion>
+
+<Accordion title="Pourquoi deux tokens opérationnels au lieu d'un ?">
+Parce que lire l'état du gateway ne doit pas porter la capacité d'arrêter un vendeur. Une sonde de monitoring ou un tableau de bord en lecture seule obtient `smsg.ops.token` et peut voir l'état des binds, la profondeur des files et le débit ; il ne peut rien désactiver.
+
+**Régler les deux à la même chaîne ne simplifie pas la configuration. Cela éteint les contrôles.** Laisser le token admin non défini aussi. Dans les deux cas les verbes de contrôle répondent 404.
+</Accordion>
+
+<Accordion title="J'obtiens un 404 du port de gestion. Le token est-il faux ou l'endpoint désactivé ?">
+Le gateway ne vous le dira pas, délibérément. Un token faux obtient le même 404 qu'un endpoint désactivé, pour que rien ne publie qu'il y a un secret qui vaut la peine d'être deviné.
+
+Quatre choses le produisent : mauvais token, token admin non défini, token admin égal au token de lecture, ou un chemin qui n'existe pas. **Vérifiez les tokens des deux côtés avant de conclure que le gateway est en panne.**
+</Accordion>
+
+<Accordion title="Pourquoi --dry-run montre-t-il moins que ce à quoi je m'attendais ?">
+Il rapporte les décisions que l'installateur prendrait. Il ne peut pas rapporter ce qu'un gestionnaire de paquets tirerait, ni ce qu'une migration trouverait dans une base à laquelle il ne s'est pas connecté.
+
+Lisez-le comme « les choix », pas « tout ce qui changerait sur cet hôte ».
+</Accordion>
+
+<Accordion title="install refuse parce qu'un répertoire de configuration existe. Et maintenant ?">
+Utilisez **`service`**, pas `install`.
+
+`install` refuse plutôt que de créer une seconde paire de tokens opérationnels par-dessus la première. Ce qui laisserait le control panel s'authentifier contre des tokens que le gateway n'a plus. `service` génère l'unit sur la configuration existante et la démarre.
+</Accordion>
+
+<Accordion title="Puis-je faire tourner deux instances sur un hôte ?">
+Oui. Comme déploiements **indépendants**, chacun avec sa propre base et ses propres ports. `--tenant NAME` nomme la même instance aux deux installateurs, et sur `update` c'est une recherche plutôt qu'une disposition, donc une mise à niveau ne peut pas être visée à la mauvaise instance en oubliant un drapeau.
+
+Voir [Plusieurs instances](/platform/install/multiple-instances).
+
+**Deux instances contre une seule base est une question différente, et la réponse est non.** La plupart des accusés de livraison seraient perdus. Voir [Cluster](/platform/install/clustering).
+</Accordion>
+
+<Accordion title="Java 25 et Node 22 — pourquoi pas les paquets de la distribution ?">
+Ubuntu 24.04 fournit `openjdk-21` et Node 18. La build du gateway cible la release 25 et **ne tournera pas sur 21** ; le panel est Next.js 16, qui ne tournera pas sur Node 18.
+
+Adoptium et NodeSource, tous deux dans [Installation à la main](/platform/install/by-hand).
+</Accordion>
+
+<Accordion title="Que signifie le code de sortie verify 4 ?">
+**Le déploiement est sain ; les propres données de cette installation ne le sont pas.**
+
+L'artefact est complet, Java est assez récent, les deux ports répondent et les tokens sont séparés. Mais il n'y a rien à router, ou pas de tarification, ou pas de logins. C'est la réponse attendue immédiatement après une installation `--bootstrap` et avant d'ajouter un vendeur.
+
+`0` bien, `1` échoué, `2` refusé ou mal utilisé.
+</Accordion>
+
+<Accordion title="Rien ne supprime httpapi.log. Est-ce normal ?">
+Oui, et c'est la seule limite que rien dans le gateway n'applique. Quarkus le tourne quotidiennement et n'offre aucun paramètre de rétention qui va avec, donc il écrit un fichier par jour et garde chacun pour toujours.
+
+`fireflo-install --log-retain-days` écrit une règle `tmpfiles.d` qui supprime les fichiers tournés, sans jamais toucher aux quatre en cours. **Une installation faite à la main doit organiser cela elle-même.**
+</Accordion>
+
+<Accordion title="Ai-je besoin de RabbitMQ ?">
+Seulement si les messages soumis doivent survivre à un redémarrage du gateway. Sans lui la file du routeur est en mémoire et un redémarrage supprime tout ce qui n'a pas encore été remis à un vendeur.
+
+Tout le reste fonctionne sans lui.
+</Accordion>
+
+</AccordionGroup>

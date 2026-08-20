@@ -1,0 +1,140 @@
+---
+title: "Products"
+description: "O que um produto seleciona — a tarifa, a rota e se o tráfego é checado ou não — e por que um produto não definido envia mensagens de graça."
+---
+
+Um **product** é uma tag em um login. Ele é combinável na tabela de roteamento, seleciona a tarifa, e
+decide se os IDs de remetente e o conteúdo da conta são checados. Ele também é opcional, e o caso
+opcional é o caro.
+
+## Um product não definido é um estado suportado que envia de graça
+
+Deixar `product` fora de uma credencial é configuração válida. Ela combina com `product:isNull:` na
+tabela de roteamento e é tarifada apenas por regras de tarifa que elas próprias não carregam produto.
+
+**Essa última cláusula é toda a armadilha.** Uma regra sem produto se aplica a todos os produtos, mas
+uma *mensagem* sem produto enxerga **apenas** as regras que também não têm nenhum. Elas não são duas
+formas de escrever "qualquer".
+
+<Warning>
+**Em um deployment cujas regras de tarifa todas carregam um produto, uma mensagem sem produto não
+combina com nada.** Ela fica sem tarifação, e uma mensagem sem tarifação nunca é cobrada — o pricing
+roda antes do débito, então `chargeCredit` a ignora inteiramente. A mensagem é entregue e cobrada de
+ninguém.
+
+Nada a recusa e nada gera um erro. Existe uma linha em `debug`, que é o sinal inteiro de que tráfego
+está sendo dado de graça.
+</Warning>
+
+Duas configurações fecham isso, ambas desligadas por padrão:
+
+| Configuração | Escopo | Efeito |
+| :--- | :--- | :--- |
+| `conf.product.required` | por listener SMPP | Recusa um **bind** cujo produto resolvido esteja em branco, ou nomeie nenhuma linha habilitada em `app_product`. Status `0x0000040F`. |
+| `smsg.restapi.product.required` | ingress REST | Recusa uma **submissão** da mesma forma, com `403`. `/secure/rate` também aplica isso, para que uma cotação não tarife um tráfego que um envio recusaria. |
+| `smsg.rating.unrated.refuse` | global, apenas lado de venda | Recusa qualquer mensagem que nenhuma regra de tarifa do lado de venda precifique. `0x00000418` via SMPP, `403` via REST. |
+
+O roteamento least-cost deliberadamente ainda tolera um fornecedor sem regra de tarifa de **custo** —
+essa é uma questão diferente de saber se o cliente pode ser cobrado, e transformar uma linha esquecida
+de tarifa de fornecedor em uma indisponibilidade seria pior do que o que ela previne.
+
+## Por que a checagem é de pertinência, não de não-vazio
+
+`system_type` em um bind SMPP **sobrescreve** o produto da credencial, e é texto livre que não é
+validado em nenhum outro lugar.
+
+Assim, um cliente que faz bind com `prem` quando o produto é `premium` passa perfeitamente em qualquer
+teste de não-vazio, e cai exatamente no estado sem tarifação acima. Somente checando o nome contra o
+catálogo é que se pega isso — que é o que `conf.product.required` faz, e por que ele não é simplesmente
+"o produto precisa estar definido".
+
+HTTP não tem bind e portanto não tem sobrescrita: nele o `product` da credencial é a única fonte.
+
+<Warning>
+**Configuração por arquivo não tem catálogo, então apenas a metade de não-vazio é aplicada.**
+`app_product` é uma tabela de banco de dados; um gateway rodando com arquivos, ou um cujo banco esteja
+inacessível, não consegue checar pertinência de forma alguma. Um nome de produto não reconhecível é
+**aceito**, e um WARN nomeando a configuração e o valor é logado uma vez por bind.
+
+A tolerância é deliberada — recusar todo bind porque uma query falhou seria uma indisponibilidade
+muito pior do que a que isso previne. Mas significa que a configuração é mais fraca do que seu nome
+sugere exatamente nos deployments que não têm catálogo para checar.
+</Warning>
+
+Antes de ligar qualquer uma delas, leia o relatório de pré-verificação na página **Servers** do
+painel: ela lista os logins que deixariam de conectar. Note o que ela não pode ver — para um login
+SMPP ela checa o fallback da credencial, então um cliente fazendo bind com um `system_type` digitado
+errado não aparecerá lá.
+
+A página **Pricing** carrega a outra pré-verificação: o tráfego das últimas 24 horas que não teve
+preço, nomeado por conta e produto. Isso é precisamente o que `smsg.rating.unrated.refuse` começaria a
+recusar. Ela conta mensagens cujo CDR não tem `price_rule_id`, então uma regra deliberadamente
+configurada como `0` não está nela — uma rota grátis permanece grátis e continua enviando.
+
+## A linha do catálogo
+
+| Coluna | Significado |
+| :--- | :--- |
+| `name` | A chave primária. Aparada, não-vazia, e comparada **exatamente** — `OTP` e `otp` são dois produtos. |
+| `label`, `description` | Para o painel. |
+| `enabled` | Se o gateway conta isso como um produto que vende. |
+| `whitelist_enabled` | Padrão `true`. `false` isenta o tráfego deste produto de checagens de sender ID e conteúdo. |
+
+## Isentando um produto de whitelisting
+
+```sql
+UPDATE app_product SET whitelist_enabled = false WHERE name = 'otp';
+```
+
+Ou *Products → Edit → Check sender IDs and content*. A pergunta "isto precisa ser validado?"
+geralmente pertence ao que está sendo vendido, e não a cada cliente que compra — senhas descartáveis
+por um shortcode não têm sender ID registrado a ser checado. E sem isso, cada conta nesse produto
+precisaria de sua própria linha de política dizendo o mesmo.
+
+Três regras surpreendem as pessoas:
+
+- **Um produto isento sobrescreve a conta.** Uma conta configurada como `ENFORCE` ainda envia
+  livremente sob um produto isento.
+- **Nenhum produto não é isento.** Tráfego nomeando nenhum produto é checado. Caso contrário, a saída
+  de uma whitelist seria simplesmente parar de enviar um `system_type`.
+- **Um produto desconhecido não é isento.** Um nome sem linha em `app_product` é checado. É um erro
+  de digitação em uma credencial muito mais frequentemente do que uma intenção.
+
+<Warning>
+**Uma aprovação arquivada sob um produto isento não protege nada.** O gateway retorna `OFF` para esse
+produto antes de qualquer merge acontecer, então a linha é armazenada, visível, e nunca consultada. O
+painel conta produtos isentos ao decidir se mudar uma conta para `ENFORCE` é seguro — caso contrário,
+a proteção contra construir uma indisponibilidade passaria batido em uma conta cujas aprovações são
+todas inertes.
+</Warning>
+
+Retirar da lista um produto (`enabled = false`) também encerra sua isenção: produtos isentos são lidos
+como `enabled AND NOT whitelist_enabled`. Essa direção é a segura — o tráfego começa a ser checado em
+vez de parar. Mas pode começar a recusar sender IDs que ninguém aprovou, portanto retire da lista um
+produto isento deliberadamente, e não como arrumação.
+
+## Nomeando um produto em um envio REST
+
+Um chamador REST pode enviar `product` em `/secure/send`, `/secure/sendbatch` e `/secure/rate`, e ele
+é aceito **apenas** de um login cujo `allowedProducts` o nomeie.
+
+| | |
+| :--- | :--- |
+| Campo omitido | O `product` do próprio login se aplica. Nenhum chamador existente é afetado. |
+| Sem `allowedProducts` | O campo é recusado: `403 This login may not send on '<product>'.` Isto vale para todo login até que um operador opte por incluí-lo. |
+| Valor na lista | Aceito, e a mensagem é **tarifada** por ele — verifique `cdr_submit`, não a resposta, que parece a mesma de qualquer forma. |
+| O próprio produto do login | Sempre permitido, e não precisa estar listado. |
+| Na lista, ausente de `app_product` | Ainda assim recusado, com a outra mensagem. Duas perguntas separadas: este login pode nomeá-lo, e depois: nós o vendemos. |
+
+Uma lista de permissão em vez de um simples campo pela mesma razão que tudo mais nesta página: o
+produto seleciona a tarifa, então um chamador livre para nomear seu próprio produto está livre para
+escolher seu próprio preço.
+
+<CardGroup cols={2}>
+<Card title="How pricing works" href="/platform/billing/how-pricing-works">
+Onde cada lado é tarifado, e o que um valor desconhecido significa.
+</Card>
+<Card title="Rolling whitelisting out" href="/platform/customers/whitelisting-rollout">
+Os quatro interruptores, e a ordem em que se aplicam.
+</Card>
+</CardGroup>

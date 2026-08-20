@@ -1,0 +1,105 @@
+---
+title: "Nada é entregue"
+description: "Quando cdr_rejected diz maxAttempts. As cinco linhas de log que nomeiam a causa, os dois números de fila que importam, e a flag de trace para usar em vez da que parece certa."
+---
+
+Você passou pelas [primeiras verificações](/platform/troubleshooting/first-checks) e a razão de
+rejeição é `maxAttempts`. Esse é o único valor que realmente significa roteamento.
+
+## O log nomeia a causa
+
+Cada uma destas é WARN ou ERROR e não precisa de nenhuma flag de debug ligada.
+
+| Linha de log | Causa |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | A regra nomeia algo que não é nem tabela de roteamento nem worker. Não envia nada. |
+| `routing.rule.broken cause=target-not-accepting` | O alvo existe mas está suspenso ou finalizando. Muitas vezes temporário. Confira o fornecedor. |
+| `message.routing.miss.first action=requeue` | A mensagem não casou com nenhuma regra habilitada. Catch-all ausente ou fora do lugar, ou uma condição que não pode ser verdadeira. |
+| `Error parsing new routing table` (ERROR) | A tabela inteira foi recusada. O gateway manteve a **anterior**. Ou não tem nenhuma, se isso aconteceu no startup. |
+| `message.dropped reason=maxAttempts attempts=… limit=…` | A mensagem desistiu. A razão logo acima dela diz por quê. |
+
+<Warning>
+**`routing.rule.broken` é logado uma vez por regra, não uma vez por mensagem**, e o contador só
+reseta quando uma nova tabela de roteamento é publicada.
+
+Então depois de corrigir uma regra, observe se a linha **reaparece**, não se fica ausente. Um log
+quieto não prova nada. `routing_rules_broken` em `/ops/health` é o mesmo fato em número, e é a forma
+confiável de distinguir "corrigido" de "já reportado".
+</Warning>
+
+## Duas coisas para descartar antes de editar qualquer regra
+
+<AccordionGroup>
+
+<Accordion title="Algum fornecedor está bound?">
+Um catch-all perfeito apontando para um fornecedor desconectado não entrega nada e parece exatamente
+um bug de roteamento.
+
+```bash
+fireflo verify
+```
+
+Responde em palavras: *"N vendor(s) configured, none bound — nothing can be sent yet."*
+</Accordion>
+
+<Accordion title="Um filtro está ausente ou desabilitado?">
+Uma regra referenciando um é **pulada inteiramente** em vez de carregada com menos condições. Porque
+descartar condições silenciosamente *ampliaria* a regra.
+
+Procure por `Skipping … filter '…' is missing or disabled`. Se isso esvaziou a tabela `default`, a
+configuração de roteamento inteira é recusada e você está no caso ERROR acima.
+</Accordion>
+
+</AccordionGroup>
+
+## Por que uma regra não casou
+
+Seis causas, e as duas últimas respondem por a maioria das surpresas:
+
+- Regras são avaliadas de cima para baixo; uma tabela NORMAL para no primeiro match.
+- O fallback tem que estar no **fim**. Um catch-all acima de outras regras torna tudo abaixo
+  inalcançável. A página de routing do painel avisa nos dois casos.
+- Nomes de atributos precisam bater com os da referência de routing.
+- Comparações de string são case-sensitive a menos que `equalsIgnoreCase` seja usado.
+- **`startsWith` compara texto literal.** Uma expressão regular escrita nele nunca pode ser
+  verdadeira. Use `matches`. O painel avisa; um arquivo editado à mão não.
+- **Um campo não definido não casa com nenhum operador positivo**, exceto `isNull`.
+  `product:equals:premium` não casa com uma mensagem sem produto. Mas `product:!equals:premium`
+  casa.
+
+## Rastreando uma mensagem
+
+Defina `outSms.routing.trace` para um único serial de mensagem ou id de conta. Toda regra contra a
+qual essa mensagem é testada então loga qual condição falhou e o que a mensagem de fato continha:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Vale ao vivo. Defina durante o incidente, limpe depois. Deixado vazio custa uma leitura volatile por
+regra.
+
+<Warning>
+**Não recorra a `outSms.routing.debug`.** Ele loga toda regra de toda mensagem e renderiza o objeto
+inteiro da mensagem para isso. Trinta `String.replace` encadeados por linha. Então é inviável nas
+taxas em que perguntas de roteamento realmente são feitas. Só é útil em um gateway ocioso
+reproduzindo um envio único.
+</Warning>
+
+## Os dois números de fila
+
+| Em `/ops/health` | O que um valor não-zero significa |
+| :--- | :--- |
+| **`routing_failed_queue`** | Mensagens estacionadas por uma falha *inesperada* de roteamento. **Sem CDR e sem receipt.** Só drenam se `outSms.enqueueFailedRouting` está definido, então na configuração comum são mensagens perdidas. **Alerte nisso.** |
+| **`routing_retry_queue`** | Mensagens esperando `outSms.routing.retryBackoffMillis`. Números pequenos são normais sob retentativa; um número que fica alto é uma tabela de roteamento que não cobre o tráfego que chega. |
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Como o roteamento funciona" icon="route" href="/platform/routing/how-it-works">
+    Tabelas, regras e a ordem em que resolvem.
+  </Card>
+  <Card title="Rejeições do fornecedor" icon="circle-xmark" href="/platform/troubleshooting/vendor-rejections">
+    Quando o fornecedor está bound e recusando todo submit.
+  </Card>
+</CardGroup>

@@ -1,0 +1,120 @@
+---
+title: "Cómo funciona el enrutamiento"
+description: "Qué hace el enrutador entre aceptar un mensaje y entregarlo a un proveedor, y por qué un error de enrutamiento aparece como tráfico faltante en lugar de como un error."
+---
+
+## La edición que parecía no hacer nada
+
+<Warning>
+**Una regla mal formada hace fallar toda la recarga, y la tabla anterior se conserva.** Una línea incorrecta no desactiva una sola regla: rechaza el conjunto completo de tablas, y la pasarela sigue enrutando con la configuración que ya servía.
+
+Nada parece estar mal: el tráfico sigue fluyendo, el archivo en disco dice lo que quisiste decir, y el único rastro es `Error parsing new routing table` en nivel ERROR en el registro. Búscalo después de cada edición.
+</Warning>
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`routingTable.conf` se recarga en caliente: una edición se aplica en unos 200 ms, sin reinicio. Esa velocidad es exactamente la razón por la que el caso de tabla conservada es fácil de pasar por alto. No hay ningún reinicio que notar, así que "mi cambio no hizo nada" es todo el síntoma.
+
+## Qué hace el enrutador con un mensaje
+
+<Steps>
+  <Step title="A la sumisión se le responde primero">
+    La pasarela envía `submit_sm_resp`, o el `200` REST, **antes** de que se ejecute el enrutamiento. Al cliente ya se le ha dicho que el mensaje fue aceptado, y se le ha cobrado por él.
+  </Step>
+  <Step title="El mensaje va a la cola del enrutador">
+    El trabajo aceptado espera aquí. Consulta [Colas y reintentos](/platform/routing/queues-and-retries).
+  </Step>
+  <Step title="Se escanea la tabla `default`">
+    Las reglas se prueban de arriba abajo y **gana la primera coincidencia**. Una regla puede enviar a un proveedor, a un grupo de proveedores o a otra tabla.
+  </Step>
+  <Step title="El worker elegido lo toma">
+    El mensaje se encola en la propia cola de ese proveedor y sale a la velocidad que el proveedor permita.
+  </Step>
+</Steps>
+
+Como el paso 1 ocurre antes del paso 3, un fallo de enrutamiento **no puede** informarse al cliente como un error de envío. Solo puede aparecer más tarde, como un acuse de recibo de entrega y una fila en `cdr_rejected`.
+
+## Las tablas son un grafo, no una lista
+
+Una regla cuyo objetivo nombra otra tabla se encadena a ella, así que `default → MESSAGE → cheapest` es una forma habitual. Dos cosas acotan la recursión:
+
+| Límite | Comportamiento |
+| :--- | :--- |
+| Comprobación de ciclos en la carga | `a → b → a`, o una tabla que se nombra a sí misma, se **rechaza en bloque**. El registro nombra la ruta y el conjunto de tablas anterior permanece en servicio. |
+| `outSms.routing.maxTableDepth` (por defecto `16`) | Limita cuántas tablas puede encadenar un mensaje en tiempo de ejecución. Alcanzarlo registra `routing.table.too-deep` y deja al mensaje sin destino desde esa regla. |
+
+Una tabla alcanzada dos veces por rutas diferentes no es un ciclo: `default → a → c` junto a `default → b → c` se carga con normalidad.
+
+## Las dos cosas que se cargan y luego se portan mal en silencio
+
+Ambas aparecen en `/ops/health` bajo `routing_warnings`, y cada una se registra una sola vez cuando aparece por primera vez, no en cada publicación.
+
+| Aviso | Qué significa |
+| :--- | :--- |
+| `no-catch-all` | Cada regla de una tabla `NORMAL` está restringida, así que un mensaje que no coincide con ninguna se reencola, se reintenta y se descarta en `outSms.routing.maxAttempts`. Ocurre minutos después, sin nada que vincule el descarte con la tabla. |
+| `unreachable-rules` | Una regla que coincide con todo está por encima de otras. La tabla se detiene en la primera coincidencia, así que las reglas debajo nunca se han ejecutado. |
+
+<Warning>
+**El catch-all va al final.** Colocado por encima de otras reglas, hace que todo lo que esté debajo sea inalcanzable, y nada rechaza la tabla. Las reglas se analizan perfectamente, simplemente nunca se ejecutan. Un catch-all es una regla que no restringe nada: `vendor1::default:` en un archivo, o una regla sin condiciones y sin filtros en la base de datos.
+
+Una regla que lleva un filtro **no es** un catch-all, por mucho que lo parezca. Consulta [Filtros](/platform/routing/filters).
+</Warning>
+
+## Cuando los mensajes desaparecen
+
+<Note>
+Antes de editar cualquier regla, descarta las tres causas que no tienen nada que ver con el enrutamiento. Solo `reason = 'maxAttempts'` en `cdr_rejected` significa enrutamiento; `headerNotApproved`, `templateNotMatched`, `missingMandatoryTlv`, `insufficientCredit` y `filtered` significan todas que el mensaje fue rechazado antes de llegar al enrutamiento. Consulta [No se entrega nada](/platform/troubleshooting/nothing-is-delivered).
+</Note>
+
+Estas líneas están en WARN o ERROR y no requieren ninguna bandera de depuración:
+
+| Línea de registro | Causa |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | La regla nombra algo que no es ni una tabla, ni un grupo, ni un worker. No envía nada. |
+| `routing.rule.broken cause=target-not-accepting` | El objetivo existe pero está suspendido o apagándose. A menudo temporal. Comprueba el [proveedor](/platform/connections/vendors). |
+| `routing.rule.broken cause=group-all-dead` | Ningún miembro del grupo está aceptando. El escaneo continúa a la siguiente regla. |
+| `message.routing.miss.first action=requeue` | El mensaje no coincidió con ninguna regla habilitada. |
+| `message.dropped reason=maxAttempts` | El mensaje se rindió. Una por mensaje; la línea de encima dice por qué. |
+
+<Warning>
+**`routing.rule.broken` se registra una vez por regla, no una vez por mensaje**, y el contador solo se reinicia cuando se publica una nueva tabla. Un registro silencioso no es, por tanto, prueba de que el problema esté resuelto. Es igual de consistente con "ya notificado".
+
+Vigila en su lugar el contador `routing_rules_broken` en `/ops/health`, que es el mismo hecho expresado como un número.
+</Warning>
+
+## Preguntar por qué un mensaje no coincidió
+
+```properties
+outSms.routing.trace = acct-1001
+```
+
+Acepta **un número de serie de mensaje o un id de cuenta**. Cada regla contra la que se prueba ese mensaje registra entonces qué condición falló y qué contenía realmente el mensaje:
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Se aplica en vivo, así que actívalo durante el incidente y bórralo después. Vacío, que es el valor por defecto, cuesta una lectura volátil por regla.
+
+<Warning>
+**Esto no es `outSms.routing.debug`.** Ese registra cada regla de cada mensaje y renderiza el objeto de mensaje completo para hacerlo, lo que lo hace inutilizable a los ritmos a los que realmente se plantean las preguntas de enrutamiento. Solo resulta útil en una pasarela inactiva reproduciendo un único envío.
+</Warning>
+
+## Siguiente
+
+<CardGroup cols={2}>
+  <Card title="Escritura de reglas" icon="pen" href="/platform/routing/writing-rules">
+    La gramática de cuatro partes, los operadores que engañan y los grupos de proveedores.
+  </Card>
+  <Card title="Enrutamiento por menor coste" icon="coins" href="/platform/routing/least-cost">
+    Donde el orden de las reglas deja de significar nada.
+  </Card>
+  <Card title="Filtros" icon="filter" href="/platform/routing/filters">
+    Condiciones nombradas, y por qué desactivar una reduce una regla a nada.
+  </Card>
+  <Card title="Colas y reintentos" icon="layer-group" href="/platform/routing/queues-and-retries">
+    Lo que ya está pagado y esperando en memoria.
+  </Card>
+</CardGroup>

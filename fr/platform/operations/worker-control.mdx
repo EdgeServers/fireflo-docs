@@ -1,0 +1,88 @@
+---
+title: "Contrôler un worker"
+description: "Trois paires de verbes qui s'appliquent immédiatement, ce que chacun fait au trafic en vol, et celui qui finira par refuser de nouveaux messages."
+---
+
+La configuration stockée seule est **trop lente pour être un contrôle**. Le gateway remarque un changement de base à son prochain sondage, jusqu'à trente secondes plus tard. Et basculer quelque chose off puis on à l'intérieur de cette fenêtre n'a aucune différence au final, donc le gateway n'en entend jamais parler.
+
+Ces verbes s'appliquent immédiatement.
+
+```bash
+./scripts/fireflo disable vendor1
+./scripts/fireflo suspend vendor1
+```
+
+## Les trois paires
+
+| Verbe | Ce qu'il fait |
+| :--- | :--- |
+| `enable` / `disable` | Démarre ou arrête le worker complètement. **Un worker désactivé quitte `/ops/health` entièrement.** |
+| `suspend` / `resume` | Cesse d'accepter et **draine la file vers le routeur**, pour que le trafic reroute vers un autre vendeur. La session reste bindée. |
+| `hold` / `release` | Continue d'accepter et **cesse d'envoyer**, pour que la file croisse aussi longtemps qu'il est retenu. |
+
+## Choisir entre eux
+
+<AccordionGroup>
+
+<Accordion title="Suspend — un vendeur se comporte mal et vous en avez un autre">
+Le défaut correct pour un problème vendeur. Le trafic en file retourne au routeur et trouve une alternative, et la session reste bindée pour que vous puissiez la tester sans un nouveau bind.
+
+Rien n'est perdu et rien n'attend.
+</Accordion>
+
+<Accordion title="Hold — vous voulez que le trafic soit gardé, pas rerouté">
+Pour une fenêtre planifiée où le vendeur reviendra bientôt et où vous préférez mettre en file plutôt que de payer une route plus chère.
+
+<Warning>
+**Surveillez `queue_depth`, et `queue_capacity`.** Un worker retenu sous une limite de capacité finira par faire **refuser du nouveau trafic** au gateway plutôt que de croître.
+
+Ce refus atteint les clients comme `ESME_RMSGQFUL` ou un `503`. Retenir n'est pas gratuit ; cela convertit un problème vendeur en un problème d'ingress si vous le laissez assez longtemps.
+</Warning>
+</Accordion>
+
+<Accordion title="Disable — le mettre hors service entièrement">
+Le worker quitte `/ops/health` complètement, ce qui vaut la peine d'être connu avant que vous n'alliez le chercher dans un tableau de bord et concluiez que quelque chose s'est crashé.
+
+Utilisez-le quand vous voulez le worker parti plutôt que en pause.
+</Accordion>
+
+</AccordionGroup>
+
+## Ce sont des états d'exécution, pas de la configuration
+
+<Warning>
+**Un worker désactivé ou suspendu revient au redémarrage** à moins que la configuration stockée dise autrement.
+
+Ces verbes existent pour agir *maintenant* ; ils n'éditent pas la configuration. Si vous voulez que le changement survive à un redémarrage, faites-le aussi dans le panel. Et si vous le voulez *seulement* jusqu'au redémarrage, c'est exactement ce que ceux-ci vous donnent.
+</Warning>
+
+## Tester un vendeur avant de lui faire confiance
+
+```bash
+fireflo test-bind vendor1
+```
+
+Compose une fois et rapporte le résultat, sans attendre le cycle de reconnexion.
+
+<Tip>
+**Il est refusé pendant que le vendeur est déjà bindé**, délibérément. Un second bind sur le même `systemId` peut vous coûter la session en direct, et beaucoup d'opérateurs n'en autorisent qu'un.
+
+Utilisez-le avant que le trafic dépende du vendeur, ou après l'avoir suspendu. Suspendre garde la session, donc suspendre puis tester n'est *pas* la séquence qui fonctionne. Disable, puis tester.
+</Tip>
+
+## Déconnecter le bind d'un client
+
+Une session listener peut être déconnectée par id. Une session **vendeur** ne peut pas. Cela répond `409`, parce que le garde-fou est le type de worker plutôt que la présence d'un id de session.
+
+Désactiver un login supprime aussi ses binds en direct, ce qui est la différence entre « ils ne peuvent pas se reconnecter » et « ils sont partis maintenant ».
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Santé en direct" icon="heart-pulse" href="/platform/operations/live-health">
+    Lire `queue_depth`, `bound_transmittable` et `last_error`.
+  </Card>
+  <Card title="Recharger la configuration" icon="arrows-rotate" href="/platform/operations/reload">
+    L'autre façon de changer ce que fait le gateway.
+  </Card>
+</CardGroup>

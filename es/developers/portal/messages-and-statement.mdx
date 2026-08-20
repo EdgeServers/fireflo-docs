@@ -1,0 +1,95 @@
+---
+title: "Mensajes y extracto"
+description: "Encontrar un mensaje entre miles, exportar el resultado, y leer una factura que se cobra en el momento del envío y no en el de la entrega."
+---
+
+Dos pantallas responden a dos preguntas distintas. **Mensajes** es "qué le pasó a este". **Extracto**
+es "qué estoy pagando". Discrepan ligeramente a propósito, y la razón está al pie de esta página.
+
+## Mensajes
+
+Una barra de filtros sobre una tabla. Los filtros se aplican al pulsar **Buscar**, no mientras
+escribe, y se llevan en la barra de direcciones. Así, una vista filtrada puede marcarse como
+favorita, o pegarse en una petición de soporte para que quien la lea vea exactamente lo que usted vio.
+
+| Filtro | Notas |
+| :--- | :--- |
+| **Período** | Última hora, 24 horas, 7 días, 30 días o un rango personalizado. Por defecto, 24 horas |
+| **Resultado** | Cualquiera o uno específico |
+| **Número de destino** | Coincide desde el inicio del número |
+| **Message id** | Exacto |
+| **Texto del mensaje** | Busca dentro del cuerpo de los mensajes |
+
+**Awaiting a receipt** aparece primero entre los resultados en lugar de por orden alfabético, porque
+es el que la gente viene a buscar.
+
+<Note>
+**La búsqueda por texto no encuentra nada a menos que su proveedor registre el contenido de los
+mensajes.** Guardar cuerpos es una decisión de despliegue con consecuencias evidentes de privacidad,
+y muchos operadores lo desactivan. Un resultado vacío aquí puede significar que el contenido no se
+guarda, no que ningún mensaje coincidiera.
+</Note>
+
+Los revendedores obtienen un filtro adicional para acotar a una única cuenta o buscar entre todas.
+
+### Columnas
+
+Siete se muestran por defecto: submitted, to, from, message id, account, billed y outcome.
+**Columnas** abre un selector agrupado bajo Message, Route, Money y Outcome: unas treinta en total,
+incluyendo recuentos de partes y reintentos, data coding, las TLV que envió, tipo de mensaje, MCC y
+MNC, unit rate, unidades facturadas, estado del acuse, código de error y hora del acuse.
+
+Tres no pueden desactivarse: **Submitted**, **To** y **Outcome**, porque una fila sin ellas no es
+identificable.
+
+Su elección se conserva en ese navegador, y **el CSV se lleva lo que esté marcado**. Ajuste las
+columnas que quiere antes de exportar.
+
+<Warning>
+**Coste, margen y vendor no están en el selector ni en los datos.** Ve lo que se le facturó. Lo que
+su proveedor pagó por transportarlo, y quién lo transportó, son suyos. Sin columna, sin exportación,
+sin campo de API.
+</Warning>
+
+**Descargar CSV** respeta los filtros y las columnas actuales. Las horas se muestran en la zona
+horaria de su navegador, y el pie indica cuál, de modo que una fila comentada entre zonas horarias
+puede fijarse.
+
+Cuando algunas filas todavía no tienen resultado, una línea sobre la tabla lo indica:
+
+> *n* de estos *total* siguen esperando un acuse de entrega. Es normal. Un mensaje sin acuse se
+> cierra en su fecha límite de expiración.
+
+## Extracto
+
+Elija un mes: se ofrecen los últimos trece, con el actual marcado como **(hasta ahora)**. Se abre
+en el mes *anterior* completo, porque es el que se le pide pagar.
+
+La tarjeta principal muestra el importe, mensajes enviados, entregados, y luego una de dos cifras,
+nunca las dos: un **límite de crédito** para cuentas facturadas a plazos, o un **saldo** para
+cuentas con crédito prepago. Leer un límite de crédito como saldo es el error de lectura que cuesta
+dinero, así que nunca se les da el mismo nombre.
+
+Si algo de tráfico salió sin tarificar, una nota indica cuántos mensajes y confirma que no están en
+el importe.
+
+Debajo: un desglose por producto —enviado, entregado, fallido, pendiente, importe— y, cuando
+existen, una lista de **períodos facturados**.
+
+> Un período cerrado es definitivo. Cualquier cosa que caiga contra él después aparece como ajuste
+> en el período siguiente.
+
+Cada mes se exporta como CSV.
+
+## Por qué las dos pantallas no coinciden
+
+> Se factura sobre mensajes **enviados**, no sobre entrega. Las cifras de entrega siguen moviéndose
+> a medida que llegan los acuses; el importe no.
+
+Un mensaje aceptado el día 31 y reportado el día 1 se factura en el mes anterior y se entrega en el
+posterior. Así que el recuento de entregas en Mensajes derivará después de cerrar un extracto, y el
+importe del extracto no.
+
+Esta es la alternativa a una factura que cambia durante semanas después de recibirla. Los precios
+se fijan en el momento del envío, lo que también explica por qué un cambio de tarifa no reformula
+el histórico.

@@ -1,0 +1,150 @@
+---
+title: "Crédit prépayé"
+description: "De l'argent en mémoire, réservé par blocs, et l'identité qui doit tenir — plus la taille de bloc qui décide quand un compte approvisionné commence à refuser."
+---
+
+Le crédit prépayé est **désactivé par défaut et PostgreSQL uniquement**. Le crédit ne peut entrer
+que par la base de données, donc un gateway sans elle démarrerait à zéro et rejetterait tout —
+sans datasource, la porte n'est simplement pas appliquée.
+
+## La conception en un paragraphe
+
+Le solde dépensable d'un compte est détenu **en mémoire** et décrémenté par message, donc le
+chemin du message ne fait aucun travail en base. La durabilité vient de la réservation par blocs :
+une seule instruction atomique déplace un montant de `balance` vers `reserved`, et le gateway
+dépense ce bloc depuis la mémoire.
+
+À quelques milliers de messages par seconde, cela fait quelques écritures en base par seconde
+plutôt que quelques milliers. **Et aucun message n'est jamais envoyé contre du crédit qui n'a pas
+été validé d'abord.**
+
+<Tip>
+Réserver **déplace** l'argent plutôt que de le marquer, c'est pourquoi deux instances de gateway
+ne peuvent pas distribuer le même crédit. La réservation est l'exclusion mutuelle.
+</Tip>
+
+## L'identité qui doit tenir
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+```
+
+Chaque unité entrée par le grand livre est soit dépensable, soit garée. **Un `kill -9` bloque du
+crédit dans `reserved` ; il ne le perd pas** — `POST /ops/credit/release` le restitue, et un arrêt
+propre le restitue automatiquement.
+
+Si les deux côtés ne s'accordent pas, c'est un vrai écart et pas un artefact d'arrondi.
+
+## Rechargement
+
+Le crédit est ajouté en écrivant une ligne `RECHARGE`. Le gateway l'applique lors de son prochain
+sondage et la marque appliquée, donc un rejeu est un no-op.
+
+```sql
+INSERT INTO balance_ledger (account_id, delta, entry_type, ref)
+VALUES ('acct-1001', 500000, 'RECHARGE', 'receipt-88');
+```
+
+**Les montants sont mis à l'échelle par 10 000**, donc `500000` vaut 50.0000 unités.
+
+L'*Ajouter du crédit* du panneau de contrôle écrit exactement cette ligne et rien d'autre. **Le
+gateway lui-même ne peut pas créer de crédit** — il n'applique que les lignes écrites par quelqu'un
+d'autre, et la colonne `balance` a exactement un écrivain, qui est ce sondage.
+
+<Warning>
+**Un `RECHARGE` pour un compte sans ligne `account_balance` ne crédite rien.** Il reste pending,
+journalise, et s'applique dès que la ligne apparaît :
+
+```
+WARN  1 recharge entries could not be credited because these accounts have no
+      account_balance row: [acct-1001]. They stay pending and will apply
+      themselves once the row exists.
+```
+
+Créer un credential ne crée **pas** de ligne de solde. Utilisez *Ouvrir pour crédit* sur la page du
+compte, ou insérez-en une à zéro à la main.
+</Warning>
+
+## Taille de bloc, et le refus qu'elle explique
+
+Un bloc est dimensionné à partir du débit auquel le compte a été observé envoyer. À froid — ou
+après une période inactive — il n'y a pas de débit pour le dimensionner, donc un plancher
+s'applique :
+
+```
+block = max(smsg.balance.block.min, price × smsg.balance.block.min.messages)
+```
+
+`smsg.balance.block.min.messages` vaut par défaut **20**, et le prix vient du message qui demande
+la réservation.
+
+<Warning>
+**Ce plancher est libellé en messages pour une raison.** Il était autrefois `smsg.balance.block.min`,
+un montant en *devise* — et un montant en devise ne peut pas dire combien de messages il achète.
+
+Au défaut de `1000` (0.1000 unités), un compte dont les messages coûtaient plus que cela obtenait
+un bloc couvrant exactement **un** message. Le message suivant arrivait bien avant que la
+prochaine réservation n'atterrisse et était refusé faute de crédit sur un compte détenant des
+milliers d'unités.
+
+C'est l'intégralité du rapport « fonds insuffisants sur un compte approvisionné ».
+</Warning>
+
+Une réservation est du tout ou rien, donc une seule instruction ne peut réussir que si le solde
+couvre le montant demandé. **La réservation essaie donc trois échelons descendants** — le bloc
+complet, le plancher libellé en messages, puis juste le seul message qui a demandé :
+
+<Tip>
+**L'échelon du bas est pourquoi le plancher ne peut pas bloquer d'argent.** Un compte avec moins de
+vingt messages restants obtient tout de même celui qu'il a demandé, plutôt que d'être refusé pour
+ne pas se permettre un plancher qui existe pour tenir les comptes actifs hors de la base. Un
+compte financé pour trois messages envoie trois.
+</Tip>
+
+**Ce que cela coûte :** un compte envoyant activement détient jusqu'à vingt messages en `reserved`
+que rien d'autre ne peut dépenser — restitués par un arrêt propre, et par `credit release` après
+un arrêt non propre.
+
+**Ce que vous verrez encore vers la fin :** les rechargements sont asynchrones par conception,
+donc un message arrivant pendant que la prochaine réservation est en vol peut être refusé même si
+du crédit reste. Ce refus est transitoire et la nouvelle tentative réussit. Ce n'est pas du crédit
+bloqué.
+
+## Refus
+
+Un compte sans crédit obtient le statut `submit_sm_resp` **`0x402`**, HTTP **402**, raison
+`insufficientCredit`.
+
+`ESME_RTHROTTLED` n'est délibérément pas utilisé : cela signifie autre chose, et ferait qu'un
+client recule et retente une condition que seul un rechargement peut lever.
+
+## Remboursements
+
+Un message débité puis abandonné pendant le routage voit son crédit restitué **exactement une
+fois**. Un message non tarifé n'est jamais débité du tout.
+
+Le rechargement se déclenche sur un seuil pendant qu'il reste du crédit, sur un thread de fond.
+**Si le trafic le devance, le message est refusé immédiatement** plutôt que de faire attendre le
+thread SMPP sur une base de données — un thread d'ingress bloqué est pire qu'un message refusé.
+
+## Propriétés
+
+| Propriété | Défaut | Ce qu'elle fait |
+| :--- | ---: | :--- |
+| `smsg.balance.enabled` | `false` | L'interrupteur maître |
+| `smsg.balance.block.min.messages` | `20` | **Le plancher qui contraint.** Augmentez pour les comptes en rafales |
+| `smsg.balance.block.min` | `1000` | Plancher en devise, en-dessous du précédent |
+| `smsg.balance.block.max` | `10000000` | Plafond sur une seule réservation |
+| `smsg.balance.refill.watermark.percent` | `20` | Le rechargement se déclenche ici |
+| `smsg.balance.recharge.poll.seconds` | `30` | Combien de temps met un rechargement à atterrir |
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Postpayé" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Limites de crédit, et factures exactes à partir d'une mise en application approximative.
+  </Card>
+  <Card title="Refus" icon="ban" href="/platform/troubleshooting/refusals">
+    Lire `insufficientCredit` face à un solde positif.
+  </Card>
+</CardGroup>

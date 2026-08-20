@@ -1,0 +1,104 @@
+---
+title: "Cuentas postpago"
+description: "Límites de crédito en lugar de saldos. Y la separación deliberada entre una factura exacta y una aplicación aproximada."
+---
+
+Una cuenta es **o prepago o postpago en un momento dado**, establecido por
+`account_balance.billing_mode`. El postpago está desactivado hasta que `smsg.balance.postpaid.enabled`
+sea true, por lo que migrar añade dos columnas y no cambia nada hasta que usted lo indique.
+
+```sql
+UPDATE account_balance
+   SET billing_mode = 'POSTPAID', credit_limit = 500000
+ WHERE account_id = 'acct-1001';
+```
+
+## Qué cambia
+
+Una cuenta postpago **no se debita en absoluto**. Su `balance` se queda en cero, no se reserva
+bloque alguno, y lo que debe se deriva de `cdr_submit` cuando se prepara la factura.
+
+Lo que la pasarela hace cumplir en su lugar es `credit_limit`: cuánto uso sin facturar puede
+acumularse antes de que la cuenta sea rechazada.
+
+<Warning>
+**`credit_limit = 0` significa sin crédito, no ilimitado.**
+
+No hay representación de ilimitado y no está previsto que la haya. Un tipo o un campo de formulario
+faltante debe fallar cerrado: una cuenta que no puede enviar nada es una llamada de soporte, y una
+cuenta que puede enviar todo es un mes de tráfico que nadie puede facturar.
+</Warning>
+
+Alcanzar el límite es **el mismo rechazo que quedarse sin crédito prepago**: SMPP `0x402`, HTTP
+`402`, motivo `insufficientCredit`. Deliberadamente: ambos significan "no puede enviar esto ahora",
+y dos códigos de estado obligarían a cada cliente de la plataforma a aprenderse un segundo.
+
+## Factura exacta, aplicación aproximada
+
+Son dos trabajos distintos, y deliberadamente no comparten implementación.
+
+<CardGroup cols={2}>
+  <Card title="La comprobación del límite" icon="gauge">
+    Lee una **cifra en memoria** refrescada en el mismo sondeo de 30 segundos que aplica las
+    recargas. Se le permite estar desactualizada.
+  </Card>
+  <Card title="La factura" icon="file-invoice">
+    Una **función pura de `cdr_submit`** sobre una ventana semiabierta. Nunca lee ese contador,
+    nunca lee `account_balance`, nunca lee el libro mayor.
+  </Card>
+</CardGroup>
+
+Por tanto **lo único que puede hacer una factura errónea es una fila de `cdr_submit` faltante o de
+más.** Nada de la ruta de aplicación puede corromper una factura.
+
+### La desactualización tiene un sesgo seguro
+
+Un sondeo solo puede *ajustar* el margen, nunca subirlo, porque la consulta no puede ver mensajes
+enviados mientras se ejecutaba. El margen sube solo cuando la deuda genuinamente encoge: un
+periodo cerrado, un reembolso llegado o un operador que cambió el límite.
+
+Ese sesgo es el punto. **La desactualización rechaza demasiado pronto en lugar de demasiado tarde.**
+
+## Cuánto puede pasar del límite una cuenta
+
+| Situación | Exceso |
+| :--- | :--- |
+| Estado estacionario, una instancia | **0 mensajes**: el decremento en memoria *es* la aplicación |
+| Reinicio no limpio | Como mucho la cola de CDR sin volcar, una vez por reinicio |
+| Un reembolso que se perdió | 0, y conservador: rechaza demasiado pronto |
+| Desactivada a mitad de periodo | Como mucho un intervalo de sondeo, y la factura sigue cubriendo la cola |
+| N instancias | Hasta (N−1) × límite |
+
+La última fila es la que hay que vigilar si alguna vez ejecuta más de una pasarela contra una base
+de datos. Se indica porque es la que escala, no porque sea un problema actual.
+
+<Warning>
+**Nunca facture desde el contador, y nunca añada una fila por mensaje en el libro mayor para que la
+facturación sea exacta.**
+
+Eso pondría una escritura en base de datos en la ruta del dinero a miles por segundo (exactamente
+lo que este subsistema existe para evitar) y `cdr_submit` ya *es* el registro por mensaje.
+</Warning>
+
+## Elegir entre las dos
+
+| | Prepago | Postpago |
+| :--- | :--- | :--- |
+| El dinero se mueve | Antes de enviar | Después de facturar |
+| Riesgo que asume | Ninguno | Hasta el límite de crédito |
+| Rechazo | Saldo agotado | Uso sin facturar sobre el límite |
+| Carga operativa | Recargas | Facturación y cobro |
+
+El prepago es el valor por defecto más seguro para una cuenta nueva. El postpago se gana su riesgo
+con clientes cuyo volumen hace de las recargas constantes una molestia.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Crédito prepago" icon="wallet" href="/platform/billing/prepaid-credit">
+    Bloques, reservas y la identidad del dinero.
+  </Card>
+  <Card title="Extractos" icon="receipt" href="/platform/billing/statements">
+    Cerrar un periodo y emitir la factura.
+  </Card>
+</CardGroup>

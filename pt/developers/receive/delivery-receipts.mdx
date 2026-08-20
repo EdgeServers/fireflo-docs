@@ -1,0 +1,130 @@
+---
+title: "Recibos de entrega"
+description: "O payload, o nível que diz se é a palavra final e o campo que fica ausente até seu provedor ligar."
+---
+
+Um recibo de entrega é como você descobre o que aconteceu com uma mensagem. **É o único jeito.** A
+resposta do envio diz que a mensagem foi aceita, nada mais.
+
+Peça um no envio:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+## O que chega
+
+Um `POST` com `Content-Type: application/json`:
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-05T08:58:59.672Z",
+  "done_date": "2026-08-05T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "FireFlo",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-1001",
+  "system_id": "acme-http",
+  "parts": 1
+}
+```
+
+`id` é o `messageId` que seu envio retornou. **É por ele que você correlaciona.** Não há mais nada.
+
+Os nomes de campos seguem os do Jasmin, então um receptor escrito para Jasmin lê isso sem
+alterações. Campos nulos são omitidos em vez de enviados como null, então um recibo para uma
+mensagem que nunca chegou a um fornecedor não vem cheio de chaves vazias.
+
+Toda chamada traz `User-Agent: FireFlo/<version>`.
+
+## `level` decide se você terminou
+
+<Warning>
+**Um recibo de nível 1 não é o desfecho.** `ACCEPTD` e `BUFFRED` chegam como nível 1, e outro recibo
+vem em seguida. Um receptor que fecha o registro no primeiro recibo vai reportar o que está errado,
+permanentemente.
+</Warning>
+
+| `level` | Significa | Estados |
+| ---: | :--- | :--- |
+| `2` | O desfecho. A mensagem terminou e é cobrada por isso. | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `REJECTD`, `FAILED`, `SEEN`, `UNKNOWN` |
+| `1` | Progresso. Outro recibo vem. | `ACCEPTD`, `BUFFRED` |
+
+Escolha com `dlr_level` no envio: `1` só progresso, `2` o desfecho (**padrão**), `3` os dois.
+
+Via SMPP, a mesma escolha é o octeto `registered_delivery`. Os bits 1–0 escolhem none / all /
+failure-only / success-only, e o bit 4 (`0x10`) adiciona a notificação intermediária. `0x11` é a
+forma SMPP de `dlr_level: 3`.
+
+<Tip>
+Se você só quer saber a resposta final, o padrão já está certo e você pode ignorar `level`
+totalmente. Trate `level` apenas se você pediu `1` ou `3`.
+</Tip>
+
+## `stat` é o estado bruto, não uma flag de sucesso
+
+`DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED`,
+`SEEN`.
+
+`EXPIRED`, `REJECTD` e `UNDELIV` todos são cobrados como falha, mas significam coisas diferentes e
+vale distinguir. Expirar é um aparelho que ficou desligado por um dia; rejeição costuma ser uma
+recusa em que você pode agir.
+
+**Não existe campo `err`.** O Jasmin envia um; o resolver do FireFlo recebe apenas o estado de
+entrega e nunca um código de erro, então emitir um seria inventá-lo.
+
+## O campo `vendor` fica ausente até seu provedor habilitar
+
+Ele nomeia qual fornecedor transporta seu tráfego. Provedores omitem isso dos clientes por
+construção em outros lugares, então vem desligado por padrão e é habilitado por implantação.
+
+`operator_msg_id` **não** é a mesma divulgação e é sempre enviado: é a referência que a operadora
+tem para a mensagem, e é o que você cita ao abrir uma consulta de entrega. Ele identifica a
+mensagem, não o fornecedor.
+
+## Entrega, retries e o que conta como sucesso
+
+| Regra | Valor |
+| :--- | :--- |
+| Sucesso | HTTP **`200`–`399`** |
+| Retries | 10 por padrão, 120 segundos de intervalo |
+| Timeout | 5 segundos, connect e request |
+
+<Warning>
+**Um `302` para uma página de login conta como sucesso** e engole o recibo. Assim como qualquer
+`2xx` de um proxy que nunca chegou à sua aplicação. Se os recibos "chegam" mas seu handler nunca
+roda, verifique o que está na frente dele.
+</Warning>
+
+## Três segmentos, três recibos
+
+Por padrão, você recebe um recibo por `submit_sm` enviado, cada um citando o id que você recebeu.
+Seu provedor pode reduzir para um com `first` ou `last`.
+
+**Todos os recibos reportam o mesmo desfecho** independentemente da escolha, porque os segmentos de
+saída são agregados antes de qualquer recibo ser construído.
+
+<Tip>
+Uma mensagem longa parcialmente entregue é reportada como **FAILED**, não parcialmente entregue. A
+resolução espera pelo último segmento e reporta o pior. É a resposta honesta, e faz as taxas de
+entrega parecerem menores do que em gateways que reportam o primeiro segmento.
+</Tip>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Callbacks não chegando" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    A faixa de sucesso, o orçamento de retries e a armadilha dos placeholders.
+  </Card>
+  <Card title="Tratamento de erros" icon="code-branch" href="/developers/errors">
+    Construindo para o recibo, e não para a resposta.
+  </Card>
+</CardGroup>

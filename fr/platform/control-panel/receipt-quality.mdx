@@ -1,0 +1,79 @@
+---
+title: "Qualité des accusés"
+description: "À quelle fréquence chaque vendor rapporte tout un résultat, et combien de temps cela prend — la comparaison qu'un taux de livraison ne peut pas faire, parce qu'un taux de livraison est calculé sur le trafic que le vendor a choisi de rapporter."
+---
+
+**À quelle fréquence chaque vendor rapporte un résultat, et combien de temps cela prend pour
+arriver.**
+
+Cet écran existe à cause d'une façon spécifique d'être induit en erreur. Le taux de livraison sur
+la page Vendors est calculé sur le trafic *rapporté* — donc un vendor qui rapporte sur deux
+messages sur cinq peut y afficher 95 % alors que trois sur cinq de tout ce que vous lui avez
+envoyé n'ont aucun résultat du tout. Le taux n'est pas faux. Il répond à une question plus
+étroite qu'il n'y paraît.
+
+Cette page élargit le dénominateur.
+
+## La table
+
+Une ligne par vendor, sur la plage choisie :
+
+| Colonne | Signification |
+| :--- | :--- |
+| **Sent** | Messages soumis à ce vendor |
+| **Reported** | Résultats que le vendor a renvoyés |
+| **Reporting rate** | Rapportés sur ce qui a été réglé |
+| **Gave up on** | Clos comme expirés parce que rien n'est jamais arrivé |
+| **Still open** | Envoyés, non réglés, encore dans l'échéance |
+| **Delivered** | De ce qui a été rapporté |
+| **Median** / **90th** | Temps de la soumission au résultat |
+| **Progress** | Accusés non terminaux |
+
+Le taux de reporting est le seul chiffre ici affiché comme badge coloré — vert à 95 % et
+au-dessus, neutre à partir de 70 %, rouge en-dessous. Un vendor sous 70 % vous fait perdre votre
+propre vue de ce qui est arrivé à du trafic que vous avez déjà payé.
+
+Un vendor sans nom enregistré apparaît comme **no vendor**.
+
+## Les quatre choses qu'il vaut la peine de lire deux fois
+
+**Le taux de reporting laisse entièrement le trafic en vol hors du dénominateur.** Les messages
+envoyés il y a une minute n'ont pas encore eu leur chance, et les compter comme du silence
+ferait paraître chaque vendor pire plus tôt vous regardez.
+
+**« Gave up on » c'est nous, pas eux.** C'est notre propre balayeur qui écrit une expiration
+parce qu'aucun accusé n'est jamais arrivé. Ceux-là ne sont pas comptés comme rapportés — ce qui
+est exactement la différence entre cette table et le taux de livraison ailleurs, où le
+dénominateur est un que le vendor lui-même a choisi.
+
+**« Delivered » est une part de ce qui a été rapporté.** Cela ne dit absolument rien sur les
+messages dans les deux colonnes précédentes. Un vendor rapportant sur 40 % de son trafic et
+livrant 99 % de cela a livré, autant que quiconque puisse le prouver, 40 % de ce que vous avez
+envoyé.
+
+**Progress compte les accusés non terminaux** — `ACCEPTD`, `BUFFRED` — qui disent qu'un message
+bouge sans dire comment il s'est terminé. Un vendor qui n'en envoie aucun n'est pas en tort ; il
+ne vous dira simplement rien avant la fin.
+
+<Note>
+Sur un gateway qui n'enregistre pas les accusés intermédiaires, la colonne Progress est **blanche
+plutôt que zéro**, et la page le dit en-dessous de la table. Un zéro serait une affirmation sur
+le vendor. Un blanc est une affirmation sur le gateway, qui est la vraie.
+</Note>
+
+## La lire lors d'un incident
+
+Un vendor dont le taux de reporting a chuté pendant que son taux de livraison reste stable n'a
+pas commencé à ne pas livrer. Il a commencé à ne pas *vous le dire*, et les deux sont
+indistinguables depuis la seule page Vendors. Le trafic sort toujours, les clients sont toujours
+débités, et vos preuves cessent silencieusement de s'accumuler.
+
+Les mêmes chiffres apparaissent sous forme de ligne compacte sur la propre carte de chaque
+vendor, étiquetés **Reports outcomes**, **Median to outcome**, **90th percentile** et **Never
+reported**.
+
+## Ce dont elle a besoin pour dire quoi que ce soit
+
+À la fois la soumission et son accusé, sur au moins deux vendors — avec un seul vendor la table
+est une unique ligne et il n'y a rien à quoi la comparer. Si rien ne s'est réglé dans la fenêtre
+du tout, la page se lit **No traffic in this period**.

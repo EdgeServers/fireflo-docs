@@ -1,0 +1,129 @@
+---
+title: "routingTable.conf"
+description: "A gramática de regra de quatro partes, encadeamento de tabelas, grupos de fornecedor, tabelas LCR, e os dois erros que o parser não vai salvar você."
+---
+
+Hot reload. Edições aplicam em cerca de 200 ms sem restart.
+
+## Uma regra tem quatro partes separadas por dois pontos
+
+```
+Target:Attribute:Operator:Value
+```
+
+`Target` é uma instância de worker (`vendor1`, `smppserver.smpp`), um **grupo**, ou outra tabela para
+encadear (`MESSAGE`).
+
+Regras são avaliadas **de cima para baixo dentro de uma tabela**, e o primeiro match vence.
+
+<Warning>
+**Uma regra malformada faz o reload inteiro falhar** e a tabela anterior é mantida. Cheque o log por
+`Error parsing new routing table` depois de editar. O gateway continua funcionando na tabela antiga,
+então nada parece errado até você se perguntar por que sua mudança não fez nada.
+</Warning>
+
+## Os dois erros que o parser não vai salvar você
+
+**`==` é um operador numérico.** Use `equals` para strings:
+
+```
+vendor1:from:equals:MyBrand      correto
+vendor1:from:==:MyBrand          falha no parse
+```
+
+**`matches` é ancorado, `startsWith` é literal.** `^61.*` casa com um número inteiro; um `61` puro
+não. E `startsWith` compara texto literal. Uma expressão regular passada para ele não casa com nada,
+em silêncio.
+
+## Uma tabela mínima
+
+```ini
+# Ponto de entrada. Tipos de mensagem: 0=texto, 10=binário, 11=UCS-2, 14=flash,
+# 17=push, 18=delivery receipt.
+[default]
+MESSAGE:type:==:0
+MESSAGE:type:==:11
+MESSAGE:type:==:14
+MESSAGE:type:==:17
+MESSAGE:type:==:10
+smppserver.smpp:type:==:18
+
+[MESSAGE]
+vendor2:to:startsWith:614          # rotear AU mobile para vendor2
+vendor2:from:equals:MyBrand        # rotear um sender ID
+vendor2:product:equals:premium     # rotear um produto
+vendor1::default:                  # o catch-all, POR ÚLTIMO
+```
+
+<Warning>
+**O catch-all vai no fim.** Acima de outras regras ele torna tudo abaixo inalcançável, e nada avisa
+você. As regras parseiam bem, simplesmente nunca rodam.
+</Warning>
+
+`product` vem do `system_type` no bind SMPP do cliente, caindo de volta para o `product` da
+credencial. Chamadores HTTP sempre usam o valor da credencial.
+
+## Grupos de fornecedor
+
+Um grupo é outro nome para o qual uma regra pode enviar. Em vez de nomear um fornecedor, a regra
+nomeia um grupo e o grupo escolhe um membro. **Pulando qualquer um que esteja suspenso ou não
+aceitando**. Que é o failover que uma regra de alvo único não faz.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Política | Escolhe |
+| :--- | :--- |
+| `round-robin` *(padrão)* | O próximo membro em turno |
+| `weighted` | Em proporção aos pesos |
+| `failover` | Sempre o primeiro membro que está up, na ordem escrita |
+
+<Warning>
+**Blocos de grupo precisam vir antes do primeiro cabeçalho `[table]`.** Dentro de um bloco de tabela
+uma linha de membro não casa com nada e é descartada em silêncio.
+
+Um peso é lido só por `weighted`. Definir um nos outros dois não muda nada, e o gateway diz isso em
+WARN em vez de deixar você acreditar que uma divisão está acontecendo.
+</Warning>
+
+## Tabelas least-cost routing
+
+Uma tabela marcada `->function(LCR)` se comporta diferente: em vez de parar na primeira regra que
+casa, **toda** regra que casa é candidata e o fornecedor com a tarifa mais barata em `rates.conf`
+vence.
+
+Ordem de regra é portanto irrelevante em uma tabela LCR. As regras são alternativas, não uma cadeia
+de fallback.
+
+- Fornecedores que estão down ou não aceitando são pulados, então o próximo mais barato carrega o
+  tráfego.
+- Um fornecedor com **nenhuma tarifa que case** é usado só se nada mais casar, então uma linha de
+  tarifa ausente degrada em vez de bloquear.
+- Regras apontando para outra tabela são **ignoradas** dentro de uma tabela LCR.
+
+Veja [Least-cost routing](/platform/routing/least-cost).
+
+## Filtros
+
+Uma regra pode referenciar um filtro nomeado da biblioteca de filtros em vez de soletrar as condições
+inline.
+
+<Warning>
+**Um filtro ausente ou desabilitado pula toda regra que o referencia**, em vez de carregar a regra
+com menos condições. Descartar uma condição faria a regra casar com *mais* tráfego, então falhar
+dessa forma seria silencioso e rotearia as coisas erradas.
+
+É por isso que desabilitar um filtro pode fazer uma regra parecer casar com **menos**, e por que a
+correção nunca é "só remover a condição".
+</Warning>
+
+Em modo de banco este arquivo não é lido depois do startup; os mesmos dados vivem em
+`app_route_table`, `app_route_rule` e suas tabelas de condição. Veja
+[Banco de dados](/reference/config/database).

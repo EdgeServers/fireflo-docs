@@ -1,0 +1,54 @@
+---
+title: "Donner un accès au portail à un client"
+description: "Deux paramètres sur le compte, une exigence de déploiement, et la raison pour laquelle le panel ne confirmera jamais que l'adresse d'un client a été reconnue."
+---
+
+Les clients accèdent au portail en saisissant leur adresse e-mail et en suivant un lien à usage unique. Il n'y a pas de mot de passe à émettre, pas d'invitation à envoyer, et rien à révoquer sauf les deux paramètres ci-dessous.
+
+## Ce qu'un opérateur définit
+
+Ouvrez le compte, allez dans **Settings**, et définissez deux choses sur la carte **Organisation**.
+
+<Steps>
+<Step title="Définir l'adresse e-mail">
+Le champ **Email** sur le compte. Un compte par adresse, en ignorant la casse. Un second compte revendiquant la même adresse est refusé plutôt que de masquer silencieusement le premier.
+
+Une adresse mal formée est refusée à la saisie, donc une adresse enregistrée est une adresse que le portail peut faire correspondre.
+</Step>
+
+<Step title="Laisser le compte listé">
+La case **Listed**, sous **Advanced**. Un lien de connexion n'est émis que pour un compte à la fois correspondant à l'adresse **et** activé.
+</Step>
+</Steps>
+
+<Warning>
+**Retirer un compte de la liste désactive son accès au portail, et la case ne le dit pas.**
+
+Sa propre description parle des listes du panel et note correctement que le trafic continue de couler dans les deux cas. Retirer de la liste n'arrête rien de ce que fait le gateway. Mais cela *arrête bien* le portail d'émettre un lien de connexion, ce qui en fait la chose la plus proche d'un interrupteur portail on/off que le compte a. Ce comportement est l'actuel ; le libellé à côté de la case n'a pas suivi.
+
+Pour arrêter le trafic, désactivez les logins. Pour arrêter la dépense, utilisez le solde. Pour arrêter l'accès au portail, retirez de la liste.
+</Warning>
+
+## Ce dont le déploiement a besoin
+
+Le panel doit pouvoir envoyer du courrier, et doit connaître sa propre adresse publique, sinon aucun lien ne peut être émis du tout. Là où l'un ou l'autre manque, le client est informé clairement que la connexion par e-mail n'est pas disponible sur ce panel et de contacter son gestionnaire de compte. Un refus honnête plutôt qu'un lien qui n'arrive jamais. Voir [la configuration du control panel](/reference/config/control-panel).
+
+## Ce que le client voit, et ce qui ne vous sera pas dit
+
+Après avoir soumis une adresse, le client reçoit toujours la même réponse :
+
+> Si cette adresse est sur un compte, un lien de connexion est en route. Il expire dans 15 minutes.
+
+<Note>
+**Cette réponse est identique que l'adresse existe, appartienne à un compte désactivé, ou n'ait jamais été entendue.** Un formulaire qui dirait « pas de tel compte » permettrait à quiconque de tester une liste d'adresses contre votre base de clients et de savoir lesquels des clients de vos concurrents sont aussi les vôtres.
+
+La conséquence pour le support vaut d'être connue : **le panel ne peut pas vous confirmer que l'adresse d'un client a été reconnue.** Si un client signale qu'aucun lien n'arrive, vérifiez l'adresse sur le compte plutôt que de chercher un rejet qui n'a jamais été remonté.
+</Note>
+
+Les liens fonctionnent une fois et expirent après quinze minutes. Un lien utilisé ou expiré le dit et en offre un frais. Les requêtes sont limitées en taux par compte et par réseau, et atteindre la limite par compte reçoit la même phrase neutre. Le client n'est pas informé qu'il a été bridé.
+
+## Ce que l'accès au portail n'est pas
+
+**L'onglet Logins n'est pas l'accès au portail.** Il contient les identifiants SMPP et HTTP, qui sont la façon dont le *logiciel* d'un client se connecte. Rien dedans n'accorde ni ne révoque la connexion d'une personne. Un compte peut avoir une douzaine de logins et aucun accès au portail, ou un accès au portail et aucun login du tout.
+
+Une fois entré, un client voit son propre trafic, son relevé, ses sender IDs, ses templates et son API playground. Et jamais votre coût, votre marge ou quel vendeur a porté quoi. Ce qu'il peut y faire est décrit pour lui sous [le portail](/developers/portal/signing-in).

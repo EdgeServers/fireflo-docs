@@ -1,0 +1,76 @@
+---
+title: "Webhooks e o store de receipts"
+description: "Como o gateway chama endpoints de cliente, como um receipt encaminhado se parece, e onde o estado de correlação é mantido."
+---
+
+## Egress
+
+Se aplica tanto a `dlr_url` em uma submissão quanto a `forward.mo.url` em um conector.
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. |
+| `smsg.webhook.schemes` | `https,http` | Schemes que o gateway vai chamar. |
+| `smsg.webhook.private.targets` | `allow` | `deny` recusa targets privados, loopback e link-local. |
+| `smsg.webhook.retries` | `10` | Tentativas antes de o receipt ser abandonado. |
+| `smsg.webhook.retry.interval.ms` | `120000` | Espera entre tentativas. |
+| `smsg.webhook.timeout.ms` | `5000` | Timeout de conexão e requisição. |
+
+<Warning>
+`smsg.webhook.redirects` **mudou de seguir redirects para não seguir.** É a configuração da qual as
+outras dependem: uma vez seguido um redirect, o endereço que foi checado não é o endereço que é
+buscado. Um endpoint que dependia de um redirect agora falha de forma alta em vez de silenciosamente
+ir para outro lugar.
+</Warning>
+
+`private.targets` é `allow` por padrão para que implantações que fazem POST a uma aplicação na
+própria rede continuem funcionando. Configure `deny` onde clientes são externos.
+
+<Note>
+Ele resolve o host e depois conecta, então um nome que responde diferente entre uma coisa e outra
+derrota. Ele aumenta o custo em vez de fechar o buraco. Regras de firewall de egress é que fecham.
+</Note>
+
+No orçamento padrão de retentativas, um endpoint inalcançável ocupa uma virtual thread por vinte
+minutos.
+
+## Forwarding de receipt
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.dlr.forward.format` | `json` | `json` faz POST de um body JSON; `kannel` emite um GET puro com `%s`/`%d` substituídos na URL registrada. |
+| `smsg.dlr.forward.fields.vendor` | `false` | Se o receipt JSON nomeia o fornecedor que pegou a mensagem. |
+
+<Warning>
+`kannel` carrega informação **somente** onde a URL registrada tem placeholders para ela. Uma URL sem
+eles recebe uma requisição sem nada dentro, e nada reporta problema. Essa falha silenciosa é por que
+`json` é o padrão.
+</Warning>
+
+`vendor` é off por padrão porque expõe seu supplier ao seu cliente, em um endpoint que ele controla.
+Geralmente comercialmente sensível.
+
+O payload está documentado em [Delivery receipts](/developers/receive/delivery-receipts).
+
+## O store de delivery receipt
+
+Estado de correlação para mensagens aguardando um receipt, e receipts guardados para um cliente SMPP
+desconectado. **O único estado persistente fora do PostgreSQL.**
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.dlr.store.path` | `data/dlr-mvstore.db` | Localização do arquivo do store. |
+| `smsg.dlr.retention.days` | `7` | Por quanto tempo uma mensagem submetida é lembrada. |
+| `smsg.dlr.correlation.days` | `3` | Por quanto tempo um message id de fornecedor ainda pode ser casado de volta. |
+| `smsg.dlr.expiry.check.minutes` | `60` | Intervalo de sweep. |
+
+O path anteriormente só podia ser configurado como uma propriedade de sistema `-D fireflo.dlr.db.path`.
+Isso continua honrado quando `smsg.dlr.store.path` não está definido, então uma implantação existente
+não é realocada em um upgrade.
+
+<Note>
+**`smsg.dlr.correlation.days` limita `smsg.cdr.deadline.hours`.** Depois da janela de correlação um
+receipt não pode mais ser casado com sua submissão, então esperar mais só atrasa a mesma resposta. O
+sweeper de expiração deriva seu limite deste valor em vez de segurar uma constante própria, então
+alargar a janela sobe o limite e estreitar abaixa. Um deadline acima do limite é clamado e logado.
+</Note>

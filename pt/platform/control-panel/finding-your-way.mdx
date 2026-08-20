@@ -1,0 +1,119 @@
+---
+title: "Encontrando o caminho"
+description: "Um mapa da sidebar do operador, para que cada grupo serve, e as seis telas que não têm entrada de menu nenhuma."
+---
+
+O painel de controle é a metade do operador do FireFlo. Seus clientes nunca o veem — eles recebem
+[o portal](/developers/portal/signing-in), que mostra a eles o próprio tráfego e nada do seu.
+
+Nada aqui é obrigatório para rodar o gateway. O gateway lê sua configuração de um banco ou de
+arquivos e continuaria carregando tráfego se o painel fosse desligado por completo. O que o painel
+oferece é uma forma de mudar essa configuração sem edição manual, e uma forma de ver o que
+aconteceu sem escrever SQL.
+
+## A sidebar
+
+<AccordionGroup>
+
+<Accordion title="Overview — a primeira tela">
+Tráfego, entrega e falhas em todo o gateway, sobre 24 horas, 7 dias ou 30 dias. Comece aqui em um
+incidente; é a única tela que responde "há algo errado" sem que você tenha de nomear a coisa que
+suspeita.
+
+Veja [o dashboard](/platform/control-panel/dashboard).
+</Accordion>
+
+<Accordion title="Gateway — as coisas que carregam tráfego">
+| Item de menu | Para |
+| :--- | :--- |
+| **Messages** | Toda mensagem, buscável, com uma visão de detalhe por mensagem |
+| **Vendors** | Conexões de saída — de quem você compra |
+| **Servers** | Listeners de entrada — como clientes se conectam a você |
+| **Accounts** | Seus clientes, e tudo ligado a eles |
+| **Pricing** | Tarifas, tanto o que você cobra quanto o que lhe é cobrado |
+| **Diagnostics** | Logs e configuração lidos da própria máquina do gateway |
+
+**Vendor** e **server** são as duas metades da mesma ideia, e confundi-los é o erro inicial mais
+comum. Veja [conexões](/platform/connections/vendors).
+</Accordion>
+
+<Accordion title="Configuration — regras que o gateway aplica">
+**Filters** são condições reutilizáveis das quais tanto regras de roteamento quanto tarifas se
+valem. **TLVs** é o catálogo de parâmetros opcionais SMPP, incluindo aqueles que seus clientes
+propuseram e você ainda não aprovou.
+</Accordion>
+
+<Accordion title="Assets — o que os clientes podem enviar">
+**Headers** são sender IDs; **Templates** são textos aprovados. Ambos são o lado do operador do que
+os clientes solicitam em seu portal, e ambos só são aplicados onde você ligou a aplicação.
+</Accordion>
+
+<Accordion title="Reports — o que aconteceu, e o que valeu">
+| Item de menu | Responde |
+| :--- | :--- |
+| **Refused** | O que foi barrado antes de virar tráfego |
+| **Queues** | O que está esperando agora |
+| **Receipts** | Quão bem cada vendor reporta desfechos |
+| **Usage** | Volume e entrega, por account |
+| **Revenue** | Faturado, custo e margem |
+</Accordion>
+
+</AccordionGroup>
+
+## As telas sem entrada de menu
+
+Existem seis telas que a sidebar nunca lista. Elas são alcançadas a partir de outras telas, o que é
+correto uma vez que você saiba e desconcertante até que saiba.
+
+| Tela | Alcançada de | O que é |
+| :--- | :--- | :--- |
+| **Live health** | O ícone de coração no header | Binds, profundidade de fila e recibos em trânsito, agora |
+| **Runtime** | "Runtime detail" na faixa de saúde do Overview | Memória, processador e capacidade de conexão |
+| **Routing** | A tela de Vendors | Routing tables, rules e vendor groups |
+| **Products** | A tela de Servers | O catálogo de products, e rates por product |
+| **Message detail** | Qualquer linha em Messages | Uma mensagem de ponta a ponta, incluindo seus TLVs |
+| **Sign-in** | Sair, ou uma sessão expirada | O formulário de sign-in do operador |
+
+<Note>
+**Runtime e Live health respondem a perguntas diferentes e são fáceis de confundir.** Live health é
+*o que é verdade agora* — quais vendors estão bindados, quão fundas estão as filas. Runtime é *se o
+software tem espaço para continuar funcionando* — memória, processador, file descriptors. Um
+gateway pode estar perfeitamente saudável em um e em problemas em outro.
+</Note>
+
+## Dentro de uma account
+
+Abrir uma account lhe dá sete abas, e elas são genuinamente assuntos diferentes em vez de seções
+de uma página:
+
+| Aba | Contém |
+| :--- | :--- |
+| **Overview** | Tráfego e entrega apenas para este cliente |
+| **Settings** | Quem eles são, se estão listados, e onde estão em uma árvore de reseller |
+| **Logins** | Suas credenciais SMPP e HTTP |
+| **Approvals** | Sender IDs e templates que solicitaram |
+| **Billing** | Crédito, o ledger e reconciliação |
+| **Tariff** | O que este cliente é cobrado |
+| **Statement** | O que devem por um período |
+
+O header acima das abas mostra ou **Balance** ou **Limit**, nunca ambos — contas prepaid mantêm
+um balance, contas postpaid têm um credit limit, e ler um como o outro é a leitura errada que
+custa dinheiro.
+
+<Warning>
+**A aba Billing é o único lugar no FireFlo onde crédito é criado, e um top-up não pode ser
+desfeito.** Leia [a aba Billing](/platform/control-panel/accounts-billing) antes de usá-la.
+</Warning>
+
+## Sign-in
+
+<Frame caption="Sign-in de operador. A versão ao lado do wordmark é a do painel, e seus três primeiros números são o release do gateway com o qual ela pareia.">
+  <img src="/images/platform/control-panel/operator-sign-in.png" alt="O card de sign-in de operador do FireFlo com campos de username e password" />
+</Frame>
+
+Sign-in de operador é um username e password mantido na própria configuração do painel — não há
+tabela de usuários, e não há forma de adicionar um segundo operador de dentro do painel. Veja
+[a configuração do painel de controle](/reference/config/control-panel).
+
+Sessões são por navegador. Entrar em um laptop não conecta você em um celular, e sair encerra apenas
+a sessão que você está usando.

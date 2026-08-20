@@ -1,0 +1,118 @@
+---
+title: "FAQ clients"
+description: "Comptes, produits, approbations et application. Les questions qui arrivent sous forme de ticket de support plutôt que d'erreur de configuration."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un client envoie sans problème et rien n'est facturé">
+Vérifiez si son login porte un **product**, et si vos règles de tarification en portent un aussi.
+
+Un message sans produit ne voit que les règles de tarification qui n'ont elles-mêmes aucun produit. Sur un déploiement dont toutes les règles en portent un, il ne correspond à rien, reste sans tarif, et un message sans tarif n'est jamais facturé. La tarification s'exécute avant le débit, elle est donc sautée. Le message est livré et facturé à personne.
+
+Il y a une ligne au niveau `debug` et rien d'autre. La page **Pricing** du panel compte les 24 dernières heures de trafic sans prix et nomme les comptes et produits d'où il vient.
+</Accordion>
+
+<Accordion title="Son identifiant nomme le bon produit et il reste sans tarif">
+`system_type` sur un bind SMPP **surcharge** le produit du login, et c'est du texte libre validé nulle part ailleurs. Un client qui bind `prem` pour `premium` atterrit exactement dans l'état sans tarif ci-dessus.
+
+C'est pourquoi `conf.product.required` vérifie **l'appartenance au catalogue** plutôt que la non-vacuité. `prem` passe parfaitement tout test « est-il défini ? ». HTTP n'a pas de bind, et donc pas de surcharge.
+</Accordion>
+
+<Accordion title="conf.product.required est activé et un bind mal orthographié passe quand même">
+Le catalogue est `app_product`, une table de la base. Un gateway en **configuration par fichier** n'a pas cette table, et une base injoignable se comporte pareil. Seule la moitié non-vacuité est donc appliquée : un nom de produit non reconnu est accepté.
+
+Un WARN nommant le paramètre et la valeur est journalisé **une fois par bind** en disant exactement cela. La tolérance est délibérée. Refuser chaque bind parce qu'une requête a échoué serait une panne bien pire que celle que ceci évite.
+</Accordion>
+
+<Accordion title="Le whitelisting est activé et rien n'est vérifié">
+Lisez `active` sur `/ops/health`. **`active: false` alors que `smsg.whitelist.enabled` est vrai signifie que le chargement n'a jamais réussi**, et non que rien n'est configuré. Rien n'est vérifié sur aucun compte, et c'est la première chose à corriger.
+
+Si `active` est vrai, parcourez les quatre interrupteurs dans l'ordre : la fonctionnalité, le listener (`conf.whitelist.enabled`), le produit (`app_product.whitelist_enabled`), puis la politique du compte. Un message n'est vérifié que si les quatre l'indiquent.
+</Accordion>
+
+<Accordion title="Un listener n'applique pas et je ne l'ai jamais désactivé">
+`conf.whitelist.enabled` est **activé** par défaut. Un listener qui ne vérifie pas a donc été explicitement retiré, ou l'interrupteur principal est éteint, ou le paramètre n'est pas de ceux qui peuvent être limités à un seul listener. Dans ce cas il garde sa forme nue, lit un global que personne ne définit, et retourne son défaut codé quelle que soit votre configuration.
+</Accordion>
+
+<Accordion title="J'ai passé un compte en ENFORCE et il refuse tout">
+Une liste vide en `ENFORCE` refuse tout, et c'est correct : une whitelist sans rien dessus n'autorise rien. C'est reporté comme `enforcing_with_nothing_approved` sur `/ops/health`.
+
+La cause habituelle est que les approbations existent mais ne comptent pas. Une approbation classée sous un produit avec `whitelist_enabled = false` ne protège rien. Ce produit se résout à `OFF` avant toute fusion. Et le trafic sans produit est servi par la portée **compte** seule, donc aucune approbation à portée de produit ne peut atteindre un login dont le login ne nomme aucun produit.
+</Accordion>
+
+<Accordion title="Le sender ID est approuvé et l'opérateur refuse quand même chaque message">
+« Approuvé » décide si le message est correspondant ici. Il ne décide pas si l'opérateur va l'accepter.
+
+Rien d'approuvé signifie rien de tamponné, donc une voie DLT reçoit un `submit_sm` sans identifiant d'entité ou de template et le refuse. Avec un statut dans le bloc 192–196, qui concerne toujours les TLV. `tlvCount=0` sur les lignes de trace le confirme.
+
+Le rapport de couverture TLV du panel indique, par ligne approuvée, quelles balises obligatoires ne seront fournies par rien et quels opérateurs les rejetteraient.
+</Accordion>
+
+<Accordion title="Le tampon est configuré et le fil ne le porte pas">
+Trois choses à vérifier, dans cet ordre :
+
+- **Le token.** `PEID=…` n'a pas de tiret bas, donc il ne porte aucune balise et ne tamponne rien. Le format est `<nom>_<balise>=<valeur>`.
+- **Le mode de tamponnage.** `whitelist.tlvs.mode` a pour défaut `off` sur un listener, donc une correspondance ne tamponne rien du tout. `assign` remplit la balise si le client n'en a pas envoyé une ; `replace` écrase ce qu'il a envoyé, et cet écrasement *est* l'approbation.
+- **L'opérateur.** Une balise absente du `registered.tlvs.submit` de cet opérateur est supprimée à la sortie, *après* que l'enregistrement d'appel l'ait notée comme présente. L'enregistrement dit envoyée ; le fil ne la porte pas.
+</Accordion>
+
+<Accordion title="Dois-je faire reconnecter le client après avoir approuvé quelque chose ?">
+Non. La whitelist est relue lors du sondage de configuration et chaque snapshot porte une génération, donc une session bindée depuis des semaines récupère un sender ID nouvellement approuvé sans reconnexion.
+
+`fireflo reload` l'applique maintenant plutôt qu'au prochain sondage. Ce qui compte, parce que le client dont le trafic est refusé est généralement au téléphone pendant qu'on l'approuve.
+</Accordion>
+
+<Accordion title="Un login du compte fonctionne et un autre non">
+Vérifiez si les approbations sont liées au login. `system_id` sur une inscription la limite à un seul login ; **NULL signifie chaque login du compte**, ce que chaque ligne signifiait avant que la colonne existe.
+
+Lier une ligne à un login la retire de tous les autres logins de ce compte. Un login sans ses propres lignes et sans lignes à portée du compte ne peut rien envoyer en `ENFORCE`. La page du compte avertit quand toutes les approbations sont liées à des logins et qu'un login est laissé sans aucune.
+
+Un message dont le login est inconnu obtient les lignes à portée du compte et rien d'autre. Fail-closed volontairement, pour qu'un appelant qui n'a pas passé de login ne reçoive pas d'approbations données à quelqu'un de spécifique.
+</Accordion>
+
+<Accordion title="Un template s'enregistre proprement et ne correspond à rien">
+`{code}` n'a pas de `#` dedans, c'est donc du texte ordinaire. Le template approuve une seule chaîne exacte contenant des accolades et refuse tout vrai message.
+
+`{#VAR#}` et `{# var #}` ne sont pas non plus le token. Le gateway les charge, les fait correspondre comme `{#var#}`, et les liste sous `templates_degraded` sur `/ops/health`. Le panel refuse de les enregistrer en premier lieu. Écrivez le token en minuscules sans espaces à l'intérieur.
+
+L'aperçu du panel est le contrôle : il montre un message exemple que le template accepte, construit par le même analyseur que le matcher utilise.
+</Accordion>
+
+<Accordion title="Puis-je augmenter la longueur de variable pour un seul client ?">
+Non. `smsg.whitelist.max.variable` est global, parce que les templates sont compilés une fois au chargement en un index par compte. Il n'y a pas de « par client » où le mettre.
+
+L'augmenter élargit **tous** les templates approuvés du déploiement d'un coup, ce qui est le plus grand faux positif de la conception. C'est journalisé au niveau INFO et rapporté comme `max_variable` sur `/ops/health`, et cette valeur rapportée est aussi la réponse quand le paramètre a été changé mais que le sondage de configuration n'a pas encore eu lieu.
+</Accordion>
+
+<Accordion title="Un client a modifié son template et son trafic s'est arrêté">
+Modifier une inscription approuvée la remet à `PENDING` et efface la revue précédente, donc elle est hors service jusqu'à ce que quelqu'un l'approuve à nouveau.
+
+C'est le principe. Un client ne doit pas changer un libellé approuvé et continuer d'envoyer sous l'approbation. Et cela a un bord tranchant sur un compte fail-closed. Proposer des TLV est la seule exception : `requested_tlvs` n'est lu par rien sur le chemin du message, donc une ligne approuvée continue de fonctionner pendant qu'un opérateur considère la proposition.
+</Accordion>
+
+<Accordion title="Un client a proposé des TLV. Pourquoi ne peut-il pas simplement les définir ?">
+Sous `replace` le tampon écrase ce que le client a affirmé, et **cet écrasement est l'approbation**. Un client capable d'écrire la colonne servie pourrait affirmer l'inscription de quelqu'un d'autre tout en envoyant un libellé approuvé, et l'enregistrement d'appel rapporterait alors la valeur qu'il a choisie comme approuvée.
+
+Le portail écrit donc `requested_tlvs`, le gateway lit `tlvs`, et un opérateur soit déplace la proposition, soit la supprime. Accepter met la valeur sur le fil au prochain sondage de configuration.
+</Accordion>
+
+<Accordion title="Quel compte est facturé quand accountId est vide sur un login ?">
+Cela diffère par protocole. SMPP retombe sur le `systemId` ; HTTP retombe sur la clé de recherche, qui est l'`apiKey` quand elle est définie.
+
+Donc un login HTTP avec une clé API et sans `accountId` est facturé sur la clé elle-même. Le secret atterrit dans `cdr_submit.account_id`, dans les chiffres de revenu du panel et dans chaque export CSV. Définissez `accountId` explicitement et ni l'un ni l'autre repli ne compte.
+</Accordion>
+
+<Accordion title="J'ai ajouté du crédit et le solde n'a pas bougé">
+Vérifiez si le compte a une ligne `account_balance`. Un compte sans ligne n'est **pas à zéro**. Il n'a pas de solde, ce qui est un état différent.
+
+Un `RECHARGE` écrit pour un compte sans ligne ne crédite rien. Il reste en attente, journalise un WARN nommant le compte, et s'applique au moment où la ligne apparaît. Créer un login ne crée pas de solde ; *Open for credit* sur la page du compte le fait.
+</Accordion>
+
+<Accordion title="J'ai retiré un compte de la liste et son trafic a continué">
+Le gateway ne lit jamais le catalogue de comptes. `enabled` sur `app_account` décide si ce panel liste le compte et rien d'autre. Ses logins continuent de se connecter, son trafic continue d'envoyer et ses règles de tarification continuent de tarifer.
+
+C'est l'opposé de ce que `enabled` signifie sur un vendeur ou un produit. Pour arrêter le trafic, désactivez les **logins** ; pour arrêter la dépense, utilisez le solde.
+</Accordion>
+
+</AccordionGroup>

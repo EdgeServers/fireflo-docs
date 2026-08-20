@@ -1,0 +1,111 @@
+---
+title: "Gerando tráfego"
+description: "Dirigindo cada uma das quatro direções por conta própria — e os dois erros de ordem de roteamento que já morderam um deployment real."
+---
+
+Uma mensagem pode atravessar o gateway de **quatro formas**. São caminhos de código genuinamente
+diferentes e falham de formas diferentes, então conseguir dirigir cada um por conta própria é o que
+transforma "algo está errado" em uma bisseção.
+
+| # | Direção | Exercita |
+| :-- | :--- | :--- |
+| 1 | **MT out** — cliente envia por SMPP, gateway envia a um fornecedor | Auth do bind, whitelist, rating, crédito, roteamento, janela do fornecedor |
+| 2 | **MT in por HTTP** — cliente envia por REST | O ingress REST, e então tudo abaixo da linha 1 |
+| 3 | **DLR de volta** — o receipt do fornecedor chega à sessão conectada do cliente | Parsing do receipt, correlação de id, o DLR store |
+| 4 | **MO in** — um assinante manda texto ao seu shortcode e ele chega ao cliente | Decode de entrada, ownership de MO, entrega a uma sessão conectada |
+
+## Preparando uma lane
+
+```bash
+psql "$CONFIG_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/seed-traffic-lane.sql
+./scripts/fireflo reload
+./scripts/fireflo show routing
+```
+
+Isso cria uma conta com crédito, um produto com whitelisting desligado, um login SMPP e um login
+HTTP, uma tarifa plana, e as regras de roteamento que as quatro direções precisam. É **idempotente**,
+e um script de teardown correspondente remove exatamente o que adicionou.
+
+<Warning>
+**Troque as duas senhas** antes de apontar para isso qualquer coisa que não seja sua própria máquina.
+</Warning>
+
+## Leia a ordem de match antes de enviar qualquer coisa
+
+```
+seq  target   rule
+ 10  smpp     type == 18                       ← receipts ao cliente
+ 20  smpp     ingateway startsWith smppclient. ← MOs de entrada ao cliente
+ 31  vendor1  to matches ^91[6-9][0-9]{9}$
+ 90  vendor1  (sem condições)                  ← todo o resto
+```
+
+O router toma a **primeira** regra que casa, e a última regra casa com tudo. Duas coisas seguem, e
+**ambas já morderam um deployment real**:
+
+<AccordionGroup>
+
+<Accordion title="Regras que selecionam por classe de mensagem devem ficar acima de regras que selecionam por destino">
+Um delivery receipt para uma mensagem cujo remetente era um endereço indiano numérico chega com aquele
+número em `to`, uma vez que `flag.reverseDlrSrcDst` tenha trocado source e destination.
+
+Colocada **abaixo** de uma regra `to matches ^91…`, esse receipt vai para um **fornecedor** em vez de
+para o cliente.
+
+Por isso o seed move as regras de destino para baixo em vez de simplesmente encaixar uma regra de
+classe acima do catch-all.
+</Accordion>
+
+<Accordion title="Um gateway sem regra `type == 18` engole todo delivery receipt">
+Ele cai no catch-all, chega ao worker de fornecedor, e é **submetido upstream como uma nova mensagem
+de saída.**
+
+`conf/routingTable.conf` sempre carregou essa regra. O banco não — e em modo de banco o banco vence.
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Ambas as falhas são silenciosas do lado do cliente: na primeira o receipt simplesmente nunca chega,
+na segunda ele chega a uma operadora como tráfego pelo qual você paga. Nenhuma produz um erro em
+lugar algum.
+</Tip>
+
+## O que cada direção prova
+
+<Steps>
+  <Step title="Direção 1 primeiro — MT out via SMPP">
+    Se isto falhar, nada mais vai funcionar também. Cobre o caminho mais longo.
+  </Step>
+  <Step title="Direção 2 — o ingress REST">
+    Falhar aqui enquanto 1 funciona isola o problema ao ingress HTTP: auth, parsing, rate limits.
+  </Step>
+  <Step title="Direção 3 — receipts de volta">
+    A mais frequentemente quebrada por ordem de roteamento do que pelo próprio caminho de receipt.
+  </Step>
+  <Step title="Direção 4 — MO in">
+    Precisa que o número de destino esteja mapeado a uma conta. Uma mensagem não mapeada é
+    registrada e entregue a lugar nenhum, sem nada observável do lado do cliente.
+  </Step>
+</Steps>
+
+## Lendo o resultado
+
+Não julgue uma lane pelo fato do send ter retornado `200` — isso apenas significa aceito para
+roteamento. Cheque:
+
+- `cdr_submit` para uma linha, e `cdr_final` para um outcome
+- `cdr_rejected` para qualquer coisa recusada, com seu motivo
+- `/ops/health` para `submitted` se movendo no fornecedor
+- O log para `message.accepted`, `message.submitted`, `message.dlr`
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Throughput" icon="gauge-high" href="/platform/operations/throughput">
+    Um baseline medido para comparar contra uma execução de carga.
+  </Card>
+  <Card title="First checks" icon="magnifying-glass" href="/platform/troubleshooting/first-checks">
+    Quando uma lane não funciona.
+  </Card>
+</CardGroup>

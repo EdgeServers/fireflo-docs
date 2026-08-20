@@ -1,0 +1,148 @@
+---
+title: "Plantillas de contenido"
+description: "Aprobar el texto que una cuenta puede enviar, los tres placeholders tipados, y las formas en que una plantilla se guarda limpiamente y luego no coincide con nada."
+---
+
+Una fila en `app_template` es un cuerpo de mensaje aprobado. Una plantilla es texto fijo con placeholders, así que
+`Your code is {#var#}` aprueba el mensaje y no un código específico.
+
+## El fallo es una plantilla que se guarda limpiamente y no empareja nada
+
+El contenido es fail-closed. "No empareja nada" no significa que la plantilla se ignore. Significa que el
+cliente deja de enviar, y parece que nada está mal desde todos los ángulos excepto el suyo.
+
+<Warning>
+**`{code}` no es un placeholder.** No tiene `#` dentro, así que es texto ordinario: la plantilla aprueba
+una única cadena exacta que contiene llaves y rechaza cada mensaje real. Nada en la fila parece mal,
+porque nada en ella *está* mal. Aprueba algo que ningún cliente enviará jamás.
+
+La vista previa del panel existe para este único error. Muestra un mensaje de ejemplo que la plantilla acepta,
+construido por el mismo escáner que usa el emparejador del gateway, así que una plantilla que aprueba llaves literales es
+visible en el momento en que se escribe en lugar de en un ticket de soporte una semana después.
+</Warning>
+
+Los casi-fallos se comportan de manera diferente en los dos lados, deliberadamente:
+
+| Escrito | El gateway | El panel |
+| :--- | :--- | :--- |
+| `{#VAR#}`, `{# var #}`, un tipo desconocido | Lo carga, lo empareja como `{#var#}` y lo lista bajo `templates_degraded` en `/ops/health` | Se niega a guardarlo |
+| `{code}` | Texto ordinario | Advierte |
+
+<Note>
+El gateway solía rechazar de plano un placeholder mal formado, lo cual suena más seguro y no lo era: el
+loader descarta una plantilla que no puede compilar, así que un operador veía una plantilla aprobada en el panel mientras
+cada mensaje que cubría era rechazado. **Estricto en autoría, tolerante pero ruidoso al cargar** es la regla.
+El trabajo del panel es impedir que la fila se escriba; el trabajo del gateway sobre una fila ya en la base de datos
+es mantener a la cuenta enviando y decir qué hizo.
+</Note>
+
+## Los tres placeholders, escritos exactamente
+
+| Token | Acepta |
+| :--- | :--- |
+| `{#var#}` | Cualquier cosa. |
+| `{#num#}` | Solo ASCII `0`–`9`. |
+| `{#alp#}` | Letras en cualquier alfabeto, las marcas combinantes con que se forman los nombres índicos, y la puntuación que sujeta un nombre. |
+
+Escribe el **token** en minúsculas sin espacios dentro. Esa es su ortografía y no dice nada sobre
+lo que acepta.
+
+`{#alp#}` toma espacios, apóstrofes, guiones y puntos, así que `your login`, `Priya Sharma`,
+`O'Brien`, `Anne-Marie` y `St. John` todos coinciden. Tanto el apóstrofe y guion ASCII como los
+tipográficos se aceptan, porque los tipográficos son los que sobreviven a un pegado desde un PDF. Lo que aún
+rechaza son los **dígitos**, y esa es toda la razón para elegirlo sobre `{#var#}`.
+
+Un placeholder tipado es estrictamente más ajustado que `{#var#}`. Mismo límite de longitud, menos caracteres
+permitidos. Así que elegir uno solo puede estrechar lo que una plantilla acepta.
+
+## Cuánto puede representar un placeholder
+
+Una variable empareja de 1 a 30 caracteres por defecto.
+
+<Warning>
+**Subir `smsg.whitelist.max.variable` amplía cada plantilla aprobada del despliegue a la vez.**
+Es global en lugar de por listener porque las plantillas se compilan una vez al cargar en un índice por
+cuenta, así que no hay dónde ponerlo por cliente. Un valor subido para el nombre largo de comerciante de un cliente
+afloja las aprobaciones de todos los demás clientes en la misma cantidad.
+
+Es el mayor falso-positivo de aceptación en este diseño, por eso se registra en INFO y se reporta como
+`max_variable` en `/ops/health`. Un valor fuera de 1–1000 vuelve al valor por defecto con un WARN.
+</Warning>
+
+`max_variable` en la salida de health también es la respuesta a "el ajuste se ha cambiado y no ha pasado
+nada". Reporta el tope realmente en vigor, así que un sondeo de configuración que aún no ha aterrizado es
+visible en lugar de conjeturado.
+
+## El espacio en blanco se compara plegado
+
+Cualquier secuencia de espacios, tabs, saltos de línea, CRLF o espacios no separables cuenta como un **único espacio** en ambos
+lados, y ambos extremos se recortan. Así que una plantilla registrada con un salto de línea antes de su firma
+coincide con tráfico que envía un espacio ahí.
+
+El plegado nunca une dos palabras: una plantilla que aprueba `foo bar` aún no puede ser satisfecha por `foobar`.
+
+<Note>
+Esto es solo comparación. El mensaje enviado al operador es byte por byte lo que llegó, y la
+plantilla almacenada es byte por byte lo que se pegó. Que es contra lo que el registro DLT es auditable.
+La vista previa del panel muestra el texto **plegado**, deliberadamente, así que un operador que pegó un cuerpo lleno de
+espacios no separables ve lo que realmente se comparará.
+</Note>
+
+## Lo que el panel se niega a guardar
+
+| Regla | Por qué |
+| :--- | :--- |
+| No vacío | Una plantilla necesita el texto que aprueba. |
+| Máximo 2 000 caracteres | Diez segmentos SMS y algo más. Una plantilla más larga que el mensaje que aprueba no puede coincidir con uno. |
+| Un tipo de placeholder conocido | Cualquier otra cosa se empareja como `{#var#}`, que acepta más de lo que pretendías. |
+| Sin dos placeholders adyacentes | Sin nada entre ellos no pueden distinguirse, así que actúan como una única variable del doble de longitud. |
+| No solo placeholders | Una plantilla que solo son variables acepta cualquier mensaje, lo cual es lo mismo que no tenerla. |
+
+Una cosa se avisa en lugar de rechazarse: una plantilla cuyo texto literal entre dos placeholders
+se repite más tarde en el cuerpo. El emparejamiento greedy puede rechazar un mensaje que un motor con backtracking aceptaría.
+Tal plantilla suele seguir siendo correcta, y este es el único modo de fallo invisible del emparejador, así que el
+objetivo es hacerlo visible en lugar de bloquearlo.
+
+## Plantillas y mensajes multi-segmento
+
+En el ingreso SMPP un `submit_sm` que lleva una cabecera de segmento **no** se comprueba de contenido. Un segmento
+lleva un fragmento del cuerpo, así que el contenido aún no puede juzgarse. Un emparejamiento de plantilla tampoco es
+por tanto lo que estampa esa PDU.
+
+<Warning>
+**Un TLV obligatorio suministrado solo por una plantilla puede no llegar a un mensaje concatenado.** Si el tag que un
+operador necesita viene solo de la fila de plantilla, y nada en la credencial lo suministra, el
+camino por segmento no tiene nada que estampar. Y un listener que requiera ese tag rechaza. Pon el tag que
+el operador requiere también en el `defaultTlvs` de la **credencial**, donde se aplica a cada PDU
+independientemente del emparejamiento.
+</Warning>
+
+El informe de cobertura de TLV del panel dice, por fila aprobada, qué tags obligatorios no suministrará nada. Consulta
+[Sender IDs](/platform/customers/sender-ids).
+
+## Aprobación, y lo que cuesta una edición
+
+Todo lo que un cliente envía desde el portal llega como `PENDING`. El gateway sirve una fila solo cuando
+está `enabled` **y** `APPROVED`.
+
+<Warning>
+**Editar una plantilla aprobada la suspende.** Cambiar el nombre, el texto, la nota o el login
+vuelve a poner la fila en `PENDING` y borra la revisión anterior, así que queda fuera de servicio hasta que alguien
+la apruebe de nuevo. Y en una cuenta fail-closed eso significa que el tráfico del cliente se detiene hasta entonces.
+
+Eso es lo que la aprobación existe para detener: cambiar la redacción aprobada bajo una aprobación existente. Proponer
+TLVs es la única excepción, porque nada en el camino del mensaje lee la columna propuesta.
+</Warning>
+
+No hay clave natural en `app_template`, así que un cuerpo duplicado se detecta en el código en lugar de por una
+restricción: pedir de nuevo un texto ya solicitado o aprobado se rechaza con un mensaje que dice
+cuál, en lugar de convertirse en una segunda fila que nadie puede distinguir de la primera.
+
+<CardGroup cols={2}>
+<Card title="Sender IDs" href="/platform/customers/sender-ids">
+La otra mitad de la misma aprobación, y el informe de cobertura de TLV.
+</Card>
+<Card title="Referencia de whitelisting" href="/reference/config/whitelisting">
+Cada propiedad, los tres modos de estampado, y la comprobación obligatoria por proveedor.
+</Card>
+</CardGroup>

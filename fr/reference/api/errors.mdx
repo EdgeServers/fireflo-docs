@@ -1,0 +1,139 @@
+---
+title: "Erreurs de l'API"
+description: "Chaque statut renvoyé par l'API REST, ce qui le provoque, et l'ordre dans lequel les vérifications s'exécutent — ce qui décide quelle erreur vous voyez réellement."
+---
+
+Chaque échec est un objet JSON avec un unique `message`. Le statut HTTP est la partie lisible par
+la machine ; la chaîne est pour une personne lisant un log.
+
+```json
+{"message":"Authentication failure"}
+```
+
+## L'ordre des vérifications
+
+Il décide quelle erreur vous voyez quand une requête est mauvaise à plus d'un titre, et c'est la
+raison pour laquelle une charge utile malformée peut revenir comme un problème d'authentification.
+
+<Steps>
+  <Step title="Authentification">
+    Avant que le corps ne soit parsé.
+  </Step>
+  <Step title="Autorisation">
+    Liste d'IP autorisées, puis type de login.
+  </Step>
+  <Step title="Négociation de contenu">
+    L'en-tête `Accept`.
+  </Step>
+  <Step title="Parsing">
+    JSON bien formé, puis noms de champs, puis valeurs.
+  </Step>
+  <Step title="Règles métier">
+    Sender ID, template, crédit, limite de débit.
+  </Step>
+</Steps>
+
+Exécuté sur une 0.7.3 en production : un corps illisible sans identifiants renvoie l'erreur
+**d'authentification**, pas l'erreur de parsing :
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Tip>
+**Corrigez les identifiants avant de déboguer une charge utile.** Un `401` ou un `403` ne vous dit
+rien sur la validité du reste de votre requête, parce que rien en aval de l'authentification n'a
+encore été exécuté.
+</Tip>
+
+## Authentification et autorisation
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 401 | `Authentication required` | Aucun en-tête `Authorization`. La réponse porte `WWW-Authenticate: Basic realm="fireflo"`. |
+| 401 | `Invalid token` | L'en-tête n'est pas Basic, n'est pas du Base64 valide, ou ne contient pas de deux-points. |
+| 403 | `Authentication failure` | Login inconnu, mot de passe incorrect, **ou un login SMPP** — ceux-là ne peuvent pas utiliser cette API. |
+| 403 | `Authorization failure` | Votre login a une liste d'IP autorisées et la requête n'en vient pas. |
+
+**401 signifie "vous ne vous êtes pas identifié" ; 403 signifie "vous l'avez fait, et cela n'a pas
+été accepté."** La distinction vaut la peine d'être câblée dans votre alerting : un 401 soudain
+est habituellement un déploiement qui a perdu sa variable d'environnement, tandis qu'un 403
+soudain est habituellement une rotation de mot de passe ou une IP qui a bougé.
+
+<Warning>
+**Un chemin inconnu sous `/secure/` renvoie `401`, pas `404`.** L'authentification s'exécute avant
+le routage, donc l'API ne dira pas à un appelant non authentifié quels endpoints existent.
+N'utilisez pas un `404` pour sonder la disponibilité d'un endpoint. Vous obtiendrez `401` quoi que
+vous demandiez.
+</Warning>
+
+## Négociation de contenu
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 415 | `This API supports JSON media type only.` | Un en-tête `Accept` qui exclut JSON. |
+
+Omettre `Accept` entièrement est bien. Envoyer `Accept: text/plain` ne l'est pas, et c'est la
+seule erreur qu'une barre d'adresse de navigateur produira de manière fiable.
+
+## Parsing
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 412 | `Got unparseable json data: <body>` | Le corps était vide, n'était pas du JSON, ou était un tableau nu plutôt qu'un objet. |
+| 400 | `Mandatory argument <name> is not found.` | Un champ requis était absent ou vide. |
+| 400 | `Unknown argument: <name>` | Un champ que l'API n'a pas, y compris `username` et `password`, qui appartiennent à l'en-tête. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Bon nom, mauvaise forme — un `coding` non numérique, un `hex_content` de longueur impaire. |
+
+<Warning>
+**`412` pour du JSON invalide, pas `400`.** La plupart des APIs utilisent `400` pour les deux, donc
+un client qui branche sur le statut traitera "votre JSON est cassé" comme une surprise de niveau
+réseau. Les deux sont permanentes, ne réessayez ni l'une ni l'autre.
+</Warning>
+
+## Règles métier
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 402 | `Insufficient credit` | Le solde prépayé ne couvrira pas. Rien n'a été envoyé et rien n'a été débité. |
+| 403 | `'<id>' is not an approved sender ID for this account.` | Le `from` n'a pas été approuvé. |
+| 403 | `The message content does not match any approved template for this account.` | Le compte n'envoie que des libellés approuvés et ce corps ne correspond à aucun. |
+| 429 | `Rate limit exceeded` | Au-dessus de la limite messages-par-seconde du compte. |
+| 500 | `Cannot send message` | Accepté et n'a pas pu être mis en file. **Tout débit est inversé.** |
+
+<Warning>
+**Il n'y a pas de `Retry-After` sur un `429`.** Faites votre propre backoff — exponentiel, avec du
+jitter. Un retry à intervalle fixe depuis plusieurs workers les resynchronise sur la rafale
+suivante.
+</Warning>
+
+## Lesquelles réessayer ?
+
+| | Réessayer | Pourquoi |
+| :--- | :--- | :--- |
+| 401, 403, 412, 400 | **Non** | Permanent. La même requête échouera à l'identique pour toujours. |
+| 402 | **Non** | Un retry ne peut pas ajouter de crédit. Alertez plutôt. |
+| 415 | **Non** | Corrigez l'en-tête. |
+| 429 | **Oui**, avec backoff | Transitoire par définition. |
+| 500 | **Oui**, une ou deux fois | Le débit a été inversé, donc un retry n'est pas un double débit. |
+| 502, 503, 504 | **Oui** | Pas depuis la passerelle. Un proxy en amont. |
+
+<Tip>
+**Un `500` est sûr à réessayer précisément parce que le débit est inversé.** C'est une propriété
+délibérée de l'ingress, pas un hasard : le crédit est prélevé avant la mise en file et restitué
+lorsque celle-ci échoue, donc un retry coûte un message, pas deux. Voir
+[Comment fonctionne la facturation](/platform/billing/prepaid-credit).
+</Tip>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Vue d'ensemble de l'API REST" icon="book" href="/reference/api/overview">
+    L'enveloppe, l'authentification et la règle sur les noms de champs.
+  </Card>
+  <Card title="Envoyer un message" icon="paper-plane" href="/reference/api/send">
+    Chaque champ, avec sa valeur par défaut et son refus.
+  </Card>
+</CardGroup>

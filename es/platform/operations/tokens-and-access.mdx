@@ -1,0 +1,105 @@
+---
+title: "Tokens y acceso"
+description: "Dos tokens con una división deliberada, por qué uno sin establecer te da 404 en lugar de 401, y la regla ausente-versus-cero que recorre cada campo."
+---
+
+El puerto de gestión lleva profundidades de cola, nombres de proveedor, estado de bind y los controles que detienen a un
+proveedor. Está guardado por **dos** secretos compartidos:
+
+```properties
+smsg.ops.token       = <una cadena aleatoria larga>
+smsg.ops.admin.token = <otra cadena aleatoria larga diferente>
+```
+
+## La división
+
+| Token | Abre |
+| :--- | :--- |
+| `smsg.ops.token` | `GET /ops/health`, `GET /ops/queues`, `/q/metrics`. **Todo lo que solo lee** |
+| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture y los seis verbos de control |
+
+De esa forma un dashboard o sistema de monitorización puede tener el token de lectura **sin poder también detener a un
+proveedor**.
+
+<Warning>
+**Deben diferir.** Establecer ambos al mismo valor se trata como ninguna separación en absoluto. Los controles
+se apagan y el gateway registra por qué.
+
+Dejar el token admin sin establecer hace lo mismo, que es la dirección segura: pierdes los controles en lugar
+de exponerlos.
+</Warning>
+
+## Un token sin establecer responde 404, no 401
+
+Configuración ausente **deshabilita** el endpoint en lugar de dejarlo abierto. Un token equivocado obtiene el
+mismo `404` en lugar de un `401`, así que un llamador no puede saber si hay algo aquí para lo que valga la pena
+encontrar un token.
+
+<Tip>
+**Si tu dashboard reporta 404, comprueba el token en ambos lados antes de asumir que el gateway está caído.**
+Esa confusión es el coste de no filtrar la existencia del endpoint, y merece la pena conocerlo
+antes de un incidente en lugar de durante uno.
+</Tip>
+
+## Deliberadamente no está bajo `/secure`
+
+Ese prefijo se autentica con **credenciales de mensajería, que pertenecen a clientes**. Profundidades de cola,
+nombres de proveedor y estado de bind son de todo el gateway, así que publicarlos ahí entregaría a cada cliente que
+pueda enviar un SMS una vista del gateway entero.
+
+El puerto de gestión lleva su propio token en su lugar. Y una credencial de mensajería no lo abre.
+
+## Mantén el puerto fuera de la red pública
+
+| Puerto | Sirve |
+| ---: | :--- |
+| 8080 | `/secure/*`, `/ping`. Lo que llaman los clientes |
+| 9000 | `/q/metrics` y `/ops/*` |
+
+Mantén 9000 en una red admin y no lo publiques. El token es una segunda línea, no la primera.
+
+## Ausente no es cero
+
+Esta regla recorre cada campo en `/ops/health`, y leerla mal produce conclusiones confiadamente
+equivocadas:
+
+| Campo | Ausente significa | Cero significaría |
+| :--- | :--- | :--- |
+| `router_queue_capacity` | **Sin límite**. El valor por defecto | Sin espacio |
+| `queue_capacity` | Sin límite | Llena |
+| `in_queue_depth` | No es un listener en absoluto | Un proveedor con una cola entrante vacía |
+| `submitted` | Los contadores están apagados para este conector | No envió nada |
+| `tps_limit` | Sin techo configurado | Un techo de cero |
+| `tps_measured` | **No medido**. Incluyendo las primeras dos ventanas tras el arranque | Conectado, contando, y sin mover nada |
+
+<Warning>
+`tps_measured` es el que pilla a la gente. **Cero es un valor real** que significa una sesión conectada que
+no envía nada. Que es un estancamiento que merece una alerta. Ausente significa que el gateway aún no ha medido,
+porque una lectura de un contador acumulativo es una línea base y aún no una tasa.
+
+Una alerta que trate ausente como cero se dispara en cada reinicio.
+</Warning>
+
+## `cdr.failed` son datos de facturación perdidos
+
+Un batch fallido **nunca se reintenta** y esos registros se han ido. No es transitorio.
+
+**Alerta con cualquier valor distinto de cero.** Este es ingreso que no puedes facturar, y nada más te lo dirá.
+
+## Una búsqueda por subcadena no es una comprobación de identidad
+
+`q=ACME` en el endpoint de sesiones también devuelve `ACMEINTL`.
+
+Cualquier cosa que actúe sobre un resultado (desconectar los binds de un login, por ejemplo) debe comparar `system_id`
+**exactamente** en lugar de confiar en la coincidencia.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="El puerto de gestión" icon="server" href="/reference/management/endpoints">
+    Cada endpoint y su token.
+  </Card>
+  <Card title="Salud en vivo" icon="heart-pulse" href="/platform/operations/live-health">
+    Leer la carga útil que esos tokens desbloquean.
+  </Card>
+</CardGroup>

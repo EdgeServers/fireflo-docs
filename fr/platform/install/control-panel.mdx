@@ -1,0 +1,84 @@
+---
+title: "Installer le control panel"
+description: "L'installateur du panel, ce qu'il dérive de la configuration du gateway, et la seule connexion qu'il ne devine jamais."
+---
+
+Le control panel sert à la fois les écrans opérateur et le portail client. C'est un processus séparé avec son propre installateur et son propre fichier d'environnement.
+
+<Note>
+**Installez-le après le gateway.** Le gateway possède le schéma de la base ; le panel ne fait que lire et écrire des lignes dedans.
+
+Il n'est **pas sur le chemin des messages**. Un panel en panne vous coûte la capacité de faire des changements, pas la capacité d'envoyer.
+</Note>
+
+## Installer
+
+```bash
+./scripts/fireflo-panel-install check
+sudo ./scripts/fireflo-panel-install install
+```
+
+`install` fait Node, l'utilisateur de service, les répertoires, la source, `npm ci`, le build, l'environnement, l'unit systemd, puis vérifie qu'il répond. Il demande d'abord ce dont il a besoin et ne change rien tant que vous n'êtes pas d'accord.
+
+## Ce qu'il dérive
+
+Étant donné le répertoire de configuration du gateway, l'installateur lit les **tokens opérationnels** et la **connexion de base en lecture seule** plutôt que de vous demander de les copier à la main.
+
+<Warning>
+**`--config-url` n'est jamais dérivée.** La connexion en lecture-écriture aux tables de configuration est celle qui peut changer ce qui est facturé aux clients, elle est donc toujours donnée explicitement.
+
+Sans elle le panel rapporte chaque domaine de configuration comme **non éditable**, plutôt que d'échouer au premier enregistrement.
+</Warning>
+
+## Le compte opérateur est deux variables d'environnement
+
+Il n'y a pas de table utilisateur.
+
+```bash
+sudo ./scripts/fireflo-panel-install passwd
+```
+
+C'est la façon supportée de le changer. Il réécrit le fichier d'environnement et redémarre l'unit en une étape, plutôt que de vous laisser éditer un fichier que l'installateur promet par ailleurs de ne jamais remplacer.
+
+## Les deux URL faciles à interchanger
+
+| Variable | Pointe vers | Si vous vous trompez |
+| :--- | :--- | :--- |
+| `GATEWAY_OPS_URL` | Le port de **gestion**, 9000 | Live health lit 404 sur tout |
+| `GATEWAY_API_URL` | Le port de **messagerie**, 8080 | Chaque appel playground renvoie 404 |
+
+Ce sont des ports différents portant des choses différentes et ne partageant aucun chemin. Les deux échecs ressemblent à une panne et n'en sont pas.
+
+## TLS en frontal
+
+Le panel parle HTTP simple sur `PORT` (3000 par défaut). Mettez nginx ou équivalent devant, et définissez `AUTH_URL` sur l'origine publique. Non définie, une déconnexion redirige vers localhost.
+
+`NODE_ENV=production` est défini pour le **build** ainsi que pour l'exécution, parce qu'il décide si le cookie de session est marqué secure.
+
+## La connexion client a besoin du courrier
+
+Un client se connecte via un lien magique. Avec `FIREFLO_SMTP_HOST` ou `FIREFLO_SMTP_FROM` non défini, **aucun client ne peut se connecter du tout**. Le portail dit que le lien ne peut pas être envoyé plutôt que d'échouer silencieusement, mais personne n'entre.
+
+Voir [Accès au portail](/platform/customers/portal-access).
+
+## Mettre à niveau
+
+```bash
+sudo ./scripts/fireflo-panel-install update
+```
+
+Remplace le build. **Ne touche jamais le fichier d'environnement.**
+
+<Warning>
+Mettez à niveau le panel et le gateway **ensemble**. La version du panel répète la release gateway contre laquelle il a été construit dans ses trois premiers numéros. `0.7.3.1` s'apparie avec le gateway `0.7.3`. Et il vérifie l'appariement à l'exécution et le dit quand ils sont en désaccord.
+</Warning>
+
+## Sous un virtualhost
+
+`--tenant NAME` place le panel à `/srv/fireflo/NAME/panel` comme unit `fireflo-NAME-panel`, et le même mot nomme la même instance à l'installateur du gateway. Avec `--vhost PATH` la racine bouge vers `PATH/panel`, avec le gateway à `PATH/gateway`.
+
+<Warning>
+Sous `--vhost`, `CDR_EXPORT_DIR` doit se trouver dans une racine `BindPaths=`. **Cet échec est silencieux.** Les exports sont préparés puis ne peuvent pas être lus.
+</Warning>
+
+Chaque variable est dans [Environnement du control panel](/reference/config/control-panel).

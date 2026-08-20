@@ -1,0 +1,125 @@
+---
+title: "Files d'attente et tentatives"
+description: "Tout ce qui se trouve dans une file FireFlo a déjà été accepté et facturé. Ce que change une limite de capacité, quelle extrémité refuse, et ce qu'un seul message peut coûter en submit_sm."
+---
+
+## Chaque message en file a déjà été payé
+
+La passerelle **répond à une soumission avant de la router**. Au moment où un message se trouve dans la
+file du routeur ou dans la file d'un fournisseur, le client a déjà reçu la confirmation d'acceptation
+et son solde a été débité.
+
+<Warning>
+**Sans limite, c'est une manière de perdre de l'argent en silence.** Un fournisseur qui cesse
+d'accepter, plus un listener qui continue d'accepter, fait grossir le tas jusqu'à ce que la JVM soit
+tuée, et chaque message en file meurt avec elle. Aucun n'est remboursé, aucun n'est enregistré autrement
+que comme `PENDING`.
+
+Il n'y a pas d'accusé de livraison pour un message qui était en mémoire au moment où le processus est
+mort, donc le seul signal pour le client est un message qui n'est jamais arrivé.
+</Warning>
+
+## Les deux limites
+
+| Propriété | Portée | Défaut | Retient |
+| :--- | :--- | :--- | :--- |
+| `smsg.queue.capacity` | globale | `0` (illimité) | Le nombre maximal de messages que retiendront la file du routeur et chaque file de worker sortant |
+| `inQueue.capacity` | par listener | `0` (illimité) | Le nombre maximal de messages qu'un listener SMPP retiendra en attente d'écriture dans le magasin |
+
+<Note>
+**Il n'y a délibérément aucune valeur par défaut.** Une limite est une affirmation sur votre propre
+trafic et votre propre tas : trop bas refuse des messages qui auraient été livrés, trop haut ne se
+déclenche jamais avant que la JVM ne le fasse.
+
+Partez de combien de messages vous êtes prêt à retenir pour un fournisseur devenu silencieux, et lisez
+d'abord les profondeurs sur `/ops/health` sous charge normale : `router_queue` et le `queue_depth` de
+chaque worker, avec la limite affichée à côté une fois qu'elle est fixée. Détails complets dans
+[Limites](/reference/config/limits).
+</Note>
+
+## Seules les deux entrées refusent
+
+À l'intérieur de la passerelle, une file pleine est un signal de **contre-pression, pas une erreur**.
+Le routeur qui attend sur une file de worker pleine est le routeur qui va à la vitesse que le
+fournisseur peut prendre, ce qui est le comportement correct.
+
+À une entrée, il y a un client qui maintient une connexion ouverte, donc attendre bloquerait cette
+session plutôt que de la ralentir. Ces deux portes refusent à la place :
+
+| Entrée | Quand la file est pleine |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` avec `ESME_RMSGQFUL` (`0x14`). **Rien n'est facturé** — le refus a lieu avant que le message soit accepté. Un ESME bien élevé fait un back-off et réessaie. |
+| REST | `503` avec `queueFull` dans `cdr_rejected`. **Tout ce qui a déjà été facturé est remboursé**, parce que le chemin REST facture avant de publier, donc celui-ci a de l'argent à rendre. |
+
+Voir [Codes de statut SMPP](/reference/smpp/status-codes).
+
+## Ce qu'un message peut coûter chez un fournisseur
+
+`maxRetries` borne le **total** des `submit_sm` qu'un message peut coûter chez un fournisseur : à
+travers les tentatives internes au worker **et** chaque aller-retour par le routeur.
+
+<Warning>
+Auparavant, cela ne bornait que la moitié interne au worker, chaque saut du routeur distribuant un
+nouveau budget. Une valeur de `1` combinée à vingt tentatives de routage signifiait environ **100 PDU
+pour un message** alors que le panneau affichait `1`.
+
+Si vous aviez réglé les paramètres autour de l'ancien comportement, revérifiez la valeur. Le basculement
+vers un fournisseur *différent* démarre bien un nouveau budget : la borne est par fournisseur, pas par
+message. Voir [Fournisseurs](/platform/connections/vendors).
+</Warning>
+
+`outSms.routing.maxAttempts` (défaut `20`) est l'autre moitié : combien de fois un message peut faire le
+tour du routeur avant d'être abandonné, remboursé et fermé en `REJECTED` avec `reason=maxAttempts`. Un
+raté et un filtre demandant le retour du message comptent tous les deux.
+
+`outSms.routing.retryBackoffMillis` (défaut `100`) est un délai sur le **message**, pas sur le routeur :
+le thread le gare et passe directement au suivant.
+
+## Deux nombres qui signifient que des messages sont perdus
+
+<Warning>
+**`routing_failed_queue` — alertez sur une valeur non nulle.** Ce sont des messages parqués par un
+échec de routage inattendu. Ils n'ont ni enregistrement d'appel ni accusé de livraison, et ils ne se
+vident **que** si `outSms.enqueueFailedRouting` est activé. Donc dans la configuration ordinaire, une
+valeur non nulle ici représente des messages qui sont simplement perdus, et ce compteur est le seul
+endroit où ce fait existe.
+</Warning>
+
+`routing_retry_queue` est la plus douce : des messages qui attendent la fin d'un back-off après un raté
+ou une remise en file par un filtre. De petits nombres sont ordinaires. Un nombre qui reste élevé est
+une table de routage qui ne couvre pas le trafic qui arrive.
+
+Les deux sont sur `/ops/health`, et exposés en tant que `fireflo_routing_failed_queue` et
+`fireflo_routing_retry_queue`. `fireflo queue dump` liste ce qui attend réellement (compte, produit,
+destination, nombre de tentatives et âge) plutôt que juste combien ; voir
+[Files d'attente](/platform/operations/queues).
+
+## RabbitMQ est optionnel, et uniquement pour REST
+
+<Tabs>
+  <Tab title="memory (défaut)">
+    Aucune dépendance externe. Les deux entrées alimentent la file du routeur dans le processus.
+
+    **Un redémarrage perd tout ce qui n'avait pas atteint un fournisseur.** Rien d'externe ne le
+    retient.
+  </Tab>
+  <Tab title="rabbitmq">
+    Le chemin **REST** publie via le broker ; le consommateur alimente la même file du routeur en
+    processus. Les lots planifiés survivent à un redémarrage, et le travail REST peut être partagé
+    entre instances de passerelle. Voir [Mise en cluster](/platform/install/clustering).
+
+    Le chemin SMPP est inchangé et reste en processus, délibérément : un aller-retour vers le broker à
+    l'intérieur de la fenêtre SMPP ajouterait de la latence, et une panne du broker arrêterait
+    entièrement SMPP.
+  </Tab>
+</Tabs>
+
+<Warning>
+Le coût de cette séparation, ce sont deux chemins d'entrée avec **des garanties de durabilité
+différentes**. Un message REST est durable de l'acceptation jusqu'à ce que le consommateur le remette
+au routeur ; un message SMPP ne l'est jamais.
+
+Quand le broker disparaît, REST retombe sur la file en processus et continue de fonctionner : rien ne
+rejette, rien n'erreur, le débit est inchangé. Alertez sur `amqp.bridge.degraded`, sinon un broker peut
+être hors service pendant des jours pendant que tous les tableaux de bord semblent en bonne santé.
+</Warning>

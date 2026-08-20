@@ -1,0 +1,112 @@
+---
+title: "Primeiras verificações"
+description: "As quatro perguntas que separam um problema de roteamento das três coisas que não são roteamento. Feitas na ordem que descarta mais rápido."
+---
+
+A maioria dos incidentes do FireFlo se apresenta da mesma forma: **mensagens foram aceitas e nada
+chegou**. Esse sintoma tem pelo menos seis causas distintas, e só uma é roteamento.
+
+Trabalhe descendo esta página em ordem. Cada passo descarta mais do que custa.
+
+## 1. Pergunte para o banco, não para o log
+
+Três das quatro causas prováveis não são roteamento, e o banco diz qual em uma query.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+| `reason` | O que significa | Onde ir |
+| :--- | :--- | :--- |
+| `maxAttempts` | **O único valor que significa roteamento.** | [Nada é entregue](/platform/troubleshooting/nothing-is-delivered) |
+| `headerNotApproved` | Sender ID não foi aprovado | [Recusas](/platform/troubleshooting/refusals) |
+| `templateNotMatched` | Body não bateu com nenhum template aprovado | [Recusas](/platform/troubleshooting/refusals) |
+| `missingMandatoryTlv` | Uma tag obrigatória resolveu para nada | [TLVs na prática](/platform/connections/tlvs) |
+| `insufficientCredit` | Saldo pré-pago não cobriria | [Crédito pré-pago](/platform/billing/prepaid-credit) |
+| `filtered` | Um filtro recusou | [Recusas](/platform/troubleshooting/refusals) |
+
+<Warning>
+**Nenhuma edição na tabela de rotas vai mudar linha alguma que não seja `maxAttempts`.** Essas
+mensagens foram recusadas *antes* de o roteamento ser alcançado. Esta é a tarde perdida mais comum
+nas operações do FireFlo.
+</Warning>
+
+## 2. Algum fornecedor está bound?
+
+Um catch-all perfeito apontando para um fornecedor que não está conectado não entrega nada, e parece
+um bug de roteamento de qualquer ângulo.
+
+```bash
+fireflo verify
+```
+
+Ele responde em palavras — *"N vendor(s) configured, none bound — nothing can be sent yet."*
+
+## 3. O cliente chegou a ser informado?
+
+**Não.** Vale internalizar isso, porque molda toda conversa com um cliente.
+
+A resposta do submit é enviada **antes de o roteamento rodar**. Então uma falha de roteamento nunca
+pode aparecer como erro no `submit_sm` do cliente ou na chamada HTTP dele. Só pode aparecer depois,
+como um delivery receipt e uma linha em `cdr_rejected`.
+
+<Tip>
+"Meu envio retornou sucesso" e "minha mensagem foi entregue" são afirmações totalmente sem relação em
+qualquer gateway SMPP, FireFlo incluído. Um `200` significa *aceito para roteamento*.
+</Tip>
+
+## 4. O log está quieto porque foi corrigido, ou porque já falou?
+
+`routing.rule.broken` é logado **uma vez por regra, não uma vez por mensagem**. De propósito, já que
+sem essa proteção seria uma linha por mensagem por tentativa exatamente no tráfego que já está indo
+mal.
+
+A consequência é uma armadilha: **um log quieto não é prova de que o problema acabou.** O contador só
+reseta quando uma nova tabela de roteamento é publicada.
+
+Então depois de corrigir uma regra, observe se a linha **reaparece**, não se ela fica ausente. A
+forma confiável da mesma pergunta é o número:
+
+```bash
+fireflo health | grep routing_rules_broken
+```
+
+## O que capturar antes de mudar qualquer coisa
+
+Se você vai pedir ajuda, ou espera precisar explicar isso depois, capture estes quatro agora. São
+todos baratos e três deles são destruídos por um restart:
+
+<Steps>
+  <Step title="A quebra por rejeição">
+    A query de `cdr_rejected` acima, com as contagens.
+  </Step>
+  <Step title="/ops/health inteiro">
+    `last_error`, `last_submit_error`, `routing_failed_queue` e `routing_retry_queue` em um único
+    snapshot.
+  </Step>
+  <Step title="As linhas de WARN e ERROR">
+    Não o log inteiro. `routing.rule.broken`, `message.dropped`, `listener.bind.failed`,
+    `message.submit.response`.
+  </Step>
+  <Step title="Um serial de mensagem que falhou">
+    Tudo lá na frente fica mais fácil quando você consegue rastrear uma mensagem real e não uma
+    classe delas.
+  </Step>
+</Steps>
+
+<Warning>
+**Redija antes de compartilhar.** Credenciais, system IDs, endereços IP, números de telefone e
+conteúdo de mensagem aparecem nessas saídas. `fireflo` redige o que consegue, mas uma linha de log
+copiada à mão é sua responsabilidade.
+</Warning>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Nada é entregue" icon="magnifying-glass" href="/platform/troubleshooting/nothing-is-delivered">
+    Quando realmente é roteamento.
+  </Card>
+  <Card title="Recusas" icon="ban" href="/platform/troubleshooting/refusals">
+    Toda razão em `cdr_rejected`, e o que resolve.
+  </Card>
+</CardGroup>

@@ -10,275 +10,1112 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "tabs": [
+    "languages": [
       {
-        "tab": "Platform",
-        "groups": [
+        "language": "en",
+        "default": true,
+        "tabs": [
           {
-            "group": "Start here",
-            "pages": [
-              "index",
-              "platform/concepts",
-              "platform/architecture",
-              "platform/quickstart"
+            "tab": "Platform",
+            "groups": [
+              {
+                "group": "Start here",
+                "pages": [
+                  "index",
+                  "platform/concepts",
+                  "platform/architecture",
+                  "platform/quickstart"
+                ]
+              },
+              {
+                "group": "The control panel",
+                "pages": [
+                  "platform/control-panel/finding-your-way",
+                  "platform/control-panel/dashboard",
+                  "platform/control-panel/messages",
+                  "platform/control-panel/usage",
+                  "platform/control-panel/revenue",
+                  "platform/control-panel/accounts-billing",
+                  "platform/control-panel/refused",
+                  "platform/control-panel/queues",
+                  "platform/control-panel/receipt-quality",
+                  "platform/control-panel/runtime-metrics",
+                  "platform/control-panel/diagnostics"
+                ]
+              },
+              {
+                "group": "Install and run",
+                "pages": [
+                  "platform/install/one-command",
+                  "platform/install/by-hand",
+                  "platform/install/database",
+                  "platform/install/configuration-source",
+                  "platform/install/first-configuration",
+                  "platform/install/control-panel",
+                  "platform/install/upgrading",
+                  "platform/install/multiple-instances",
+                  "platform/install/clustering",
+                  "platform/install/faq"
+                ]
+              },
+              {
+                "group": "Connections",
+                "pages": [
+                  "platform/connections/servers",
+                  "platform/connections/vendors",
+                  "platform/connections/credentials",
+                  "platform/connections/tlvs",
+                  "platform/connections/concatenation",
+                  "platform/connections/faq"
+                ]
+              },
+              {
+                "group": "Routing",
+                "pages": [
+                  "platform/routing/how-it-works",
+                  "platform/routing/writing-rules",
+                  "platform/routing/least-cost",
+                  "platform/routing/filters",
+                  "platform/routing/queues-and-retries",
+                  "platform/routing/faq"
+                ]
+              },
+              {
+                "group": "Customers and approvals",
+                "pages": [
+                  "platform/customers/accounts",
+                  "platform/customers/products",
+                  "platform/customers/sender-ids",
+                  "platform/customers/templates",
+                  "platform/customers/whitelisting-rollout",
+                  "platform/customers/portal-access",
+                  "platform/customers/faq"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": [
+                  "platform/billing/how-pricing-works",
+                  "platform/billing/tariffs",
+                  "platform/billing/prepaid-credit",
+                  "platform/billing/postpaid",
+                  "platform/billing/statements",
+                  "platform/billing/cdrs",
+                  "platform/billing/usage-and-retention",
+                  "platform/billing/faq"
+                ]
+              },
+              {
+                "group": "Operations",
+                "pages": [
+                  "platform/operations/live-health",
+                  "platform/operations/prometheus-grafana",
+                  "platform/operations/worker-control",
+                  "platform/operations/queues",
+                  "platform/operations/capture",
+                  "platform/operations/reload",
+                  "platform/operations/tokens-and-access",
+                  "platform/operations/generating-traffic",
+                  "platform/operations/throughput",
+                  "platform/operations/faq"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "pages": [
+                  "platform/troubleshooting/first-checks",
+                  "platform/troubleshooting/nothing-is-delivered",
+                  "platform/troubleshooting/refusals",
+                  "platform/troubleshooting/vendor-rejections",
+                  "platform/troubleshooting/binds-and-listeners",
+                  "platform/troubleshooting/callbacks"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "platform/migrating/from-jasmin-or-kannel",
+                  "platform/migrating/customer-notices"
+                ]
+              },
+              {
+                "group": "Project",
+                "pages": [
+                  "platform/project/releases"
+                ]
+              }
             ]
           },
           {
-            "group": "The control panel",
-            "pages": [
-              "platform/control-panel/finding-your-way",
-              "platform/control-panel/dashboard",
-              "platform/control-panel/messages",
-              "platform/control-panel/usage",
-              "platform/control-panel/revenue",
-              "platform/control-panel/accounts-billing",
-              "platform/control-panel/refused",
-              "platform/control-panel/queues",
-              "platform/control-panel/receipt-quality",
-              "platform/control-panel/runtime-metrics",
-              "platform/control-panel/diagnostics"
+            "tab": "Developers",
+            "groups": [
+              {
+                "group": "Get started",
+                "pages": [
+                  "developers/index",
+                  "developers/quickstart",
+                  "developers/authentication",
+                  "developers/errors",
+                  "developers/faq"
+                ]
+              },
+              {
+                "group": "Sending",
+                "pages": [
+                  "developers/send/one-message",
+                  "developers/send/batches",
+                  "developers/send/sender-ids",
+                  "developers/send/encoding-and-segments",
+                  "developers/send/custom-tlvs",
+                  "developers/send/faq"
+                ]
+              },
+              {
+                "group": "Receiving",
+                "pages": [
+                  "developers/receive/delivery-receipts",
+                  "developers/receive/batch-callbacks",
+                  "developers/receive/mobile-originated",
+                  "developers/receive/faq"
+                ]
+              },
+              {
+                "group": "SMPP",
+                "pages": [
+                  "developers/smpp/binding",
+                  "developers/smpp/submitting",
+                  "developers/smpp/receipts-and-mo",
+                  "developers/smpp/faq"
+                ]
+              },
+              {
+                "group": "Billing and credit",
+                "pages": [
+                  "developers/billing/balance-and-quotes",
+                  "developers/billing/statements-and-limits",
+                  "developers/billing/faq"
+                ]
+              },
+              {
+                "group": "The portal",
+                "pages": [
+                  "developers/portal/signing-in",
+                  "developers/portal/messages-and-statement",
+                  "developers/portal/registrations",
+                  "developers/portal/playground"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "developers/migrating/from-jasmin"
+                ]
+              }
             ]
           },
           {
-            "group": "Install and run",
-            "pages": [
-              "platform/install/one-command",
-              "platform/install/by-hand",
-              "platform/install/database",
-              "platform/install/configuration-source",
-              "platform/install/first-configuration",
-              "platform/install/control-panel",
-              "platform/install/upgrading",
-              "platform/install/multiple-instances",
-              "platform/install/clustering",
-              "platform/install/faq"
-            ]
-          },
-          {
-            "group": "Connections",
-            "pages": [
-              "platform/connections/servers",
-              "platform/connections/vendors",
-              "platform/connections/credentials",
-              "platform/connections/tlvs",
-              "platform/connections/concatenation",
-              "platform/connections/faq"
-            ]
-          },
-          {
-            "group": "Routing",
-            "pages": [
-              "platform/routing/how-it-works",
-              "platform/routing/writing-rules",
-              "platform/routing/least-cost",
-              "platform/routing/filters",
-              "platform/routing/queues-and-retries",
-              "platform/routing/faq"
-            ]
-          },
-          {
-            "group": "Customers and approvals",
-            "pages": [
-              "platform/customers/accounts",
-              "platform/customers/products",
-              "platform/customers/sender-ids",
-              "platform/customers/templates",
-              "platform/customers/whitelisting-rollout",
-              "platform/customers/portal-access",
-              "platform/customers/faq"
-            ]
-          },
-          {
-            "group": "Billing",
-            "pages": [
-              "platform/billing/how-pricing-works",
-              "platform/billing/tariffs",
-              "platform/billing/prepaid-credit",
-              "platform/billing/postpaid",
-              "platform/billing/statements",
-              "platform/billing/cdrs",
-              "platform/billing/usage-and-retention",
-              "platform/billing/faq"
-            ]
-          },
-          {
-            "group": "Operations",
-            "pages": [
-              "platform/operations/live-health",
-              "platform/operations/prometheus-grafana",
-              "platform/operations/worker-control",
-              "platform/operations/queues",
-              "platform/operations/capture",
-              "platform/operations/reload",
-              "platform/operations/tokens-and-access",
-              "platform/operations/generating-traffic",
-              "platform/operations/throughput",
-              "platform/operations/faq"
-            ]
-          },
-          {
-            "group": "Troubleshooting",
-            "pages": [
-              "platform/troubleshooting/first-checks",
-              "platform/troubleshooting/nothing-is-delivered",
-              "platform/troubleshooting/refusals",
-              "platform/troubleshooting/vendor-rejections",
-              "platform/troubleshooting/binds-and-listeners",
-              "platform/troubleshooting/callbacks"
-            ]
-          },
-          {
-            "group": "Migrating",
-            "pages": [
-              "platform/migrating/from-jasmin-or-kannel",
-              "platform/migrating/customer-notices"
-            ]
-          },
-          {
-            "group": "Project",
-            "pages": [
-              "platform/project/releases"
+            "tab": "Reference",
+            "groups": [
+              {
+                "group": "REST API",
+                "pages": [
+                  "reference/api/overview",
+                  "reference/api/send",
+                  "reference/api/sendbatch",
+                  "reference/api/balance",
+                  "reference/api/rate",
+                  "reference/api/ping",
+                  "reference/api/dlr-webhook",
+                  "reference/api/errors"
+                ]
+              },
+              {
+                "group": "Configuration keys",
+                "pages": [
+                  "reference/config/paths",
+                  "reference/config/database",
+                  "reference/config/rating",
+                  "reference/config/whitelisting",
+                  "reference/config/limits",
+                  "reference/config/webhooks",
+                  "reference/config/logging",
+                  "reference/config/operational-endpoint",
+                  "reference/config/control-panel",
+                  "reference/config/docker"
+                ]
+              },
+              {
+                "group": "File formats",
+                "pages": [
+                  "reference/files/credentials-yml",
+                  "reference/files/smsg-properties",
+                  "reference/files/routing-table",
+                  "reference/files/rates-conf"
+                ]
+              },
+              {
+                "group": "SMPP settings",
+                "pages": [
+                  "reference/smpp/server",
+                  "reference/smpp/worker-base",
+                  "reference/smpp/client",
+                  "reference/smpp/tlvs",
+                  "reference/smpp/status-codes"
+                ]
+              },
+              {
+                "group": "CLI",
+                "pages": [
+                  "reference/cli/fireflo",
+                  "reference/cli/fireflo-install",
+                  "reference/cli/fireflo-panel-install",
+                  "reference/cli/environment"
+                ]
+              },
+              {
+                "group": "Management API",
+                "pages": [
+                  "reference/management/endpoints"
+                ]
+              },
+              {
+                "group": "Data model",
+                "pages": [
+                  "reference/data/cdr-tables",
+                  "reference/data/config-tables"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "Developers",
-        "groups": [
+        "language": "fr",
+        "tabs": [
           {
-            "group": "Get started",
-            "pages": [
-              "developers/index",
-              "developers/quickstart",
-              "developers/authentication",
-              "developers/errors",
-              "developers/faq"
+            "tab": "Platform",
+            "groups": [
+              {
+                "group": "Start here",
+                "pages": [
+                  "fr/index",
+                  "fr/platform/concepts",
+                  "fr/platform/architecture",
+                  "fr/platform/quickstart"
+                ]
+              },
+              {
+                "group": "The control panel",
+                "pages": [
+                  "fr/platform/control-panel/finding-your-way",
+                  "fr/platform/control-panel/dashboard",
+                  "fr/platform/control-panel/messages",
+                  "fr/platform/control-panel/usage",
+                  "fr/platform/control-panel/revenue",
+                  "fr/platform/control-panel/accounts-billing",
+                  "fr/platform/control-panel/refused",
+                  "fr/platform/control-panel/queues",
+                  "fr/platform/control-panel/receipt-quality",
+                  "fr/platform/control-panel/runtime-metrics",
+                  "fr/platform/control-panel/diagnostics"
+                ]
+              },
+              {
+                "group": "Install and run",
+                "pages": [
+                  "fr/platform/install/one-command",
+                  "fr/platform/install/by-hand",
+                  "fr/platform/install/database",
+                  "fr/platform/install/configuration-source",
+                  "fr/platform/install/first-configuration",
+                  "fr/platform/install/control-panel",
+                  "fr/platform/install/upgrading",
+                  "fr/platform/install/multiple-instances",
+                  "fr/platform/install/clustering",
+                  "fr/platform/install/faq"
+                ]
+              },
+              {
+                "group": "Connections",
+                "pages": [
+                  "fr/platform/connections/servers",
+                  "fr/platform/connections/vendors",
+                  "fr/platform/connections/credentials",
+                  "fr/platform/connections/tlvs",
+                  "fr/platform/connections/concatenation",
+                  "fr/platform/connections/faq"
+                ]
+              },
+              {
+                "group": "Routing",
+                "pages": [
+                  "fr/platform/routing/how-it-works",
+                  "fr/platform/routing/writing-rules",
+                  "fr/platform/routing/least-cost",
+                  "fr/platform/routing/filters",
+                  "fr/platform/routing/queues-and-retries",
+                  "fr/platform/routing/faq"
+                ]
+              },
+              {
+                "group": "Customers and approvals",
+                "pages": [
+                  "fr/platform/customers/accounts",
+                  "fr/platform/customers/products",
+                  "fr/platform/customers/sender-ids",
+                  "fr/platform/customers/templates",
+                  "fr/platform/customers/whitelisting-rollout",
+                  "fr/platform/customers/portal-access",
+                  "fr/platform/customers/faq"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": [
+                  "fr/platform/billing/how-pricing-works",
+                  "fr/platform/billing/tariffs",
+                  "fr/platform/billing/prepaid-credit",
+                  "fr/platform/billing/postpaid",
+                  "fr/platform/billing/statements",
+                  "fr/platform/billing/cdrs",
+                  "fr/platform/billing/usage-and-retention",
+                  "fr/platform/billing/faq"
+                ]
+              },
+              {
+                "group": "Operations",
+                "pages": [
+                  "fr/platform/operations/live-health",
+                  "fr/platform/operations/prometheus-grafana",
+                  "fr/platform/operations/worker-control",
+                  "fr/platform/operations/queues",
+                  "fr/platform/operations/capture",
+                  "fr/platform/operations/reload",
+                  "fr/platform/operations/tokens-and-access",
+                  "fr/platform/operations/generating-traffic",
+                  "fr/platform/operations/throughput",
+                  "fr/platform/operations/faq"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "pages": [
+                  "fr/platform/troubleshooting/first-checks",
+                  "fr/platform/troubleshooting/nothing-is-delivered",
+                  "fr/platform/troubleshooting/refusals",
+                  "fr/platform/troubleshooting/vendor-rejections",
+                  "fr/platform/troubleshooting/binds-and-listeners",
+                  "fr/platform/troubleshooting/callbacks"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "fr/platform/migrating/from-jasmin-or-kannel",
+                  "fr/platform/migrating/customer-notices"
+                ]
+              },
+              {
+                "group": "Project",
+                "pages": [
+                  "fr/platform/project/releases"
+                ]
+              }
             ]
           },
           {
-            "group": "Sending",
-            "pages": [
-              "developers/send/one-message",
-              "developers/send/batches",
-              "developers/send/sender-ids",
-              "developers/send/encoding-and-segments",
-              "developers/send/custom-tlvs",
-              "developers/send/faq"
+            "tab": "Developers",
+            "groups": [
+              {
+                "group": "Get started",
+                "pages": [
+                  "fr/developers/index",
+                  "fr/developers/quickstart",
+                  "fr/developers/authentication",
+                  "fr/developers/errors",
+                  "fr/developers/faq"
+                ]
+              },
+              {
+                "group": "Sending",
+                "pages": [
+                  "fr/developers/send/one-message",
+                  "fr/developers/send/batches",
+                  "fr/developers/send/sender-ids",
+                  "fr/developers/send/encoding-and-segments",
+                  "fr/developers/send/custom-tlvs",
+                  "fr/developers/send/faq"
+                ]
+              },
+              {
+                "group": "Receiving",
+                "pages": [
+                  "fr/developers/receive/delivery-receipts",
+                  "fr/developers/receive/batch-callbacks",
+                  "fr/developers/receive/mobile-originated",
+                  "fr/developers/receive/faq"
+                ]
+              },
+              {
+                "group": "SMPP",
+                "pages": [
+                  "fr/developers/smpp/binding",
+                  "fr/developers/smpp/submitting",
+                  "fr/developers/smpp/receipts-and-mo",
+                  "fr/developers/smpp/faq"
+                ]
+              },
+              {
+                "group": "Billing and credit",
+                "pages": [
+                  "fr/developers/billing/balance-and-quotes",
+                  "fr/developers/billing/statements-and-limits",
+                  "fr/developers/billing/faq"
+                ]
+              },
+              {
+                "group": "The portal",
+                "pages": [
+                  "fr/developers/portal/signing-in",
+                  "fr/developers/portal/messages-and-statement",
+                  "fr/developers/portal/registrations",
+                  "fr/developers/portal/playground"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "fr/developers/migrating/from-jasmin"
+                ]
+              }
             ]
           },
           {
-            "group": "Receiving",
-            "pages": [
-              "developers/receive/delivery-receipts",
-              "developers/receive/batch-callbacks",
-              "developers/receive/mobile-originated",
-              "developers/receive/faq"
-            ]
-          },
-          {
-            "group": "SMPP",
-            "pages": [
-              "developers/smpp/binding",
-              "developers/smpp/submitting",
-              "developers/smpp/receipts-and-mo",
-              "developers/smpp/faq"
-            ]
-          },
-          {
-            "group": "Billing and credit",
-            "pages": [
-              "developers/billing/balance-and-quotes",
-              "developers/billing/statements-and-limits",
-              "developers/billing/faq"
-            ]
-          },
-          {
-            "group": "The portal",
-            "pages": [
-              "developers/portal/signing-in",
-              "developers/portal/messages-and-statement",
-              "developers/portal/registrations",
-              "developers/portal/playground"
-            ]
-          },
-          {
-            "group": "Migrating",
-            "pages": [
-              "developers/migrating/from-jasmin"
+            "tab": "Reference",
+            "groups": [
+              {
+                "group": "REST API",
+                "pages": [
+                  "fr/reference/api/overview",
+                  "fr/reference/api/send",
+                  "fr/reference/api/sendbatch",
+                  "fr/reference/api/balance",
+                  "fr/reference/api/rate",
+                  "fr/reference/api/ping",
+                  "fr/reference/api/dlr-webhook",
+                  "fr/reference/api/errors"
+                ]
+              },
+              {
+                "group": "Configuration keys",
+                "pages": [
+                  "fr/reference/config/paths",
+                  "fr/reference/config/database",
+                  "fr/reference/config/rating",
+                  "fr/reference/config/whitelisting",
+                  "fr/reference/config/limits",
+                  "fr/reference/config/webhooks",
+                  "fr/reference/config/logging",
+                  "fr/reference/config/operational-endpoint",
+                  "fr/reference/config/control-panel",
+                  "fr/reference/config/docker"
+                ]
+              },
+              {
+                "group": "File formats",
+                "pages": [
+                  "fr/reference/files/credentials-yml",
+                  "fr/reference/files/smsg-properties",
+                  "fr/reference/files/routing-table",
+                  "fr/reference/files/rates-conf"
+                ]
+              },
+              {
+                "group": "SMPP settings",
+                "pages": [
+                  "fr/reference/smpp/server",
+                  "fr/reference/smpp/worker-base",
+                  "fr/reference/smpp/client",
+                  "fr/reference/smpp/tlvs",
+                  "fr/reference/smpp/status-codes"
+                ]
+              },
+              {
+                "group": "CLI",
+                "pages": [
+                  "fr/reference/cli/fireflo",
+                  "fr/reference/cli/fireflo-install",
+                  "fr/reference/cli/fireflo-panel-install",
+                  "fr/reference/cli/environment"
+                ]
+              },
+              {
+                "group": "Management API",
+                "pages": [
+                  "fr/reference/management/endpoints"
+                ]
+              },
+              {
+                "group": "Data model",
+                "pages": [
+                  "fr/reference/data/cdr-tables",
+                  "fr/reference/data/config-tables"
+                ]
+              }
             ]
           }
         ]
       },
       {
-        "tab": "Reference",
-        "groups": [
+        "language": "es",
+        "tabs": [
           {
-            "group": "REST API",
-            "pages": [
-              "reference/api/overview",
-              "reference/api/send",
-              "reference/api/sendbatch",
-              "reference/api/balance",
-              "reference/api/rate",
-              "reference/api/ping",
-              "reference/api/dlr-webhook",
-              "reference/api/errors"
+            "tab": "Platform",
+            "groups": [
+              {
+                "group": "Start here",
+                "pages": [
+                  "es/index",
+                  "es/platform/concepts",
+                  "es/platform/architecture",
+                  "es/platform/quickstart"
+                ]
+              },
+              {
+                "group": "The control panel",
+                "pages": [
+                  "es/platform/control-panel/finding-your-way",
+                  "es/platform/control-panel/dashboard",
+                  "es/platform/control-panel/messages",
+                  "es/platform/control-panel/usage",
+                  "es/platform/control-panel/revenue",
+                  "es/platform/control-panel/accounts-billing",
+                  "es/platform/control-panel/refused",
+                  "es/platform/control-panel/queues",
+                  "es/platform/control-panel/receipt-quality",
+                  "es/platform/control-panel/runtime-metrics",
+                  "es/platform/control-panel/diagnostics"
+                ]
+              },
+              {
+                "group": "Install and run",
+                "pages": [
+                  "es/platform/install/one-command",
+                  "es/platform/install/by-hand",
+                  "es/platform/install/database",
+                  "es/platform/install/configuration-source",
+                  "es/platform/install/first-configuration",
+                  "es/platform/install/control-panel",
+                  "es/platform/install/upgrading",
+                  "es/platform/install/multiple-instances",
+                  "es/platform/install/clustering",
+                  "es/platform/install/faq"
+                ]
+              },
+              {
+                "group": "Connections",
+                "pages": [
+                  "es/platform/connections/servers",
+                  "es/platform/connections/vendors",
+                  "es/platform/connections/credentials",
+                  "es/platform/connections/tlvs",
+                  "es/platform/connections/concatenation",
+                  "es/platform/connections/faq"
+                ]
+              },
+              {
+                "group": "Routing",
+                "pages": [
+                  "es/platform/routing/how-it-works",
+                  "es/platform/routing/writing-rules",
+                  "es/platform/routing/least-cost",
+                  "es/platform/routing/filters",
+                  "es/platform/routing/queues-and-retries",
+                  "es/platform/routing/faq"
+                ]
+              },
+              {
+                "group": "Customers and approvals",
+                "pages": [
+                  "es/platform/customers/accounts",
+                  "es/platform/customers/products",
+                  "es/platform/customers/sender-ids",
+                  "es/platform/customers/templates",
+                  "es/platform/customers/whitelisting-rollout",
+                  "es/platform/customers/portal-access",
+                  "es/platform/customers/faq"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": [
+                  "es/platform/billing/how-pricing-works",
+                  "es/platform/billing/tariffs",
+                  "es/platform/billing/prepaid-credit",
+                  "es/platform/billing/postpaid",
+                  "es/platform/billing/statements",
+                  "es/platform/billing/cdrs",
+                  "es/platform/billing/usage-and-retention",
+                  "es/platform/billing/faq"
+                ]
+              },
+              {
+                "group": "Operations",
+                "pages": [
+                  "es/platform/operations/live-health",
+                  "es/platform/operations/prometheus-grafana",
+                  "es/platform/operations/worker-control",
+                  "es/platform/operations/queues",
+                  "es/platform/operations/capture",
+                  "es/platform/operations/reload",
+                  "es/platform/operations/tokens-and-access",
+                  "es/platform/operations/generating-traffic",
+                  "es/platform/operations/throughput",
+                  "es/platform/operations/faq"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "pages": [
+                  "es/platform/troubleshooting/first-checks",
+                  "es/platform/troubleshooting/nothing-is-delivered",
+                  "es/platform/troubleshooting/refusals",
+                  "es/platform/troubleshooting/vendor-rejections",
+                  "es/platform/troubleshooting/binds-and-listeners",
+                  "es/platform/troubleshooting/callbacks"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "es/platform/migrating/from-jasmin-or-kannel",
+                  "es/platform/migrating/customer-notices"
+                ]
+              },
+              {
+                "group": "Project",
+                "pages": [
+                  "es/platform/project/releases"
+                ]
+              }
             ]
           },
           {
-            "group": "Configuration keys",
-            "pages": [
-              "reference/config/paths",
-              "reference/config/database",
-              "reference/config/rating",
-              "reference/config/whitelisting",
-              "reference/config/limits",
-              "reference/config/webhooks",
-              "reference/config/logging",
-              "reference/config/operational-endpoint",
-              "reference/config/control-panel",
-              "reference/config/docker"
+            "tab": "Developers",
+            "groups": [
+              {
+                "group": "Get started",
+                "pages": [
+                  "es/developers/index",
+                  "es/developers/quickstart",
+                  "es/developers/authentication",
+                  "es/developers/errors",
+                  "es/developers/faq"
+                ]
+              },
+              {
+                "group": "Sending",
+                "pages": [
+                  "es/developers/send/one-message",
+                  "es/developers/send/batches",
+                  "es/developers/send/sender-ids",
+                  "es/developers/send/encoding-and-segments",
+                  "es/developers/send/custom-tlvs",
+                  "es/developers/send/faq"
+                ]
+              },
+              {
+                "group": "Receiving",
+                "pages": [
+                  "es/developers/receive/delivery-receipts",
+                  "es/developers/receive/batch-callbacks",
+                  "es/developers/receive/mobile-originated",
+                  "es/developers/receive/faq"
+                ]
+              },
+              {
+                "group": "SMPP",
+                "pages": [
+                  "es/developers/smpp/binding",
+                  "es/developers/smpp/submitting",
+                  "es/developers/smpp/receipts-and-mo",
+                  "es/developers/smpp/faq"
+                ]
+              },
+              {
+                "group": "Billing and credit",
+                "pages": [
+                  "es/developers/billing/balance-and-quotes",
+                  "es/developers/billing/statements-and-limits",
+                  "es/developers/billing/faq"
+                ]
+              },
+              {
+                "group": "The portal",
+                "pages": [
+                  "es/developers/portal/signing-in",
+                  "es/developers/portal/messages-and-statement",
+                  "es/developers/portal/registrations",
+                  "es/developers/portal/playground"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "es/developers/migrating/from-jasmin"
+                ]
+              }
             ]
           },
           {
-            "group": "File formats",
-            "pages": [
-              "reference/files/credentials-yml",
-              "reference/files/smsg-properties",
-              "reference/files/routing-table",
-              "reference/files/rates-conf"
+            "tab": "Reference",
+            "groups": [
+              {
+                "group": "REST API",
+                "pages": [
+                  "es/reference/api/overview",
+                  "es/reference/api/send",
+                  "es/reference/api/sendbatch",
+                  "es/reference/api/balance",
+                  "es/reference/api/rate",
+                  "es/reference/api/ping",
+                  "es/reference/api/dlr-webhook",
+                  "es/reference/api/errors"
+                ]
+              },
+              {
+                "group": "Configuration keys",
+                "pages": [
+                  "es/reference/config/paths",
+                  "es/reference/config/database",
+                  "es/reference/config/rating",
+                  "es/reference/config/whitelisting",
+                  "es/reference/config/limits",
+                  "es/reference/config/webhooks",
+                  "es/reference/config/logging",
+                  "es/reference/config/operational-endpoint",
+                  "es/reference/config/control-panel",
+                  "es/reference/config/docker"
+                ]
+              },
+              {
+                "group": "File formats",
+                "pages": [
+                  "es/reference/files/credentials-yml",
+                  "es/reference/files/smsg-properties",
+                  "es/reference/files/routing-table",
+                  "es/reference/files/rates-conf"
+                ]
+              },
+              {
+                "group": "SMPP settings",
+                "pages": [
+                  "es/reference/smpp/server",
+                  "es/reference/smpp/worker-base",
+                  "es/reference/smpp/client",
+                  "es/reference/smpp/tlvs",
+                  "es/reference/smpp/status-codes"
+                ]
+              },
+              {
+                "group": "CLI",
+                "pages": [
+                  "es/reference/cli/fireflo",
+                  "es/reference/cli/fireflo-install",
+                  "es/reference/cli/fireflo-panel-install",
+                  "es/reference/cli/environment"
+                ]
+              },
+              {
+                "group": "Management API",
+                "pages": [
+                  "es/reference/management/endpoints"
+                ]
+              },
+              {
+                "group": "Data model",
+                "pages": [
+                  "es/reference/data/cdr-tables",
+                  "es/reference/data/config-tables"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "language": "pt",
+        "tabs": [
+          {
+            "tab": "Platform",
+            "groups": [
+              {
+                "group": "Start here",
+                "pages": [
+                  "pt/index",
+                  "pt/platform/concepts",
+                  "pt/platform/architecture",
+                  "pt/platform/quickstart"
+                ]
+              },
+              {
+                "group": "The control panel",
+                "pages": [
+                  "pt/platform/control-panel/finding-your-way",
+                  "pt/platform/control-panel/dashboard",
+                  "pt/platform/control-panel/messages",
+                  "pt/platform/control-panel/usage",
+                  "pt/platform/control-panel/revenue",
+                  "pt/platform/control-panel/accounts-billing",
+                  "pt/platform/control-panel/refused",
+                  "pt/platform/control-panel/queues",
+                  "pt/platform/control-panel/receipt-quality",
+                  "pt/platform/control-panel/runtime-metrics",
+                  "pt/platform/control-panel/diagnostics"
+                ]
+              },
+              {
+                "group": "Install and run",
+                "pages": [
+                  "pt/platform/install/one-command",
+                  "pt/platform/install/by-hand",
+                  "pt/platform/install/database",
+                  "pt/platform/install/configuration-source",
+                  "pt/platform/install/first-configuration",
+                  "pt/platform/install/control-panel",
+                  "pt/platform/install/upgrading",
+                  "pt/platform/install/multiple-instances",
+                  "pt/platform/install/clustering",
+                  "pt/platform/install/faq"
+                ]
+              },
+              {
+                "group": "Connections",
+                "pages": [
+                  "pt/platform/connections/servers",
+                  "pt/platform/connections/vendors",
+                  "pt/platform/connections/credentials",
+                  "pt/platform/connections/tlvs",
+                  "pt/platform/connections/concatenation",
+                  "pt/platform/connections/faq"
+                ]
+              },
+              {
+                "group": "Routing",
+                "pages": [
+                  "pt/platform/routing/how-it-works",
+                  "pt/platform/routing/writing-rules",
+                  "pt/platform/routing/least-cost",
+                  "pt/platform/routing/filters",
+                  "pt/platform/routing/queues-and-retries",
+                  "pt/platform/routing/faq"
+                ]
+              },
+              {
+                "group": "Customers and approvals",
+                "pages": [
+                  "pt/platform/customers/accounts",
+                  "pt/platform/customers/products",
+                  "pt/platform/customers/sender-ids",
+                  "pt/platform/customers/templates",
+                  "pt/platform/customers/whitelisting-rollout",
+                  "pt/platform/customers/portal-access",
+                  "pt/platform/customers/faq"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": [
+                  "pt/platform/billing/how-pricing-works",
+                  "pt/platform/billing/tariffs",
+                  "pt/platform/billing/prepaid-credit",
+                  "pt/platform/billing/postpaid",
+                  "pt/platform/billing/statements",
+                  "pt/platform/billing/cdrs",
+                  "pt/platform/billing/usage-and-retention",
+                  "pt/platform/billing/faq"
+                ]
+              },
+              {
+                "group": "Operations",
+                "pages": [
+                  "pt/platform/operations/live-health",
+                  "pt/platform/operations/prometheus-grafana",
+                  "pt/platform/operations/worker-control",
+                  "pt/platform/operations/queues",
+                  "pt/platform/operations/capture",
+                  "pt/platform/operations/reload",
+                  "pt/platform/operations/tokens-and-access",
+                  "pt/platform/operations/generating-traffic",
+                  "pt/platform/operations/throughput",
+                  "pt/platform/operations/faq"
+                ]
+              },
+              {
+                "group": "Troubleshooting",
+                "pages": [
+                  "pt/platform/troubleshooting/first-checks",
+                  "pt/platform/troubleshooting/nothing-is-delivered",
+                  "pt/platform/troubleshooting/refusals",
+                  "pt/platform/troubleshooting/vendor-rejections",
+                  "pt/platform/troubleshooting/binds-and-listeners",
+                  "pt/platform/troubleshooting/callbacks"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "pt/platform/migrating/from-jasmin-or-kannel",
+                  "pt/platform/migrating/customer-notices"
+                ]
+              },
+              {
+                "group": "Project",
+                "pages": [
+                  "pt/platform/project/releases"
+                ]
+              }
             ]
           },
           {
-            "group": "SMPP settings",
-            "pages": [
-              "reference/smpp/server",
-              "reference/smpp/worker-base",
-              "reference/smpp/client",
-              "reference/smpp/tlvs",
-              "reference/smpp/status-codes"
+            "tab": "Developers",
+            "groups": [
+              {
+                "group": "Get started",
+                "pages": [
+                  "pt/developers/index",
+                  "pt/developers/quickstart",
+                  "pt/developers/authentication",
+                  "pt/developers/errors",
+                  "pt/developers/faq"
+                ]
+              },
+              {
+                "group": "Sending",
+                "pages": [
+                  "pt/developers/send/one-message",
+                  "pt/developers/send/batches",
+                  "pt/developers/send/sender-ids",
+                  "pt/developers/send/encoding-and-segments",
+                  "pt/developers/send/custom-tlvs",
+                  "pt/developers/send/faq"
+                ]
+              },
+              {
+                "group": "Receiving",
+                "pages": [
+                  "pt/developers/receive/delivery-receipts",
+                  "pt/developers/receive/batch-callbacks",
+                  "pt/developers/receive/mobile-originated",
+                  "pt/developers/receive/faq"
+                ]
+              },
+              {
+                "group": "SMPP",
+                "pages": [
+                  "pt/developers/smpp/binding",
+                  "pt/developers/smpp/submitting",
+                  "pt/developers/smpp/receipts-and-mo",
+                  "pt/developers/smpp/faq"
+                ]
+              },
+              {
+                "group": "Billing and credit",
+                "pages": [
+                  "pt/developers/billing/balance-and-quotes",
+                  "pt/developers/billing/statements-and-limits",
+                  "pt/developers/billing/faq"
+                ]
+              },
+              {
+                "group": "The portal",
+                "pages": [
+                  "pt/developers/portal/signing-in",
+                  "pt/developers/portal/messages-and-statement",
+                  "pt/developers/portal/registrations",
+                  "pt/developers/portal/playground"
+                ]
+              },
+              {
+                "group": "Migrating",
+                "pages": [
+                  "pt/developers/migrating/from-jasmin"
+                ]
+              }
             ]
           },
           {
-            "group": "CLI",
-            "pages": [
-              "reference/cli/fireflo",
-              "reference/cli/fireflo-install",
-              "reference/cli/fireflo-panel-install",
-              "reference/cli/environment"
-            ]
-          },
-          {
-            "group": "Management API",
-            "pages": [
-              "reference/management/endpoints"
-            ]
-          },
-          {
-            "group": "Data model",
-            "pages": [
-              "reference/data/cdr-tables",
-              "reference/data/config-tables"
+            "tab": "Reference",
+            "groups": [
+              {
+                "group": "REST API",
+                "pages": [
+                  "pt/reference/api/overview",
+                  "pt/reference/api/send",
+                  "pt/reference/api/sendbatch",
+                  "pt/reference/api/balance",
+                  "pt/reference/api/rate",
+                  "pt/reference/api/ping",
+                  "pt/reference/api/dlr-webhook",
+                  "pt/reference/api/errors"
+                ]
+              },
+              {
+                "group": "Configuration keys",
+                "pages": [
+                  "pt/reference/config/paths",
+                  "pt/reference/config/database",
+                  "pt/reference/config/rating",
+                  "pt/reference/config/whitelisting",
+                  "pt/reference/config/limits",
+                  "pt/reference/config/webhooks",
+                  "pt/reference/config/logging",
+                  "pt/reference/config/operational-endpoint",
+                  "pt/reference/config/control-panel",
+                  "pt/reference/config/docker"
+                ]
+              },
+              {
+                "group": "File formats",
+                "pages": [
+                  "pt/reference/files/credentials-yml",
+                  "pt/reference/files/smsg-properties",
+                  "pt/reference/files/routing-table",
+                  "pt/reference/files/rates-conf"
+                ]
+              },
+              {
+                "group": "SMPP settings",
+                "pages": [
+                  "pt/reference/smpp/server",
+                  "pt/reference/smpp/worker-base",
+                  "pt/reference/smpp/client",
+                  "pt/reference/smpp/tlvs",
+                  "pt/reference/smpp/status-codes"
+                ]
+              },
+              {
+                "group": "CLI",
+                "pages": [
+                  "pt/reference/cli/fireflo",
+                  "pt/reference/cli/fireflo-install",
+                  "pt/reference/cli/fireflo-panel-install",
+                  "pt/reference/cli/environment"
+                ]
+              },
+              {
+                "group": "Management API",
+                "pages": [
+                  "pt/reference/management/endpoints"
+                ]
+              },
+              {
+                "group": "Data model",
+                "pages": [
+                  "pt/reference/data/cdr-tables",
+                  "pt/reference/data/config-tables"
+                ]
+              }
             ]
           }
         ]

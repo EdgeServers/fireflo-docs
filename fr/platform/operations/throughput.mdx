@@ -1,0 +1,101 @@
+---
+title: "Débit"
+description: "Une baseline mesurée, la seule ligne de configuration qui a coupé les pertes de 92%, et le levier qui semblait évident et n'a rien fait."
+---
+
+Ce sont des vrais nombres d'un vrai run, pas des projections. Lisez les mises en garde avant d'en citer un. Le banc utilisait un SMSC de test, et la découverte la plus utile porte sur cela.
+
+## La baseline
+
+| Run | Messages | Résultat |
+| :--- | ---: | :--- |
+| Chaud, fenêtre 100 × 1 tx | 2 000 | ~840 msg/s, pic file routeur 4, **0 perdus** |
+| Burst, fenêtre 500 × **4 tx** | 20 000 | file vendeur à 7 987, **2 528 perdus (12,6%)** |
+| Burst, fenêtre 500 × **1 tx** | 20 000 | file vendeur à 8 042, **217 perdus (1,1%)**, 752 msg/s |
+| Burst, `vendor1.tps = 300` | 20 000 | **0 perdus, 0 `RMSGQFUL`, 1,00 submits/msg** |
+
+**Le burst corrigé est celui contre lequel comparer les travaux futurs : 752 msg/s livrés, 98,9% de succès, 26,3 s pour 20 000 messages.**
+
+## Le routeur n'a jamais été le goulot
+
+`fireflo_router_queue` a lu **0** pendant tout le burst de 20 000 messages et a fait un pic à 18 sur tous les autres runs.
+
+Les messages étaient routés aussi vite qu'ils arrivaient ; ils s'empilaient ensuite dans la file du **worker vendeur**, qui a atteint 7 987. Tout ce qui limitait le débit était en aval du code de routage.
+
+<Tip>
+C'est la forme diagnostique unique la plus utile à reconnaître. **File routeur plate pendant qu'une file vendeur croît** signifie que le gateway va bien et que le vendeur est la contrainte. Ajouter des threads de routeur ou ajuster le routage ne change rien.
+</Tip>
+
+## La seule ligne qui a coupé les pertes de 92%
+
+Le premier burst a perdu 2 528 messages, chacun `message.dropped reason=maxAttempts attempts=20 limit=20`, avec 151 985 tentatives de submit pour 24 000 messages acceptés. Environ six chacun.
+
+La connexion vendeur n'a jamais chuté. **Ce n'était pas de la connectivité.** Le SMSC de test a cessé de répondre assez vite sous burst, les submits ont expiré, le worker a retenté, et les messages qui utilisaient les 20 tentatives de routage ont été abandonnés.
+
+Re-lancer à `transceivers = 1`, mêmes messages, même fenêtre, mêmes threads routeur :
+
+| | 4 transceivers | 1 transceiver |
+| :--- | ---: | ---: |
+| Livrés | 21 472 (87,4%) | **19 783 (98,9%)** |
+| Abandonnés au plafond | 2 528 | **217** |
+| Tentatives de submit par message | ~6,3 | **4,1** |
+| Pic de file vendeur | 7 987 | 8 042 |
+
+La file a toujours atteint 8 042 et le routeur n'a toujours jamais engorgé, donc la *forme* du run était identique. Ce qui a changé est qu'une seule session ne provoque pas ce que fait le SMSC de test quand sur-sessionné.
+
+<Warning>
+**Le premier burst a mesuré les limites du SMSC de test, pas celles du gateway.** Il est gardé dans le dossier parce que le contraste est la chose la plus utile que l'exercice a produite. Et parce que « nous avons perdu 12% d'un burst » est exactement le genre de nombre qui est cité sans sa cause.
+</Warning>
+
+## Le levier qui semblait évident et n'a rien fait
+
+Une version antérieure de la baseline disait que le remède pour les 1,1% résiduels était d'augmenter `outSms.routing.maxAttempts` et `outSms.routing.retryBackoffMillis`, raisonnant qu'un message ne survit qu'environ deux secondes d'un vendeur qui n'accepte pas.
+
+**Cela a été mesuré et c'est faux.**
+
+| Configuration | Perdus | Débit |
+| :--- | ---: | ---: |
+| maxAttempts 20, backoff défaut | 217 (1,1%) | 752 msg/s |
+| **maxAttempts 60, backoff 500 ms** | 227 (1,1%) | 720 msg/s |
+
+Aucune amélioration, et légèrement plus lent. Plus de retries contre un vendeur qui n'accepte pas est plus de charge sur la chose qui refuse déjà.
+
+**Ce qui a corrigé était `vendor1.tps = 300`.** Rythmer le gateway à ce que le vendeur pouvait vraiment prendre. Zéro perdus, zéro `ESME_RMSGQFUL`, et exactement 1,00 submits par message.
+
+<Tip>
+La leçon générale : **quand un vendeur est la contrainte, rythmez vers lui plutôt que de pousser plus fort dessus.** Un ratio submits-par-message au-dessus de 1 est le nombre qui vous dit dans quelle situation vous êtes.
+</Tip>
+
+## Ce qu'il faut mesurer sur votre propre déploiement
+
+<Steps>
+  <Step title="File routeur contre file vendeur">
+    Routeur plat, file vendeur qui croît = le vendeur est la limite. Les deux qui croissent = l'ingress dépasse le routage.
+  </Step>
+  <Step title="Submits par message">
+    1,00 est sain. Tout ce qui est matériellement au-dessus est des retries, et les retries sont de la capacité vendeur gaspillée.
+  </Step>
+  <Step title="Compte ESME_RMSGQFUL">
+    Non nul signifie que vous poussez plus fort que le bout d'en face n'accepte.
+  </Step>
+  <Step title="Perte au plafond de tentatives">
+    `message.dropped reason=maxAttempts` est l'état final de tout ce qui précède.
+  </Step>
+</Steps>
+
+## Mises en garde
+
+- **Un SMSC de test n'est pas un opérateur.** Les deux runs de burst étaient bornés par le simulateur, pas par FireFlo.
+- **L'écart run-to-run était plus grand que l'effet du paramètre de fenêtre.** Augmenter `windowSize` 100 → 500 et transceivers 1 → 4 a produit 337 et 910 msg/s sur deux runs de configuration *identique*, contre 500 et 840 pour la baseline. **Ce banc ne peut pas résoudre cet effet.** Ce qui est une déclaration sur la mesure, pas une preuve que la fenêtre ne compte pas.
+- **`message.trace.mode = all` a produit 226 MB de log** pour un run de 20 000 messages. Utile pour une enquête, ruineux comme défaut.
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Files" icon="layer-group" href="/platform/operations/queues">
+    Distinguer un problème de volume d'un problème vendeur.
+  </Card>
+  <Card title="Générer du trafic" icon="flask" href="/platform/operations/generating-traffic">
+    Produire de la charge contre laquelle mesurer.
+  </Card>
+</CardGroup>

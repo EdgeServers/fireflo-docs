@@ -1,0 +1,87 @@
+---
+title: "Logging e limites de log"
+description: "Os quatro arquivos de log, quais são limitados, o único que vai encher um disco, e as flags que escrevem segredos."
+---
+
+## Os quatro logs
+
+| Log | Registra |
+| :--- | :--- |
+| `smsg.log` | Log principal da aplicação |
+| `smppclient.log` | Conexão de fornecedor e atividade de mensagens |
+| `smppserver.log` | Bind do listener, sessão e atividade de mensagens |
+| `httpapi.log` | Log de acesso HTTP, quando log em arquivo está habilitado |
+
+## Limites — e o que não tem nenhum
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `FIREFLO_LOG_MAX_SIZE` | `100M` | Tamanho em que `smsg.log`, `smppclient.log` e `smppserver.log` rotacionam. |
+| `FIREFLO_LOG_BACKUPS` | `1` | Quantos arquivos rotacionados cada um desses três mantém. |
+
+<Note>
+`conf.example/fireflo.env` vem com `5`, então uma instalação feita a partir dele mantém cinco e uma
+feita à mão mantém um. Nenhuma está errada; são só diferentes, e vale saber qual você tem.
+</Note>
+
+<Warning>
+**`httpapi.log` não é coberto por nenhum.** Quarkus rotaciona diariamente e não oferece retenção
+junto. Não existe configuração para isso. Então escreve um arquivo por dia e mantém todos eles para
+sempre. **Nada no gateway vai remover algum um dia.**
+
+`fireflo-install` cuida disso com uma regra de `tmpfiles.d` que apaga arquivos rotacionados mais
+antigos que `--log-retain-days`, nunca tocando nos quatro vivos. **Instalar à mão significa
+providenciar isso você mesmo, ou aceitar crescimento sem limite.**
+</Warning>
+
+## O que o access log deliberadamente omite
+
+`httpapi.log` registra método, path, protocolo, status, bytes enviados, tempo de resposta, referer e
+user agent. **Ele intencionalmente omite a query string.**
+
+Credenciais viajam em um header `Authorization` e não na URL, mas `GET /secure/rate` ainda aceita
+`to` e `content` como parâmetros de query, e `dlr_url` e `callback_url` são fornecidos pelo cliente
+e rotineiramente carregam tokens próprios.
+
+<Warning>
+Não adicione `%U`, `%r`, `%q`, ou `%{i,Authorization}` a `quarkus.http.access-log.pattern`. Se
+customizar, evite `%r`, `%q`, `%{QUERY_STRING}` e `%{q,...}` a menos que os logs resultantes sejam
+tratados como dados sensíveis.
+</Warning>
+
+## Flags de diagnóstico que escrevem segredos
+
+As flags de worker `log.pdus`, `log.bytes`, `print.msgs`, `print.resps` e `print.mos` são desabilitadas
+por padrão. Habilitar qualquer uma pode escrever credenciais SMPP, números de telefone,
+identificadores de provedor, URLs de callback e corpos de mensagem em logs.
+
+<Note>
+Para diagnosticar uma sessão, prefira [capture](/platform/operations/capture) a `log.pdus`. Uma
+captura é limitada, mantida em memória, com escopo em uma única sessão, e expira sozinha, enquanto
+`log.pdus` escreve os PDUs de toda sessão em um arquivo compartilhado até alguém lembrar de
+desligar.
+</Note>
+
+## Tracing do ciclo de vida de mensagem
+
+Logs de ciclo de vida `message.*` são controlados por `message.trace.mode`:
+
+| Valor | Mantém |
+| :--- | :--- |
+| `necessary` *(padrão)* | `message.accepted`, `message.submitted`, `message.dlr`, `message.deliver.sent` |
+| `off` | Nada |
+| `all` | Os acima mais detalhe de rota, enqueue, resposta e retentativa |
+
+## Variáveis de log Docker
+
+| Variável | Exemplo | Descrição |
+| :--- | :--- | :--- |
+| `QUARKUS_LOG_LEVEL` | `INFO` | Nível raiz de log do Quarkus |
+| `LOG_LEVEL` | `INFO` | Nível de log do pacote FireFlo |
+| `QUARKUS_LOG_CONSOLE_ENABLE` | `false` | Log em console ligado ou desligado |
+| `QUARKUS_LOG_FILE_ENABLE` | `true` | Log em arquivo ligado ou desligado |
+| `QUARKUS_LOG_FILE_PATH` | `/work/logs/smsg.log` | Caminho do log principal da aplicação |
+| `QUARKUS_LOG_FILE_SMPPCLIENT_PATH` | `/work/logs/smppclient.log` | Caminho do log do fornecedor |
+| `QUARKUS_LOG_FILE_SMPPSERVER_PATH` | `/work/logs/smppserver.log` | Caminho do log do listener |
+| `QUARKUS_HTTP_ACCESS_LOG_ENABLE` | `true` | Log de acesso HTTP |
+| `QUARKUS_HTTP_ACCESS_LOG_DIRECTORY` | `/work/logs` | Diretório do access log |

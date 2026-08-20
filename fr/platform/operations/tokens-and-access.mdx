@@ -1,0 +1,91 @@
+---
+title: "Tokens et accès"
+description: "Deux tokens avec une séparation délibérée, pourquoi un non défini vous donne 404 plutôt que 401, et la règle absent-contre-zéro qui court à travers chaque champ."
+---
+
+Le port de gestion porte les profondeurs de file, les noms de vendeurs, l'état des binds et les contrôles qui arrêtent un vendeur. Il est gardé par **deux** secrets partagés :
+
+```properties
+smsg.ops.token       = <une longue chaîne aléatoire>
+smsg.ops.admin.token = <une longue chaîne aléatoire différente>
+```
+
+## La séparation
+
+| Token | Ouvre |
+| :--- | :--- |
+| `smsg.ops.token` | `GET /ops/health`, `GET /ops/queues`, `/q/metrics`. **Tout ce qui ne fait que lire** |
+| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture et les six verbes de contrôle |
+
+Ainsi un tableau de bord ou un système de monitoring peut tenir le token de lecture **sans être aussi capable d'arrêter un vendeur**.
+
+<Warning>
+**Ils doivent différer.** Régler les deux à la même valeur est traité comme aucune séparation du tout. Les contrôles s'éteignent et le gateway journalise pourquoi.
+
+Laisser le token admin non défini fait la même chose, ce qui est la direction sûre : vous perdez les contrôles plutôt que de les exposer.
+</Warning>
+
+## Un token non défini répond 404, pas 401
+
+Une configuration absente **désactive** l'endpoint plutôt que de le laisser ouvert. Un mauvais token obtient le même `404` plutôt qu'un `401`, pour qu'un appelant ne puisse pas dire s'il y a ici quelque chose pour lequel il vaut la peine de trouver un token.
+
+<Tip>
+**Si votre tableau de bord rapporte 404, vérifiez le token des deux côtés avant de supposer que le gateway est en panne.** Cette confusion est le coût de ne pas divulguer l'existence de l'endpoint, et elle vaut la peine d'être connue avant un incident plutôt que pendant un.
+</Tip>
+
+## Il n'est délibérément pas sous `/secure`
+
+Ce préfixe est authentifié avec les **identifiants de messagerie, qui appartiennent aux clients**. Les profondeurs de file, les noms de vendeurs et l'état des binds sont à l'échelle du gateway, donc les publier là remettrait à chaque client qui peut envoyer un SMS une vue de tout le gateway.
+
+Le port de gestion porte son propre token à la place. Et un identifiant de messagerie ne l'ouvre pas.
+
+## Gardez le port hors du réseau public
+
+| Port | Sert |
+| ---: | :--- |
+| 8080 | `/secure/*`, `/ping`. Ce que les clients appellent |
+| 9000 | `/q/metrics` et `/ops/*` |
+
+Gardez 9000 sur un réseau admin et ne le publiez pas. Le token est une deuxième ligne, pas la première.
+
+## Absent n'est pas zéro
+
+Cette règle court à travers chaque champ sur `/ops/health`, et la lire de travers produit des conclusions confidemment fausses :
+
+| Champ | Absent signifie | Zéro signifierait |
+| :--- | :--- | :--- |
+| `router_queue_capacity` | **Pas de limite**, le défaut | Pas de place restante |
+| `queue_capacity` | Non borné | Pleine |
+| `in_queue_depth` | Pas un listener du tout | Un vendeur avec une file entrante vide |
+| `submitted` | Les compteurs sont éteints pour ce connecteur | Rien envoyé |
+| `tps_limit` | Pas de plafond configuré | Un plafond de zéro |
+| `tps_measured` | **Non mesuré**. Y compris les deux premières fenêtres après démarrage | Bindé, comptant, et ne bougeant rien |
+
+<Warning>
+`tps_measured` est celui qui piège les gens. **Zéro est une vraie valeur** signifiant une session bindée qui n'envoie rien, ce qui est un blocage qui vaut la peine d'alerter. Absent signifie que le gateway n'a pas encore mesuré, parce qu'une lecture d'un compteur cumulatif est une baseline et pas encore un taux.
+
+Une alerte qui traite absent comme zéro se déclenche à chaque redémarrage.
+</Warning>
+
+## `cdr.failed` est des données de facturation perdues
+
+Un batch échoué n'est **jamais retenté** et ces enregistrements sont partis. Ce n'est pas un transitoire.
+
+**Alertez sur toute valeur non nulle.** C'est du revenu que vous ne pouvez pas facturer, et rien d'autre ne vous le dira.
+
+## Une recherche par sous-chaîne n'est pas un contrôle d'identité
+
+`q=ACME` sur l'endpoint sessions retourne aussi `ACMEINTL`.
+
+Tout ce qui agit sur un résultat, déconnecter les binds d'un login par exemple, doit comparer `system_id` **exactement** plutôt que faire confiance à la correspondance.
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Le port de gestion" icon="server" href="/reference/management/endpoints">
+    Chaque endpoint et son token.
+  </Card>
+  <Card title="Santé en direct" icon="heart-pulse" href="/platform/operations/live-health">
+    Lire la charge utile que ces tokens débloquent.
+  </Card>
+</CardGroup>

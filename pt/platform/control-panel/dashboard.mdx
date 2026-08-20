@@ -1,0 +1,94 @@
+---
+title: "O dashboard"
+description: "Quatro números, um gráfico de tráfego e uma decomposição de falhas — o que a tela Overview responde, e as duas cifras nela que são lidas erradas com maior frequência."
+---
+
+A tela Overview responde a uma pergunta: **a plataforma está carregando o que deveria, e está caindo?**
+Ela deliberadamente não é uma tela de saúde. Se o software tem memória e conexões para continuar
+funcionando é uma pergunta diferente, feita em [Runtime](/platform/control-panel/runtime-metrics),
+e as duas são mantidas separadas porque um operador olhando um problema de entrega não quer estar
+lendo sobre tamanho do heap.
+
+Tudo na página obedece a um controle de intervalo — **24 horas**, **7 dias** ou **30 dias**, default
+24 horas. Cifras atualizam a cada sessenta segundos, e param de atualizar enquanto a aba do
+navegador está em background.
+
+## As quatro cifras
+
+| Card | O que conta |
+| :--- | :--- |
+| **Messages** | Tudo submetido no período |
+| **Delivery rate** | Entregues contra falhadas, com as duas contagens embaixo |
+| **In flight** | Submetidas, sem recibo ainda |
+| **Margin** | Faturado menos custo do vendor, em vermelho quando negativo |
+
+<Note>
+**Um card em branco ainda está carregando, não zero.** Os cards mostram um placeholder até que a
+cifra chegue, e então mostram ou o número ou o erro. Eles nunca inventarão um `0` para preencher a
+lacuna, porque "sem tráfego" e "não conseguimos perguntar" são respostas diferentes e só uma delas
+é seu problema.
+</Note>
+
+**In flight não é um backlog.** É tráfego que foi enviado e cobrado e simplesmente ainda não foi
+reportado. Uma mensagem que nunca recebe recibo é fechada no seu prazo de expiração; até então fica
+aqui, e em uma plataforma ocupada sempre ficará.
+
+## Tráfego
+
+Três séries — submitted, delivered, failed — sobre o intervalo escolhido. Sem nada na janela, o
+gráfico é substituído por **No traffic in this period**, o que é uma declaração sobre o intervalo
+que você escolheu tanto quanto sobre a plataforma.
+
+## Por que mensagens falharam
+
+Uma decomposição de todo desfecho que não foi uma entrega, cada um nomeado em linguagem simples em
+vez de por seu código de recibo:
+
+- Failed at the vendor
+- Rejected on submission
+- Dropped before sending
+- No receipt within the deadline
+
+Ao lado de cada nome, em tipo menor, está o estado numérico do recibo e o próprio código de erro
+do vendor. Isso parece duplicação e não é. `EXPIRED`, `REJECTD` e `UNDELIV` todos faturam
+identicamente e significam coisas inteiramente diferentes, e quando você vai a um vendor perguntar
+sobre um pico, **o número é a coisa pela qual a documentação deles é indexada**. O nome é para você;
+o número é para eles.
+
+### Dispensando uma falha
+
+Cada linha pode ser dispensada, o que a esconde da lista sem deletar nada. Um rodapé conta o que
+você escondeu e pode mostrar de novo.
+
+<Tip>
+**Uma falha dispensada volta sozinha na próxima vez que acontece.** Dispensar esconde o que você
+já lidou, não o que começa de novo.
+</Tip>
+
+Dispensas vivem no navegador em que você as fez. Outro operador, ou o mesmo operador em outra
+máquina, vê a lista completa — o que é deliberado, já que a triagem de uma pessoa não é uma
+declaração de fato para toda a plataforma.
+
+Essa distinção aparece nos dois estados vazios. **No failures in this period** significa que nada
+falhou. **Every failure in this period has been dismissed** significa que algo falhou, e você
+escolheu não olhar. A tela não reportará um período limpo com base no seu próprio arquivamento.
+
+## Gateway health
+
+Uma faixa de seis tiles no pé da página — memória, processador, tasks running, API requests,
+internal tasks, uptime — cada uma com uma sparkline, e um link para o detalhe. É uma olhada, não uma
+investigação.
+
+<Warning>
+**"Internal tasks" não são conexões de vendor.** É o trabalho de background do próprio gateway:
+escritas em banco, tratamento de recibos. Em todo outro lugar do painel, um *worker* significa uma
+conexão SMPP, então este tile evita a palavra inteiramente. Lê-lo como um vendor travado te leva a
+procurar um problema de operadora que não existe.
+</Warning>
+
+O tile **API requests** reporta uma média desde que o processo iniciou. Ele responde "este endpoint
+está lento em geral" e não pode responder "estava lento cinco minutos atrás".
+
+Se um refresh falha enquanto cifras mais antigas ainda estão em tela, uma nota de rodapé diz que
+o poll falhou e os números ficam. A tela prefere uma leitura antiga sobre a qual você é avisado a
+uma em branco sobre a qual você não é.

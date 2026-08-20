@@ -1,0 +1,123 @@
+---
+title: "Le webhook d'accusé de livraison"
+description: "Ce que la passerelle POSTe vers votre dlr_url. Chaque champ, les deux formats et le budget de retries."
+---
+
+La seule direction où **vous êtes le serveur**. Demandez-le avec `"dlr": "yes"` et un `dlr_url` sur
+l'envoi.
+
+## `json` — le défaut
+
+Un `POST` avec `Content-Type: application/json` :
+
+```json
+{
+  "id": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-13T08:58:59.672Z",
+  "done_date": "2026-08-13T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-in-2001",
+  "system_id": "sunrise-http",
+  "parts": 1
+}
+```
+
+## Champs
+
+| Champ | Signification |
+| :--- | :--- |
+| `id` | Le `messageId` renvoyé par l'envoi. **C'est ainsi que vous corrélez.** |
+| `stat` | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED` ou `SEEN` |
+| `level` | `2` l'issue, `1` la progression. **Un accusé de niveau 1 ne signifie pas que le message est terminé** — `ACCEPTD` et `BUFFRED` arrivent tous deux en 1 et un autre suit. |
+| `sub_date` | Quand vous l'avez soumis, ISO-8601. Omis quand inconnu. |
+| `done_date` | Quand cet accusé a été émis. Sur un accusé de niveau 2, quand le message s'est terminé. |
+| `to` | La destination, telle que vous l'avez donnée. |
+| `from` | Le sender ID qui a été utilisé. |
+| `operator_msg_id` | La référence de l'opérateur, pour lui poser une question. |
+| `account_id` | Le compte facturé. |
+| `system_id` | Le login qui l'a soumis. |
+| `parts` | Nombre de segments. Omis quand inconnu. |
+
+**Les champs à null sont omis plutôt qu'envoyés comme null**, donc un accusé pour un message qui
+n'a jamais atteint un vendor n'arrive pas rempli de clés vides.
+
+Chaque appel porte `User-Agent: FireFlo/<version>`.
+
+<Warning>
+**Il n'y a pas de champ `err`.** Jasmin en envoie un ; le résolveur de FireFlo reçoit seulement
+l'état de livraison, jamais de code d'erreur, donc en émettre un signifierait l'inventer.
+
+**`vendor` est absent tant que votre fournisseur ne l'active pas.** Il nomme quel fournisseur
+transporte votre trafic, ce qui est retenu aux clients par construction ailleurs.
+</Warning>
+
+## `kannel` — substitution de placeholders
+
+Un simple `GET` sur l'URL enregistrée avec deux placeholders substitués. **Rien n'est ajouté.**
+
+| Placeholder | Valeur |
+| :--- | :--- |
+| `%s` | Id de message de la passerelle |
+| `%d` | `1` livré, `2` échec, `4` bufferisé, `8` soumis au SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Une URL sans placeholders reçoit une requête qui ne porte absolument rien** — pas de corps, pas
+de query, pas d'identifiant. L'endpoint est touché à l'heure, renvoie `200`, et l'intégration a
+l'air de "fonctionner mais vide".
+
+Rien dans le système ne le signale, car un callback vide est indiscernable d'un callback
+correctement configuré qui n'a rien à porter.
+</Warning>
+
+Le format est choisi par votre fournisseur avec `smsg.dlr.forward.format`, pas par vous.
+`dlr-method` est accepté sur un envoi mais ne le **sélectionne pas**.
+
+## Livraison et retries
+
+| Règle | Valeur | Propriété |
+| :--- | :--- | :--- |
+| Succès | HTTP **`200`–`399`** | — |
+| Retries | **10** | `smsg.webhook.retries` |
+| Intervalle | **120 000 ms** | `smsg.webhook.retry.interval.ms` |
+| Timeout | **5 000 ms**, connexion et requête | `smsg.webhook.timeout.ms` |
+
+<Warning>
+**Un `302` vers une page de connexion compte comme succès et avale l'accusé.** Idem pour tout
+`2xx` d'un proxy qui n'a jamais atteint votre application. Si les accusés "arrivent" mais votre
+handler ne s'exécute jamais, regardez ce qui est en amont.
+</Warning>
+
+La livraison est **at-least-once**. Rendez votre handler idempotent sur `id` **plus `level`**, pas
+sur `id` seul, puisqu'un message peut légitimement produire un niveau 1 puis un niveau 2.
+
+## Quels accusés vous recevez
+
+`dlr_level` sur l'envoi : `1` progression uniquement, `2` l'issue (**défaut**), `3` les deux.
+
+En SMPP, le même choix est l'octet `registered_delivery`. `0x11` est l'écriture SMPP de
+`dlr_level: 3`.
+
+## Chaque accusé est enregistré
+
+Qu'il soit transféré ou non. **Supprimer un accusé est une décision sur ce qui vous est dit,
+jamais sur ce qui est enregistré.** Donc "je n'ai jamais reçu d'accusé" a toujours une réponse
+côté fournisseur.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Accusés de livraison" icon="receipt" href="/developers/receive/delivery-receipts">
+    Construire contre ceci, avec le piège du niveau expliqué.
+  </Card>
+  <Card title="Callbacks qui n'arrivent pas" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    Diagnostiquer le silence.
+  </Card>
+</CardGroup>

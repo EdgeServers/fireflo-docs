@@ -1,0 +1,113 @@
+---
+title: "Binding"
+description: "Qué pedir a su proveedor, qué tipo de bind usar, y los límites que deciden cuántas sesiones puede mantener."
+---
+
+SMPP es una sesión TCP persistente. Se enlaza una vez, se mantiene abierta y se envía por ella. Por
+eso supera a una llamada HTTPS por mensaje con volumen sostenido.
+
+## Qué necesita
+
+Pida a su proveedor:
+
+| | Notas |
+| :--- | :--- |
+| **Host y puerto** | Los puertos plano y TLS suelen ser distintos |
+| **`system_id`** | Su login. Debe ser una credencial de tipo **SMPP** |
+| **`password`** | |
+| **`system_type`** | A menudo en blanco; algunos proveedores requieren un valor específico |
+| **Tipo de bind** | Véase abajo |
+| **TON/NPI** | Para su dirección de origen, si especifican una |
+
+<Warning>
+**Una credencial HTTP no puede hacer bind, y una credencial SMPP no puede usar la API REST.** Las
+credenciales tienen tipo, y no son intercambiables. Pida una de cada si necesita ambas.
+</Warning>
+
+## Qué tipo de bind
+
+| Bind | Puede | Úselo cuando |
+| :--- | :--- | :--- |
+| **Transceiver** | Enviar y recibir en una sesión | Casi siempre: es lo más simple y con menos sesiones |
+| **Transmitter** | Solo enviar | Tiene un receptor aparte, o su librería requiere el desdoblamiento |
+| **Receiver** | Solo recibir | Emparejado con un transmitter |
+
+<Tip>
+**Un bind solo de receptor no envía nada y parece perfectamente sano.** Si su sesión está arriba
+y no sale ningún mensaje, compruebe el tipo de bind antes que nada. Es la causa más común, con
+diferencia, de "enlazado pero no pasa nada".
+</Tip>
+
+## Los límites que se le aplican
+
+Su proveedor los fija; saber que existen ahorra especular ante un bind rechazado.
+
+| Ajuste | Por defecto | Qué limita |
+| :--- | ---: | :--- |
+| `srv.maxConnections` | 1000 | Total de sesiones concurrentes en el listener |
+| `srv.maxConnectionsPerIP` | 0 (sin límite) | Sesiones desde una IP |
+| `conf.maxConnectionsPerUser.default` | 0 (sin límite) | Binds concurrentes por cuenta |
+| `conf.maxPending.default` | 1000 | **Tamaño de ventana**: peticiones no reconocidas en vuelo |
+| `srv.bindTimeout` | 5000 ms | Cuánto espera el servidor su PDU de bind |
+
+**El tamaño de ventana es el que da forma a su throughput.** Es cuántos `submit_sm` puede tener
+pendientes sin respuesta. Un cliente que espere cada respuesta antes de enviar el siguiente está
+limitado por el tiempo de ida y vuelta, por grande que sea la ventana.
+
+## Si su bind se rechaza
+
+Cuatro causas, y el rechazo no siempre las distingue:
+
+<Steps>
+  <Step title="Tipo de credencial incorrecto">
+    Un login HTTP. Se rechaza como fallo de autenticación.
+  </Step>
+  <Step title="system_id o password incorrectos">
+    Ambos son sensibles a mayúsculas.
+  </Step>
+  <Step title="Un límite ya alcanzado">
+    Otra sesión suya sigue abierta, incluida una obsoleta que el extremo remoto todavía no ha
+    dejado caer por timeout.
+  </Step>
+  <Step title="Su IP no está permitida">
+    Si hay una lista permitida configurada, todo lo demás puede ser correcto y el bind sigue
+    fallando.
+  </Step>
+</Steps>
+
+<Tip>
+**Una sesión obsoleta es la sorprendente.** Si se reconecta más rápido de lo que el servidor deja
+caer su sesión anterior, está compitiendo consigo mismo por un límite por usuario. Deshaga el
+bind limpiamente al apagar, y deje que `enquire_link` detecte un peer muerto en lugar de
+reconectar agresivamente.
+</Tip>
+
+## Mantener viva la sesión
+
+Envíe `enquire_link` en un intervalo: cada 30 segundos es típico. Es cómo ambos extremos
+detectan una conexión que ha muerto sin un `FIN`, que es el resultado normal de un timeout NAT o
+un firewall que segando un flujo inactivo.
+
+Su librería casi con seguridad lo hace por usted. Confírmelo, porque una sesión muerta pero no
+cerrada acepta sus `submit_sm` en un buffer de socket y los pierde.
+
+## Sin dirección de bind en el listener
+
+Merece la pena saberlo si pide a su proveedor que restrinja el acceso: **ambos listeners se
+enlazan a todas las interfaces**, y no hay ajuste de dirección de bind. La librería subyacente no
+tiene esa opción.
+
+Restringir la exposición se hace con un firewall, un namespace de red o vinculando el contenedor
+a una interfaz. Si su proveedor le dice que un listener está "solo en la interfaz interna", eso
+es algo que arreglaron alrededor de la pasarela, no dentro de ella.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Enviar mensajes" icon="paper-plane" href="/developers/smpp/submitting">
+    `submit_sm`, codificación y los campos que importan.
+  </Card>
+  <Card title="Ajustes del listener" icon="sliders" href="/reference/smpp/server">
+    Toda propiedad de listener y vendor.
+  </Card>
+</CardGroup>

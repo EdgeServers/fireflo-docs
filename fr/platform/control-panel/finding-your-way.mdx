@@ -1,0 +1,124 @@
+---
+title: "Se repérer"
+description: "Une carte de la barre latérale opérateur, à quoi sert chaque groupe, et les six écrans qui n'ont aucune entrée de menu."
+---
+
+Le panneau de contrôle est la moitié opérateur de FireFlo. Vos clients ne le voient jamais — ils
+obtiennent [le portail](/developers/portal/signing-in), qui leur montre leur propre trafic et rien
+du vôtre.
+
+Rien ici n'est requis pour faire tourner le gateway. Le gateway lit sa configuration depuis une
+base de données ou depuis des fichiers et continuerait à porter le trafic si le panneau était
+entièrement éteint. Ce que le panneau vous donne est un moyen de changer cette configuration sans
+édition à la main, et un moyen de voir ce qui s'est passé sans écrire de SQL.
+
+## La barre latérale
+
+<AccordionGroup>
+
+<Accordion title="Overview — le premier écran">
+Trafic, livraison et échecs sur tout le gateway, sur 24 heures, 7 jours ou 30 jours. Commencez ici
+lors d'un incident ; c'est le seul écran qui répond à « quelque chose ne va-t-il pas » sans que
+vous ayez à nommer la chose que vous soupçonnez.
+
+Voir [le tableau de bord](/platform/control-panel/dashboard).
+</Accordion>
+
+<Accordion title="Gateway — les choses qui portent le trafic">
+| Entrée de menu | Pour |
+| :--- | :--- |
+| **Messages** | Chaque message, cherchable, avec une vue détail par message |
+| **Vendors** | Connexions sortantes — de qui vous achetez |
+| **Servers** | Listeners entrants — comment les clients se connectent à vous |
+| **Accounts** | Vos clients, et tout ce qui y est rattaché |
+| **Pricing** | Tarifs, à la fois ce que vous facturez et ce qui vous est facturé |
+| **Diagnostics** | Logs et configuration lus depuis la machine du gateway |
+
+**Vendor** et **server** sont les deux moitiés de la même idée, et les confondre est l'erreur
+initiale la plus courante — voir [connexions](/platform/connections/vendors).
+</Accordion>
+
+<Accordion title="Configuration — règles que le gateway applique">
+**Filters** sont des conditions réutilisables sur lesquelles les règles de routage et les tarifs
+s'appuient. **TLVs** est le catalogue des paramètres optionnels SMPP, y compris ceux que vos
+clients ont proposés et que vous n'avez pas encore approuvés.
+</Accordion>
+
+<Accordion title="Assets — ce que les clients peuvent envoyer">
+**Headers** sont les sender IDs ; **Templates** sont les formulations approuvées. Les deux sont
+le côté opérateur de ce que les clients demandent dans leur portail, et les deux ne sont
+appliqués que là où vous avez activé l'application.
+</Accordion>
+
+<Accordion title="Reports — ce qui est arrivé, et ce que cela valait">
+| Entrée de menu | Répond |
+| :--- | :--- |
+| **Refused** | Ce qui a été refoulé avant de devenir du trafic |
+| **Queues** | Ce qui attend en ce moment |
+| **Receipts** | À quel point chaque vendor rapporte bien les résultats |
+| **Usage** | Volume et livraison, par compte |
+| **Revenue** | Facturé, coût et marge |
+</Accordion>
+
+</AccordionGroup>
+
+## Les écrans sans entrée de menu
+
+Six écrans existent que la barre latérale ne liste jamais. Ils sont atteints depuis d'autres
+écrans, ce qui va bien une fois que vous savez et est déroutant jusqu'à ce que vous sachiez.
+
+| Écran | Atteint depuis | Ce que c'est |
+| :--- | :--- | :--- |
+| **Live health** | L'icône cœur dans l'en-tête | Binds, profondeur de file et accusés en vol, maintenant |
+| **Runtime** | « Runtime detail » sur le ruban santé de l'Overview | Mémoire, processeur et capacité de connexions |
+| **Routing** | L'écran Vendors | Tables de routage, règles et groupes de vendors |
+| **Products** | L'écran Servers | Le catalogue de products, et les tarifs par-product |
+| **Message detail** | Toute ligne sur Messages | Un message de bout en bout, y compris ses TLV |
+| **Sign-in** | Se déconnecter, ou une session expirée | Le formulaire de connexion opérateur |
+
+<Note>
+**Runtime et Live health répondent à des questions différentes et sont faciles à confondre.**
+Live health est *ce qui est vrai en ce moment* — quels vendors sont bindés, la profondeur des
+files. Runtime est *si le logiciel a la place de continuer à fonctionner* — mémoire, processeur,
+descripteurs de fichiers. Un gateway peut être parfaitement en bonne santé sur l'un et en
+difficulté sur l'autre.
+</Note>
+
+## À l'intérieur d'un compte
+
+Ouvrir un compte vous donne sept onglets, et ce sont réellement des sujets différents plutôt que
+des sections d'une seule page :
+
+| Onglet | Contient |
+| :--- | :--- |
+| **Overview** | Trafic et livraison pour ce client seul |
+| **Settings** | Qui il est, s'il est listé, et où il se situe dans un arbre revendeur |
+| **Logins** | Ses credentials SMPP et HTTP |
+| **Approvals** | Sender IDs et templates qu'il a demandés |
+| **Billing** | Crédit, le grand livre, et la réconciliation |
+| **Tariff** | Ce que ce client se voit facturer |
+| **Statement** | Ce qu'il doit pour une période |
+
+L'en-tête au-dessus des onglets montre soit **Balance** soit **Limit**, jamais les deux. Les
+comptes prépayés détiennent un solde, les comptes postpayés ont une limite de crédit, et lire
+l'un comme l'autre est la mauvaise lecture qui coûte de l'argent.
+
+<Warning>
+**L'onglet Billing est le seul endroit dans FireFlo où du crédit est créé, et un rechargement ne
+peut pas être annulé.** Lisez [l'onglet Billing](/platform/control-panel/accounts-billing) avant
+de l'utiliser.
+</Warning>
+
+## Se connecter
+
+<Frame caption="Connexion opérateur. La version à côté du wordmark est celle du panneau, et ses trois premiers nombres sont la release du gateway avec laquelle elle est appariée.">
+  <img src="/images/platform/control-panel/operator-sign-in.png" alt="The FireFlo operator sign-in card with username and password fields" />
+</Frame>
+
+La connexion opérateur est un nom d'utilisateur et un mot de passe détenus dans la configuration
+propre au panneau — il n'y a pas de table utilisateur, et pas de moyen d'ajouter un second
+opérateur depuis l'intérieur du panneau. Voir
+[la configuration du panneau de contrôle](/reference/config/control-panel).
+
+Les sessions sont par navigateur. Se connecter sur un ordinateur portable ne vous connecte pas
+sur un téléphone, et se déconnecter met fin seulement à la session que vous utilisez.

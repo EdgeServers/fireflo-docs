@@ -1,0 +1,62 @@
+---
+title: "Management API"
+description: "Os endpoints na porta 9000, qual token cada um leva, e por que toda recusa é um 404."
+---
+
+Porta **9000** por padrão, longe da porta que carrega mensagens. Autenticação Bearer, dois tokens.
+
+<Warning>
+Isto **não** é descrito como OpenAPI de propósito, e não há Swagger UI. É uma superfície operacional
+para os operadores de uma implantação, não uma API contra a qual clientes integram.
+</Warning>
+
+| Método | Path | Token | Propósito |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/ops/health` | read | Tudo que o gateway sabe sobre si agora |
+| `GET` | `/q/metrics` | read | Exposição Prometheus, como texto |
+| `POST` | `/ops/reload` | admin | Relê a configuração agora, em vez de esperar o poll |
+| `POST` | `/ops/workers/{name}/test-bind` | admin | Disca um fornecedor uma vez e reporta o que aconteceu |
+| `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Derruba o bind de um cliente, deixando os outros em paz |
+| `POST` | `/ops/workers/{name}/{action}` | admin | `enable`, `disable`, `suspend`, `resume`, `hold`, `release` |
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://localhost:9000/ops/health
+```
+
+## Toda recusa é um 404
+
+Um token errado, um endpoint desabilitado e um path que não existe todos respondem **404**. Nada
+anuncia que existe um segredo aqui valendo a pena adivinhar.
+
+<Note>
+Isso significa que um check de monitoramento reportando 404 tem quatro causas possíveis, e o gateway
+não vai dizer qual: token errado, admin token não definido, admin token igual ao token de leitura,
+ou path genuinamente errado. Cheque os tokens dos dois lados antes de concluir que o gateway está
+fora.
+</Note>
+
+## O que não está nesta porta
+
+`/openapi.json`, `/swagger-ui` e `/ping` vivem na porta de **mensagens**. Apontar uma ferramenta para
+a errada produz 404s que parecem um outage.
+
+## `/ops/health`
+
+O payload carrega, no nível de topo: a versão em execução, origens de configuração por domínio,
+profundidade da fila do roteador, contagem de aguardando-receipt, contadores de CDR, a profundidade
+da fila do broker quando um está configurado, e uma seção `balance` quando enforcement de crédito
+está ligado.
+
+Por worker carrega `accepting`, `paused`, `suspended_manually`, `suspended_automatically`, `bound`,
+`bound_transmittable`, `queue_depth`, `retry_queue_depth`, `tps_limit`, `tps_measured`, `submitted`,
+`last_error` com timestamp, `last_submit_error` com `submit_rejected`, uma **amostra** de sessões
+limitada a 20, e `sessions_total`.
+
+<Warning>
+Nunca conte o array `sessions` para responder "quantos estão bound". É uma amostra limitada.
+`sessions_total` é a contagem, e `bound` é o número de binds vivos.
+</Warning>
+
+Veja [Health ao vivo](/platform/operations/live-health) para como ler, e
+[O endpoint operacional](/reference/config/operational-endpoint) para os tokens.

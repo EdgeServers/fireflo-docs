@@ -1,0 +1,80 @@
+---
+title: "Entrando"
+description: "Não há senha. Você informa seu endereço de e-mail, segue um link que funciona uma vez e cai na sua conta. E a mesma resposta volta, aconteça o que acontecer."
+---
+
+O portal não tem senha. Você informa o endereço de e-mail que seu operador mantém para sua conta, e
+um link de uso único chega por e-mail.
+
+<Frame caption="A tela de sign-in do portal. Um campo, sem senha, e um número de versão que diz para qual release do gateway este painel foi construído.">
+  <img src="/images/developers/portal/sign-in.png" alt="The FireFlo portal sign-in card, showing a single email address field and an 'Email me a link' button" />
+</Frame>
+
+> Entre com o endereço de e-mail da sua conta. Vamos enviar um link. Não há senha para lembrar.
+
+## O que acontece em seguida
+
+O que quer que você tenha digitado, a tela diz a mesma coisa:
+
+> **Confira sua caixa de entrada.** Se este endereço está em uma conta, um link de sign-in está a
+> caminho. Ele funciona uma vez e expira em 15 minutos.
+
+<Note>
+**Essa resposta não muda se o endereço estiver errado.** É idêntica para um endereço em uma conta,
+em uma conta desativada e para um endereço nunca visto.
+
+É deliberado. Um formulário que dissesse "conta inexistente" permitiria que qualquer um testasse uma
+lista de endereços e descobrisse quem são os clientes do seu provedor. O custo dessa proteção é que
+um erro de digitação parece exatamente com sucesso. Se nada chegar, verifique o endereço antes de
+supor uma falha.
+</Note>
+
+Dois controles ficam abaixo. **Enviar de novo** fica desativado por dois minutos e faz uma contagem
+regressiva; o timer sobrevive a um reload de página e se corrige quando você volta do seu cliente de
+e-mail, em vez de mostrar um número desatualizado. **Usar outro endereço** volta para um formulário
+vazio.
+
+> Nada após um ou dois minutos? Verifique o spam e depois envie de novo. O link mais recente é o que
+> funciona.
+
+Essa última frase importa: solicitar um segundo link não deixa o primeiro válido. Siga o e-mail mais
+recente.
+
+## Seguindo o link
+
+O link faz login e leva para **Visão geral**, não para suas mensagens, porque a primeira pergunta
+depois do login costuma ser "como estão as coisas", não "mostre a linha 4.000".
+
+Se o link já foi usado, ou tem mais de quinze minutos:
+
+> **Esse link não funcionou.** Links de sign-in funcionam uma vez e expiram em 15 minutos. Peça um
+> novo.
+
+<Frame caption="O que aparece com um link usado ou expirado. Os dois são normais. Um link é gasto no momento em que dá certo, então seguir o mesmo e-mail duas vezes produz isso.">
+  <img src="/images/developers/portal/link-expired.png" alt="The portal verify screen reading 'That link did not work', with a button back to sign in" />
+</Frame>
+
+Os dois são normais. Um link é gasto no momento em que funciona, então seguir o mesmo e-mail duas
+vezes (ou ter um scanner de e-mail seguindo antes de você) produz isso.
+
+## Limites
+
+Solicitações de sign-in têm rate limit por conta e por rede. O limite por conta responde com a mesma
+frase neutra do sucesso, então você não é avisado de que atingiu. O limite por rede avisa:
+
+> Muitas solicitações de sign-in desse endereço. Tente novamente em breve.
+
+## Quando não está disponível
+
+Se seu provedor não configurou o painel para enviar e-mail, você recebe um erro real em vez de um
+link que nunca chega:
+
+> Sign-in por e-mail não está disponível neste painel. Fale com seu gerente de conta.
+
+É uma configuração de implantação do lado dele, não algo que você pode contornar.
+
+## Continuando conectado
+
+Sua sessão é mantida em um cookie no navegador em que você entrou, e **Sair** na barra do topo a
+encerra. Entrar no celular não desloga no desktop. Se você usar o portal em uma máquina compartilhada,
+faça logout em vez de fechar a aba.

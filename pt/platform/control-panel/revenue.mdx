@@ -1,0 +1,70 @@
+---
+title: "Receita"
+description: "Custo, preço e margem por account e product. E a regra de contagem que explica por que a margem parece mais fina do que a tarifa diz que deveria."
+---
+
+**Receita conta cada mensagem uma vez; custo conta cada tentativa de vendor.**
+
+Essa frase é a tela inteira. Uma mensagem que você faturou a uma taxa pode ter sido submetida a um
+vendor três vezes antes de colar, e você foi cobrado pelas três. A tarifa diz que sua margem é um
+terço; o relatório diz que é muito menos; ambos estão corretos, e apenas o relatório é sobre
+dinheiro que efetivamente se moveu.
+
+Se a margem aqui é persistentemente abaixo do que a tarifa prevê, a pergunta a fazer não é "o
+pricing está errado" mas **"quantas tentativas cada mensagem está levando"** — o que é uma
+pergunta de retry e qualidade de vendor, respondida em [Qualidade dos recibos](/platform/control-panel/receipt-quality)
+e nas próprias páginas dos vendors.
+
+## Os totais
+
+| Cifra | Significado |
+| :--- | :--- |
+| **Billed** | O que clientes foram cobrados |
+| **Vendor cost** | O que vendors cobraram de você, toda tentativa |
+| **Margin** | A diferença, com seu percentual, vermelho quando negativo |
+| **In flight** | Faturado, desfecho desconhecido |
+
+<Warning>
+**"In flight" não é dinheiro perdido e não é um erro.** É tráfego que foi faturado e ainda não tem
+desfecho.
+
+Deve sempre ser pequeno e sempre recente. O sweeper do gateway fecha mensagens não reportadas como
+expiradas após 48 horas — portanto **qualquer coisa nesta cifra mais antiga que 48 horas significa
+que o sweeper não está rodando**, e isso é um problema de operador, não de contabilidade.
+</Warning>
+
+## Por account e product
+
+Uma linha por par account e product:
+
+**Account · Product · Messages · Billed · Cost · Margin · In flight**
+
+Margens negativas são vermelhas, positivas verdes. Uma account ou product ausente mostra um traço
+em vez de ser dobrada em um total que o esconderia.
+
+Em uma tela estreita, cada linha se torna seu próprio card e a coluna in-flight é descartada,
+mantendo messages, billed, cost e margin.
+
+Não há busca, seletor de coluna e export aqui. Este é um resumo para ser lido; o detalhe por
+mensagem por trás dele vive nos call records, que exportam.
+
+## O que precisa ser verdade para isso estar certo
+
+Margem só pode ser computada onde os dois lados da negociação foram precificados no momento em que
+a mensagem foi submetida:
+
+- um **rate do lado de venda** com scope para a account, e
+- um **rate de custo** com scope para o vendor que a carregou.
+
+Rate scope é um campo com dois significados — um account id é o que você cobra, um nome de vendor
+é o que lhe cobram — e nada no schema os distingue. Sem rate de custo configurado, o custo é zero,
+e a margem se lerá como o valor faturado completo. Isso não é uma plataforma saudável; é uma não
+configurada.
+
+<Note>
+Preços são fixados na submissão e não se movem depois. Mudar uma tarifa hoje não reformula a semana
+passada — que é o que torna um período fechado no statement de um cliente final, e é deliberado.
+Veja [como o pricing funciona](/platform/billing/how-pricing-works).
+</Note>
+
+Sem nada faturado na janela, a tela lê **No billed traffic in this period**.

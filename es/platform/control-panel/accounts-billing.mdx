@@ -1,0 +1,133 @@
+---
+title: "La pestaña Billing"
+description: "El único sitio de FireFlo donde se crea crédito, y la única escritura del panel que no se puede deshacer. Más el libro mayor y una conciliación que deliberadamente se niega a arreglar nada."
+---
+
+Abra una cuenta y elija **Billing**. Cuatro tarjetas: lo que la cuenta tiene, cómo añadirle, si el
+crédito cuadra y cada movimiento.
+
+<Warning>
+**Añadir crédito no se puede deshacer desde el panel.** No hay "quitar crédito" ni reversión.
+Deshacer una recarga necesitaría una entrada de ajuste negativa, y esa no existe.
+
+El formulario le pide confirmar el importe y la referencia antes de escribir. Lea la confirmación
+en lugar de pasar por ella: es el último punto en el que el número aún es suyo para cambiar.
+</Warning>
+
+## Lo que la cuenta tiene
+
+Las cuentas prepago muestran **Available**. Las cuentas postpago muestran un **Credit limit**: lo
+que pueden acumular antes de que la pasarela las rechace, que es el mismo rechazo que recibe una
+cuenta prepago cuando se queda sin. A los dos nunca se les da el mismo nombre.
+
+<Note>
+**Reservado no es una retención que encoge a medida que salen los mensajes.** Es crédito que se ha
+movido fuera del saldo, y solo crece hasta que se libera.
+
+Verlo subir en una cuenta ocupada es correcto. Verlo asentado en una inactiva significa que el
+crédito quedó varado por una parada no limpia, y se devuelve liberando el crédito retenido: nada se
+pierde de cualquier forma, porque saldo más reservado se conserva.
+</Note>
+
+Una fila de saldo faltante se lee como **No balance row — not zero, absent**, que es un estado
+distinto y más consecuente: una recarga contra una cuenta sin fila queda pendiente en lugar de
+acreditada. **Open for credit** crea la fila a cero.
+
+La moneda no se pregunta. Hay una moneda por plataforma, tomada de la pasarela, y FireFlo nunca
+convierte: un saldo en cualquier otra cosa nunca podría gastarse contra un precio. El campo aparece
+solo cuando el panel no puede leer en absoluto la moneda de la plataforma.
+
+## Añadir crédito
+
+Tres campos: **Amount**, **Reference** y una **Note** opcional.
+
+Una vez tecleado un importe válido el formulario devuelve exactamente lo que se almacenará, porque
+el dinero se mantiene con cuatro decimales y un decimal mal colocado es el error caro aquí.
+
+<Warning>
+**La referencia es la guardia contra replays, no un memo.** Un id de recibo o de transacción es lo
+que evita que el mismo pago se acredite dos veces, y la base de datos solo puede hacerlo cumplir
+cuando está establecido.
+
+Es obligatoria por exactamente esa razón. No ponga una descripción ahí: ponga lo que identifique
+unívocamente el pago.
+</Warning>
+
+Confirmar son dos pasos a propósito. Pulsar Enter en un campo no hace nada, y el botón se arma en
+una confirmación que nombra el importe, la moneda y la referencia antes de escribir.
+
+Después de que guarde, **el saldo no se mueve inmediatamente**. El panel escribe una entrada de
+recarga y la pasarela la aplica en su próximo sondeo de configuración, en unos treinta segundos. Un
+saldo que aún no ha cambiado no es un fallo.
+
+## Cambiar entre prepago y postpago
+
+La misma tarjeta cambia el modo de facturación, y avisa antes de guardar de cualquier manera:
+
+- **A postpago**: la cuenta deja de gastar su saldo. Cualquier cosa ya reservada se queda reservada
+  hasta que se libere.
+- **A prepago**: el límite se limpia y la cuenta vuelve a gastar su saldo. El uso desde la última
+  factura sigue debido.
+
+<Warning>
+**Un límite de crédito postpago de cero no es ilimitado: es sin crédito**, y la cuenta no podría
+enviar nada. El formulario lo rechaza en lugar de aceptar un ajuste que en silencio detiene a un
+cliente.
+</Warning>
+
+**Switch credit off** deja a una cuenta enviando hasta que se acabe el bloque que ya tiene, y
+después para. No es instantáneo.
+
+## ¿Cuadra el crédito?
+
+Dos identidades sobre toda la vida de la cuenta: cada unidad acreditada está aún en el saldo o
+reservada contra él, y lo que se reservó cubre lo que se gastó.
+
+No se ejecuta sola: pulse **Reconcile**. Vuelven dos cifras. **Unexplained** es el residual, y la
+que vale la pena actuar sobre ella. **Reserved, not yet spent** es normal en una cuenta que envía.
+
+Debajo, un relato en lenguaje llano de todo lo que no cuadró. Las distinciones que importan:
+
+| Veredicto | Significa |
+| :--- | :--- |
+| **Pending credit** | Recargas que la pasarela aún no ha aplicado. No es un problema: espere un sondeo |
+| **Credit lost** | Acreditado, y ni en el saldo ni en el reservado |
+| **Credit minted** | Retenido, sin recarga o transferencia que lo justifique: la dirección más seria |
+| **Charged without reserving** | El consumo es real, la reserva no |
+| **Held unspent** | Varado por una parada no limpia. Liberado a mano, no perdido |
+| **Missing rollup** | Días sin rollup de uso. Aún contados aquí, pero desde registros que la purga borra |
+| **Unrated** | Mensajes enviados sin precio. En postpago, ingresos que nadie facturó |
+
+<Note>
+**No hay botón de "arreglarlo", deliberadamente.** La conciliación nunca escribe una entrada de
+ajuste.
+
+Un residual es la parte que nadie pudo explicar, y publicar un ajuste para él cuadraría los libros
+ocultando la causa. También siempre está a escala de la vida de la cuenta, nunca de un periodo: una
+identidad que se cumple sobre un mes pero no sobre la vida de la cuenta no se ha cumplido.
+</Note>
+
+## Dinero entrando y saliendo
+
+Cada recarga y transferencia, buscable por referencia, nota o tipo, ordenable y paginado.
+
+Por defecto el libro mayor lista solo entradas que una persona o el sistema de facturación
+escribió. Las reservas de crédito propias de la pasarela están ocultas y contadas en su lugar:
+aproximadamente una cada veinte mensajes, cada una moviendo crédito entre dos columnas de una fila y
+netando a cero. **Show them** revela el lote.
+
+La columna **State** lleva la parte que la gente se pierde: **Pending** significa que la pasarela
+aún no lo ha aplicado. Donde una cuenta no tiene fila de saldo, una entrada positiva dice o bien
+que está esperando la fila y se acreditará en el momento en que exista, o bien que se aplicó antes
+de que la fila desapareciera y ya nada puede decir qué acreditó.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Cómo funciona el crédito prepago" icon="wallet" href="/platform/billing/prepaid-credit">
+    Bloques, reservas y lo que la pasarela hace cuando se acaba el crédito.
+  </Card>
+  <Card title="Cuentas postpago" icon="file-invoice" href="/platform/billing/postpaid">
+    Facturación a mes vencido contra un límite.
+  </Card>
+</CardGroup>

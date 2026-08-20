@@ -1,0 +1,128 @@
+---
+title: "Saúde em tempo real"
+description: "Estado de bind, profundidade de fila e receipts em voo existem apenas na JVM em execução — o endpoint que os reporta, e os dois números que as pessoas leem errado."
+---
+
+Três superfícies respondem a três perguntas diferentes, e pegar a errada desperdiça um incidente:
+
+| Superfície | Responde |
+| :--- | :--- |
+| `/q/metrics` | **Quanto, ao longo do tempo** |
+| Tabelas de call-record | **O que aconteceu** com uma mensagem específica |
+| `/ops/health` | **O que é verdade agora** — binds, profundidade de fila, receipts em voo |
+
+O terceiro existe porque esse estado vive apenas na JVM em execução. Nada mais pode reportá-lo.
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/ops/health
+```
+
+```json
+{
+  "data": {
+    "observed_at": "2026-08-05T11:28:50Z",
+    "router_queue": 0,
+    "router_queue_capacity": 50000,
+    "awaiting_receipt": 5139,
+    "dlr_store_persistent": true,
+    "config_sources": {
+      "properties": "database", "credentials": "file",
+      "routing": "database", "rates": "database"
+    },
+    "tps_window_seconds": 5,
+    "cdr": { "enabled": true, "sink": "postgres", "written": 1, "failed": 0 },
+    "workers": [
+      { "name": "smppclient.vendor1", "type": "smppclient", "accepting": true,
+        "bound": 1, "bound_transmittable": 1,
+        "queue_depth": 0, "queue_capacity": 50000, "submitted": 1,
+        "tps_limit": 200, "tps_measured": 12.4,
+        "sessions_total": 1,
+        "sessions": [ "…" ] },
+      { "name": "smppclient.vendor2", "type": "smppclient", "accepting": false,
+        "bound": 0, "queue_depth": 0,
+        "last_error": "Bind failed: ESME_RINVPASWD (Invalid password)",
+        "last_error_at": "2026-08-06T09:12:04Z" }
+    ]
+  }
+}
+```
+
+## `sessions` é uma amostra, não o conjunto
+
+<Warning>
+**No máximo 20 sessões por worker aparecem nesta resposta, seja o que for que `sessions_total` diga.**
+
+Health é consultado a cada poucos segundos por todo dashboard aberto, e um listener carregando
+quinhentos binds estava enviando quinhentas linhas a cada vez.
+
+**Contar o array para responder "quantos estão conectados" dá um número errado que parece
+plausível.** Use `bound`, ou `sessions_total` para a contagem de linhas.
+</Warning>
+
+Para ver ou pesquisar o conjunto todo, pagine-o:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:9000/ops/workers/smppserver.smpp/sessions?q=acme&offset=0&limit=50'
+```
+
+```json
+{ "data": { "rows": [ "…" ], "total": 412, "matched": 3, "offset": 0, "limit": 50 } }
+```
+
+`q` casa de forma case-insensitive por substring em `account`, `system_id`, `host`, `system_type` e
+`bind_type`. **Colunas numéricas deliberadamente não são pesquisadas** — `50` casaria com um
+throughput de 50, uma porta de 2750 e uma sessão ativa há 50 segundos ao mesmo tempo.
+
+`total` conta toda sessão; `matched` conta as que passam em `q`. Ambos são reportados porque um
+operador que filtrou para um cliente ainda precisa saber que o listener está carregando quatrocentos
+binds.
+
+`limit` tem padrão 50, teto de 200, e **a resposta ecoa o tamanho realmente aplicado** — então um
+chamador pedindo 10 000 pode ver que recebeu 200 em vez de concluir que só havia 200 sessões.
+
+## Os campos que valem alerta
+
+| Campo | Observe |
+| :--- | :--- |
+| `bound_transmittable` | Zero enquanto `bound` não é — uma sessão só de recepção não carrega nada |
+| `last_error` | **Presente** significa que um bind foi recusado; **vazio** significa que o socket nunca abriu |
+| `router_queue` contra `router_queue_capacity` | Crescimento sustentado é roteamento mais lento que ingress |
+| `awaiting_receipt` | Crescimento significa que receipts não estão voltando |
+| `queue_depth` por worker | Um único fornecedor acumulando |
+| `cdr.failed` | Não-zero significa que registros estão sendo perdidos |
+
+<Tip>
+**`last_error` é o campo que separa as duas falhas que um badge não separa.** Um valor significa que
+o socket abriu e o bind foi recusado — credenciais, system type, IP, um limite de bind. Vazio
+significa que o socket nunca abriu — firewall, DNS, ou a outra ponta fora.
+
+Ele limpa no momento em que um bind tem sucesso.
+</Tip>
+
+## `config_sources` responde a uma pergunta que as pessoas fazem ao contrário
+
+Ele diz, por domínio, se o gateway está lendo arquivos ou o banco.
+
+Isso importa porque **uma mudança feita no painel não faz nada se o gateway está lendo um arquivo
+para aquele domínio** — e o sintoma é "minha edição não aplicou", que manda as pessoas olharem para
+a edição.
+
+## `bound: 0` em um listener geralmente está tudo bem
+
+Em um **fornecedor** significa que nada está conectado e nada pode ser enviado.
+
+Em um **listener** geralmente significa que nenhum cliente está conectado agora — o que é quieto em
+vez de quebrado. Por isso um listener com ninguém conectado não é pintado de vermelho da forma como
+um fornecedor sem sessão é.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="The management port" icon="server" href="/reference/management/endpoints">
+    Cada endpoint, e qual token cada um precisa.
+  </Card>
+  <Card title="Binds and listeners" icon="triangle-exclamation" href="/platform/troubleshooting/binds-and-listeners">
+    Três falhas que parecem todas "ninguém está conectado".
+  </Card>
+</CardGroup>

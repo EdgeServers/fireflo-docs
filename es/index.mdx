@@ -1,0 +1,71 @@
+---
+title: "FireFlo"
+sidebarTitle: "Qué es FireFlo"
+description: "Una pasarela SMS headless, con un panel de control para usted y un portal para sus clientes."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+FireFlo se sitúa entre las aplicaciones que quieren enviar SMS y los operadores que realmente los
+entregan. Habla HTTP con sus aplicaciones y SMPP con sus proveedores, en ambas direcciones, y
+mantiene el enrutamiento, los precios y el registro de cada mensaje en su propia infraestructura.
+
+Son tres piezas que se distribuyen juntas:
+
+<CardGroup cols={3}>
+  <Card title="La pasarela" icon="server">
+    Un servicio Java/Quarkus. Acepta binds SMPP y envíos por HTTP, enruta, tarifica y registra cada
+    mensaje, y llama a sus proveedores.
+  </Card>
+  <Card title="El panel de control" icon="sliders">
+    Las pantallas de sus operadores. Vendors, listeners, enrutamiento, clientes, tarifas, extractos y
+    estado en vivo. Configuración y diagnóstico en un único lugar.
+  </Card>
+  <Card title="El portal del cliente" icon="users">
+    La otra mitad de esa aplicación, para sus clientes: sus mensajes, su extracto, sus registros de
+    sender ID, rotación de credenciales y un playground de API.
+  </Card>
+</CardGroup>
+
+Versión actual: <Versions />.
+
+## Qué parte del sitio busca
+
+<CardGroup cols={3}>
+  <Card title="Plataforma" icon="wrench" href="/platform/concepts">
+    **Usted opera FireFlo.** Instalarlo, conectar proveedores, escribir reglas de enrutamiento, dar
+    de alta clientes, tarificar su tráfico y saber cuándo algo falla.
+  </Card>
+  <Card title="Desarrolladores" icon="code" href="/developers">
+    **Usted envía mensajes a través del FireFlo de otra persona.** Sacar un mensaje por HTTP o SMPP,
+    gestionar los acuses de recibo y leer lo que se le ha facturado.
+  </Card>
+  <Card title="Referencia" icon="book" href="/reference/api/overview">
+    **Está buscando un dato concreto.** Cada campo de petición, clave de configuración, ajuste de
+    worker, verbo de CLI y código de estado, con su valor por defecto y qué ocurre cuando algo falla.
+  </Card>
+</CardGroup>
+
+## Si dispone de diez minutos
+
+<Steps>
+  <Step title="Lea el vocabulario">
+    [Conceptos](/platform/concepts) fija el puñado de palabras sobre las que se apoya el resto del
+    sitio: **vendor**, **server**, **product**, **account**, **scope**. Dos de ellas significan lo
+    contrario de lo que un fondo Kannel o Jasmin sugeriría.
+  </Step>
+  <Step title="Arránquelo">
+    [Quickstart](/platform/quickstart) ejecuta una pasarela en Docker con un solo comando, y
+    [Install](/platform/install/one-command) la instala en un servidor correctamente.
+  </Step>
+  <Step title="Envíe algo">
+    [Enviar un mensaje](/developers/send/one-message) es un único `curl`. Todo lo que viene después
+    es enrutarlo a un destino real.
+  </Step>
+</Steps>
+
+<Note>
+  FireFlo es software comercial, con licencia por despliegue. Está creado y mantenido por
+  [Remotiq](https://fireflo.au). Hable con nosotros sobre licencias, o escriba a
+  [support@fireflo.au](mailto:support@fireflo.au) si ya lo ejecuta.
+</Note>

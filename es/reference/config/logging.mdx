@@ -1,0 +1,86 @@
+---
+title: "Logging y límites de log"
+description: "Los cuatro archivos de log, cuál de ellos está acotado, el que llenará un disco y los flags que escriben secretos."
+---
+
+## Los cuatro logs
+
+| Log | Registra |
+| :--- | :--- |
+| `smsg.log` | Log principal de la aplicación |
+| `smppclient.log` | Actividad de conexión y mensajes del proveedor |
+| `smppserver.log` | Actividad de bind, sesión y mensajes del listener |
+| `httpapi.log` | Log de acceso HTTP, cuando el logging a archivo está habilitado |
+
+## Límites, y el que no tiene ninguno
+
+| Variable | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `FIREFLO_LOG_MAX_SIZE` | `100M` | Tamaño al que `smsg.log`, `smppclient.log` y `smppserver.log` rotan. |
+| `FIREFLO_LOG_BACKUPS` | `1` | Cuántos archivos rotados guarda cada uno de esos tres. |
+
+<Note>
+`conf.example/fireflo.env` incluye `5`, así que una instalación hecha desde él guarda cinco y una construida a mano guarda
+uno. Ninguna es errónea; simplemente son diferentes, y vale la pena saber cuál tienes.
+</Note>
+
+<Warning>
+**`httpapi.log` no está cubierto por ninguno.** Quarkus lo rota diariamente y no ofrece retención a juego con
+eso. No hay ajuste para ello. Así que escribe un archivo por día y guarda cada
+uno de ellos para siempre. **Nada en la pasarela los eliminará jamás.**
+
+`fireflo-install` maneja esto con una regla `tmpfiles.d` que borra archivos rotados más viejos que
+`--log-retain-days`, sin tocar nunca los cuatro en vivo. **Instalar a mano significa arreglar eso
+tú mismo, o aceptar crecimiento sin límite.**
+</Warning>
+
+## Qué omite deliberadamente el log de acceso
+
+`httpapi.log` registra método, ruta, protocolo, estado, bytes enviados, tiempo de respuesta, referer y user
+agent. **Omite intencionadamente el query string.**
+
+Las credenciales viajan en una cabecera `Authorization` en lugar de la URL, pero `GET /secure/rate` aún
+toma `to` y `content` como parámetros de query, y `dlr_url` y `callback_url` son proporcionados por el cliente y
+rutinariamente llevan tokens propios.
+
+<Warning>
+No añadas `%U`, `%r`, `%q`, o `%{i,Authorization}` a `quarkus.http.access-log.pattern`. Si lo
+personalizas, evita `%r`, `%q`, `%{QUERY_STRING}` y `%{q,...}` a menos que los logs resultantes se traten
+como datos sensibles.
+</Warning>
+
+## Flags de diagnóstico que escriben secretos
+
+Los flags de worker `log.pdus`, `log.bytes`, `print.msgs`, `print.resps` y `print.mos` están deshabilitados por
+defecto. Habilitar cualquiera de ellos puede escribir credenciales SMPP, números de teléfono, identificadores de proveedor,
+URLs de callback y cuerpos de mensajes a los logs.
+
+<Note>
+Para diagnosticar una sesión, prefiere [capture](/platform/operations/capture) sobre `log.pdus`: una captura
+está acotada, retenida en memoria, con ámbito a una sola sesión, y expira sola, donde `log.pdus`
+escribe los PDUs de cada sesión a un archivo compartido hasta que alguien recuerda apagarlo.
+</Note>
+
+## Rastreo del ciclo de vida del mensaje
+
+Los logs del ciclo de vida `message.*` se controlan por `message.trace.mode`:
+
+| Valor | Guarda |
+| :--- | :--- |
+| `necessary` *(predeterminado)* | `message.accepted`, `message.submitted`, `message.dlr`, `message.deliver.sent` |
+| `off` | Nada |
+| `all` | Lo anterior más detalle de ruta, encolado, respuesta y reintento |
+
+## Variables de log de Docker
+
+| Variable | Ejemplo | Descripción |
+| :--- | :--- | :--- |
+| `QUARKUS_LOG_LEVEL` | `INFO` | Nivel de log raíz de Quarkus |
+| `LOG_LEVEL` | `INFO` | Nivel de log del paquete FireFlo |
+| `QUARKUS_LOG_CONSOLE_ENABLE` | `false` | Logging a consola encendido o apagado |
+| `QUARKUS_LOG_FILE_ENABLE` | `true` | Logging a archivo encendido o apagado |
+| `QUARKUS_LOG_FILE_PATH` | `/work/logs/smsg.log` | Ruta del log principal de la aplicación |
+| `QUARKUS_LOG_FILE_SMPPCLIENT_PATH` | `/work/logs/smppclient.log` | Ruta del log del proveedor |
+| `QUARKUS_LOG_FILE_SMPPSERVER_PATH` | `/work/logs/smppserver.log` | Ruta del log del listener |
+| `QUARKUS_HTTP_ACCESS_LOG_ENABLE` | `true` | Logging de acceso HTTP |
+| `QUARKUS_HTTP_ACCESS_LOG_DIRECTORY` | `/work/logs` | Directorio de log de acceso |

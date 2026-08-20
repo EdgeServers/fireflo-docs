@@ -1,0 +1,133 @@
+---
+title: "Productos"
+description: "Qué selecciona un producto (la tarifa, la ruta y si el tráfico se comprueba siquiera) y por qué uno sin definir envía mensajes gratis."
+---
+
+Un **producto** es una etiqueta en un login. Es coincidente en la tabla de enrutamiento, selecciona la tarifa y
+decide si se comprueban los sender IDs y el contenido de una cuenta. También es opcional, y el
+caso opcional es el caro.
+
+## Un producto sin definir es un estado soportado que envía gratis
+
+Dejar `product` fuera de una credencial es configuración legal. Coincide con `product:isNull:` en la
+tabla de enrutamiento y solo se tarifica mediante reglas de tarifa que a su vez no lleven producto.
+
+**Esa última cláusula es toda la trampa.** Una regla sin producto se aplica a todos los productos, pero un
+*mensaje* sin producto ve **solo** las reglas que no lo tienen. No son dos formas de escribir "cualquiera".
+
+<Warning>
+**En un despliegue cuyas reglas de tarifa lleven todas un producto, un mensaje sin producto no coincide con nada.**
+Se deja sin tarificar, y un mensaje sin tarificar nunca se cobra. La tarificación se ejecuta antes del cargo, así que
+`chargeCredit` lo salta por completo. El mensaje se entrega y no se factura a nadie.
+
+Nada lo rechaza y nada genera un error. Hay una línea en `debug`, que es la única señal
+de que se está regalando tráfico.
+</Warning>
+
+Dos ajustes lo cierran, ambos desactivados por defecto:
+
+| Ajuste | Alcance | Efecto |
+| :--- | :--- | :--- |
+| `conf.product.required` | por listener SMPP | Rechaza un **bind** cuyo producto resuelto esté en blanco, o nombre una fila no habilitada en `app_product`. Estado `0x0000040F`. |
+| `smsg.restapi.product.required` | ingreso REST | Rechaza una **submission** de la misma manera, con `403`. `/secure/rate` también lo aplica, así que una cotización no puede tarificar tráfico que un envío va a rechazar. |
+| `smsg.rating.unrated.refuse` | global, solo lado de venta | Rechaza cualquier mensaje que ninguna regla de tarifa del lado de venta tarifique. `0x00000418` sobre SMPP, `403` sobre REST. |
+
+El enrutamiento por menor coste sigue tolerando deliberadamente a un proveedor sin tarifa de **coste**. Esa es una cuestión
+diferente de si se puede facturar al cliente, y convertir una línea olvidada de tarifa de proveedor en una
+caída sería peor que lo que evita.
+
+## Por qué la comprobación es pertenencia, no no-vacío
+
+`system_type` en un bind SMPP **sobrescribe** el producto de la credencial, y es texto libre validado
+en ningún otro sitio.
+
+Así que un cliente que hace bind `prem` cuando el producto es `premium` pasa perfectamente cualquier prueba de no-vacío, y
+aterriza exactamente en el estado sin tarificar anterior. Solo comprobar el nombre contra el catálogo lo detecta.
+Eso es lo que hace `conf.product.required`, y por eso no es simplemente "el producto debe estar establecido".
+
+HTTP no tiene bind y por tanto no hay sobrescritura: ahí el `product` de la credencial es la única fuente.
+
+<Warning>
+**La configuración por archivo no tiene catálogo, así que solo se aplica la mitad de no-vacío.** `app_product` es una
+tabla de base de datos; un gateway que corre sobre archivos, o uno cuya base de datos está inalcanzable, no puede comprobar
+la pertenencia en absoluto. Un nombre de producto irreconocible se **acepta**, y se registra un WARN con el nombre del ajuste y
+el valor una vez por bind.
+
+La tolerancia es deliberada. Rechazar cada bind porque falló una consulta es una caída mucho peor que
+la que esto evita. Pero significa que el ajuste es más débil que su nombre precisamente en los despliegues
+que no tienen catálogo contra el que comprobar.
+</Warning>
+
+Antes de activar cualquiera de los dos, lee el informe previo en la página **Servers** del panel: lista los
+logins que dejarían de conectarse. Ten en cuenta lo que no puede ver. Para un login SMPP comprueba el
+fallback de la credencial, así que un cliente que haga bind con un `system_type` mal escrito no aparecerá ahí.
+
+La página **Pricing** contiene la otra comprobación previa: el tráfico de las últimas 24 horas que no llevó
+precio, nombrado por cuenta y producto. Eso es exactamente lo que `smsg.rating.unrated.refuse` empezaría
+a rechazar. Cuenta mensajes cuyo CDR no tiene `price_rule_id`, así que una regla puesta deliberadamente a `0`
+no aparece. Una ruta gratuita sigue siendo gratuita y sigue enviando.
+
+## La fila del catálogo
+
+| Columna | Significado |
+| :--- | :--- |
+| `name` | La clave primaria. Recortada, no vacía y emparejada **exactamente**. `OTP` y `otp` son dos productos. |
+| `label`, `description` | Para el panel. |
+| `enabled` | Si el gateway cuenta esto como un producto que vende. |
+| `whitelist_enabled` | Por defecto `true`. `false` exime al tráfico de este producto de las comprobaciones de sender ID y contenido. |
+
+## Eximir un producto del whitelisting
+
+```sql
+UPDATE app_product SET whitelist_enabled = false WHERE name = 'otp';
+```
+
+O *Products → Edit → Check sender IDs and content*. La pregunta "¿debe validarse esto?" pertenece normalmente
+a lo que se vende y no a cada cliente que lo compra. Las contraseñas de un solo uso sobre un shortcode no tienen sender ID registrado que comprobar.
+Y sin esto, cada cuenta en ese producto necesitaría su propia fila de política que lo indicara.
+
+Tres reglas sorprenden a la gente:
+
+- **Un producto exento sobrescribe la cuenta.** Una cuenta configurada como `ENFORCE` sigue enviando libremente bajo un
+  producto exento.
+- **Ningún producto no es exento.** El tráfico que no nombra ningún producto se comprueba. De otro modo, la forma de salir de
+  un whitelist sería dejar de enviar un `system_type`.
+- **Un producto desconocido no es exento.** Un nombre sin fila en `app_product` se comprueba. Es un error tipográfico en
+  una credencial mucho más a menudo que una intención.
+
+<Warning>
+**Una aprobación archivada bajo un producto exento no protege nada.** El gateway devuelve `OFF` para ese
+producto antes de que ocurra ninguna combinación, así que la fila se guarda, es visible, y nunca se consulta. El panel cuenta
+los productos exentos cuando decide si es seguro cambiar una cuenta a `ENFORCE`. De otro modo, la
+guardia contra construir una caída dejaría pasar una cuenta cuyas aprobaciones están todas inertes.
+</Warning>
+
+Desactivar un producto (`enabled = false`) también termina con su exención: los productos exentos se leen como
+`enabled AND NOT whitelist_enabled`. Esa dirección es la segura. El tráfico empieza a comprobarse
+en lugar de detenerse. Pero puede empezar a rechazar sender IDs que nadie ha aprobado, así que desactiva un producto exento
+deliberadamente y no como limpieza.
+
+## Nombrar un producto en un envío REST
+
+Un llamador REST puede enviar `product` en `/secure/send`, `/secure/sendbatch` y `/secure/rate`, y se
+acepta **solo** desde un login cuyo `allowedProducts` lo nombre.
+
+| | |
+| :--- | :--- |
+| Campo omitido | Se aplica el propio `product` del login. Ningún llamador existente se ve afectado. |
+| Sin `allowedProducts` | El campo se rechaza: `403 This login may not send on '<product>'.` Este es cada login hasta que un operador incluye uno. |
+| Valor en la lista | Aceptado, y el mensaje se **tarifica** con él. Comprueba `cdr_submit`, no la respuesta, que se ve igual de cualquier manera. |
+| El propio producto del login | Siempre permitido, y no necesita estar en la lista. |
+| En la lista, ausente de `app_product` | Aún así rechazado, con el otro mensaje. Dos preguntas separadas: ¿puede este login nombrarlo?, luego ¿lo vendemos? |
+
+Una lista de permitidos en lugar de un campo simple por la misma razón que todo lo demás en esta página: el
+producto selecciona la tarifa, así que un llamador libre de nombrar su propio producto es libre de elegir su propio precio.
+
+<CardGroup cols={2}>
+<Card title="Cómo funciona la tarificación" href="/platform/billing/how-pricing-works">
+Dónde se tarifica cada lado, y qué significa un importe desconocido.
+</Card>
+<Card title="Desplegar el whitelisting" href="/platform/customers/whitelisting-rollout">
+Los cuatro interruptores, y el orden en que se aplican.
+</Card>
+</CardGroup>

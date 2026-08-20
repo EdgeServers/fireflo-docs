@@ -1,0 +1,144 @@
+---
+title: "Crédito prepaid"
+description: "Dinheiro em memória, reservado em blocos, e a identidade que precisa se manter. Além do tamanho de bloco que decide quando uma conta fundeada começa a recusar."
+---
+
+Crédito prepaid está **desligado por padrão e é apenas PostgreSQL**. Crédito só pode entrar através
+do banco de dados, portanto um gateway sem um começaria em zero e rejeitaria tudo. Sem um datasource,
+a barreira simplesmente não é aplicada.
+
+## O design em um parágrafo
+
+O saldo gastável de uma account é mantido **em memória** e decrementado por mensagem, portanto o
+caminho da mensagem não faz nenhum trabalho de banco de dados. A durabilidade vem de reservar em
+blocos: uma única instrução atômica move um valor de `balance` para `reserved`, e o gateway gasta
+esse bloco da memória.
+
+Em alguns milhares de mensagens por segundo isso é algumas escritas por segundo no banco em vez de
+alguns milhares. **E nenhuma mensagem é enviada contra crédito que não tenha sido comitado antes.**
+
+<Tip>
+Reservar **move** dinheiro em vez de marcá-lo, e é por isso que duas instâncias de gateway não podem
+distribuir o mesmo crédito. A reserva é a exclusão mútua.
+</Tip>
+
+## A identidade que precisa se manter
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+```
+
+Toda unidade que entrou pelo ledger está ou gastável ou estacionada. **Um `kill -9` deixa crédito
+preso em `reserved`; ele não o perde.** `POST /ops/credit/release` o devolve, e um shutdown limpo o
+devolve automaticamente.
+
+Se os dois lados discordam, isso é uma discrepância real e não um artefato de arredondamento.
+
+## Fazendo top-up
+
+Crédito é adicionado escrevendo uma linha `RECHARGE`. O gateway a aplica em seu próximo poll e a
+marca como aplicada, portanto um replay é um no-op.
+
+```sql
+INSERT INTO balance_ledger (account_id, delta, entry_type, ref)
+VALUES ('acct-1001', 500000, 'RECHARGE', 'receipt-88');
+```
+
+**Valores são escalados por 10 000**, portanto `500000` é 50.0000 unidades.
+
+O *Add credit* do painel de controle escreve exatamente essa linha e nada mais. **O próprio gateway
+não pode criar crédito.** Ele apenas aplica linhas que outra pessoa escreveu, e a coluna `balance`
+tem exatamente um escritor, que é este poll.
+
+<Warning>
+**Um `RECHARGE` para uma account sem linha `account_balance` credita nada.** Fica pendente, loga,
+e se aplica no momento em que a linha aparece:
+
+```
+WARN  1 recharge entries could not be credited because these accounts have no
+      account_balance row: [acct-1001]. They stay pending and will apply
+      themselves once the row exists.
+```
+
+Criar uma credencial **não** cria uma linha de saldo. Use *Open for credit* na página da account,
+ou insira uma em zero manualmente.
+</Warning>
+
+## Tamanho do bloco, e a recusa que ele explica
+
+Um bloco é dimensionado a partir da taxa em que a account foi observada enviando. A frio — ou após
+um período ocioso — não há taxa da qual dimensioná-lo, portanto um piso se aplica:
+
+```
+block = max(smsg.balance.block.min, price × smsg.balance.block.min.messages)
+```
+
+`smsg.balance.block.min.messages` tem default **20**, e o preço vem da mensagem que pediu a reserva.
+
+<Warning>
+**Esse piso é denominado em mensagens por uma razão.** Ele costumava ser `smsg.balance.block.min`,
+um valor em *moeda* — e um valor em moeda não pode dizer quantas mensagens ele compra.
+
+No default de `1000` (0.1000 unidades), uma account cujas mensagens custam mais do que isso recebia
+um bloco cobrindo exatamente **uma** mensagem. A próxima mensagem chegava muito antes da próxima
+reserva e era recusada por falta de crédito em uma account contendo milhares de unidades.
+
+É toda a explicação do "sem fundos suficientes em uma conta fundeada".
+</Warning>
+
+Uma reserva é tudo-ou-nada, portanto uma única instrução só pode ter sucesso se o saldo cobrir o
+valor pedido. **A reserva portanto tenta três degraus decrescentes** — o bloco cheio, o piso
+denominado em mensagens, depois apenas a única mensagem que pediu:
+
+<Tip>
+**O degrau de baixo é por que o piso não pode deixar dinheiro preso.** Uma account com menos de vinte
+mensagens restantes ainda recebe a única que pediu, em vez de ser recusada por não poder pagar um
+piso que existe para manter accounts ativas fora do banco. Uma account fundeada para três mensagens
+envia três.
+</Tip>
+
+**O que custa:** uma account ativamente enviando mantém até vinte mensagens em `reserved` que nada
+mais pode gastar. Devolvido por um shutdown limpo, e por `credit release` após um não limpo.
+
+**O que você ainda verá perto do fim:** refills são assíncronos por design, portanto uma mensagem
+chegando enquanto a próxima reserva está em trânsito pode ser recusada mesmo que restem créditos.
+Essa recusa é transiente e a retentativa funciona. Não é crédito preso.
+
+## Recusa
+
+Uma account sem crédito recebe `submit_sm_resp` status **`0x402`**, HTTP **402**, motivo
+`insufficientCredit`.
+
+`ESME_RTHROTTLED` é deliberadamente não usado: significa outra coisa, e faria um cliente recuar e
+retentar uma condição que apenas um top-up pode resolver.
+
+## Reembolsos
+
+Uma mensagem cobrada e depois descartada durante o roteamento tem seu crédito devolvido **exatamente
+uma vez**. Uma mensagem não rateada nunca é cobrada.
+
+Refill dispara em uma watermark enquanto ainda há crédito, em uma thread de background. **Se o
+tráfego a supera, a mensagem é recusada imediatamente** em vez de a thread SMPP esperar por um
+banco de dados. Uma thread de ingress travada é pior do que uma mensagem recusada.
+
+## Propriedades
+
+| Propriedade | Padrão | O que faz |
+| :--- | ---: | :--- |
+| `smsg.balance.enabled` | `false` | O switch mestre |
+| `smsg.balance.block.min.messages` | `20` | **O piso que se aplica.** Aumente para accounts com rajadas |
+| `smsg.balance.block.min` | `1000` | Piso em moeda, abaixo do acima |
+| `smsg.balance.block.max` | `10000000` | Teto de uma única reserva |
+| `smsg.balance.refill.watermark.percent` | `20` | Refill dispara aqui |
+| `smsg.balance.recharge.poll.seconds` | `30` | Em quanto tempo um top-up cai |
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Postpaid" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Limites de crédito, e faturas exatas a partir de aplicação aproximada.
+  </Card>
+  <Card title="Recusas" icon="ban" href="/platform/troubleshooting/refusals">
+    Lendo `insufficientCredit` contra um saldo positivo.
+  </Card>
+</CardGroup>

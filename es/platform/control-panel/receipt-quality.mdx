@@ -1,0 +1,76 @@
+---
+title: "Calidad de acuses"
+description: "Con qué frecuencia cada vendor informa un resultado en absoluto, y cuánto tarda. La comparación que una tasa de entrega no puede hacer, porque una tasa de entrega se computa sobre el tráfico que el vendor eligió reportar."
+---
+
+**Con qué frecuencia cada vendor informa un resultado, y cuánto tarda en llegar.**
+
+Esta pantalla existe por una forma específica de ser inducido a error. La tasa de entrega en la
+página de Vendors se computa sobre el tráfico *reportado*, así que un vendor que reporta dos
+mensajes de cinco puede mostrar 95% ahí mientras que tres de cinco de todo lo que le envió no
+tienen resultado en absoluto. La tasa no está equivocada. Está respondiendo a una pregunta más
+estrecha de lo que parece.
+
+Esta página amplía el denominador.
+
+## La tabla
+
+Una fila por vendor, sobre el rango elegido:
+
+| Columna | Significado |
+| :--- | :--- |
+| **Sent** | Mensajes enviados a ese vendor |
+| **Reported** | Resultados que el vendor devolvió |
+| **Reporting rate** | Reportado sobre lo que se ha liquidado |
+| **Gave up on** | Cerrados como expirados porque nada llegó |
+| **Still open** | Enviados, no liquidados, aún dentro de la fecha límite |
+| **Delivered** | De lo que se reportó |
+| **Median** / **90th** | Tiempo desde el envío al resultado |
+| **Progress** | Acuses no terminales |
+
+La tasa de reporting es la única cifra aquí mostrada como un badge coloreado: verde en 95% y por
+encima, plano desde 70%, rojo por debajo. Un vendor bajo 70% le está haciendo perder su propia
+visión de lo que pasó al tráfico que ya ha pagado.
+
+Un vendor sin nombre registrado aparece como **no vendor**.
+
+## Las cuatro cosas que vale la pena leer dos veces
+
+**La tasa de reporting deja el tráfico en vuelo fuera del denominador por completo.** Los mensajes
+enviados hace un minuto aún no han tenido su oportunidad, y contarlos como silencio haría que cada
+vendor pareciera peor cuanto antes los mirara.
+
+**"Gave up on" somos nosotros, no ellos.** Es nuestro propio barredor escribiendo una expiración
+porque nunca llegó un acuse. Esos no se cuentan como reportados: que es exactamente la diferencia
+entre esta tabla y la tasa de entrega en otros sitios, donde el denominador es uno que el propio
+vendor eligió.
+
+**"Delivered" es una parte de lo que se reportó.** No dice absolutamente nada sobre los mensajes en
+las dos columnas anteriores. Un vendor reportando sobre 40% de su tráfico y entregando 99% de eso
+ha entregado, por lo que nadie puede probar, 40% de lo que envió.
+
+**Progress cuenta acuses no terminales** (`ACCEPTD`, `BUFFRED`), que dicen que un mensaje se mueve
+sin decir cómo terminó. Un vendor que no envía ninguno de estos no tiene la culpa; simplemente no
+le dirá nada antes del final.
+
+<Note>
+En una pasarela que no registra acuses intermedios, la columna Progress está **en blanco en lugar
+de cero**, y la página lo dice debajo de la tabla. Un cero sería una afirmación sobre el vendor. Un
+blanco es una afirmación sobre la pasarela, que es la verdadera.
+</Note>
+
+## Leerla en un incidente
+
+Un vendor cuya tasa de reporting ha caído mientras su tasa de entrega se mantiene estable no ha
+empezado a fallar en entregar. Ha empezado a fallar en *decírselo*, y las dos son indistinguibles
+solo desde la página de Vendors. El tráfico aún sale, a los clientes aún se les cobra, y su
+evidencia deja silenciosamente de acumularse.
+
+Las mismas cifras aparecen como una línea compacta en la tarjeta de cada vendor, etiquetadas
+**Reports outcomes**, **Median to outcome**, **90th percentile** y **Never reported**.
+
+## Qué necesita para decir algo
+
+Tanto el envío como su acuse, a lo largo de al menos dos vendors. Con un solo vendor la tabla es
+una única fila y no hay nada contra lo que compararla. Si nada se liquidó en la ventana en
+absoluto, la página lee **No traffic in this period**.

@@ -1,0 +1,120 @@
+---
+title: "Callbacks não chegam"
+description: "Delivery receipts e forwards de MO que nunca aterrissam. A faixa de sucesso, o orçamento de retentativas, e o erro de placeholder que dispara uma requisição sem nada dentro."
+---
+
+As duas direções — delivery receipts para uma `dlr_url`, e mensagens MO para uma `forward.mo.url` —
+compartilham um mecanismo de entrega, então compartilham estas regras.
+
+## As duas regras que decidem tudo
+
+| Regra | Valor |
+| :--- | :--- |
+| **Sucesso** | HTTP **`200`–`399`**. Qualquer outra coisa é falha. |
+| **Retentativas** | `smsg.webhook.retries`, padrão **10**, com `smsg.webhook.retry.interval.ms` entre uma e outra, padrão **120000** |
+| **Timeout** | `smsg.webhook.timeout.ms`, padrão **5000**. Vale para conexão *e* requisição |
+
+<Warning>
+**No orçamento padrão, um endpoint inalcançável ocupa uma virtual thread por vinte minutos.** Dez
+tentativas, dois minutos entre elas. Um cliente cujo endpoint fica fora por uma hora não está apenas
+sem receber receipts. Ele está segurando threads pela hora inteira, e todo outro cliente no mesmo
+estado também.
+
+Se você opera muitos clientes com endpoints não confiáveis, baixe a contagem de retentativas antes de
+subir o teto de threads.
+</Warning>
+
+## Um receipt nunca chega
+
+<Steps>
+  <Step title="Uma dlr_url foi fornecida?">
+    Via HTTP ela precisa estar presente e URL-encoded, e `dlr` precisa ser `yes`. Definir um sem o
+    outro não faz nada.
+  </Step>
+  <Step title="O endpoint é alcançável a partir do host do gateway?">
+    Não do seu laptop. Do host ou container onde o gateway roda. Política de egress, split DNS e
+    subnets privadas mordem aqui.
+  </Step>
+  <Step title="Retorna 200–399?">
+    Um `401` atrás de um proxy que autentica é a falha silenciosa mais comum. Assim como um `302`
+    para uma página de login, que *conta* como sucesso e engole o receipt.
+  </Step>
+  <Step title="O gateway logou a falha?">
+    Falhas de forward e retentativas são logadas. Dez tentativas em silêncio significam que o
+    endpoint respondeu.
+  </Step>
+</Steps>
+
+## A armadilha do placeholder
+
+No formato `kannel`, o callback é um **`GET` puro com placeholders substituídos. Nada é anexado**.
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%s` | Id de mensagem do gateway |
+| `%d` | `1` entregue, `2` falhou, `4` buffered, `8` submitted to SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Uma URL sem placeholders recebe uma requisição sem nada dentro.** Sem body, sem query, sem
+identificador. O endpoint é chamado no horário, retorna `200`, e o cliente conclui que os receipts
+estão "funcionando mas vazios".
+
+Este é o erro de integração de receipt mais comum, e nada no sistema sinaliza: um callback vazio é
+indistinguível de um configurado corretamente que por acaso não carrega dados.
+</Warning>
+
+## Forwards de MO nunca chegam
+
+Callbacks de MO são **`POST`**, e as mesmas regras de `200`–`399` e retentativa se aplicam.
+
+- `forward.mo.url` é definido no worker SMPP client **que recebe** a MO. Não no listener, e não
+  globalmente.
+- `forward.mo.format` é `JSON` ou `FORM`.
+- A URL pode carregar placeholders, URL-encoded antes da substituição:
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%p` | Endereço de origem (`from`) |
+| `%P` | Endereço de destino (`to`) |
+| `%a` | Texto da mensagem |
+| `%t` | Timestamp |
+| `%i` | Identificador do gateway de entrada |
+| `%I` | Message centre |
+| `%o` | Valor de data coding |
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+```
+
+<Tip>
+O detalhe completo do MO de entrada precisa de `print.mos = true` **temporariamente**. Trate essa
+saída como sensível. Ela contém conteúdo de mensagem e os dois endereços.
+</Tip>
+
+## Receipts que chegam mas dizem a coisa errada
+
+Não é problema de entrega, e vale descartar antes de ir olhar rede:
+
+- **`request.dlrs` está desligado no fornecedor.** Toda mensagem então fecha como `EXPIRED` no
+  deadline, porque nada reporta o desfecho. A taxa de entrega vira *sem sentido* em vez de zero. O
+  que é pior, já que zero parece um problema e um número sem sentido parece dado.
+- **Um receipt de nível 1 não é o desfecho.** `ACCEPTD` e `BUFFRED` ambos chegam como nível 1 e outro
+  receipt vem em seguida. Um cliente que trata o primeiro receipt como final vai reportar a coisa
+  errada para sempre.
+- **Três segmentos, três receipts.** `conf.dlr.multipart` tem padrão `all`, então um cliente recebe
+  um receipt por `submit_sm` que enviou. `first` ou `last` colapsa isso para um só.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Delivery receipts" icon="receipt" href="/developers/receive/delivery-receipts">
+    O payload, os níveis e como correlacionar.
+  </Card>
+  <Card title="Qualidade de receipt" icon="chart-simple" href="/platform/control-panel/receipt-quality">
+    Taxa reportada contra taxa de entrega.
+  </Card>
+</CardGroup>

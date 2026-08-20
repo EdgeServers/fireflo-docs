@@ -1,0 +1,101 @@
+---
+title: "FAQ de SMPP"
+description: "Janelas, throttling, reconexões, sessões zumbis e os códigos de status que realmente aparecem."
+---
+
+<AccordionGroup>
+
+<Accordion title="Estou conectado e nada está saindo">
+Verifique primeiro o **tipo de bind**. Uma sessão só de receiver conecta perfeitamente e não envia
+nada, e não há erro em lugar nenhum para te dizer isso.
+
+Se é transceiver ou transmitter e as mensagens ainda não saem, olhe a janela: um cliente que nunca
+recebe respostas enche a janela e para, o que parece idêntico a estar bloqueado.
+</Accordion>
+
+<Accordion title="Que throughput devo esperar?">
+Depende do tamanho da sua janela e do seu round-trip, não só do gateway.
+
+**Tamanho da janela** (`conf.maxPending.default`, 1000 por padrão) é quantos `submit_sm` podem estar
+pendentes. Se seu cliente espera cada resposta antes de mandar o próximo, seu teto é `1 / RTT`. Em
+torno de 20 mensagens por segundo em um link de 50 ms, independentemente do tamanho da janela.
+
+Envie assincronamente e case sua contagem em trânsito com a janela.
+</Accordion>
+
+<Accordion title="Recebo ESME_RTHROTTLED (88) toda hora">
+Você está acima do limite de mensagens por segundo da sua conta. Diminua o ritmo. Este é
+genuinamente transitório e repetir após uma pausa é o certo.
+
+Não responda abrindo mais sessões. O limite é por conta, não por sessão, então isso te custa slots
+de conexão e não muda nada.
+</Accordion>
+
+<Accordion title="Meu bind é recusado, mas as credenciais estão certas">
+Geralmente um limite, e geralmente de sua própria autoria: **uma sessão zumbi ainda conta contra
+seu limite por usuário**.
+
+Se você reconecta mais rápido do que o servidor derruba sua sessão anterior, você compete consigo
+mesmo. Faça unbind corretamente ao desligar, e deixe `enquire_link` detectar peer morto em vez de
+reconectar agressivamente.
+
+Verifique também se uma lista de IPs permitidos se aplica. Tudo o mais pode estar certo e o bind
+ainda falha.
+</Accordion>
+
+<Accordion title="O que ESME_RSUBMITFAIL (69) significa?">
+"Recusado, sem motivo informado." É a recusa menos informativa do protocolo.
+
+Ele é classificado como retryable, o que é uma decisão genuinamente discutível. O mesmo código é
+usado por SMSCs diferentes para sobrecarga transitória e para recusa permanente. Se você o vê
+constantemente numa rota, trate como permanente e pergunte ao seu provedor o que o upstream está de
+fato rejeitando.
+</Accordion>
+
+<Accordion title="Tudo falha com um status entre 192 e 196">
+Esse bloco é **sempre sobre TLVs**:
+
+| | |
+| ---: | :--- |
+| 192 | O stream de TLVs está malformado |
+| 193 | Uma TLV que o fornecedor não permite |
+| 194 | Uma TLV do tamanho errado |
+| 195 | Uma TLV obrigatória não foi enviada |
+| 196 | Um valor de TLV foi rejeitado |
+
+Numa rota DLT, 195 e 196 quase sempre significam id de entidade ou template ausente ou errado. E
+isso geralmente significa que nada foi aprovado, então nada foi estampado.
+</Accordion>
+
+<Accordion title="Uma tag que envio nunca chega à operadora">
+O listener não a declara. **Tags não declaradas são descartadas no ingresso**, antes de qualquer
+coisa mais rodar, e nada reporta.
+
+Pergunte ao seu provedor se a tag está em `registered.tlvs.submit` para o seu listener.
+</Accordion>
+
+<Accordion title="Devo dividir mensagens longas eu mesmo?">
+Qualquer um dos caminhos custa o mesmo. Dividir você mesmo te dá um id por segmento e controle
+total do UDH; enviar um corpo longo é mais simples e deixa o gateway fazer.
+
+Se você dividir, **envie os segmentos próximos entre si**. Eles são mantidos para reagrupamento, e
+um conjunto incompleto é eventualmente descartado.
+</Accordion>
+
+<Accordion title="Posso ver as PDUs brutas?">
+Só o seu provedor pode, e apenas temporariamente. O log de PDUs vem desligado por padrão porque
+**PDUs de bind contêm senhas** e PDUs de `submit_sm` contêm números de telefone e corpos de
+mensagem.
+
+Há também uma facilidade de captura que grava PDUs recentes em um buffer circular para exatamente
+isso, sem deixar o log ligado permanentemente. Peça pelo nome.
+</Accordion>
+
+<Accordion title="Posso usar um login para SMPP e para a API REST?">
+Não. As credenciais são tipadas como `HTTP` ou `SMPP` e não são intercambiáveis. Peça uma de cada.
+
+A recusa é inutilmente genérica nas duas direções — um `403 Authentication failure` no REST, e uma
+falha de autenticação no bind — então verifique o tipo antes de verificar a senha.
+</Accordion>
+
+</AccordionGroup>

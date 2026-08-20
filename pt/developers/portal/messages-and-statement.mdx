@@ -1,0 +1,93 @@
+---
+title: "Mensagens e extrato"
+description: "Como achar uma mensagem entre milhares, exportar o resultado e ler uma fatura cobrada na submissão, não na entrega."
+---
+
+Duas telas respondem duas perguntas diferentes. **Mensagens** é "o que aconteceu com esta".
+**Extrato** é "pelo que estou pagando". Elas discordam levemente de propósito, e o motivo está no
+fim desta página.
+
+## Mensagens
+
+Uma barra de filtros sobre uma tabela. Os filtros são aplicados quando você aperta **Buscar**, não
+enquanto digita, e eles são carregados na barra de endereços. Assim, uma visão filtrada pode ser
+salva nos favoritos ou colada em um chamado, de forma que quem ler veja exatamente o que você viu.
+
+| Filtro | Observações |
+| :--- | :--- |
+| **Período** | Última hora, 24 horas, 7 dias, 30 dias, ou um intervalo customizado. Padrão: 24 horas |
+| **Desfecho** | Qualquer, ou um específico |
+| **Número de destino** | Match pelo início do número |
+| **Message id** | Exato |
+| **Texto da mensagem** | Busca dentro dos corpos das mensagens |
+
+**Awaiting a receipt** aparece primeiro entre os desfechos, e não em ordem alfabética, porque é o
+que as pessoas vêm procurar.
+
+<Note>
+**A busca por texto de mensagem não acha nada se seu provedor não guarda o conteúdo.** Armazenar
+corpos é uma escolha de implantação com consequências óbvias de privacidade, e vários operadores
+desligam. Um resultado vazio aqui pode significar que o conteúdo não é guardado, não que nenhuma
+mensagem casou.
+</Note>
+
+Revendedores ganham um filtro extra para restringir a uma única conta ou buscar em todas.
+
+### Colunas
+
+Sete são exibidas por padrão: submetida, para, de, message id, conta, cobrado e desfecho.
+**Colunas** abre um seletor agrupado em Mensagem, Rota, Dinheiro e Desfecho. Cerca de trinta ao
+todo, incluindo contagens de partes e retries, data coding, as TLVs que você enviou, tipo de
+mensagem, MCC e MNC, tarifa, unidades cobradas, estado do recibo, código de erro e hora do recibo.
+
+Três não podem ser desligadas: **Submetida**, **Para** e **Desfecho**. Uma linha sem elas não é
+identificável.
+
+A sua escolha fica salva naquele navegador, e **o CSV carrega o que estiver marcado**. Configure as
+colunas que você quer antes de exportar.
+
+<Warning>
+**Custo, margem e fornecedor não estão no seletor nem nos dados.** Você vê o que foi cobrado. O que
+seu provedor pagou para transportar, e quem transportou, é dele. Sem coluna, sem export, sem campo
+na API.
+</Warning>
+
+**Baixar CSV** respeita os filtros e as colunas atuais. Os horários aparecem no fuso do seu
+navegador, e o rodapé diz qual, para que uma linha discutida entre fusos possa ser fixada.
+
+Onde algumas linhas ainda não têm desfecho, uma nota acima da tabela informa:
+
+> *n* de *total* ainda aguardam um recibo de entrega. Isso é normal. Uma mensagem sem recibo é
+> fechada no seu prazo de expiração.
+
+## Extrato
+
+Escolha um mês. Os últimos treze são oferecidos, e o atual é marcado como **(so far)**. Abre no mês
+*anterior* completo, porque é aquele que você está sendo cobrado.
+
+O card do topo mostra o valor, mensagens enviadas, entregues e um de dois números, nunca os dois: um
+**limite de crédito** para contas faturadas a posteriori, ou um **saldo** para contas em crédito
+pré-pago. Ler um limite de crédito como saldo é a leitura errada que custa dinheiro, então eles
+nunca têm o mesmo nome.
+
+Se algum tráfego saiu sem preço, uma nota diz quantas mensagens e confirma que não estão no valor.
+
+Abaixo: um detalhamento por produto — enviadas, entregues, com falha, pendentes, valor. E, onde
+existirem, uma lista de **períodos faturados**.
+
+> Um período fechado é final. Qualquer coisa que caia nele depois aparece como um ajuste no período
+> seguinte.
+
+Cada mês exporta em CSV.
+
+## Por que as duas telas discordam
+
+> Cobrado nas mensagens **submetidas**, não na entrega. Os números de entrega continuam se movendo à
+> medida que os recibos chegam; o valor não.
+
+Uma mensagem aceita no dia 31 e reportada no dia 1º é cobrada no mês anterior e entregue no
+seguinte. Então a contagem de entregues em Mensagens vai variar depois que um extrato é fechado, e o
+valor do extrato não.
+
+Essa é a alternativa a uma fatura que muda por semanas depois que você a recebe. Os preços são
+fixados na submissão, o que também explica por que uma mudança de tarifa não retifica o histórico.
