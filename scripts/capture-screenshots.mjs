@@ -58,8 +58,14 @@ const PASS = process.env.OPERATOR_PASSWORD;
 const CHROME = process.env.CHROME_BIN ?? "/usr/bin/google-chrome";
 const PORT = 9222;
 
-// The account the demo seed creates. Screens that need one customer use this.
-const DEMO_ACCOUNT = process.env.DEMO_ACCOUNT ?? "acct-in-2001";
+// The account screens that need one customer are photographed against.
+//
+// Was `acct-in-2001`, which only the India DLT seed creates -- so unless that seed had been applied
+// the billing capture photographed a 404, silently, because a 404 screenshots just as happily as a
+// page. `acct-lane-3001` comes from the traffic-lane seed and is the better subject anyway: the
+// billing tab is four cards about holdings, credit, reconciliation and the ledger, and this is the
+// account with a ledger worth showing rather than one empty row.
+const DEMO_ACCOUNT = process.env.DEMO_ACCOUNT ?? "acct-lane-3001";
 
 /** Route → image path, relative to images/. Order is the order they are visited. */
 const OPERATOR = [
@@ -74,6 +80,11 @@ const OPERATOR = [
   ["/cp/diagnostics", "platform/control-panel/diagnostics.png"],
   ["/cp/accounts", "platform/control-panel/accounts.png"],
   [`/cp/accounts/${DEMO_ACCOUNT}/billing`, "platform/control-panel/accounts-billing.png"],
+  // The two connection screens. Both are described click-by-click in the Connections pages and
+  // neither had ever been photographed. They are also the two cards that changed most in the
+  // 0.7.4.3 rework, so an old capture of them would be wrong in a way a reader would notice.
+  ["/cp/vendors", "platform/connections/vendors.png"],
+  ["/cp/servers", "platform/connections/servers.png"],
 ];
 
 const PORTAL = [

@@ -1,14 +1,33 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "FireFlo",
-  "description": "High-throughput SMS gateway, control panel and customer portal.",
+  "name": "FireFlo SMS/SMPP Gateway",
+  "description": "A self-hosted SMS and SMPP gateway: HTTP and SMPP in both directions, routing, rating and delivery receipts, with a control panel and a customer portal.",
   "colors": {
     "primary": "#E2571E",
     "light": "#FF8A4C",
     "dark": "#B23A0F"
   },
   "favicon": "/favicon.svg",
+  "logo": {
+    "light": "/logo/mark.svg",
+    "dark": "/logo/mark.svg"
+  },
+  "seo": {
+    "metatags": {
+      "og:site_name": "FireFlo SMS/SMPP Gateway",
+      "og:title": "FireFlo SMS/SMPP Gateway",
+      "og:description": "A self-hosted SMS and SMPP gateway: HTTP and SMPP in both directions, routing, rating and delivery receipts, with a control panel and a customer portal.",
+      "og:type": "website",
+      "og:image": "https://docs.fireflo.au/images/og-card.png",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "twitter:card": "summary_large_image",
+      "twitter:title": "FireFlo SMS/SMPP Gateway",
+      "twitter:description": "A self-hosted SMS and SMPP gateway, with a control panel and a customer portal.",
+      "twitter:image": "https://docs.fireflo.au/images/og-card.png"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -297,6 +316,26 @@
       "label": "Support",
       "href": "mailto:support@fireflo.au"
     }
+  },
+  "footer": {
+    "links": [
+      {
+        "header": "FireFlo",
+        "items": [
+          { "label": "fireflo.au", "href": "https://fireflo.au" },
+          { "label": "Licensing", "href": "https://fireflo.au" },
+          { "label": "Support", "href": "mailto:support@fireflo.au" }
+        ]
+      },
+      {
+        "header": "Documentation",
+        "items": [
+          { "label": "What FireFlo is", "href": "https://docs.fireflo.au/" },
+          { "label": "Quickstart", "href": "https://docs.fireflo.au/platform/quickstart" },
+          { "label": "REST API", "href": "https://docs.fireflo.au/reference/api/send" }
+        ]
+      }
+    ]
   },
   "redirects": [
     {
