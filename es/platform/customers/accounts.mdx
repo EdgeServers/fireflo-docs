@@ -1,0 +1,121 @@
+---
+title: "Cuentas"
+description: "La cuenta es la clave de facturación: una cuenta contiene muchos logins, y el saldo, el límite de crédito, la tarifa y el extracto cuelgan de ella en lugar de de cualquiera de ellos."
+---
+
+Una **cuenta** es un id sobre el que coinciden un login, un ámbito de tasa, una fila de saldo y un
+registro de llamada. Nada tiene que crearla: una cuenta existe en el momento en que un login la
+nombra o llega un mensaje llevándola, y la fila `app_account` es una etiqueta atornillada después.
+
+## Deje `accountId` en blanco y otra cosa se convierte en la cuenta
+
+`accountId` es opcional en una credencial, y lo que llena el hueco **difiere por protocolo**.
+
+| Protocolo | Recurre a |
+| :--- | :--- |
+| SMPP | el `systemId` |
+| HTTP | la *clave de lookup*, que es el `apiKey` cuando hay uno |
+
+<Warning>
+**Un login HTTP con un `apiKey` y sin `accountId` factura a la propia clave API.** El secreto
+aterriza en `cdr_submit.account_id`, en las cifras de ingresos del panel y en cada exportación CSV:
+copiado en registros que viven tanto como la historia de facturación, y que dejan la plataforma en
+hojas de cálculo. Rotar la clave después divide la historia de ese cliente entre dos ids.
+
+Establezca `accountId` explícitamente en cada credencial y ninguno de los fallbacks importa.
+</Warning>
+
+## Por qué la cuenta y no el login
+
+Una cuenta puede tener varios logins, y todo lo que lleva dinero o un techo está asociado a la
+cuenta:
+
+| Asociado a la cuenta | Dónde vive |
+| :--- | :--- |
+| Saldo prepago y crédito reservado | `account_balance` |
+| Límite de crédito y modo de facturación | `account_balance.billing_mode`, `credit_limit` |
+| Tarifa: lo que este cliente paga | un ámbito de tasa nombrado tras el id de la cuenta |
+| Extracto y uso diario | `cdr_submit`, `usage_daily` |
+| Techos de tasa | la cuenta, no el bind |
+
+<Note>
+Un límite por login permitiría a un cliente subirse su propio techo creando otro login. Asociar a
+la cuenta es lo que hace que cualquiera de estos signifique algo.
+</Note>
+
+Las aprobaciones son lo único que puede ir en cualquier dirección: una fila de sender ID o
+plantilla puede nombrar un `system_id` para atarla a un login, o dejarlo null para todos los
+logins de la cuenta. Consulte [Sender IDs](/platform/customers/sender-ids).
+
+## Qué contiene realmente la fila del catálogo
+
+`app_account` es nombre, contacto y jerarquía: nada que la ruta del mensaje lea.
+
+| Columna | Significado |
+| :--- | :--- |
+| `id` | La clave de facturación. Recortada y no vacía, y la clave primaria. |
+| `label`, `description` | Para las personas que leen el panel. |
+| `email` | Almacenado para el sign-in por magic-link y notificaciones. Una cuenta por dirección, ignorando mayúsculas y minúsculas. |
+| `enabled` | Si este panel la lista. |
+| `resells` | Esta cuenta puede tener otras y moverles saldo. |
+| `parent_account_id` | El reseller bajo el que se sitúa. |
+
+El árbol tiene exactamente dos niveles de profundidad, y la base de datos lo hace cumplir:
+`app_account_two_levels` rechaza una fila que a la vez nombra un padre y revende, por lo que una
+cuenta o bien tiene otras o pertenece a una.
+
+<Warning>
+**Deslistar una cuenta no detiene nada.** La pasarela nunca lee el catálogo de cuentas, así que
+limpiar `enabled` elimina la fila de las listas de este panel y deja sus logins conectándose, su
+tráfico enviándose y sus reglas de tasa tarificando exactamente como antes. Es lo contrario de lo
+que significa `enabled` en un vendor o en un producto, y mucho más caro de equivocarse.
+
+Para detener el tráfico, desactive los **logins**. Para detener el gasto, use el saldo.
+</Warning>
+
+## Crear un login no crea un saldo
+
+Una cuenta sin fila `account_balance` **no está en cero**: no tiene saldo, que es un estado
+distinto y el que en silencio se traga una recarga.
+
+<Warning>
+**Un `RECHARGE` escrito para una cuenta sin fila de saldo no acredita nada.** Se queda pendiente y
+registra, y se aplica en el momento en que aparece la fila. Pero hasta entonces el cliente ha
+pagado y no puede enviar. Abra la cuenta para crédito primero (*Open for credit* en la página de
+la cuenta), luego recargue.
+</Warning>
+
+El panel distingue las dos deliberadamente: "no balance row" y "credit switched off" se muestran
+como respuestas distintas en lugar de colapsarse en una única cifra vacía. Consulte
+[Crédito prepago](/platform/billing/prepaid-credit).
+
+## Un id de cuenta que también es un nombre de vendor
+
+La tarificación empareja un ámbito de tasa solo por nombre, y la misma tabla contiene ambos lados
+del trato. Un id que también es un nombre de instancia de vendor tiene sus reglas leídas como
+**nuestro coste para ese vendor** así como lo que este cliente paga.
+
+La página de la cuenta lo pinta en rojo en lugar de dejar que se descubra en un informe de
+márgenes. Renombre uno antes de tarificar cualquiera. `*` está reservado directamente y no puede
+usarse como nombre de cuenta o de vendor.
+
+## Qué hay en la página de la cuenta
+
+<CardGroup cols={2}>
+<Card title="Logins" href="/platform/connections/credentials">
+Quién puede conectarse como esta cuenta, qué producto lleva cada uno y rotar un secreto.
+</Card>
+<Card title="Tarifa personalizada" href="/platform/billing/tariffs">
+Lo que esta cuenta paga. Sin reglas propias significa que se tarifica por el catch-all que la cubra.
+</Card>
+<Card title="Extracto" href="/platform/billing/statements">
+Lo que se debe por un periodo, facturado en el envío, así que el importe deja de moverse cuando lo hace el periodo.
+</Card>
+<Card title="Sender IDs y contenido" href="/platform/customers/whitelisting-rollout">
+Las dos listas de aprobación y el interruptor de aplicación a su lado.
+</Card>
+</CardGroup>
+
+El tráfico en la página se deriva de los mensajes que realmente llegaron, dividido por login y
+producto: así que muestra tráfico que entró bajo esta cuenta desde un login que este panel nunca ha
+visto.

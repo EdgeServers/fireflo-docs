@@ -1,0 +1,115 @@
+---
+title: "Listeners auxquels vos clients se connectent"
+description: "Ajouter un server, contre quoi un bind est vérifié, et les états dans lesquels un listener peut se trouver."
+---
+
+Un **server** est un listener auquel vos clients se connectent en entrée. En ajouter un est un
+port, un nom, puis la politique que vous voulez appliquer à tous ceux qui s'y connectent.
+
+## En ajouter un
+
+<Tabs>
+  <Tab title="Panneau de contrôle">
+    **Servers → Add server.** Le nom et le port sont les seuls champs obligatoires ; tout le reste a
+    un défaut qui fonctionne.
+  </Tab>
+  <Tab title="smsg.properties">
+```properties
+outSms.instance.smpp.type     = smppserver
+outSms.instance.smpp.srv.port = 27777
+outSms.instance.smpp.enable   = true
+```
+  </Tab>
+</Tabs>
+
+Chaque paramètre est à [Paramètres du listener](/reference/smpp/server).
+
+<Warning>
+**Un listener qui ne peut pas prendre son port n'arrête pas le gateway.** Il journalise et tout le
+reste continue de tourner — approprié pour un déploiement multi-listeners, et surprenant la
+première fois.
+
+Un démarrage propre n'est pas la preuve que chaque listener est en marche. Vérifiez `/ops/health`.
+</Warning>
+
+## Contre quoi un bind est vérifié, dans l'ordre
+
+<Steps>
+  <Step title="Le credential">
+    `systemId` et `password` doivent correspondre à un credential `SMPP` activé. Voir
+    [credentials.yml](/reference/files/credentials-yml).
+  </Step>
+  <Step title="allowedIps, si défini">
+    Vide signifie **aucune restriction**.
+  </Step>
+  <Step title="Limites de connexions">
+    `srv.maxConnections` globalement, `srv.maxConnectionsPerIP`, et
+    `conf.maxConnectionsPerUser.default` par compte.
+  </Step>
+  <Step title="Le product, si conf.product.required est activé">
+    Le product résolu doit nommer une ligne **activée** dans le catalogue de products. Vide ou
+    inconnu est refusé avec `0x40F` — au bind, pas à la soumission, parce que le product vit sur
+    le contexte de session.
+  </Step>
+</Steps>
+
+## D'où vient le product
+
+`system_type` sur la requête de bind, avec repli sur le champ `product` du credential.
+
+<Warning>
+`system_type` est du texte libre validé nulle part ailleurs. Un client qui se binde avec `prem` au
+lieu de `premium` passe tout test de non-vide et atterrit dans l'état **non tarifé** où les
+messages sont livrés et débités de rien.
+
+C'est pourquoi `conf.product.required` vérifie l'**appartenance au catalogue** plutôt que la
+présence d'une valeur. Et pourquoi, en mode fichier, où il n'y a pas de catalogue, seule la
+moitié non-vide s'applique. C'est journalisé une fois par chargement de configuration en nommant
+le listener.
+</Warning>
+
+## Ce qu'un listener applique à tous ceux qui y sont bindés
+
+| Paramètre | Effet |
+| :--- | :--- |
+| `conf.maxRate.default` | Plafond de débit par compte |
+| `conf.maxPending.default` | Taille de fenêtre — requêtes non acquittées en vol |
+| `forward.dlrs` | **Désactivé supprime les accusés pour tout le monde ici**, quoi que chaque client ait demandé |
+| `conf.whitelist.enabled` | Si sender ID et contenu sont vérifiés |
+| `mandatory.tlvs.submit` | Tags qu'un message doit porter, sinon `0xC3` |
+| `inQueue.capacity` | Messages retenus en attente du magasin de messages |
+
+## Les états dans lesquels un listener peut se trouver
+
+| Verbe | Effet |
+| :--- | :--- |
+| `enable` / `disable` | Chargé, ou non |
+| `suspend` / `resume` | Cesse d'accepter ; la file se vide vers le routeur |
+| `hold` / `release` | Continue d'accepter, cesse d'envoyer ; **la file grossit** |
+
+Le panneau les montre comme un badge par carte. `Listening` sans personne de bindé n'est **pas** un
+défaut. Un listener sans clients connectés est calme, pas cassé, c'est pourquoi il n'est pas peint
+en rouge comme un vendor sans session.
+
+## Couper le bind d'un client
+
+```bash
+scripts/fireflo disconnect smpp 7
+```
+
+Les ids de session viennent de `fireflo health`. Ce sont les compteurs propres au listener, donc
+ils entrent en collision entre listeners et redémarrent avec le gateway.
+
+<Note>
+**Cela met fin à une connexion ; cela ne retire pas la permission.** Un client en bonne santé se
+rebinde en quelques secondes à moins que vous ne désactiviez aussi son login.
+</Note>
+
+## Messages entrants
+
+`mo.owner.map` décide quel compte possède quelle adresse entrante. `mo.owner.default` est où va un
+message non apparié — et **vide signifie nulle part** : le listener journalise
+`message.mo.unmapped` et consomme le message plutôt que de deviner un propriétaire.
+
+Délibéré, parce que livrer le message d'un inconnu au mauvais client est pire. Mais le trafic non
+mappé disparaît tranquillement à moins que vous ne surveilliez cette ligne.

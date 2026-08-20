@@ -1,0 +1,108 @@
+---
+title: "Statements e fechamento de período"
+description: "Por que um período fechado nunca é reescrito, por que a linha BILL não move dinheiro, e o que um reembolso tardio se torna em vez disso."
+---
+
+Um statement é o uso de um cliente em um período. **Fechar** um período transforma isso de uma
+query viva em um fato registrado.
+
+## Um período fechado é imutável
+
+Fechar escreve uma linha `BILL` registrando o que foi faturado. **Ela nunca é reescrita.**
+
+Um reembolso que cai depois, um recibo tardio, uma rate corrigida a posteriori — nenhum deles altera
+um período fechado. O painel re-executa o resumo, compara-o com o valor armazenado e mostra a
+diferença como uma **credit note contra o próximo período**.
+
+<Warning>
+**Esta é toda a razão de fechar existir** em vez de o statement ser simplesmente uma query viva.
+
+Reformular silenciosamente um período fechado destrói a capacidade do cliente de reconciliar: a
+fatura que ele pagou no mês passado deixa de casar com a fatura que o painel mostra este mês, sem
+nada em nenhum lugar registrando que ela mudou ou por quê.
+</Warning>
+
+## A linha `BILL` não move dinheiro
+
+`delta` registra o valor faturado — negativo, porque é o que a account consumiu. Mas a linha é
+**inerte**.
+
+O poll de recharge do gateway seleciona apenas `RECHARGE` e `TRANSFER`, portanto **nada nunca aplica
+um `BILL`**. Arrears nunca entram em `account_balance.balance`, que mantém sua restrição não-negativa
+e seu significado único: dinheiro disponível para gastar.
+
+Para o que a linha *é* estruturalmente carregadora é para a janela. A linha `BILL` mais recente —
+`max(created_at) WHERE entry_type = 'BILL'` — é o início do período não faturado. Portanto,
+**fechar é o que devolve o headroom de uma conta postpaid.**
+
+<Tip>
+Vale a pena manter em mente essa conexão: um cliente postpaid que deixou de poder enviar pode
+simplesmente estar esperando você fechar o período dele. Nada está quebrado; a fatura não foi emitida.
+</Tip>
+
+## Fechar duas vezes é um conflito, não uma segunda fatura
+
+A referência é determinística:
+
+```
+bill:<accountId>:<label>
+```
+
+`uq_balance_ledger_ref` é único onde não é nulo, portanto o mesmo período não pode ser fechado duas
+vezes.
+
+**Determinístico de propósito** — dois operadores clicando ao mesmo tempo devem colidir, e um pedido
+retentado não deve produzir uma duplicata. O label é `YYYY-MM` ou um intervalo de datas, e não pode
+conter um dois-pontos, portanto o *último* dois-pontos divide a referência de volta e um account id
+contendo dois-pontos ainda faz round-trip.
+
+## De que um statement é computado
+
+A fatura é uma **função pura de `cdr_submit` sobre uma janela semiaberta**. Ela nunca lê o contador
+postpaid, nunca lê `account_balance` e nunca lê o ledger.
+
+Portanto, a única coisa que pode tornar uma fatura errada é uma linha `cdr_submit` ausente ou extra.
+
+<Warning>
+Uma vez que um período é mais antigo que `FIREFLO_CDR_KEEP_DAYS`, as linhas das quais foi computado
+já se foram. A cifra armazenada em `BILL` e `usage_daily` são então o único registro. É por isso que
+o purge se recusa a deletar um dia que nada resumiu.
+</Warning>
+
+## Janelas semiabertas
+
+Um período cobre `[start, end)` — início inclusivo, fim exclusivo. Uma mensagem exatamente na
+meia-noite da fronteira pertence ao período **posterior**, e pertence a exatamente um.
+
+Essa é a propriedade que vale a pena verificar em qualquer query que você escreva: `BETWEEN` em SQL
+é inclusivo nos dois extremos e vai contar em dobro uma mensagem de fronteira em dois statements.
+
+## A ordem que funciona
+
+<Steps>
+  <Step title="Deixe o período terminar">
+    Cifras faturáveis ficam finais no momento em que o dia termina. Billing é sobre `submitted`.
+  </Step>
+  <Step title="Revise antes de fechar">
+    O resumo é uma query viva até que você a feche. Este é o último ponto em que uma correção é
+    uma edição em vez de uma credit note.
+  </Step>
+  <Step title="Feche">
+    Uma linha `BILL`, idempotente na referência.
+  </Step>
+  <Step title="Deixe correções posteriores serem credit notes">
+    Elas são visíveis, atribuíveis, e caem no próximo período em vez de silenciosamente alterar um
+    número que o cliente já pagou.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Postpaid" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Limites de crédito, e por que fechar devolve headroom.
+  </Card>
+  <Card title="Uso e retenção" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    O que sobrevive depois que os call records são purgados.
+  </Card>
+</CardGroup>

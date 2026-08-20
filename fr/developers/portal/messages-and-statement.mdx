@@ -1,0 +1,98 @@
+---
+title: "Messages et relevé"
+description: "Retrouver un message parmi des milliers, exporter le résultat, et lire une facture qui est débitée à la soumission plutôt qu'à la livraison."
+---
+
+Deux écrans répondent à deux questions différentes. **Messages** répond à "qu'est-il arrivé à
+celui-ci". **Relevé** répond à "qu'est-ce que je paie". Ils divergent légèrement à dessein, et la
+raison figure au bas de cette page.
+
+## Messages
+
+Une barre de filtres au-dessus d'un tableau. Les filtres s'appliquent quand vous pressez
+**Rechercher**, pas au fur et à mesure que vous tapez, et ils sont portés dans la barre d'adresse.
+Une vue filtrée peut donc être mise en favori, ou collée dans une demande de support pour que celui
+qui la lit voie exactement ce que vous avez vu.
+
+| Filtre | Notes |
+| :--- | :--- |
+| **Période** | Dernière heure, 24 heures, 7 jours, 30 jours, ou une plage personnalisée. 24 heures par défaut |
+| **Issue** | N'importe laquelle, ou une issue précise |
+| **Numéro de destination** | Correspondance depuis le début du numéro |
+| **Message id** | Exact |
+| **Texte du message** | Recherche à l'intérieur des corps de message |
+
+**En attente d'un accusé** est listé en premier parmi les issues plutôt qu'alphabétiquement, parce
+que c'est celle que les gens viennent chercher.
+
+<Note>
+**La recherche par texte de message ne trouve rien à moins que votre fournisseur n'enregistre le
+contenu.** Stocker les corps est un choix de déploiement avec des conséquences évidentes sur la
+vie privée, et beaucoup d'opérateurs le désactivent. Un résultat vide ici peut vouloir dire que le
+contenu n'est pas conservé, pas qu'aucun message ne correspondait.
+</Note>
+
+Les revendeurs disposent d'un filtre supplémentaire pour se limiter à un seul compte ou chercher
+parmi tous.
+
+### Colonnes
+
+Sept sont affichées par défaut : soumis, à, de, message id, compte, facturé et issue. **Colonnes**
+ouvre un sélecteur regroupé sous Message, Route, Argent et Issue — environ trente au total, y
+compris comptes de parts et de retries, data coding, les TLVs que vous avez envoyés, type de
+message, MCC et MNC, tarif au prix, unités facturées, état d'accusé, code d'erreur et heure
+d'accusé.
+
+Trois ne peuvent pas être désactivées — **Soumis**, **À** et **Issue** — puisqu'une ligne sans elles
+n'est pas identifiable.
+
+Votre choix est conservé dans ce navigateur, et **le CSV emporte ce qui est coché**. Réglez les
+colonnes que vous voulez avant d'exporter.
+
+<Warning>
+**Coût, marge et vendor ne sont pas dans le sélecteur ni dans les données.** Vous voyez ce qui vous
+a été facturé. Ce que votre fournisseur a payé pour le transporter, et qui l'a transporté, lui
+appartient. Pas de colonne, pas d'export, pas de champ d'API.
+</Warning>
+
+**Télécharger CSV** respecte les filtres et les colonnes courants. Les heures sont affichées dans le
+fuseau horaire de votre navigateur, et le pied de page indique lequel, pour qu'une ligne discutée
+entre fuseaux puisse être fixée.
+
+Là où certaines lignes n'ont pas encore d'issue, une ligne au-dessus du tableau le signale :
+
+> *n* de ces *total* sont encore en attente d'un accusé de livraison. C'est normal. Un message sans
+> accusé est clos à sa date limite d'expiration.
+
+## Relevé
+
+Choisissez un mois. Les treize derniers sont proposés, le courant marqué **(à ce jour)**. Il s'ouvre
+sur le mois *précédent* complet, parce que c'est celui qu'on vous demande de payer.
+
+La carte principale montre le montant, les messages envoyés, livrés, puis l'un des deux chiffres,
+jamais les deux : une **limite de crédit** pour les comptes facturés en post-payé, ou un **solde**
+pour les comptes en crédit prépayé. Lire une limite de crédit comme un solde est le contresens qui
+coûte de l'argent, ils ne portent donc jamais le même nom.
+
+Si du trafic est sorti sans être tarifé, une note indique combien de messages et confirme qu'ils ne
+sont pas dans le montant.
+
+En dessous : une ventilation par produit — envoyé, livré, échec, en attente, montant — et, quand
+elles existent, une liste des **périodes facturées**.
+
+> Une période close est définitive. Ce qui atterrit dessus après coup apparaît en ajustement sur la
+> période qui suit.
+
+Chaque mois s'exporte en CSV.
+
+## Pourquoi les deux écrans divergent
+
+> Facturé sur les messages **soumis**, pas sur la livraison. Les chiffres de livraison continuent
+> de bouger à mesure que les accusés arrivent ; le montant, non.
+
+Un message accepté le 31 et rapporté le 1er est facturé sur le mois précédent et livré sur le mois
+suivant. Le compte livré sur Messages dérive donc après la clôture d'un relevé, et le montant du
+relevé ne bouge pas.
+
+C'est l'alternative à une facture qui change pendant des semaines après réception. Les prix sont
+fixés à la soumission, ce qui explique aussi qu'un changement de tarif ne rejoue pas l'historique.

@@ -1,0 +1,101 @@
+---
+title: "Runtime"
+description: "Si le gateway a la mémoire, le processeur et la capacité de connexions pour continuer à fonctionner — cinq verdicts, chacun publié avec la règle par laquelle il a été atteint."
+---
+
+<Warning>
+**Cette page porte sur le gateway lui-même, pas sur les messages qu'il transporte.** Rien ici ne
+compte les messages, livraisons ou débit vendor. Ceux-là sont sur le
+[tableau de bord](/platform/control-panel/dashboard) et
+[Live health](/platform/operations/live-health). Il s'agit ici de savoir si le logiciel a la
+mémoire, la puissance de traitement et la capacité de connexions pour continuer à faire son
+travail.
+</Warning>
+
+Cette séparation est toute la conception. Un gateway peut livrer parfaitement pendant qu'il est
+silencieusement à court de descripteurs de fichiers, et il peut être inactif tout en fuyant de la
+mémoire. Ni l'un ni l'autre n'apparaît dans un chiffre de livraison.
+
+## Tendance récente
+
+Quatre sparklines — mémoire, processeur, tâches en cours, travail en attente — étiquetés **since
+this page opened**. L'historique est tenu dans l'onglet du navigateur et commence vide, donc il
+ne peut réellement pas vous montrer quoi que ce soit d'avant votre arrivée. Pour une vue plus
+longue, pointez un système de monitoring vers le propre endpoint de mesures du gateway.
+
+## Les cinq verdicts
+
+Chaque carte porte un badge — **Healthy**, **Worth watching**, **Under pressure**, ou **Not
+reported** — un résumé, une barre de remplissage, et deux lignes de prose : ce que la lecture
+signifie, et **la règle par laquelle le badge a été atteint**.
+
+Publier la règle est délibéré. Un seuil que vous ne pouvez pas voir est un seuil que vous ne
+pouvez pas contester, et ce sont des jugements sur votre plateforme, pas des lois de la nature.
+Si 70 % de processeur est normal pour votre profil de trafic, la carte est fausse et vous devez
+savoir précisément à quel point.
+
+| Carte | Healthy | Worth watching | Under pressure |
+| :--- | :--- | :--- | :--- |
+| **Memory** | sous 75 % du plafond | jusqu'à 90 % | au-dessus de 90 % |
+| **Processor** | sous 70 % | jusqu'à 90 % | au-dessus de 90 % |
+| **Connection capacity** | sous 70 % de la limite | jusqu'à 85 % | au-dessus de 85 % |
+| **API requests** | sous 250 ms en moyenne | jusqu'à 1 seconde | au-dessus de 1 seconde |
+| **Internal task queue** | sous 70 % des slots occupés, rien en attente | quoi que ce soit en file | — |
+
+### Ce que chacune vous dit réellement
+
+**Memory.** De la mémoire qui monte sans cesse et ne redescend jamais après un nettoyage est à
+quoi ressemble une fuite. Épuisez-la entièrement et le gateway cesse d'accepter des messages. La
+ligne de détail compte les pauses de nettoyage et le temps total passé en pause.
+
+**Processor.** Une utilisation soutenue élevée signifie que le débit est limité par cette machine
+plutôt que par le vendor. Des pics brefs pendant une rafale sont normaux.
+
+**Connection capacity.** Chaque session SMPP, connexion à la base de données et fichier ouvert
+compte pour ceci.
+
+<Note>
+Atteignez la limite de connexions et le gateway **refuse les nouvelles connexions vendor et
+client avant que tout autre symptôme n'apparaisse**. Rien dans le trafic ne paraît d'abord
+anormal. C'est la carte qui échoue silencieusement, et la raison pour laquelle elle est sur la
+page tout court.
+</Note>
+
+**API requests.** Messages soumis en HTTP, plus les appels propres à ce panneau. Des réponses
+lentes ici pointent vers le gateway ou sa base, pas vers un vendor. Le chiffre est une moyenne
+depuis que le processus a démarré — utile pour « ceci est lent en général », inutile pour un pic
+il y a un instant.
+
+**Internal task queue.** Le travail de fond propre au gateway — écritures en base, traitement des
+accusés. Du travail en attente ici qui ne s'écoule jamais signifie qu'il arrive plus vite qu'il
+ne peut être fait, et la ligne de détail vous dira si quelque chose a été refoulé d'emblée, ce
+qui est du travail que le gateway n'a pas pu faire du tout.
+
+<Warning>
+**La file de tâches internes n'est pas un pool de workers.** *Worker* signifie une connexion
+SMPP partout ailleurs dans cette documentation et partout ailleurs dans le panneau. C'est évité
+ici à dessein : les lecteurs qui ont rencontré le mot sur cette carte sont partis chercher un
+vendor qui n'était jamais impliqué.
+</Warning>
+
+Là où une lecture est simplement absente, la carte le dit en mots — « The gateway did not report
+a memory ceiling » — plutôt que d'afficher un zéro qui se lit comme une mesure.
+
+## Les lectures brutes
+
+Un seul contrôle, **Show the raw readings**, ouvre tout ce que le gateway publie, dans les noms
+propres au logiciel, groupé par sujet. Ce sont les mêmes données qu'un système de monitoring
+scraperait, et c'est ici pour enquêter sur quelque chose que les cartes ci-dessus ne peuvent pas
+expliquer.
+
+Il y a une seule case de recherche sur chaque groupe plutôt qu'une par carte, parce que lorsque
+vous cherchez vous ne savez généralement pas dans quel groupe est la mesure — c'est la majeure
+partie de pourquoi vous cherchez. Les groupes ne correspondant à rien disparaissent plutôt que
+de laisser des en-têtes vides.
+
+Le pas descendant est un pas à dessein. Une version précédente faisait descendre un lecteur de
+l'anglais simple à la syntaxe des labels bruts en un clic, ce qui n'est pas de la révélation
+progressive mais une falaise.
+
+Un pied de page rapporte quand la page a lu pour la dernière fois, et rafraîchit toutes les dix
+secondes.

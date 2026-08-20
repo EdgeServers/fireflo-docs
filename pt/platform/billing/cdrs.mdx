@@ -1,0 +1,170 @@
+---
+title: "Call records"
+description: "Três tabelas append-only, por que recibos de progresso vivem separados dos desfechos e as colunas que são NULL em vez de zero."
+---
+
+Três tipos de registro, **todos append-only**. Nada é jamais atualizado, o que torna delivery receipts
+concorrentes seguros e permite que uma mensagem re-roteada mantenha as duas tentativas em vez de
+sobrescrever a primeira.
+
+| Tabela | Uma linha por |
+| :--- | :--- |
+| **`cdr_submit`** | Segmento submetido, gravado quando entra na wire |
+| **`cdr_final`** | **Desfecho**, acrescentado quando se torna conhecido |
+| **`cdr_interim`** | Recibo de **progresso**, que não é um desfecho e não fecha a mensagem |
+
+Elas fazem join em `(gateway_msg_id, part_no)`. A view `cdr_pnl` faz left-join entre submit e final,
+portanto registros ainda sem desfecho aparecem como `PENDING`. **A exposição em trânsito permanece
+visível** em vez de ser silenciosamente excluída dos seus números.
+
+## Por que recibos de progresso vivem na sua própria tabela
+
+Um vendor pode enviar vários recibos para uma mensagem: `ACCEPTD` ao aceitá-la, `BUFFRED` enquanto
+retenta, e depois `DELIVRD` ou uma falha. **Somente o último é um desfecho.**
+
+Todo leitor pega a **primeira** linha `cdr_final` de uma mensagem: a lista de mensagens, o dashboard
+do portal, as queries de receita e a view `cdr_pnl` todos fazem isso. Portanto, gravar recibos de
+progresso em `cdr_final` faria um `ACCEPTD` sobrepujar o `DELIVRD` que o seguiu, em toda lista, todo
+gráfico e no P&L.
+
+O expiry sweep depende da mesma coisa: ele encontra mensagens não resolvidas por meio de anti-join em
+`cdr_final`, portanto um recibo de progresso ali faria uma mensagem aberta parecer fechada e ela nunca
+seria revisitada.
+
+<Warning>
+**Isso não é hipotético.** Antes do 0.6.6, o primeiro recibo a chegar liberava a entrada de correlação
+e escrevia `cdr_final`; o desfecho real que se seguia não tinha ao que se anexar e era registrado como
+um recibo para uma mensagem desconhecida.
+
+**Uma mensagem entregue podia acabar permanentemente registrada como `FAILED`.**
+</Warning>
+
+As duas tabelas também têm tempos de vida diferentes. `cdr_final` é histórico de billing e vive
+enquanto o CDR. `cdr_interim` é histórico de *qualidade* — quão rápido um vendor reporta e se
+reporta ou não — o que é uma pergunta sobre tráfego recente, portanto ela é podada em sua própria
+janela mais curta (`smsg.cdr.interim.retention.days`, default 30). **Perdê-la custa um relatório, não uma fatura.**
+
+## Ambos os lados da negociação
+
+Rate, units e total são registrados separadamente por lado, porque os dois podem legitimamente cobrar
+contagens de unidades diferentes para uma mensagem — um vendor cobra por segmento onde você pode
+cobrar por mensagem.
+
+| Coluna | Significado |
+| :--- | :--- |
+| `cost_rate`, `cost_units`, `cost` | O que o vendor cobra de você |
+| `price_rate`, `billed_units`, `price` | O que você cobra do cliente |
+| `margin`, `margin_pct` | Armazenado, para que o P&L some uma coluna |
+| `cost_currency`, `price_currency` | Por lado; o FireFlo nunca converte |
+| `cost_rule_id`, `price_rule_id` | Qual rate rule casou, para auditoria |
+
+<Warning>
+**Dinheiro desconhecido é `NULL`, nunca `0`.** Uma taxa que não pôde ser determinada permanece
+distinguível de uma mensagem genuinamente gratuita. Qualquer query que trate `NULL` como zero
+reportará um vendor sem preço como lucro puro.
+</Warning>
+
+Para uma mensagem concatenada **o dinheiro vive inteiramente na parte 1**, cujo custo já cobre todos
+os segmentos. Segmentos posteriores são linhas de entrega sem dinheiro. Gravar valores em todos os
+segmentos multiplicaria os dois lados pela contagem de segmentos.
+
+## Uma mensagem recusada não carrega dinheiro
+
+Qualquer coisa que chegou a um vendor tem uma linha em `cdr_submit`, aceita ou não. Uma mensagem que
+o vendor recusou é registrada por completo — identidade, timing, vendor, endereços — mais uma linha
+em `cdr_final` e uma em `cdr_rejected` carregando o status code do vendor.
+
+Mas `price`, `cost` e `margin` são **null**, porque o crédito do cliente foi devolvido no momento da
+recusa.
+
+<Tip>
+Isso é deliberado: toda query de receita soma essas colunas **sem um filtro de desfecho**, e um preço
+em uma mensagem reembolsada superestimaria a receita exatamente pelo tráfego que foi devolvido.
+</Tip>
+
+## As três colunas de TLV
+
+Três pontos em um mesmo pipeline. Toda pergunta útil é uma comparação entre dois deles.
+
+| Coluna | O que ela contém |
+| :--- | :--- |
+| `tlvs_received` | Como chegaram, antes que algo fosse adicionado |
+| `tlvs` | Como o gateway os resolveu |
+| `tlvs_sent` | O que o vendor efetivamente colocou na wire |
+
+```
+tlvs_received → tlvs       uma account, sender ID ou template substituiu a do cliente?
+tlvs → tlvs_sent           o que o vendor adicionou, e o que ele descartou?
+```
+
+A segunda comparação costumava ser irrespondível. Uma tag que o vendor não registrou é descartada —
+corretamente, é o vendor decidindo — mas isso acontecia em silêncio, então um DLT template id podia
+estar presente na mensagem, ausente na wire e não mencionado em nenhum lugar acima de DEBUG. Um
+descarte agora também é um WARN limitado nomeando o vendor e a tag.
+
+`NULL` significa que nada registrou a coluna; `{}` significa que foi registrado e não havia nenhum.
+`tlvs_sent` é `NULL` para todo vendor não-SMPP.
+
+## O corpo da mensagem
+
+Registrado **somente se você ativar**.
+
+| `smsg.cdr.body` | Armazenado |
+| :--- | :--- |
+| `off` *(padrão)* | Nada |
+| `excerpt` | Os primeiros 160 caracteres |
+| `full` | A mensagem inteira |
+
+Um valor não reconhecido é tratado como `off`. A falha que importa é armazenar conteúdo que ninguém
+pediu para armazenar, portanto um erro de digitação não deve ligar a gravação.
+
+<Warning>
+**Esta é uma escolha deliberada com consequências.** Conteúdo é a coisa mais sensível que um gateway
+manuseia — one-time passcodes, números de conta, mensagens pessoais — e uma vez em `cdr_submit` vive
+exatamente o tempo da linha de billing e aparece em todo backup dela.
+
+É legível em ambas as superfícies do painel, buscável por substring e **incluído em exports CSV**,
+que é onde conteúdo sai mais facilmente da plataforma.
+
+`excerpt` é o meio-termo para trabalho de suporte: o suficiente para reconhecer um template, mas não
+todo o tráfego de um cliente.
+</Warning>
+
+## Desfechos
+
+| Estado | Significado |
+| :--- | :--- |
+| `DELIVERED` | O vendor confirmou a entrega |
+| `FAILED` | O vendor reportou uma falha permanente |
+| `EXPIRED` | Nenhum recibo antes do prazo — genuinamente **desconhecido**, não known-bad |
+| `DROPPED` | Um filtro descartou antes de qualquer vendor |
+| `REJECTED` | Nunca roteada ou aceita; qualquer cobrança foi estornada |
+
+`dlr_state` mantém o valor **bruto** do SMPP ao lado do desfecho grosseiro, porque `EXPIRED`, `REJECTD`
+e `UNDELIV` todos são faturados como falhas mas vale a pena distingui-los.
+
+**O expiry sweep** fecha qualquer coisa passada de seu prazo como `EXPIRED`, deixando o billing
+decidir quanto vale um desfecho desconhecido. O prazo é limitado a três dias: passada a janela de
+correlação, um recibo já não pode ser casado mesmo se chegar, portanto esperar mais não muda a resposta.
+
+## Se uma mensagem não aparece em lista nenhuma
+
+O writer normalmente está apontado para um banco de dados diferente do painel. Verifique
+`smsg.cdr.sink` e o `FIREFLO_DB_URL` do gateway contra o `METRICS_DATABASE_URL` do painel antes de
+olhar em qualquer outro lugar.
+
+<Warning>
+**CDRs nunca contêm credenciais.** Endereços estão presentes porque rating e resolução de disputa
+precisam deles. Trate as tabelas e arquivos de acordo, e defina uma política de retenção.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Uso e retenção" icon="clock-rotate-left" href="/platform/billing/usage-and-retention">
+    O que sobrevive quando os call records são purgados.
+  </Card>
+  <Card title="Como o pricing funciona" icon="tag" href="/platform/billing/how-pricing-works">
+    Onde cada lado da negociação é liquidado.
+  </Card>
+</CardGroup>

@@ -1,0 +1,103 @@
+---
+title: "Autenticación"
+description: "HTTP Basic, por qué se rechaza un login SMPP, y los dos 401 que significan cosas distintas."
+---
+
+Todo bajo `/secure/` usa autenticación HTTP Basic, con su login como nombre de usuario.
+`/ping` no requiere ninguna.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+O directamente la cabecera, si su cliente no la construye por usted:
+
+```
+Authorization: Basic <base64 of login:password>
+```
+
+## Las credenciales van en la cabecera, en ningún otro sitio
+
+`username` y `password` como campos del cuerpo **no se ignoran**: devuelven
+`400 Unknown argument`. Ese rechazo suele ser la primera señal de un payload copiado de otra
+pasarela.
+
+## Un login SMPP no puede usar esta API
+
+Esto pilla a la gente porque el rechazo no lo dice. Un `403 Authentication failure` cubre los tres
+casos: login desconocido, contraseña incorrecta y *un login del tipo equivocado*.
+
+<Tip>
+Si un login funciona por SMPP y devuelve `403` aquí, compruebe su **tipo** antes de comprobar la
+contraseña. Las credenciales tienen tipo `HTTP` o `SMPP` y no son intercambiables. Un mismo login no
+puede hacer ambas cosas.
+</Tip>
+
+## Los dos 401
+
+Significan cosas distintas, y merece la pena ramificar por ellos:
+
+| Respuesta | Significado |
+| :--- | :--- |
+| `{"message":"Authentication required"}` | Sin cabecera `Authorization`. Trae `WWW-Authenticate: Basic realm="fireflo"`. |
+| `{"message":"Invalid token"}` | Una cabecera que no es Basic, no es Base64 válido, o no contiene dos puntos. |
+
+Ejecutado contra una pasarela en vivo:
+
+```http
+GET /secure/balance          (no header)
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic realm="fireflo"
+{"message":"Authentication required"}
+
+GET /secure/balance          (Authorization: Bearer xyz)
+HTTP/1.1 401 Unauthorized
+{"message":"Invalid token"}
+```
+
+**401 significa que no se identificó. 403 significa que sí lo hizo y no se aceptó.** Merece la pena
+cablearlo en su alerta por separado: un 401 súbito suele ser un despliegue que perdió una variable
+de entorno; un 403 súbito, una contraseña rotada o una IP movida.
+
+## Listas de IP permitidas
+
+Si su login tiene una, una petición desde cualquier otro sitio es `403 Authorization failure`. Un
+mensaje distinto al fallo de credenciales anterior, de modo que ambos se distinguen en un log.
+
+Lo configura el operador de su pasarela. Merece la pena preguntar si hay una configurada antes de
+mover su integración a nueva infraestructura.
+
+## La autenticación se ejecuta antes que todo lo demás
+
+Confirmado en vivo: un POST sin credenciales **y** con un cuerpo no parseable devuelve el error de
+autenticación, no el de parseo.
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Warning>
+**Arregle las credenciales antes de depurar un payload.** Un `401` o un `403` no le dicen nada sobre
+si el resto de su petición es correcta, porque nada posterior a la autenticación se ha ejecutado.
+</Warning>
+
+## Cómo mantener la contraseña segura
+
+- Léala del entorno o de un almacén de secretos, nunca del código fuente.
+- No se rota por usted. Si se filtra, pida a su operador que la cambie.
+- **Una ruta desconocida bajo `/secure/` devuelve `401`, no `404`**, de modo que la API no confirma
+  a un llamante no autenticado qué endpoints existen. No construya descubrimiento sobre códigos de
+  estado.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Errores de la API" icon="triangle-exclamation" href="/reference/api/errors">
+    Cada estado, y cuáles merece la pena reintentar.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    Primer mensaje en cuatro lenguajes.
+  </Card>
+</CardGroup>

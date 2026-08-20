@@ -1,0 +1,80 @@
+---
+title: "fireflo-install"
+description: "Os cinco verbos, as opções que valem conhecer e o que cada verbo se recusa a tocar."
+---
+
+Instala e atualiza o **gateway**. O painel de controle tem seu próprio instalador —
+[`fireflo-panel-install`](/reference/cli/fireflo-panel-install).
+
+## Os cinco verbos
+
+| Verbo | Faz | Nunca toca |
+| :--- | :--- | :--- |
+| `check` | Esse host está pronto. Não muda nada. | Tudo |
+| `install` | Primeira instalação: pacotes, usuário de serviço, diretórios, artefato, configuração, banco de dados, unit do systemd, firewall, smoke test | Um diretório de conf existente. Ele recusa em vez disso |
+| `update` | Substitui **apenas o artefato** | O diretório de conf |
+| `service` | Gera o script de inicialização e a unit numa instalação existente, e inicia | O diretório de conf |
+| `rollback` | Restaura o artefato anterior | O diretório de conf |
+
+<Warning>
+**`install` recusa quando um diretório de configuração já existe**, em vez de criar um segundo par
+de tokens operacionais em cima do primeiro. Se você tem configuração mas não tem serviço, o verbo
+que você quer é `service`, não `install`.
+</Warning>
+
+## Opções que valem conhecer
+
+### Layout e identidade
+
+| Opção | Propósito |
+| :--- | :--- |
+| `--tenant NAME` | Dá nome a esta instância. Em `update`, `service` e `rollback` é uma **busca**: a instalação com esse nome é encontrada e seus próprios caminhos, unit, conta e portas são usados, então um upgrade não pode ser mirado na instância errada por esquecimento de uma flag. |
+| `--vhost PATH` | Coloca a instância em um virtualhost por cliente. `--tenant websmsc --vhost /home/websmsc` dá `/home/websmsc/gateway`, com o painel ao lado em `/home/websmsc/panel`. |
+| `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Caminhos individuais. |
+| `--user` / `--group` / `--service-name` | A conta de serviço e o nome da unit. |
+
+As duas units geradas montam um **tmpfs sobre `/home`** e vinculam de volta apenas o único
+virtualhost, então um gateway não pode ver o diretório home de nenhum outro cliente.
+
+### Configuração e banco de dados
+
+| Opção | Propósito |
+| :--- | :--- |
+| `--config-source file\|db` | Qual fonte a instância inicia usando. |
+| `--db-*` | Detalhes da conexão de banco. |
+| `--bootstrap` / `--import` | Popula um banco novo, ou traz uma configuração de arquivo existente. |
+| `--country` / `--country-code` / `--product` / `--rate` / `--decimals` / `--currency` | A primeira tarifa. |
+
+### Comportamento
+
+| Opção | Propósito |
+| :--- | :--- |
+| `--whitelist` / `--no-whitelist` | Se a checagem de sender ID e conteúdo já começa ligada. |
+| `--balance` / `--no-balance` | Se o crédito pré-pago é obrigatório. |
+| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Portas. Um intervalo deixa o instalador escolher a próxima porta livre de listener. |
+| `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ para o caminho REST. |
+| `--log-backups` / `--log-retain-days` | Retenção de log, incluindo a regra `tmpfiles.d` que expira `httpapi.log`. |
+
+### Executando
+
+| Opção | Propósito |
+| :--- | :--- |
+| `--yes` | Não perguntar. |
+| `--dry-run` | Mostrar o que aconteceria. |
+| `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Pular um estágio. |
+| `--sudo` / `--no-sudo` | Elevação de privilégio. |
+
+<Note>
+**`--dry-run` mostra menos do que você poderia esperar.** Ele não pode reportar o que um gerenciador
+de pacotes puxaria, nem o que uma migração encontraria em um banco em que não se conectou. Leia como
+"as decisões que este script tomaria", não "tudo que mudaria neste host".
+</Note>
+
+## O que ele não instala
+
+O **painel de controle**. Isso é `fireflo-panel-install`, e num host novo você roda os dois.
+
+`--log-retain-days` escreve uma regra `tmpfiles.d` que apaga logs rotacionados, sem tocar nos quatro
+ativos. **Instalar à mão significa arranjar isso você mesmo.** Veja [Logging](/reference/config/logging).
+
+Veja [Instalar em um comando](/platform/install/one-command) para o passo a passo.

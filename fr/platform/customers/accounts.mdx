@@ -1,0 +1,125 @@
+---
+title: "Comptes"
+description: "Le compte est la clé de facturation — un compte détient plusieurs logins, et le solde, la limite de crédit, le tarif et le relevé s'y rattachent plutôt qu'à l'un d'eux."
+---
+
+Un **compte** est un id sur lequel un login, un scope de tarif, une ligne de solde et un
+enregistrement d'appel s'accordent tous. Rien n'a besoin de le créer : un compte existe au moment
+où un login le nomme ou qu'un message arrive en le portant, et la ligne `app_account` est une
+étiquette boulonnée par-dessus après coup.
+
+## Laissez `accountId` vide et autre chose devient le compte
+
+`accountId` est optionnel sur un credential, et ce qui comble le vide **diffère par protocole**.
+
+| Protocole | Retombe sur |
+| :--- | :--- |
+| SMPP | le `systemId` |
+| HTTP | la *clé de recherche*, qui est l'`apiKey` lorsqu'une est définie |
+
+<Warning>
+**Un login HTTP avec un `apiKey` et pas d'`accountId` facture sur la clé API elle-même.** Le
+secret atterrit dans `cdr_submit.account_id`, dans les chiffres de revenu du panneau de contrôle
+et dans chaque export CSV — copié dans des enregistrements qui vivent aussi longtemps que
+l'historique de facturation, et qui quittent la plateforme dans des tableurs. Faire tourner la
+clé ensuite scinde l'historique de ce client sur deux ids.
+
+Définissez `accountId` explicitement sur chaque credential et aucun repli n'a d'importance.
+</Warning>
+
+## Pourquoi le compte et pas le login
+
+Un compte peut détenir plusieurs logins, et tout ce qui porte de l'argent ou un plafond est
+indexé sur le compte :
+
+| Indexé sur le compte | Où cela vit |
+| :--- | :--- |
+| Solde prépayé et crédit réservé | `account_balance` |
+| Limite de crédit et mode de facturation | `account_balance.billing_mode`, `credit_limit` |
+| Tarif — ce que ce client paie | un scope de tarif nommé d'après l'id du compte |
+| Relevé et usage quotidien | `cdr_submit`, `usage_daily` |
+| Plafonds de débit | le compte, pas le bind |
+
+<Note>
+Une limite par login permettrait à un client de relever son propre plafond en créant un autre
+login. Indexer sur le compte est ce qui donne un sens à tout cela.
+</Note>
+
+Les approbations sont la seule chose qui peut aller dans les deux sens : une ligne de sender ID
+ou de template peut nommer un `system_id` pour la lier à un login, ou la laisser null pour tous
+les logins du compte. Voir [Sender IDs](/platform/customers/sender-ids).
+
+## Ce que contient réellement la ligne du catalogue
+
+`app_account` est nom, contact et hiérarchie — rien que le chemin du message ne lise.
+
+| Colonne | Signification |
+| :--- | :--- |
+| `id` | La clé de facturation. Trimé et non-vide, et la clé primaire. |
+| `label`, `description` | Pour les personnes lisant le panneau. |
+| `email` | Stocké pour la connexion par magic-link et les avis. Un compte par adresse, sans tenir compte de la casse. |
+| `enabled` | Si ce panneau le liste. |
+| `resells` | Ce compte peut en détenir d'autres et leur transférer du solde. |
+| `parent_account_id` | Le revendeur sous lequel il se trouve. |
+
+L'arbre a exactement deux niveaux de profondeur, et la base l'applique :
+`app_account_two_levels` refuse une ligne qui à la fois nomme un parent et resells, donc un
+compte soit en détient d'autres soit appartient à un.
+
+<Warning>
+**Délister un compte n'arrête rien.** Le gateway ne lit jamais le catalogue de comptes, donc
+effacer `enabled` retire la ligne des listes de ce panneau et laisse ses logins se connecter, son
+trafic envoyer et ses règles de tarif tarifer exactement comme avant. C'est l'opposé de ce que
+`enabled` signifie sur un vendor ou un product, et bien plus coûteux à interpréter à l'envers.
+
+Pour arrêter le trafic, désactivez les **logins**. Pour arrêter la dépense, utilisez le solde.
+</Warning>
+
+## Créer un login ne crée pas de solde
+
+Un compte sans ligne `account_balance` n'est **pas à zéro** — il n'a pas de solde, ce qui est un
+état différent et celui qui avale silencieusement un rechargement.
+
+<Warning>
+**Un `RECHARGE` écrit pour un compte sans ligne de solde ne crédite rien.** Il reste pending et
+journalise, et s'applique au moment où la ligne apparaît — mais jusque-là le client a payé et
+ne peut pas envoyer. Ouvrez d'abord le compte pour crédit (*Open for credit* sur la page du
+compte), puis rechargez.
+</Warning>
+
+Le panneau distingue délibérément les deux : « no balance row » et « credit switched off » sont
+affichés comme des réponses différentes plutôt que fusionnés en un chiffre vide. Voir
+[Crédit prépayé](/platform/billing/prepaid-credit).
+
+## Un id de compte qui est aussi un nom de vendor
+
+La tarification apparie un scope de tarif par nom seul, et la même table contient les deux côtés
+du marché. Un id qui est aussi un nom d'instance de vendor voit ses règles lues comme **notre
+coût pour ce vendor** en plus de ce que ce client paie.
+
+La page du compte peint cela en rouge plutôt que le laisser découvrir dans un rapport de marge.
+Renommez-en un avant de tarifer l'un ou l'autre. `*` est réservé d'emblée et ne peut pas être
+utilisé comme nom de compte ou de vendor.
+
+## Ce qu'il y a sur la page du compte
+
+<CardGroup cols={2}>
+<Card title="Logins" href="/platform/connections/credentials">
+Qui peut se connecter comme ce compte, quel product chacun porte, et faire tourner un secret.
+</Card>
+<Card title="Tarif sur mesure" href="/platform/billing/tariffs">
+Ce que ce compte paie. Pas de règles propres signifie qu'il est tarifé par tout attrape-tout qui
+le couvre.
+</Card>
+<Card title="Relevé" href="/platform/billing/statements">
+Ce qui est dû pour une période, facturé sur submitted — donc le montant cesse de bouger quand la
+période cesse.
+</Card>
+<Card title="Sender IDs et contenu" href="/platform/customers/whitelisting-rollout">
+Les deux listes d'approbation et l'interrupteur d'application à côté d'elles.
+</Card>
+</CardGroup>
+
+Le trafic sur la page est dérivé des messages qui sont réellement arrivés, split par login et
+product — donc il montre le trafic qui est entré sous ce compte depuis un login que ce panneau
+n'a jamais vu.

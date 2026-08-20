@@ -1,0 +1,148 @@
+---
+title: "Crédito prepago"
+description: "Dinero en memoria, reservado en bloques, y la identidad que debe cumplirse. Más el tamaño del bloque que decide cuándo una cuenta con fondos empieza a rechazar."
+---
+
+El crédito prepago está **desactivado por defecto y solo con PostgreSQL**. El crédito solo puede
+entrar por la base de datos, así que una pasarela sin ella arrancaría en cero y rechazaría todo: sin
+datasource la puerta simplemente no se hace cumplir.
+
+## El diseño en un párrafo
+
+El saldo gastable de una cuenta se mantiene **en memoria** y se decrementa por mensaje, por lo que
+la ruta del mensaje no hace ningún trabajo de base de datos. La durabilidad viene de reservar en
+bloques: una sentencia atómica mueve un importe de `balance` a `reserved`, y la pasarela gasta ese
+bloque desde memoria.
+
+A unos pocos miles de mensajes por segundo eso son un par de escrituras a base de datos por segundo
+en lugar de un par de miles. **Y ningún mensaje se envía nunca contra crédito que no se haya
+comprometido antes.**
+
+<Tip>
+Reservar **mueve** el dinero en lugar de marcarlo, y es por eso que dos instancias de la pasarela no
+pueden repartir el mismo crédito. La reserva es la exclusión mutua.
+</Tip>
+
+## La identidad que debe cumplirse
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+```
+
+Cada unidad que entró por el libro mayor es o gastable o está aparcada. **Un `kill -9` vara crédito
+en `reserved`; no lo pierde.** `POST /ops/credit/release` lo devuelve, y un apagado limpio lo
+devuelve automáticamente.
+
+Si los dos lados no coinciden, es una discrepancia real y no un artefacto de redondeo.
+
+## Recargar
+
+El crédito se añade escribiendo una fila `RECHARGE`. La pasarela lo aplica en su próximo sondeo y lo
+marca como aplicado, por lo que un replay es no-op.
+
+```sql
+INSERT INTO balance_ledger (account_id, delta, entry_type, ref)
+VALUES ('acct-1001', 500000, 'RECHARGE', 'receipt-88');
+```
+
+**Los importes están escalados por 10 000**, así que `500000` son 50.0000 unidades.
+
+*Añadir crédito* del panel de control escribe exactamente esta fila y nada más. **La propia pasarela
+no puede crear crédito**: solo aplica filas que escribió alguien más, y la columna `balance` tiene
+exactamente un escritor, que es este sondeo.
+
+<Warning>
+**Un `RECHARGE` para una cuenta sin fila `account_balance` no acredita nada.** Se queda pendiente,
+registra, y se aplica en el momento en que aparece la fila:
+
+```
+WARN  1 recharge entries could not be credited because these accounts have no
+      account_balance row: [acct-1001]. They stay pending and will apply
+      themselves once the row exists.
+```
+
+Crear una credencial **no** crea una fila de saldo. Use *Abrir para crédito* en la página de la
+cuenta, o inserte una a cero a mano.
+</Warning>
+
+## Tamaño del bloque, y el rechazo que explica
+
+Un bloque se dimensiona a partir de la tasa a la que se ha observado enviar a la cuenta. En frío (o
+tras un periodo inactivo) no hay tasa para dimensionarlo, así que se aplica un suelo:
+
+```
+block = max(smsg.balance.block.min, price × smsg.balance.block.min.messages)
+```
+
+`smsg.balance.block.min.messages` es por defecto **20**, y el precio proviene del mensaje que pide
+la reserva.
+
+<Warning>
+**Este suelo está denominado en mensajes por una razón.** Antes era `smsg.balance.block.min`, un
+importe en *moneda*. Y un importe en moneda no puede decir cuántos mensajes compra.
+
+Con el valor por defecto de `1000` (0.1000 unidades), una cuenta cuyos mensajes costaban más que eso
+obtenía un bloque que cubría exactamente **un** mensaje. El siguiente mensaje llegaba mucho antes de
+que aterrizara la siguiente reserva y era rechazado por falta de crédito en una cuenta con miles de
+unidades.
+
+Ese es el informe completo de "fondos insuficientes en cuenta con fondos".
+</Warning>
+
+Una reserva es todo o nada, así que una sentencia única solo puede tener éxito si el saldo cubre el
+importe pedido. **La reserva por tanto prueba tres peldaños descendentes**: el bloque completo, el
+suelo denominado en mensajes, y por último el único mensaje que preguntó:
+
+<Tip>
+**El peldaño de abajo es por lo que el suelo no puede varar dinero.** Una cuenta con menos de veinte
+mensajes restantes aún consigue el que pidió, en lugar de ser rechazada por no poder pagar un suelo
+que existe para mantener las cuentas ocupadas fuera de la base de datos. Una cuenta con fondos para
+tres mensajes envía tres.
+</Tip>
+
+**Lo que cuesta:** una cuenta enviando activamente mantiene hasta veinte mensajes de valor en
+`reserved` que nada más puede gastar. Devueltos por un apagado limpio, y por `credit release` tras
+uno no limpio.
+
+**Lo que seguirá viendo cerca del final:** las recargas son asíncronas por diseño, así que un
+mensaje que llega mientras la siguiente reserva está en vuelo puede ser rechazado aunque quede
+crédito. Ese rechazo es transitorio y el reintento tiene éxito. No es crédito varado.
+
+## Rechazo
+
+Una cuenta sin crédito recibe `submit_sm_resp` estado **`0x402`**, HTTP **402**, motivo
+`insufficientCredit`.
+
+`ESME_RTHROTTLED` deliberadamente no se usa: significa otra cosa, y haría que un cliente retrocediera
+y reintentara una condición que solo una recarga puede levantar.
+
+## Reembolsos
+
+Un mensaje cargado y luego descartado durante el enrutamiento recibe su crédito devuelto
+**exactamente una vez**. Un mensaje sin tarificar nunca se carga en absoluto.
+
+La recarga se dispara en un watermark mientras queda crédito, en un hilo de fondo. **Si el tráfico lo
+supera, el mensaje se rechaza inmediatamente** en lugar de que el hilo SMPP espere a la base de
+datos: un hilo de entrada bloqueado es peor que un mensaje rechazado.
+
+## Propiedades
+
+| Propiedad | Por defecto | Qué hace |
+| :--- | ---: | :--- |
+| `smsg.balance.enabled` | `false` | El interruptor maestro |
+| `smsg.balance.block.min.messages` | `20` | **El suelo que ata.** Súbalo para cuentas con ráfagas |
+| `smsg.balance.block.min` | `1000` | Suelo en moneda, por debajo del anterior |
+| `smsg.balance.block.max` | `10000000` | Techo en una reserva individual |
+| `smsg.balance.refill.watermark.percent` | `20` | La recarga se dispara aquí |
+| `smsg.balance.recharge.poll.seconds` | `30` | Cuán pronto aterriza una recarga |
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Postpago" icon="file-invoice-dollar" href="/platform/billing/postpaid">
+    Límites de crédito, y facturas exactas a partir de una aplicación aproximada.
+  </Card>
+  <Card title="Rechazos" icon="ban" href="/platform/troubleshooting/refusals">
+    Leer `insufficientCredit` contra un saldo positivo.
+  </Card>
+</CardGroup>

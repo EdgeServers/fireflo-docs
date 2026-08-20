@@ -1,0 +1,128 @@
+---
+title: "Sender IDs y plantillas"
+description: "Solicitar los nombres desde los que envía y la redacción que usa: los cuatro estados de aprobación, la gramática de los marcadores y por qué editar un registro activo lo suspende."
+---
+
+Dos pantallas, una misma forma. **Sender IDs** son los nombres desde los que se pueden enviar sus
+mensajes. **Templates** son la redacción que pueden usar. Cada una es aprobada por su proveedor
+antes de que pueda usarse.
+
+<Note>
+**Nada en estas pantallas aprueba nada.** Cada guardado es una solicitud. Es la parte que más
+sorprende a los clientes: un registro que acaba de crear y que puede ver en la lista todavía no es
+utilizable.
+</Note>
+
+Si alguno se impone en absoluto es decisión de su proveedor. Cuando se impone —el régimen DLT de
+India es el caso obvio—, un remitente sin registrar o una redacción no aprobada se rechaza en el
+envío.
+
+## Los cuatro estados
+
+| Distintivo | Significado |
+| :--- | :--- |
+| **Waiting for approval** | Enviado, aún sin revisar. No utilizable |
+| **In use** | Aprobado y activo |
+| **Not approved** | Rechazado, con el motivo de su proveedor visible |
+| **Withdrawn** | Estaba aprobado, desactivado por su proveedor. No utilizable |
+
+Cada fila indica también a qué producto se aplica y a qué login: uno concreto o **todos sus
+logins**.
+
+<Frame caption="Sender IDs, todos aprobados y en uso. El producto al que se limita cada uno aparece junto a él. Un remitente aprobado para un producto no lo está para otro.">
+  <img src="/images/developers/portal/senders.png" alt="La pantalla Sender IDs del portal listando tres sender IDs aprobados, cada uno limitado a un producto" />
+</Frame>
+
+<Frame caption="Templates, incluyendo una en hindi. Los huecos {#var#} son lo que puede cambiar; todo lo demás alrededor se compara exactamente.">
+  <img src="/images/developers/portal/templates.png" alt="La pantalla Templates del portal listando cuatro plantillas aprobadas con sintaxis de marcador" />
+</Frame>
+
+## Solicitar un sender ID
+
+Un solo campo. Los rechazos merecen conocerse antes de tropezar con ellos:
+
+- Un sender ID tiene un máximo de 64 caracteres, **pero SMPP permite 21**. Cualquier valor cerca
+  del límite superior podría almacenarse aquí y no entregarse nunca.
+- Los espacios iniciales o finales se rechazan de plano. Un sender ID se compara exactamente, y un
+  espacio final es invisible en cualquier lugar donde se muestre.
+- Debe ser ASCII imprimible.
+
+## Solicitar una plantilla
+
+Un **nombre**, para que usted y su proveedor la reconozcan, no comparado con nada. Luego la
+**redacción**, que sí se compara. Exactamente, salvo los huecos que marque.
+
+> Ponga `{#var#}` donde el mensaje cambie: un nombre, un código, un número de pedido. Todo lo
+> demás debe coincidir exactamente.
+
+Existen tres marcadores:
+
+| Marcador | Acepta |
+| :--- | :--- |
+| `{#var#}` | Cualquier cosa |
+| `{#num#}` | Dígitos 0–9 |
+| `{#alp#}` | Letras, espacios y puntuación de nombres |
+
+Una vista previa en vivo muestra un mensaje de ejemplo que su plantilla aceptaría. Es la forma más
+rápida de detectar una plantilla más estrecha o más ancha de lo que pretendía.
+
+### Dónde salen mal las plantillas
+
+El formulario rechaza cada una de estas con una frase en lugar de un código:
+
+**Un token mal escrito.** `{#VAR#}` o `{#Var#}` no es un marcador. Escriba el token en minúsculas y
+sin espacios dentro. Es la ortografía, no una declaración sobre lo que acepta.
+
+**Algo que parece un marcador y no lo es**, como `{#VAR}` o `{{#var#}}`. Los caracteres alrededor
+de un marcador real se comparan literalmente, así que esto solo aprobaría un mensaje que los
+llevara exactamente tal cual.
+
+**Dos marcadores pegados.** Dos variables sin nada entre ellas no pueden distinguirse, así que
+actúan como una única variable del doble de longitud. Ponga entre ellas la redacción que las
+separa.
+
+**Una plantilla que solo es un marcador**, que acepta cualquier mensaje: lo mismo que no tener
+plantilla.
+
+También puede recibir un aviso en lugar de un rechazo, cuando la redacción se repite alrededor de
+la parte cambiante. Eso puede hacer que una plantilla coincida menos de lo que espera, y merece la
+pena comentarlo con su proveedor.
+
+## Stamps
+
+Bajo **Stamps to ask for** puede proponer los valores que su proveedor asocia a cada mensaje en
+este registro: bajo DLT, sus identificadores de entidad y plantilla.
+
+> **Preguntar es gratis:** nada aquí llega a un mensaje hasta que su operador lo acepte, así que
+> un registro aprobado sigue funcionando entretanto.
+
+Si ya preguntó y no obtuvo respuesta, guardar sustituye lo que verá su proveedor en lugar de
+encolar una segunda solicitud.
+
+## Qué login
+
+Cuando su cuenta tiene más de un login de API, puede vincular un registro a uno de ellos.
+
+<Warning>
+**Deje esto en "All my logins" a menos que sepa que quiere lo contrario.** Vinculado a un solo
+login, un registro no hace nada por los demás, y un login sin nada aprobado no puede enviar nada
+en absoluto.
+</Warning>
+
+## Editar algo que está en uso
+
+Cambiar la redacción, el sender ID, el nombre, la nota o el login de un registro activo lo envía
+de vuelta a aprobación, y el botón de guardar le pide confirmar:
+
+> Esto deja de ser utilizable hasta que un operador apruebe el cambio.
+
+Si es su único registro en uso, así lo dice, porque la consecuencia es mayor:
+
+> Esto deja de ser utilizable hasta que un operador apruebe el cambio, y es el único que tiene en
+> uso, así que nada se aceptará desde esta cuenta hasta entonces.
+
+**Cambiar solo los stamps propuestos no suspende nada** y se guarda sin confirmación, ya que esos
+no surten efecto hasta que se aceptan de todos modos.
+
+Si necesita una redacción alterada en vivo antes de retirar la antigua, solicite la nueva como una
+plantilla aparte y deje que su proveedor retire la antigua después.

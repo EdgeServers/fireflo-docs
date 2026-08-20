@@ -1,0 +1,102 @@
+---
+title: "FAQ facturation"
+description: "Rapprochement, remboursements, messages contestés et les chiffres qui divergent légitimement."
+---
+
+<AccordionGroup>
+
+<Accordion title="J'ai envoyé 1000 messages et j'ai été facturé 1240. Pourquoi ?">
+Des segments. Vous êtes facturé par segment, pas par message, et 240 des vôtres étaient plus longs
+qu'un segment.
+
+Un message de plus de 160 caractères GSM-7 se découpe à 153 par segment. Si quelque chose dans le
+texte force l'UCS-2 — une apostrophe typographique est le coupable habituel — les limites tombent à
+70 et 67, donc un message de 150 caractères devient trois segments.
+
+`/secure/rate` renvoie `submit_sm_count` pour n'importe quel corps, gratuitement, avant l'envoi.
+</Accordion>
+
+<Accordion title="J'en ai envoyé 1000 et j'ai été facturé 960. Est-ce une erreur ?">
+Non. Les refus ne coûtent rien. Les sender IDs non approuvés, les templates non correspondants, les
+TLVs obligatoires manquants et le crédit insuffisant vous laissent tous non débité, ou remboursé si
+le débit avait déjà été pris.
+
+**Le nombre que vous avez envoyé et le nombre facturé sont légitimement différents.** Les refus
+sont l'écart, et votre fournisseur peut les lister.
+</Accordion>
+
+<Accordion title="Pourquoi suis-je refusé alors que j'ai de l'argent sur le compte ?">
+Presque toujours une **recharge en vol**. Le crédit est réservé par blocs et les recharges sont
+asynchrones, donc un message qui arrive pendant une réservation est refusé alors qu'il reste de
+l'argent. Un retry réussit.
+
+**La taille de bloc ne piège pas le crédit** : une réservation retombe sur le message unique qui l'a
+demandée si c'est tout ce que le solde couvre. Vous dépensez donc chaque unité que vous détenez.
+
+Un refus qui persiste sur un compte approvisionné est un problème différent. Remontez-le.
+</Accordion>
+
+<Accordion title="Suis-je remboursé pour un message en échec ?">
+Cela dépend d'où il a échoué :
+
+| | Débité ? |
+| :--- | :--- |
+| Refusé à l'entrée | **Non** — rien n'a été prélevé |
+| Accepté puis abandonné avant un vendor | **Remboursé** |
+| Envoyé à un vendor et refusé par lui | **Remboursé** |
+| Livré | Débité |
+| `UNDELIV` ou `EXPIRED` après une tentative réelle | **Débité** — la tentative a eu lieu |
+
+La dernière ligne mérite d'être intériorisée : un combiné éteint pendant une journée vous coûte le
+message, parce que votre fournisseur a payé pour tenter l'envoi.
+</Accordion>
+
+<Accordion title="Un client dit n'avoir jamais reçu un message que j'ai payé">
+Regardez l'état final sur l'enregistrement. `DELIVRD` signifie que l'opérateur a signalé la
+livraison. Au-delà, c'est une question pour l'opérateur, et `operator_msg_id` est la référence à
+citer.
+
+Si l'état est `UNKNOWN` ou si le message s'est réglé en `EXPIRED` sans qu'aucun accusé n'arrive,
+demandez à votre fournisseur si les accusés sont même demandés sur cette route. **Si chaque message
+sur une route se règle en `EXPIRED`, rien ne rapporte les issues** et le taux de livraison est
+dénué de sens plutôt que zéro.
+</Accordion>
+
+<Accordion title="Pourquoi un long message partiellement livré est-il facturé en entier ?">
+Parce que chaque segment a été soumis et payé. La résolution rapporte l'issue du **pire** segment,
+donc le message se lit FAILED. Mais les segments qui sont passés ont bel et bien été transportés.
+
+La facturation suit ce qui a été envoyé, et le reporting de livraison suit ce que le destinataire
+pouvait lire. Ils répondent à des questions différentes.
+</Accordion>
+
+<Accordion title="Un retry peut-il me débiter deux fois ?">
+Seulement si vous réessayez quelque chose qui a effectivement réussi. Il n'y a **pas de clé
+d'idempotence** sur `/secure/send`, donc un retry après un timeout envoie un second message et le
+facture.
+
+Ne réessayez que sur `429` et `500`. Un `500` est explicitement sûr — le débit est inversé avant que
+vous ne le voyiez — mais un **timeout ne l'est pas**, car le message a pu être accepté et vous n'avez
+simplement pas vu la réponse. Gardez votre propre clé de dé-duplication pour tout ce qui est visible
+d'un utilisateur.
+</Accordion>
+
+<Accordion title="Un devis coûte-t-il quelque chose ?">
+Non. `/secure/rate` n'envoie rien, ne débite rien et ne compte contre aucune limite de débit. C'est
+la seule vérification pré-envoi véritablement gratuite de l'API.
+</Accordion>
+
+<Accordion title="Pourquoi le même message coûte-t-il des montants différents selon les pays ?">
+Le prix est par destination — pays et souvent réseau. C'est pourquoi `to` est obligatoire sur un
+devis : un prix sans destination serait une devinette.
+
+`product` peut le changer encore, si votre fournisseur a autorisé plus d'un produit à votre login.
+</Accordion>
+
+<Accordion title="Jusqu'où remonte mon historique ?">
+La politique de rétention de votre fournisseur décide cela, et les enregistrements sont purgés
+selon un planning. Si vous avez besoin d'un historique au-delà, **exportez selon votre propre
+planning** plutôt que de supposer qu'il sera là.
+</Accordion>
+
+</AccordionGroup>

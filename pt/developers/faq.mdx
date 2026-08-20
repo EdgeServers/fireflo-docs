@@ -1,0 +1,94 @@
+---
+title: "FAQ para desenvolvedores"
+description: "Como começar, como escolher entre REST e SMPP, e as perguntas que vêm antes da sua primeira mensagem."
+---
+
+<AccordionGroup>
+
+<Accordion title="REST ou SMPP — qual devo usar?">
+**REST**, a menos que você tenha um motivo para não usar. Uma chamada HTTPS por mensagem, nada para
+manter vivo, e toda linguagem fala.
+
+**SMPP** compensa sua complexidade em volume alto e sustentado, onde um bind persistente evita um
+handshake TCP e TLS por mensagem, e onde você quer o protocolo que as próprias operadoras usam.
+
+Tudo depois da aceitação é idêntico nos dois caminhos: mesmo roteamento, tarifação, aprovações e
+recibos.
+</Accordion>
+
+<Accordion title="Um mesmo login pode fazer os dois?">
+Não. As credenciais são tipadas como `HTTP` ou `SMPP`, e as duas não são intercambiáveis. Peça uma
+de cada se você precisa das duas.
+
+Essa é a causa de um `403 Authentication failure` que sobrevive a qualquer verificação de senha: o
+login está bom, ele é simplesmente do tipo errado para a porta em que você bate.
+</Accordion>
+
+<Accordion title="Existe um sandbox?">
+Isso é decisão do seu provedor, não uma propriedade do gateway. Pergunte a ele.
+
+O que existe em todo lugar é `/secure/rate`, que tarifa uma mensagem sem enviá-la, sem cobrar nada e
+sem contar em nenhum rate limit. É o suficiente para validar destinos, codificação e preço antes de
+enviar algo real.
+</Accordion>
+
+<Accordion title="Existe um SDK oficial?">
+Não. A API é pequena o bastante para que um cliente HTTP e quatro linhas de código cubram tudo. Veja
+o [Quickstart](/developers/quickstart) para curl, Node, Python e PHP.
+
+<Warning>
+**Confira qualquer documento OpenAPI que você tenha recebido contra estas páginas antes de gerar um
+cliente.** Uma especificação mais antiga ainda em circulação tipa `custom_tlvs` como array, quando
+deve ser um objeto, tipa `validity_period` como string, quando deve ser um inteiro, e omite
+`product`.
+</Warning>
+</Accordion>
+
+<Accordion title="Qual é a minha base URL?">
+A do seu provedor, não uma fixa. Cada operador roda o próprio FireFlo. Todos os exemplos aqui usam
+`https://sms.example.com` como substituto.
+</Accordion>
+
+<Accordion title="Preciso tratar rate limiting?">
+Sim, se você envia em rajadas. Sua conta tem um limite de mensagens por segundo; acima dele você
+recebe `429` **sem cabeçalho `Retry-After`**.
+
+Faça backoff exponencial com jitter. Um intervalo fixo de retry em vários workers os ressincroniza
+no próximo pico, transformando um limite momentâneo em um sustentado.
+</Accordion>
+
+<Accordion title="Como sei que uma mensagem foi entregue?">
+Por um [recibo de entrega](/developers/receive/delivery-receipts), e apenas por ele. Peça um com
+`"dlr": "yes"` e um `dlr_url`.
+
+Aguarde um recibo de **nível 2**. `ACCEPTD` e `BUFFRED` chegam como nível 1 e outro vem em seguida.
+Um cliente que trate o primeiro recibo como final reporta o desfecho errado permanentemente.
+</Accordion>
+
+<Accordion title="Por que recebo três recibos para uma mensagem longa?">
+Porque você enviou três `submit_sm`. `conf.dlr.multipart` tem valor padrão `all`, então há um recibo
+por segmento submetido, cada um citando o id que você recebeu.
+
+Seu provedor pode ajustar para `first` ou `last` para reduzir isso a um. **Todos os recibos reportam
+o mesmo desfecho** independentemente da escolha, porque os segmentos são agregados antes de qualquer
+recibo ser construído.
+</Accordion>
+
+<Accordion title="Por que uma mensagem longa parcialmente entregue é reportada como falha?">
+Porque o destinatário não recebeu uma mensagem legível. A resolução espera pelo último segmento e
+reporta o **pior** desfecho, não o primeiro.
+
+É a resposta honesta, e ela empurra os números de taxa de entrega para baixo em comparação com
+gateways que reportam o primeiro segmento. Vale saber antes de comparar provedores por um número de
+taxa de entrega.
+</Accordion>
+
+<Accordion title="Posso extrair minhas mensagens do sistema?">
+Sim. O portal do cliente mostra suas próprias mensagens com busca e exportação CSV, e seu extrato
+separadamente. Veja [o portal](/developers/portal/messages-and-statement).
+
+Você vê as TLVs que **você** enviou nas suas próprias mensagens. O que um fornecedor adicionou
+downstream não é seu para ver.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,122 @@
+---
+title: "TLVs personnalisés"
+description: "Paramètres SMPP supplémentaires sur un envoi REST. Un objet, pas une liste ; décimal sauf mention hex ; et Int8 qui signifie huit octets."
+---
+
+Certaines destinations exigent des paramètres qui ne font pas partie d'un envoi ordinaire. Le DLT
+indien est le plus visible et impose un identifiant d'entité enregistrée et un identifiant de
+template sur chaque message.
+
+`custom_tlvs` les porte.
+
+```json
+{
+  "to": "919876543210",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "custom_tlvs": {
+    "0x1400": "1101234567890123456",
+    "tmid_0x1402:Int8": "1102000000000012345"
+  }
+}
+```
+
+## Quatre règles, qui ont chacune mordu quelqu'un
+
+<AccordionGroup>
+
+<Accordion title="C'est un objet, pas une liste de paires">
+```json
+"custom_tlvs": { "0x1400": "…" }        // correct
+"custom_tlvs": [{ "tag": "0x1400" }]    // 400
+"custom_tlvs": "0x1400=…"               // 400
+```
+
+Le fichier swagger versionné le type comme un tableau. **C'est faux.** Le parseur veut un objet, et
+générer un client depuis cette spec produit une charge utile refusée au premier appel.
+</Accordion>
+
+<Accordion title="Un nombre nu est DÉCIMAL">
+`1401` est le décimal 1401, qui vaut le tag `0x0579`, **pas** le `0x1401` que presque tout le monde
+entend.
+
+C'est le cas dangereux, parce qu'il *parse*. Rien n'est refusé : la passerelle envoie le tag
+`0x0579`, l'opérateur ignore un paramètre qu'il ne reconnaît pas, et le message est livré sans la
+valeur qu'il était censé porter. Il n'y a d'erreur nulle part.
+
+Écrivez `0x1401` quand vous voulez de l'hex. Les tags décimaux sont légaux et certains vendors les
+publient effectivement ainsi, ce qui est précisément la raison pour laquelle la passerelle ne peut
+pas deviner pour vous.
+</Accordion>
+
+<Accordion title="Le tag est ce qui suit le DERNIER underscore">
+`tmid_0x1401` est le tag `0x1401`. Le nom devant est une décoration que la passerelle conserve pour
+ses propres logs, et il peut lui-même contenir des underscores. `source_network_id_5120` est le tag
+5120 décimal.
+
+Un nom seul ne suffit pas. La passerelle fait correspondre sur le nombre.
+</Accordion>
+
+<Accordion title="Int8 signifie huit OCTETS">
+`:Int8` ajouté à une clé fixe l'encodage sur le fil. Les largeurs sont en octets, suivant la
+convention SMPP :
+
+| Token | Octets |
+| :--- | ---: |
+| `Int1` | 1 |
+| `Int2` | 2 |
+| `Int4` | 4 |
+| `Int8` | 8 |
+| `OctetString` | *par défaut* |
+| `COctetString` | terminé par null |
+
+Lu comme des *bits*, `Int8` ressemblerait à un champ d'un octet et le refus qui en résulte est
+déroutant. Un identifiant de template DLT autour de 1,4 × 10¹⁸ ne rentre nulle part au-dessous de
+huit octets.
+</Accordion>
+
+</AccordionGroup>
+
+## Le nom du champ garde son underscore
+
+Tous les autres champs de cette API traitent `_` et `-` comme le même caractère. **`custom_tlvs`
+non.** `custom-tlvs` renvoie `400 Unknown argument`.
+
+## D'où un tag peut aussi provenir
+
+Vous n'êtes pas la seule source, et la vôtre ne gagne pas toujours :
+
+<Steps>
+  <Step title="Vos custom_tlvs">
+    Extraits seulement si le listener déclare le tag. Les tags non déclarés sont **rejetés**, pas
+    transmis.
+  </Step>
+  <Step title="Les valeurs par défaut de votre identifiant">
+    Définies par votre fournisseur, elles remplissent les tags que vous n'avez pas envoyés. C'est
+    là qu'un identifiant d'entité DLT trouve habituellement sa place, puisque c'est une propriété
+    de vous plutôt que d'un message particulier.
+  </Step>
+  <Step title="Le stamp de whitelist">
+    Sur un template approuvé. En mode `replace`, il **écrase** ce que vous avez envoyé, et cet
+    écrasement est l'approbation.
+  </Step>
+  <Step title="Les valeurs par défaut du vendor">
+    Elles remplissent ce qui n'est toujours pas fixé au moment de l'envoi.
+  </Step>
+</Steps>
+
+<Warning>
+Si un tag que vous envoyez n'arrive jamais, la cause la plus probable est que le listener ne le
+déclare pas. Demandez à votre fournisseur s'il est dans `registered.tlvs.submit`. Un tag non
+déclaré est écarté silencieusement à l'entrée, avant que tout le reste de cette liste ne s'exécute.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Déclarations de TLV" icon="tags" href="/reference/smpp/tlvs">
+    La grammaire complète et les cinq niveaux de déclaration.
+  </Card>
+  <Card title="Envoyer un message" icon="paper-plane" href="/reference/api/send">
+    Chaque champ de l'endpoint.
+  </Card>
+</CardGroup>

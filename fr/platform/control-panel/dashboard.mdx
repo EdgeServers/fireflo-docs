@@ -1,0 +1,96 @@
+---
+title: "Le tableau de bord"
+description: "Quatre chiffres, un graphique de trafic et une répartition des échecs — ce à quoi l'écran Overview répond, et les deux chiffres qui y sont le plus souvent mal lus."
+---
+
+L'écran Overview répond à une question : **la plateforme transporte-t-elle ce qu'elle devrait, et
+cela atterrit-il ?** Ce n'est délibérément pas un écran de santé. Savoir si le logiciel a la
+mémoire et les connexions pour continuer à fonctionner est une question différente, posée sur
+[Runtime](/platform/control-panel/runtime-metrics), et les deux sont séparées parce qu'un opérateur
+scrutant un problème de livraison ne veut pas lire sur la taille du tas.
+
+Tout sur la page obéit à un contrôle de plage — **24 heures**, **7 jours** ou **30 jours**, par
+défaut 24 heures. Les chiffres se rafraîchissent toutes les soixante secondes, et cessent de se
+rafraîchir pendant que l'onglet du navigateur est en arrière-plan.
+
+## Les quatre chiffres
+
+| Carte | Ce qu'elle compte |
+| :--- | :--- |
+| **Messages** | Tout ce qui a été soumis sur la période |
+| **Delivery rate** | Livré contre échoué, avec les deux comptes en-dessous |
+| **In flight** | Soumis, pas encore d'accusé |
+| **Margin** | Facturé moins coût vendor, en rouge si négatif |
+
+<Note>
+**Une carte blanche est encore en chargement, pas à zéro.** Les cartes affichent un
+placeholder jusqu'à ce que le chiffre arrive, puis affichent soit le nombre, soit l'erreur. Elles
+n'inventeront jamais un `0` pour combler la lacune, parce que « pas de trafic » et « nous n'avons
+pas pu demander » sont des réponses différentes et une seule est votre problème.
+</Note>
+
+**In flight n'est pas un backlog.** C'est du trafic qui a été envoyé et facturé et qui n'a
+simplement pas encore été rapporté. Un message qui n'obtient jamais d'accusé est clos à son
+échéance d'expiration ; jusque-là il siège ici, et sur une plateforme active il y sera toujours.
+
+## Trafic
+
+Trois séries — submitted, delivered, failed — sur la plage choisie. Sans rien dans la fenêtre, le
+graphique est remplacé par **No traffic in this period**, ce qui est une déclaration sur la plage
+que vous avez choisie autant que sur la plateforme.
+
+## Pourquoi les messages ont échoué
+
+Une répartition de chaque résultat qui n'était pas une livraison, chacun nommé en langage clair
+plutôt que par son code d'accusé :
+
+- Failed at the vendor
+- Rejected on submission
+- Dropped before sending
+- No receipt within the deadline
+
+À côté de chaque nom, en petites lettres, siège l'état numérique de l'accusé et le code d'erreur
+propre au vendor. Cela ressemble à de la duplication et ne l'est pas. `EXPIRED`, `REJECTD` et
+`UNDELIV` se facturent tous de façon identique et signifient des choses entièrement différentes,
+et lorsque vous allez chez un vendor pour poser une question sur un pic, **le nombre est ce sur
+quoi leur documentation est indexée**. Le nom est pour vous ; le nombre est pour eux.
+
+### Écarter un échec
+
+Chaque ligne peut être écartée, ce qui la cache de la liste sans rien supprimer. Un pied de page
+compte ce que vous avez caché et peut le remontrer.
+
+<Tip>
+**Un échec écarté revient tout seul la prochaine fois qu'il se produit.** Écarter cache ce dont
+vous avez déjà traité, pas ce qui recommence.
+</Tip>
+
+Les écartements vivent dans le navigateur où vous les avez faits. Un autre opérateur, ou le même
+opérateur sur une autre machine, voit la liste complète — ce qui est délibéré, puisque le triage
+d'une personne n'est pas une déclaration factuelle à l'échelle de la plateforme.
+
+Cette distinction apparaît dans les deux états vides. **No failures in this period** signifie que
+rien n'a échoué. **Every failure in this period has been dismissed** signifie que quelque chose a
+échoué, et vous avez choisi de ne pas le regarder. L'écran ne rapportera pas une période propre
+sur la force de votre propre classement.
+
+## Santé du gateway
+
+Un ruban de six tuiles en pied de page — mémoire, processeur, tâches en cours, requêtes API,
+tâches internes, uptime — chacune avec un sparkline, et un lien vers le détail. C'est un coup
+d'œil, pas une enquête.
+
+<Warning>
+**« Internal tasks » n'est pas les connexions vendor.** C'est le travail de fond propre au
+gateway : écritures en base, traitement des accusés. Partout ailleurs dans le panneau, un
+*worker* désigne une connexion SMPP, donc cette tuile évite le mot entièrement. La lire comme un
+vendor bloqué vous envoie chercher un problème d'opérateur qui n'existe pas.
+</Warning>
+
+La tuile **API requests** rapporte une moyenne depuis que le processus a démarré. Elle répond à
+« cet endpoint est-il lent en général » et ne peut pas répondre à « était-il lent il y a cinq
+minutes ».
+
+Si un rafraîchissement échoue tandis que des chiffres plus anciens sont toujours à l'écran, une
+note en pied dit que le sondage a échoué et les chiffres restent en place. L'écran préfère une
+lecture périmée dont on vous informe à une lecture blanche dont on ne vous informe pas.

@@ -1,0 +1,109 @@
+---
+title: "Comptes postpayés"
+description: "Limites de crédit plutôt que soldes — et la séparation délibérée entre une facture exacte et une mise en application approximative."
+---
+
+Un compte est **soit prépayé, soit postpayé à un instant donné**, défini par
+`account_balance.billing_mode`. Le postpayé est désactivé tant que `smsg.balance.postpaid.enabled`
+n'est pas true, donc migrer ajoute deux colonnes et ne change rien tant que vous ne le dites pas.
+
+```sql
+UPDATE account_balance
+   SET billing_mode = 'POSTPAID', credit_limit = 500000
+ WHERE account_id = 'acct-1001';
+```
+
+## Ce qui change
+
+Un compte postpayé n'est **pas débité du tout**. Son `balance` reste à zéro, aucun bloc n'est
+réservé, et ce qu'il doit est dérivé de `cdr_submit` lorsque la facture est préparée.
+
+Ce que le gateway applique à la place est `credit_limit` — combien d'usage non facturé peut
+s'accumuler avant que le compte ne soit refusé.
+
+<Warning>
+**`credit_limit = 0` signifie pas de crédit, pas illimité.**
+
+Il n'y a aucune représentation de l'illimité et il n'est pas prévu qu'il y en ait. Une faute de
+frappe ou un champ de formulaire manquant doit échouer en mode fermé : un compte qui ne peut rien
+envoyer est un appel au support, et un compte qui peut tout envoyer est un mois de trafic que
+personne ne peut facturer.
+</Warning>
+
+Atteindre la limite est **le même refus qu'épuiser du crédit prépayé** — SMPP `0x402`, HTTP `402`,
+raison `insufficientCredit`. Délibérément : les deux signifient « vous ne pouvez pas envoyer
+maintenant », et deux codes de statut obligeraient chaque client de la plateforme à en apprendre un
+deuxième.
+
+## Facture exacte, mise en application approximative
+
+Ce sont deux tâches différentes, et elles ne partagent délibérément pas d'implémentation.
+
+<CardGroup cols={2}>
+  <Card title="Le contrôle de limite" icon="gauge">
+    Lit un **chiffre en mémoire** rafraîchi sur le même sondage de 30 secondes qui applique les
+    rechargements. Il est autorisé à être périmé.
+  </Card>
+  <Card title="La facture" icon="file-invoice">
+    Une **fonction pure de `cdr_submit`** sur une fenêtre semi-ouverte. Ne lit jamais ce compteur,
+    ne lit jamais `account_balance`, ne lit jamais le grand livre.
+  </Card>
+</CardGroup>
+
+Donc **la seule chose qui peut rendre une facture fausse est une ligne `cdr_submit` manquante ou en
+trop.** Rien dans le chemin de mise en application ne peut corrompre une facture.
+
+### La péremption est biaisée en toute sécurité
+
+Un sondage ne peut jamais que *resserrer* la marge de manœuvre, jamais l'élever — parce que la
+requête ne peut pas voir les messages envoyés pendant qu'elle tournait. La marge de manœuvre monte
+seulement quand la dette diminue réellement : une période clôturée, un remboursement arrivé, ou un
+opérateur a changé la limite.
+
+Ce biais est le point. **La péremption refuse trop tôt plutôt que trop tard.**
+
+## Jusqu'où au-delà de la limite un compte peut aller
+
+| Situation | Dépassement |
+| :--- | :--- |
+| Régime permanent, une instance | **0 message** — le décrément en mémoire *est* la mise en application |
+| Redémarrage non propre | Au plus la file CDR non flushée, une fois par redémarrage |
+| Un remboursement perdu | 0, et conservateur — il refuse trop tôt |
+| Désactivé en cours de période | Au plus un intervalle de sondage, et la facture couvre encore la fin |
+| N instances | Jusqu'à (N−1) × limite |
+
+La dernière ligne est celle à surveiller si vous exécutez jamais plus d'un gateway contre une base
+de données. Elle est mentionnée parce qu'elle est celle qui monte à l'échelle, pas parce qu'elle
+est un problème actuel.
+
+<Warning>
+**Ne facturez jamais depuis le compteur, et n'ajoutez jamais une ligne de grand livre par message
+pour rendre la facturation exacte.**
+
+Cela mettrait une écriture en base sur le chemin de l'argent à des milliers par seconde — la chose
+exacte que ce sous-système existe pour éviter — et `cdr_submit` *est* déjà l'enregistrement par
+message.
+</Warning>
+
+## Choisir entre les deux
+
+| | Prépayé | Postpayé |
+| :--- | :--- | :--- |
+| L'argent bouge | Avant l'envoi | Après la facturation |
+| Risque que vous portez | Aucun | Jusqu'à la limite de crédit |
+| Refus | Solde épuisé | Usage non facturé au-delà de la limite |
+| Charge opérationnelle | Rechargements | Facturation et recouvrement |
+
+Le prépayé est le défaut le plus sûr pour un nouveau compte. Le postpayé mérite son risque avec des
+clients dont le volume rend les rechargements constants une nuisance.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocs, réservations et l'identité de l'argent.
+  </Card>
+  <Card title="Relevés" icon="receipt" href="/platform/billing/statements">
+    Clôturer une période et émettre la facture.
+  </Card>
+</CardGroup>

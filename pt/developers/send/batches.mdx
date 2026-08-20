@@ -1,0 +1,116 @@
+---
+title: "Batches"
+description: "Muitas mensagens em uma chamada, agendamento e a resposta que te diz muito menos do que parece."
+---
+
+`/secure/sendbatch` enfileira muitas mensagens em uma chamada.
+
+```json
+{
+  "messages": [
+    { "to": "61491570006", "content": "Your OTP is 4417." },
+    { "to": "61491570007", "content": "Your OTP is 9921." }
+  ]
+}
+```
+
+Cada elemento aceita os mesmos campos que um envio único. O `to` de uma mensagem pode ser um array,
+o que multiplica.
+
+## A resposta confirma apenas aceitação
+
+```json
+{
+  "data": {
+    "batchId": "c0ffee12-9f3a-4a1e-8d55-1b2c3d4e5f60",
+    "messageCount": 3,
+    "scheduled": "3600s"
+  }
+}
+```
+
+<Warning>
+**Não há ids por mensagem nesta resposta, nem resultados por mensagem.** `messageCount` é para
+quantas o batch se expandiu, não quantas tiveram sucesso.
+
+Desfechos por mensagem chegam na sua **errback URL** como callbacks separados. Um cliente que trate
+um `200` aqui como "todas as três enviadas" está errado exatamente nos casos que valem conhecer.
+</Warning>
+
+## Padrões e configuração
+
+```json
+{
+  "messages": [
+    { "to": "61491570006", "content": "Your OTP is 4417." },
+    { "to": "61491570007", "content": "Your OTP is 9921." }
+  ],
+  "globals": {
+    "from": "SUNOTP",
+    "dlr": "yes",
+    "dlr_url": "https://yourapp.example.com/hooks/dlr"
+  },
+  "batch_config": {
+    "schedule_at": "3600s",
+    "callback_url": "https://yourapp.example.com/hooks/batch-done",
+    "errback_url": "https://yourapp.example.com/hooks/batch-error"
+  }
+}
+```
+
+**`globals` é mesclado *por baixo* de cada mensagem**, então um campo definido em uma mensagem
+individual vence.
+
+<Warning>
+**Chaves desconhecidas em `batch_config` são ignoradas, não recusadas.** Um erro de digitação em
+`errback_url` custa a você cada resultado por mensagem, silenciosamente. O batch é aceito e os
+callbacks simplesmente não chegam.
+
+Este é o único lugar da API onde um campo mal escrito não produz um `400`, então confira enviando
+uma mensagem deliberadamente fadada a falhar e conferindo que o callback chega.
+</Warning>
+
+## Agendamento
+
+`schedule_at` aceita exatamente duas formas:
+
+| Formato | Significado |
+| :--- | :--- |
+| `3600s` | Relativo. Em uma hora |
+| `2026-08-20 09:30:00` | Absoluto, `YYYY-MM-DD HH:MM:SS` |
+
+Qualquer outra coisa é `412 Got unknown format`. **Uma data no passado também é recusada**, em vez
+de enviada imediatamente.
+
+<Tip>
+Batches agendados sobrevivem a um restart apenas quando o gateway roda com um broker RabbitMQ. E nem
+mesmo aí enquanto a conexão com o broker está degradada. Se agendamento durável importa para você,
+pergunte ao seu provedor qual provedor de fila ele roda e se ele alerta em `amqp.bridge.degraded`.
+</Tip>
+
+## Limites
+
+| Limite | Valor |
+| :--- | :--- |
+| Mensagens por batch após expansão | **10 000** |
+| Acima disso | `400 a batch may expand to at most 10000 messages` |
+
+Destinos como array multiplicam: 100 mensagens, cada uma com 200 destinatários, dá 20 000, e é
+recusado.
+
+## Pacing
+
+Os batches se ajustam sozinhos ao volume da fila do roteador, pausando acima de uma marca d'água.
+Você não precisa limitar sua própria submissão do batch. Mas **ainda** precisa respeitar o limite de
+mensagens por segundo da sua conta em envios comuns, que é um teto separado e retorna `429`.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Enviar um batch" icon="layer-group" href="/reference/api/sendbatch">
+    Cada campo, com as recusas.
+  </Card>
+  <Card title="Callbacks de batch" icon="phone-arrow-down-left" href="/developers/receive/batch-callbacks">
+    O que chega em `callback_url` e `errback_url`.
+  </Card>
+</CardGroup>

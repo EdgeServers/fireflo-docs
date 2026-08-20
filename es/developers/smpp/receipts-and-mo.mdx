@@ -1,0 +1,99 @@
+---
+title: "Acuses y mensajes entrantes"
+description: "deliver_sm transporta dos cosas distintas, y distinguirlas es la primera tarea de cualquier receptor SMPP."
+---
+
+En un bind transceiver o receiver, `deliver_sm` llega desde la pasarela. Transporta **dos cosas
+distintas**, y su manejador tiene que separarlas antes de nada.
+
+| `esm_class` | Es | Contiene |
+| :--- | :--- | :--- |
+| Bits de acuse de entrega puestos | Un **acuse** de un mensaje que envió | El `id`, un estado y recuentos |
+| En otro caso | Un **mensaje entrante** desde un terminal | Texto real de alguien |
+
+<Warning>
+**No trate un acuse como un mensaje entrante.** Un receptor ingenuo que reenvíe cada
+`deliver_sm` a la bandeja de entrada de una aplicación le entrega `id:… sub:001 dlvrd:001
+stat:DELIVRD` a una persona. Y, peor aún, normalmente tampoco cierra el registro que el acuse
+estaba ahí para cerrar.
+</Warning>
+
+## Leer un acuse
+
+El cuerpo sigue el formato convencional:
+
+```
+id:7a2a5b6c-… sub:001 dlvrd:001 submit date:2608190859 done date:2608190859 stat:DELIVRD err:000
+```
+
+`id` es el id del mensaje de su `submit_sm_resp`. Es la clave de correlación, y la única.
+
+`stat` es el estado en bruto: `DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`,
+`REJECTD`, `FAILED`, `BUFFRED`, `SEEN`. `EXPIRED`, `REJECTD` y `UNDELIV` se facturan todos como
+fallos pero significan cosas distintas.
+
+<Tip>
+**`ACCEPTD` y `BUFFRED` no son resultados.** Sigue otro acuse. Si pidió notificaciones
+intermedias con el bit 4 de `registered_delivery`, su manejador debe esperar un estado final en
+lugar de cerrar con el primer acuse.
+</Tip>
+
+## Tres segmentos, tres acuses
+
+Por defecto recibe un acuse por cada `submit_sm` que envió, cada uno citando el id que se le dio.
+Su proveedor puede colapsar eso a uno con `conf.dlr.multipart` fijado a `first` o `last`, que
+lleva los totales reales de `sub:`/`dlvrd:`.
+
+**Todos los acuses reportan el mismo resultado** de cualquier manera, porque los segmentos
+salientes se agregan antes de construir cualquier acuse. Así que no hay nada que conciliar entre
+ellos. Elija uno e ignore el resto, o pida a su proveedor que envíe uno.
+
+## Mensajes entrantes
+
+Un `deliver_sm` sin los bits de acuse es un mensaje real que alguien envió a su número.
+
+La pasarela tiene que resolver **qué cuenta posee el número de destino** antes de poder
+enrutarlo a usted. Si ese mapeo falta, el mensaje se registra y no se entrega a nadie. Y no hay
+nada observable de su lado, porque en lo que respecta al enrutamiento nunca estuvo dirigido a
+usted.
+
+<Tip>
+Al poner en marcha un nuevo número entrante, envíe un mensaje y pida a su proveedor que
+confirme que se resolvió a su cuenta en lugar de aterrizar sin mapear. Separa "mi manejador
+está roto" de "el número nunca fue mío", que de otra forma son indistinguibles.
+</Tip>
+
+## Responder
+
+Conteste cada `deliver_sm` con un `deliver_sm_resp`. Una PDU sin contestar consume un hueco de
+ventana en el extremo de la pasarela, y suficientes de ellas estancan la sesión de una forma
+que parece que la pasarela ha dejado de enviar.
+
+## Si los acuses nunca llegan
+
+<Steps>
+  <Step title="¿Puede su bind recibir?">
+    Un bind solo transmitter no puede. Es la causa más común y la más fácil de pasar por alto,
+    porque el envío funciona perfectamente.
+  </Step>
+  <Step title="¿Los pidió?">
+    `registered_delivery` en `0x00` significa ninguno. Algunas librerías lo dejan en cero por
+    defecto.
+  </Step>
+  <Step title="¿Los produce el vendor?">
+    Si su proveedor tiene `request.dlrs` desactivado para el vendor que transporta su tráfico,
+    nada reporta jamás un resultado y cada mensaje se estabiliza como `EXPIRED` en su fecha
+    límite.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Envío" icon="paper-plane" href="/developers/smpp/submitting">
+    `registered_delivery` y cómo se corresponde con los niveles de acuse.
+  </Card>
+  <Card title="FAQ de SMPP" icon="circle-question" href="/developers/smpp/faq">
+    Ventanas, throttling, reconexiones y sesiones obsoletas.
+  </Card>
+</CardGroup>

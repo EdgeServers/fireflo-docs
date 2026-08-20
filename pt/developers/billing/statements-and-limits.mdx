@@ -1,0 +1,86 @@
+---
+title: "Extratos e limites"
+description: "Onde fica seu histórico de uso, o que contém um registro de chamada e os dois tetos que se aplicam ao seu tráfego."
+---
+
+## Seu histórico de uso
+
+Toda mensagem produz um **registro de chamada**: o que você enviou, quando, quanto custou e como
+terminou. Seu extrato é essa história consolidada por período.
+
+Ambos vivem no portal do cliente, e não na API. Veja [o portal](/developers/portal/messages-and-statement)
+para ler e exportar.
+
+<Tip>
+Não existe **endpoint REST para o seu histórico de mensagens**. `/secure/balance` dá o número
+atual; o portal dá o histórico e uma exportação CSV. Se você precisa de histórico nos seus próprios
+sistemas, exporte em vez de tentar reconstruir a partir dos recibos. Os recibos que você deixou de
+receber são exatamente os que estariam faltando.
+</Tip>
+
+## O que um registro contém
+
+| | |
+| :--- | :--- |
+| A mensagem | Destino, sender ID, segmentos, codificação |
+| O dinheiro | Tarifa unitária, contagem de segmentos, total |
+| O desfecho | Estado final e quando foi alcançado |
+| As TLVs | **As que você enviou**, não o que um fornecedor adicionou downstream |
+
+Você vê o seu lado da mensagem. Qual fornecedor a transportou e o que ele adicionou não é seu para
+ver. É a mesma regra que o campo `vendor` de um recibo segue.
+
+## Segmentos, não mensagens
+
+**Você é cobrado por segmento.** Um registro mostra a contagem de segmentos, e o total é a tarifa
+unitária multiplicada por ela.
+
+É aqui que uma conta inesperada geralmente se explica: um corpo que passou de 160 caracteres GSM-7,
+ou um único apóstrofo tipográfico que forçou a mensagem inteira a UCS-2 e reduziu a capacidade para
+70. Veja [Codificação e segmentos](/developers/send/encoding-and-segments).
+
+## Os dois tetos
+
+São coisas diferentes e produzem falhas diferentes:
+
+| Limite | Excedido por | Você recebe |
+| :--- | :--- | :--- |
+| **Mensagens por segundo** | Enviar rápido demais | `429`, ou `ESME_RTHROTTLED` via SMPP |
+| **Crédito** | Enviar mais do que você financiou | `402 Insufficient credit` |
+
+<Warning>
+**Nenhum tem cabeçalho dizendo quando tentar de novo.** Não há `Retry-After` em um `429`. Faça
+backoff exponencial com jitter, porque um intervalo fixo entre vários workers os ressincroniza no
+próximo pico.
+
+E um `402` não deveria ser repetido. Repetir não adiciona crédito; só transforma um alerta em
+milhares.
+</Warning>
+
+## Recusas não custam nada
+
+Toda recusa (remetente não aprovado, template que não bate, TLV ausente, crédito insuficiente) deixa
+você sem cobrança, ou reembolsado se a cobrança já tinha sido feita.
+
+Vale saber ao reconciliar: **a quantidade de mensagens que você enviou e a quantidade pela qual foi
+cobrado são legitimamente números diferentes**, e as recusas são a diferença.
+
+O único caso que surpreende é a recusa de conteúdo em multipart, onde cada segmento foi confirmado
+antes de a mensagem ser descartada. Você vê acknowledgements de segmentos que depois foram
+reembolsados.
+
+## O que um `500` significa para sua conta
+
+`500 Cannot send message` reverte qualquer cobrança. Por isso é o único erro de servidor seguro para
+repetir: o retry custa uma mensagem, não duas.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Saldo e cotações" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Verificar crédito e tarifar uma mensagem antes de enviar.
+  </Card>
+  <Card title="FAQ de faturamento" icon="circle-question" href="/developers/billing/faq">
+    Reconciliação, reembolsos e mensagens contestadas.
+  </Card>
+</CardGroup>

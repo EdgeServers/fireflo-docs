@@ -1,0 +1,66 @@
+---
+title: "Envoyer des SMS avec FireFlo"
+description: "Deux voies d'entrée, un même ensemble de règles derrière, et la poignée de choses qui se comportent différemment d'autres passerelles."
+---
+
+Vous pouvez atteindre FireFlo par deux voies, et votre choix tient surtout au volume et à ce que
+votre stack parle déjà.
+
+<CardGroup cols={2}>
+  <Card title="REST" icon="code" href="/developers/quickstart">
+    JSON sur HTTPS. Un appel, un message. Commencez ici sauf raison contraire.
+  </Card>
+  <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
+    Un bind persistant. Débit plus élevé, et ce que parlent les opérateurs eux-mêmes.
+  </Card>
+</CardGroup>
+
+**Tout ce qui se passe en aval de l'acceptation est identique.** Même routage, même tarification,
+mêmes approbations, mêmes accusés. Le choix affecte la manière dont vous remettez un message, pas
+ce qui lui arrive.
+
+## Trois choses qui surprennent
+
+Bon à savoir avant votre première intégration plutôt que pendant votre premier incident.
+
+<AccordionGroup>
+
+<Accordion title="Une réponse en succès ne signifie pas livré">
+La réponse de soumission est envoyée **avant l'exécution du routage**. Donc `200`, ou `ESME_ROK`,
+signifie *accepté pour routage*, et rien de plus.
+
+Un message peut être accepté puis refusé, abandonné ou échouer au routage, et le seul moyen de
+l'apprendre est un [accusé de livraison](/developers/receive/delivery-receipts). Si votre
+intégration traite l'acceptation comme une livraison, elle sera fausse exactement dans les cas qui
+vous importent.
+</Accordion>
+
+<Accordion title="Votre sender ID et vos libellés peuvent tous deux nécessiter une approbation">
+Sur un compte avec whitelisting activé, un `from` non approuvé est refusé, tout comme un corps de
+message qui ne correspond à aucun template approuvé.
+
+C'est normal pour les destinations réglementées, DLT indien en tête. Si vos envois fonctionnent en
+test et échouent en production, c'est la première chose à vérifier.
+</Accordion>
+
+<Accordion title="Underscores et hyphens désignent le même champ — sauf une fois">
+`dlr_url` et `dlr-url` sont un seul champ, et envoyer **les deux** donne un `400` plutôt qu'un
+comportement last-one-wins.
+
+La seule exception est `custom_tlvs`, qui conserve son underscore. `custom-tlvs` est un argument
+inconnu.
+</Accordion>
+
+</AccordionGroup>
+
+## Où aller ensuite
+
+| Vous voulez | Lisez |
+| :--- | :--- |
+| Envoyer votre premier message | [Quickstart](/developers/quickstart) |
+| Connaître chaque champ | [`/secure/send`](/reference/api/send) |
+| Envoyer à plusieurs personnes en une fois | [Batches](/developers/send/batches) |
+| Savoir pourquoi un long message coûte trois unités | [Encodage et segments](/developers/send/encoding-and-segments) |
+| Recevoir les accusés de livraison | [Accusés de livraison](/developers/receive/delivery-receipts) |
+| Gérer une erreur correctement | [Erreurs](/developers/errors) |
+| Migrer depuis Jasmin | [Migration depuis Jasmin](/developers/migrating/from-jasmin) |

@@ -1,0 +1,81 @@
+---
+title: "Messages entrants"
+description: "Messages envoyés *vers* votre numéro : comment ils vous parviennent, les placeholders, et pourquoi ils sont configurés sur le vendor plutôt que par vous."
+---
+
+Un **MO** — mobile-originated — est un message qu'un combiné envoie *vers* un numéro qui vous
+appartient. Une réponse à une alerte, un `STOP`, un mot-clé entrant.
+
+## Celui-ci n'est pas à vous de configurer
+
+Contrairement à un `dlr_url`, que vous fixez par message, le transfert MO est configuré **sur le
+worker vendor qui reçoit le trafic**, par celui qui exploite la passerelle.
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+outSms.instance.testRoute.forward.mo.format = JSON
+```
+
+Donc si des messages entrants ne vous parviennent pas, la correction est une conversation avec
+votre fournisseur plutôt qu'un changement dans votre code. Deux choses qui valent la peine d'être
+demandées : si `forward.mo.url` est bien réglé sur le bon worker, et si le numéro que vous attendez
+est bien mappé à votre compte.
+
+## Ce qui arrive
+
+Un **`POST`**, au format `JSON` ou `FORM`. La même règle de succès `200`–`399` et le même budget de
+retries que les accusés de livraison : 10 tentatives, à 120 secondes d'intervalle, timeout de 5
+secondes.
+
+L'URL peut porter des placeholders. Les valeurs sont URL-encodées avant substitution :
+
+| Placeholder | Valeur |
+| :--- | :--- |
+| `%p` | Adresse d'origine — le combiné |
+| `%P` | Adresse de destination — votre numéro |
+| `%a` | Texte du message |
+| `%t` | Horodatage |
+| `%i` | Identifiant de passerelle entrante |
+| `%I` | Message centre |
+| `%o` | Valeur de data coding |
+
+<Warning>
+**`%p` est l'expéditeur et `%P` la destination.** La casse est la seule différence entre les deux,
+et les inverser produit un système qui fonctionne parfaitement jusqu'à ce que quelqu'un essaie de
+répondre au numéro qu'il a enregistré.
+</Warning>
+
+## La propriété doit être résolue
+
+Un message entrant arrive à la passerelle avec un numéro de destination et aucun compte attaché.
+La passerelle mappe ce numéro à un compte avant de pouvoir transférer quoi que ce soit.
+
+Si le mappage manque, le message est **non mappé** : il arrive, il est enregistré, et il n'est
+transféré nulle part. Il n'y a pas d'erreur de votre côté à observer, car rien ne vous a jamais été
+adressé du point de vue du routage.
+
+<Tip>
+En testant un nouveau numéro entrant, envoyez un message et demandez à votre fournisseur de
+confirmer qu'il a bien été résolu sur votre compte plutôt que de terminer non mappé. Cette
+vérification unique sépare "mon endpoint est cassé" de "ce numéro n'a jamais été le mien".
+</Tip>
+
+## Débogage
+
+Le détail complet des entrants nécessite `print.mos = true` sur la passerelle, **temporairement**.
+Cette sortie contient le contenu du message et les deux adresses, donc elle est sensible et n'est
+pas à laisser activée.
+
+Votre fournisseur devra le faire, et il vaut la peine de le lui demander plutôt que de deviner,
+puisque l'alternative est d'inférer une voie entrante depuis son absence.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Accusés de livraison" icon="receipt" href="/developers/receive/delivery-receipts">
+    La direction sortante, que vous contrôlez, par message.
+  </Card>
+  <Card title="FAQ réception" icon="circle-question" href="/developers/receive/faq">
+    Ordre, doublons et que faire d'un accusé manquant.
+  </Card>
+</CardGroup>

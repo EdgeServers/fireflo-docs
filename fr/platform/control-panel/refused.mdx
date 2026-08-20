@@ -1,0 +1,104 @@
+---
+title: "Refused"
+description: "Messages que le gateway n'a pas voulu envoyer et pourquoi — y compris les trois refus qui se produisent après que le client s'est vu dire oui, et qui portent donc un identifiant de message et un remboursement."
+---
+
+**Messages que le gateway n'a pas voulu envoyer, et pourquoi.** Le premier écran à ouvrir quand un
+client dit que rien n'arrive.
+
+La plupart des refus se sont produits à la porte : rien n'a été envoyé et rien n'a été débité.
+Trois non, et la différence est la chose la plus importante sur cette page.
+
+## Refusé à la porte, ou refusé après acceptation
+
+<Warning>
+**Trois raisons se produisent après que le client s'est vu dire oui** — *never routed*, *vendor
+refused it* et *dropped by a filter*.
+
+Ces messages ont été acceptés, débités et dans deux cas réellement envoyés. Ils portent un
+**message id**, ils apparaissent dans les enregistrements d'appels, et **leur débit a été
+remboursé**. Tout le reste sur cette page a été refoulé avant de devenir du trafic tout court.
+
+Le filtre **Stage** sépare les deux, et c'est le filtre à saisir lors de la réconciliation du
+compte d'un client par rapport au vôtre.
+</Warning>
+
+## Les raisons
+
+Des cartes de résumé mènent la page — une par raison, avec un compte pour toute la fenêtre. Elles
+ne bougent pas quand vous paginez, et en cliquer une filtre dessus.
+
+| Raison | Signifie habituellement |
+| :--- | :--- |
+| **Sender ID not approved** | L'expéditeur n'est pas sur la liste approuvée du compte pour ce product |
+| **Content not approved** | Le corps ne correspond à aucun template approuvé — un mot changé suffit |
+| **Out of credit** | Le crédit prépayé ne couvrirait pas |
+| **Required parameter missing** | Un TLV requis par l'ingress était absent, et rien ne l'a fourni |
+| **Rate limit exceeded** | Au-delà des messages par seconde du compte |
+| **Product not sold** | Le login a nommé un product sans ligne activée dans le catalogue |
+| **No price configured** | Aucun tarif côté vente n'a correspondu, et le gateway refuse plutôt qu'envoyer sans facturation |
+| **Product not allowed for this login** | Le login n'est pas autorisé à nommer ce product |
+| **Queue full** | La file du routeur était à capacité et a refusé plutôt que faire grossir le tas |
+| **Could not be queued** | Accepté par les vérifications, mais n'a pas pu être passé — habituellement le broker |
+| **Never routed** | *Après acceptation.* Aucune règle activée n'a correspondu ; remboursé |
+| **Vendor refused it** | *Après acceptation.* L'opérateur a rejeté le submit ; remboursé |
+| **Dropped by a filter** | *Après acceptation.* Un filter de routage l'a arrêté ; remboursé |
+
+<Note>
+**« Out of credit » immédiatement après un redémarrage du gateway peut apparaître sur un compte
+approvisionné**, pendant que le crédit est réservé pour la première fois. Un message le rapporte
+et le suivant réussit. Persister après les premiers envois est une vraie pénurie.
+</Note>
+
+Deux raisons méritent leur propre note. **Content not approved** est une comparaison exacte en
+dehors des placeholders — un seul mot changé refuse. Et sur **vendor refused it**, le statut
+numérique propre à l'opérateur siège à côté de la ligne ; la famille 192–196 porte toujours sur
+des TLV, ce qui sur une voie DLT indienne signifie habituellement un id d'entité ou de template
+manquant ou non estampillé.
+
+Un résumé vide le dit clairement, et ajoute la vérification à faire en premier : si vous
+attendiez des refus et n'en voyez aucun, confirmez que l'application est activée du tout — **une
+whitelist non chargée autorise tout par conception**.
+
+## En trouver un
+
+Le grand filet est **Anything**, qui regarde à l'intérieur de compte, expéditeur, destination,
+product, login, détail de refus et extrait de message à la fois. Des filtres plus étroits
+existent pour compte, destination, nom de bind, product, ingress, listener, from-number et
+message id.
+
+**Carrier status** prend le numéro de l'opérateur en décimal — 69 est le générique « refusé et ne
+dira pas pourquoi » — et seuls les refus vendor en portent un.
+
+## La table
+
+Neuf colonnes par défaut : refused, why, vendor said, account, product, from, to, via, message.
+Le sélecteur ajoute la raison en anglais, le détail du refus, s'il a été débité et remboursé, le
+nom de code vendor, et les ids de ligne et de message.
+
+L'**extrait du message** — les 160 premiers caractères — est conservé **inconditionnellement**,
+contrairement au corps sur un enregistrement d'appel. Un refus de contenu ne peut pas être
+diagnostiqué sans voir ce qui a été envoyé, donc c'est le seul endroit où le texte du message
+est toujours disponible.
+
+<Note>
+Un tiret sous **Parts** signifie que le message a été refusé avant que ses segments ne soient
+comptés — pas zéro parts. **Data coding** affiche `0`, qui est réel : c'est GSM 7-bit.
+</Note>
+
+## Exporter
+
+Préparé en arrière-plan, conservé sept jours, et — comme sur Messages — il **porte chaque
+colonne plus la raison en anglais et le code opérateur**, quoi que vous ayez choisi à l'écran.
+Ces fichiers sont lus par des gens sans panneau ouvert.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Pourquoi un message a été refusé" icon="circle-question" href="/platform/troubleshooting/refusals">
+    Remonter d'un refus à sa cause.
+  </Card>
+  <Card title="Rejets vendor" icon="triangle-exclamation" href="/platform/troubleshooting/vendor-rejections">
+    Ce que signifie chaque code de statut opérateur.
+  </Card>
+</CardGroup>

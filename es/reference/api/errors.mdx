@@ -1,0 +1,138 @@
+---
+title: "Errores de la API"
+description: "Cada estado que devuelve la API REST, qué lo provoca y el orden en que se ejecutan las comprobaciones, que decide qué error ve realmente."
+---
+
+Cada fallo es un objeto JSON con un único `message`. El estado HTTP es la parte legible por
+máquina; la cadena es para una persona leyendo un log.
+
+```json
+{"message":"Authentication failure"}
+```
+
+## El orden en que se ejecutan las comprobaciones
+
+Esto decide qué error ve cuando una petición está mal en más de un sentido, y es la razón por la
+que un payload malformado puede volver como un problema de autenticación.
+
+<Steps>
+  <Step title="Autenticación">
+    Antes de que se parsee el cuerpo siquiera.
+  </Step>
+  <Step title="Autorización">
+    Lista de IPs permitidas, luego tipo de login.
+  </Step>
+  <Step title="Negociación de contenido">
+    La cabecera `Accept`.
+  </Step>
+  <Step title="Parseo">
+    Buen formato JSON, luego nombres de campo, luego valores de campo.
+  </Step>
+  <Step title="Reglas de negocio">
+    Sender ID, plantilla, saldo, límite de tasa.
+  </Step>
+</Steps>
+
+Ejecutado contra una versión 0.7.3 en vivo, un cuerpo no parseable sin credenciales devuelve el
+error de **autenticación**, no el de parseo:
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Tip>
+**Arregle las credenciales antes de depurar un payload.** Un `401` o un `403` no le dicen nada
+sobre si el resto de su petición es correcta, porque nada posterior a la autenticación se ha
+ejecutado todavía.
+</Tip>
+
+## Autenticación y autorización
+
+| Estado | `message` | Cuándo |
+| :--- | :--- | :--- |
+| 401 | `Authentication required` | Sin cabecera `Authorization`. La respuesta lleva `WWW-Authenticate: Basic realm="fireflo"`. |
+| 401 | `Invalid token` | La cabecera no es Basic, no es Base64 válido, o no contiene dos puntos. |
+| 403 | `Authentication failure` | Login desconocido, contraseña incorrecta, **o un login SMPP**: esos no pueden usar esta API. |
+| 403 | `Authorization failure` | Su login tiene una lista de IPs permitidas y la petición no vino desde una de ellas. |
+
+**401 significa "usted no se identificó"; 403 significa "sí lo hizo, y no se aceptó."** La
+distinción merece cablearse en su alerta: un 401 súbito suele ser un despliegue que perdió su
+variable de entorno, mientras que un 403 súbito suele ser una rotación de contraseña o una IP que
+se movió.
+
+<Warning>
+**Una ruta desconocida bajo `/secure/` devuelve `401`, no `404`.** La autenticación se ejecuta
+antes del enrutamiento, así que la API no le dirá a un llamante no autenticado qué endpoints
+existen. No use un `404` para sondar disponibilidad de endpoints: obtendrá `401` pida lo que
+pida.
+</Warning>
+
+## Negociación de contenido
+
+| Estado | `message` | Cuándo |
+| :--- | :--- | :--- |
+| 415 | `This API supports JSON media type only.` | Una cabecera `Accept` que excluye JSON. |
+
+Omitir `Accept` por completo está bien. Enviar `Accept: text/plain` no, y este es el único error
+que la barra de direcciones de un navegador producirá con fiabilidad.
+
+## Parseo
+
+| Estado | `message` | Cuándo |
+| :--- | :--- | :--- |
+| 412 | `Got unparseable json data: <body>` | El cuerpo estaba vacío, no era JSON, o era un array desnudo en lugar de un objeto. |
+| 400 | `Mandatory argument <name> is not found.` | Un campo obligatorio ausente o en blanco. |
+| 400 | `Unknown argument: <name>` | Un campo que la API no tiene, incluyendo `username` y `password`, que pertenecen a la cabecera. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Nombre correcto, forma incorrecta: un `coding` no numérico, un `hex_content` con longitud impar. |
+
+<Warning>
+**`412` para JSON malo, no `400`.** La mayoría de APIs usan `400` para ambos, así que un cliente
+que ramifique según el estado tratará "su JSON está roto" como una sorpresa a nivel de red. Ambos
+son permanentes: no reintente ninguno.
+</Warning>
+
+## Reglas de negocio
+
+| Estado | `message` | Cuándo |
+| :--- | :--- | :--- |
+| 402 | `Insufficient credit` | El saldo prepago no lo cubrirá. No se envió nada y no se cobró nada. |
+| 403 | `'<id>' is not an approved sender ID for this account.` | El `from` no se ha aprobado. |
+| 403 | `The message content does not match any approved template for this account.` | La cuenta envía solo redacciones aprobadas y este cuerpo no coincidió con ninguna. |
+| 429 | `Rate limit exceeded` | Por encima del límite de mensajes por segundo de la cuenta. |
+| 500 | `Cannot send message` | Aceptado y no se pudo encolar. **Todo cargo se revierte.** |
+
+<Warning>
+**No hay `Retry-After` en un `429`.** Aplique backoff propio: exponencial, con jitter. Un
+reintento con intervalo fijo desde muchos workers se resincroniza en la siguiente ráfaga.
+</Warning>
+
+## ¿Cuáles de estos debería reintentar?
+
+| | Reintentar | Por qué |
+| :--- | :--- | :--- |
+| 401, 403, 412, 400 | **No** | Permanentes. La misma petición fallará idénticamente para siempre. |
+| 402 | **No** | Reintentar no añade saldo. Alerte en su lugar. |
+| 415 | **No** | Corrija la cabecera. |
+| 429 | **Sí**, con backoff | Transitorio por definición. |
+| 500 | **Sí**, una o dos veces | El cargo se revirtió, así que un reintento no es un doble cargo. |
+| 502, 503, 504 | **Sí** | No provienen de la pasarela, sino de un proxy delante. |
+
+<Tip>
+**Un `500` es seguro de reintentar precisamente porque el cargo se revierte.** Es una propiedad
+deliberada del ingress, no un accidente: el saldo se retira antes de encolar y se devuelve
+cuando el encolado falla, así que un reintento cuesta un mensaje, no dos. Véase
+[Cómo funciona la facturación](/platform/billing/prepaid-credit).
+</Tip>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Visión general de la API REST" icon="book" href="/reference/api/overview">
+    La envoltura, la autenticación y la regla de nombres de campo.
+  </Card>
+  <Card title="Enviar un mensaje" icon="paper-plane" href="/reference/api/send">
+    Cada campo, con su valor por defecto y su rechazo.
+  </Card>
+</CardGroup>

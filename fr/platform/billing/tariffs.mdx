@@ -1,0 +1,116 @@
+---
+title: "Tarifs et réconciliation"
+description: "Éditer les tarifs depuis le panneau, overrides par compte, et les deux identités qui disent si le crédit d'un compte s'additionne."
+---
+
+## Éditer les tarifs depuis le panneau
+
+Deux opérations sur la page d'un product, et la différence entre elles compte :
+
+| Action | Écrit | Portée |
+| :--- | :--- | :--- |
+| **Définir ce que tout le monde paie** | Le scope `*` pour ce product | Tout compte n'ayant pas sa propre règle |
+| **Tarifer un compte** | Le scope d'un compte nommé | Ce compte uniquement |
+
+**Les deux ne sauvent que les règles du product que vous consultez.** Le reste du scope reste
+intact, donc définir `*` pour `promo` ne peut pas déranger `*` pour autre chose.
+
+L'éditeur de scope complet sur la page *Pricing* remplace toujours un scope en entier — ce qui est
+correct là, parce qu'il vous en montre la totalité.
+
+<Warning>
+Les règles propres à un compte sont essayées en premier et **la première qui correspond gagne**,
+donc tout ce que le compte porte bat le défaut — **y compris un attrape-tout nu**.
+
+C'est ce qui fait qu'un tarif négocié est un override plutôt qu'une suggestion. Cela signifie
+aussi qu'un attrape-tout au niveau du compte désactive silencieusement chaque défaut que vous
+définissez ensuite.
+</Warning>
+
+## Deux identités, pas une
+
+Si le crédit d'un compte s'additionne se vérifie contre **deux** équations. Se tromper à ce sujet
+signale un faux écart sur chaque compte, donc cela vaut la peine de l'énoncer précisément.
+
+```
+MONEY:        Σ(RECHARGE + TRANSFER)  =  balance + reserved
+CONSUMPTION:  reserved − consumed     =  credit reserved but not yet spent   (≥ 0)
+```
+
+<Warning>
+**L'équation évidente est fausse.** `credited − consumed = balance + reserved` était écrite ainsi
+dans la conception et les données l'ont réfutée immédiatement — elle était décalée d'exactement la
+consommation sur chaque compte.
+
+La consommation ne touche jamais les colonnes de solde. Le crédit est réservé par blocs
+(`balance -= n, reserved += n`), dépensé depuis un compteur en mémoire, et **la partie dépensée
+n'est jamais réécrite**. Donc `reserved` est un compteur consommé sur la vie du compte, pas un
+blocage, et chaque mouvement que la base voit laisse `balance + reserved` inchangé.
+</Warning>
+
+L'identité de l'argent tient à l'unité près sur chaque compte, ce qui rend un vrai écart
+significatif.
+
+### Ce qui est exclu, et pourquoi
+
+| Type d'entrée | Compté ? | Pourquoi |
+| :--- | :--- | :--- |
+| `RECHARGE`, `TRANSFER` | **Oui** | De l'argent entrant sur le compte |
+| `RESERVE`, `RELEASE` | Non | Ils déplacent un montant entre deux colonnes de la même ligne, se compensant à zéro |
+| `BILL` | Non | Une période clôturée enregistre ce qui a été facturé et ne bouge rien |
+
+## Sur la vie du compte, jamais une période
+
+Le crédit est un **total courant**. Toute fenêtre plus courte nécessite un solde d'ouverture que
+rien n'enregistre — et un chiffre d'ouverture erroné invente un écart chaque fois qu'il est
+exécuté.
+
+<Tip>
+Donc « réconcilier ce compte pour mars » n'est pas une question à laquelle les données peuvent
+répondre. « Réconcilier ce compte » l'est, et l'a toujours été.
+</Tip>
+
+## D'où viennent les deux côtés
+
+| Côté | Source |
+| :--- | :--- |
+| Crédité | `Σ RECHARGE + TRANSFER`, **appliqués uniquement** — les entrées pending n'ont pas bougé d'argent |
+| Consommé | `usage_daily` pour les jours agrégés **plus** `cdr_submit` pour la queue vive |
+
+Jamais les deux pour un même jour. C'est la jointure qui fait que la réconciliation survit à la
+fenêtre de rétention : une fois qu'un jour est agrégé et purgé, sa consommation compte toujours.
+
+## Quand les chiffres ne s'accordent pas
+
+Procédez dans cet ordre :
+
+<Steps>
+  <Step title="Y a-t-il des rechargements pending ?">
+    Un `RECHARGE` pour un compte sans ligne `account_balance` ne crédite rien et reste pending. Il
+    est dans le grand livre et pas dans le solde — ce qui est exactement un écart côté argent.
+  </Step>
+  <Step title="Y a-t-il eu un arrêt non propre ?">
+    Un `kill -9` bloque du crédit dans `reserved`. `balance + reserved` est toujours conservé,
+    donc l'identité de l'argent tient — mais le compte a moins de dépensable qu'il ne devrait
+    jusqu'à ce que `POST /ops/credit/release` s'exécute.
+  </Step>
+  <Step title="Le rollup est-il en retard ?">
+    Un jour ni agrégé ni encore dans `cdr_submit` est de la consommation que personne ne compte.
+    La purge est censée rendre cela impossible ; vérifiez qu'elle n'a pas été contournée.
+  </Step>
+  <Step title="Le panneau lit-il la même base de données ?">
+    `METRICS_DATABASE_URL` contre le `FIREFLO_DB_URL` du gateway. Un décalage ici fait que chaque
+    chiffre est en désaccord d'une manière qui ressemble à un bug comptable.
+  </Step>
+</Steps>
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Comment fonctionne le pricing" icon="tag" href="/platform/billing/how-pricing-works">
+    Scopes, le défaut `*`, et LCR.
+  </Card>
+  <Card title="Crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocs, réservations et le grand livre.
+  </Card>
+</CardGroup>

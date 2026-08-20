@@ -1,0 +1,122 @@
+---
+title: "El webhook de acuse de entrega"
+description: "Lo que la pasarela hace POST a su dlr_url: cada campo, ambos formatos y el presupuesto de reintentos."
+---
+
+La única dirección en la que **usted es el servidor**. Pídalo con `"dlr": "yes"` y un `dlr_url`
+en el envío.
+
+## `json`: el valor por defecto
+
+Un `POST` con `Content-Type: application/json`:
+
+```json
+{
+  "id": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-13T08:58:59.672Z",
+  "done_date": "2026-08-13T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-in-2001",
+  "system_id": "sunrise-http",
+  "parts": 1
+}
+```
+
+## Campos
+
+| Campo | Significado |
+| :--- | :--- |
+| `id` | El `messageId` que devolvió el envío. **Así es como correlaciona.** |
+| `stat` | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED` o `SEEN` |
+| `level` | `2` el resultado, `1` progreso. **Un acuse de nivel 1 no significa que el mensaje haya terminado**: `ACCEPTD` y `BUFFRED` llegan ambos como 1 y sigue otro. |
+| `sub_date` | Cuándo lo envió, ISO-8601. Omitido cuando se desconoce. |
+| `done_date` | Cuándo se emitió este acuse. En un acuse de nivel 2, cuándo terminó el mensaje. |
+| `to` | El destino, tal como lo dio. |
+| `from` | El sender ID que se usó. |
+| `operator_msg_id` | La referencia propia del operador, para escalar una consulta con él. |
+| `account_id` | La cuenta facturada. |
+| `system_id` | El login que lo envió. |
+| `parts` | Número de segmentos. Omitido cuando no se conoce. |
+
+**Los campos nulos se omiten en lugar de enviarse como nulls**, así que un acuse de un mensaje
+que nunca llegó a un vendor no llega lleno de claves vacías.
+
+Cada llamada lleva `User-Agent: FireFlo/<version>`.
+
+<Warning>
+**No hay campo `err`.** Jasmin envía uno; el resolver de FireFlo solo recibe el estado de entrega,
+nunca un código de error, así que emitir uno significaría inventarlo.
+
+**`vendor` está ausente salvo que su proveedor lo active.** Nombra qué proveedor transporta su
+tráfico, algo que se retiene de los clientes por construcción en otras partes.
+</Warning>
+
+## `kannel`: sustitución de marcadores
+
+Un `GET` desnudo contra la URL registrada con dos marcadores sustituidos. **No se anexa nada.**
+
+| Marcador | Valor |
+| :--- | :--- |
+| `%s` | Id de mensaje de la pasarela |
+| `%d` | `1` entregado, `2` fallido, `4` en buffer, `8` enviado al SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Una URL sin marcadores recibe una petición que no lleva nada en absoluto**: sin cuerpo, sin
+query, sin identificador. El endpoint recibe golpes en el horario previsto, devuelve `200` y la
+integración parece que "funciona pero vacía".
+
+Nada en el sistema lo señala, porque un callback vacío es indistinguible de uno correctamente
+configurado que resulta no llevar datos.
+</Warning>
+
+El formato lo elige su proveedor con `smsg.dlr.forward.format`, no usted. `dlr-method` se acepta
+en un envío pero **no** lo selecciona.
+
+## Entrega y reintentos
+
+| Regla | Valor | Propiedad |
+| :--- | :--- | :--- |
+| Éxito | HTTP **`200`–`399`** | — |
+| Reintentos | **10** | `smsg.webhook.retries` |
+| Intervalo | **120 000 ms** | `smsg.webhook.retry.interval.ms` |
+| Timeout | **5 000 ms**, conexión y petición | `smsg.webhook.timeout.ms` |
+
+<Warning>
+**Un `302` a una página de login cuenta como éxito y se traga el acuse.** Igual que cualquier
+`2xx` de un proxy que nunca llegó a su aplicación. Si los acuses "llegan" pero su manejador nunca
+se ejecuta, mire lo que hay delante.
+</Warning>
+
+La entrega es **al menos una vez**. Haga su manejador idempotente sobre `id` **más `level`**, no
+sobre `id` solo, ya que un mensaje puede producir legítimamente un nivel 1 y luego un nivel 2.
+
+## Qué acuses recibe
+
+`dlr_level` en el envío: `1` solo progreso, `2` el resultado (**por defecto**), `3` ambos.
+
+Sobre SMPP la misma elección es el octeto `registered_delivery`: `0x11` es la ortografía SMPP de
+`dlr_level: 3`.
+
+## Cada acuse se registra
+
+Se reenvíe o no. **Suprimir un acuse es una decisión sobre qué decirle, nunca sobre qué
+registrar.** Así que "nunca recibí un acuse" siempre tiene respuesta por parte de su proveedor.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    Construir contra esto, con la trampa de los niveles explicada.
+  </Card>
+  <Card title="Los callbacks no llegan" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    Diagnosticar el silencio.
+  </Card>
+</CardGroup>

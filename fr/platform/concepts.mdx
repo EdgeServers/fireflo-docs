@@ -1,0 +1,141 @@
+---
+title: "Concepts"
+description: "La douzaine de mots sur lesquels s'appuie ce site. Deux d'entre eux signifient l'opposé de ce que suggère une expérience Kannel ou Jasmin."
+---
+
+Lisez cette page en premier. Toutes les autres pages présupposent ces mots, et deux d'entre eux
+sont un écart délibéré par rapport au vocabulaire du fichier de configuration lui-même.
+
+## Vendor et server
+
+<CardGroup cols={2}>
+  <Card title="Vendor" icon="antenna">
+    Une connexion **sortante** vers celui qui transporte votre trafic. FireFlo la compose. La
+    configuration l'appelle `smppclient`.
+  </Card>
+  <Card title="Server" icon="server">
+    Un **listener** auquel vos clients se connectent. FireFlo accepte. La configuration l'appelle
+    `smppserver`.
+  </Card>
+</CardGroup>
+
+Les valeurs de configuration restent `smppclient` et `smppserver`, et le resteront toujours. C'est
+ce que le gateway lit. **Elles n'apparaissent jamais dans l'interface**, et elles ne sont pas
+utilisées dans la prose de ce site en dehors des blocs de code et des noms de clés.
+
+<Warning>
+C'est là qu'une expérience Kannel ou Jasmin induit en erreur. « Client » et « server » décrivent de
+quel côté d'un socket se trouve FireFlo, ce qui est un fait d'implémentation. **Vendor** et
+**server** décrivent qui est à l'autre bout et qui paie qui. C'est ce à quoi vous réfléchissez
+réellement lorsqu'un message ne veut pas partir.
+
+La couche de données était d'accord depuis le début : `cdr_submit.vendor` et la charge utile de
+l'accusé de livraison ont toujours dit *vendor*.
+</Warning>
+
+Les deux sont des **workers**, et partagent [un ensemble de paramètres de base](/reference/smpp/worker-base).
+
+## Account, login, product
+
+| Mot | Est | N'est pas |
+| :--- | :--- | :--- |
+| **Account** | La clé de facturation. Le solde, la limite de crédit, le relevé et le tarif y sont rattachés. | Une personne, ni un login |
+| **Login** (credential) | Un moyen de s'authentifier — un `system_id` SMPP ou un nom d'utilisateur REST. Un compte peut en détenir plusieurs. | La chose qui est facturée |
+| **Product** | Un tarif nommé sous lequel un message est valorisé, résolu par message. | Un feature flag |
+
+<Note>
+**Un compte, plusieurs logins.** C'est pourquoi le plafond de débit est indexé sur le compte plutôt
+que sur le credential. Une limite par login permettrait à un client de relever la sienne en créant
+un autre login.
+</Note>
+
+Un product est résolu, dans cet ordre : le `system_type` d'un bind SMPP, puis le champ `product` du
+credential. Les appelants HTTP n'ont pas de bind, donc la valeur du credential est la seule source.
+
+<Warning>
+**Un product non défini est un état supporté qui peut envoyer des messages gratuitement.** Un
+message sans product ne voit que les règles de tarif qui n'ont elles-mêmes pas de product. Donc sur
+un déploiement dont toutes les règles en portent un, il ne correspond à rien et n'est pas facturé.
+Voir [Limites](/reference/config/limits) pour les deux interrupteurs qui ferment cela.
+</Warning>
+
+## Table de routage, règle, chaîne, groupe
+
+Une **table de routage** est une liste nommée de **règles**, évaluée de haut en bas ; la première
+qui correspond gagne.
+
+La cible d'une règle peut être un worker, une autre **table** — ce qui est une *chaîne*, et
+c'est ainsi que `[default]` envoie les messages texte dans `[MESSAGE]` — ou un **groupe**.
+
+Un **groupe** est un ensemble de vendors avec une politique : `round-robin`, `weighted` ou
+`failover`. Il ignore les membres suspendus ou n'acceptant pas, ce qui constitue le failover qu'une
+règle à cible unique ne peut pas assurer.
+
+Une **table LCR** est marquée `->function(LCR)` et inverse la règle habituelle : chaque règle
+correspondante est un candidat, et le vendor le moins cher gagne. L'ordre des règles n'y a pas
+d'importance.
+
+## Filter
+
+Un ensemble nommé et réutilisable de conditions, partagé par le routage et la tarification pour que
+le même prédicat ne soit pas écrit deux fois.
+
+<Warning>
+**Un filter manquant ou désactivé fait sauter chaque règle qui le référence.** Il ne charge pas la
+règle avec moins de conditions. Retirer une condition fait qu'une règle correspond *davantage*, donc
+échouer de cette façon routerait ou tariferait silencieusement les mauvaises choses.
+</Warning>
+
+## Scope et tarif
+
+Un **scope** est le membre gauche d'une règle de tarif, et le côté du marché dont il s'agit dépend
+entièrement de ce qu'il nomme :
+
+| Le scope nomme | Il s'agit de |
+| :--- | :--- |
+| Un vendor | **Coût** — ce que vous payez |
+| Un compte | **Prix** — ce que vous facturez |
+| `[*]` | Le défaut côté vente pour tout compte n'ayant pas ses propres règles |
+
+Rien dans le schéma ne les distingue. Le gateway les distingue selon la recherche qui interroge,
+c'est pourquoi le panneau les regroupe en **Ce que nous payons** et **Ce que nous facturons** plutôt
+qu'en une seule liste.
+
+Un **tarif** est l'ensemble des règles de prix pour un compte.
+
+## Message, segment, part
+
+Un **message** est ce qu'un client soumet. Plus long qu'un SMS, il sort en plusieurs **segments**,
+et `smsg.restapi.billing.units` décide si cela est facturé une fois ou par segment.
+
+<Note>
+Quelle que soit l'unité de facturation, un message laisse **exactement une** ligne `part_no = 1`
+dans `cdr_submit`. Les retentatives n'ajoutent pas de lignes. Cet invariant est ce qui fait que
+compter les messages et sommer l'argent sont la même question.
+</Note>
+
+## Prépayé et postpayé
+
+| Mode | Le compte détient | Refusé lorsque |
+| :--- | :--- | :--- |
+| **Prépayé** | Un solde, débité au fur et à mesure des envois | Le solde s'épuise |
+| **Postpayé** | Une limite de crédit, facturée à terme échu | L'usage non facturé atteint la limite |
+
+Les deux refusent **de façon identique** — `0x402` en SMPP, `402` avec `insufficientCredit` en HTTP
+— de sorte que l'intégration d'un client n'a jamais besoin de savoir dans lequel il se trouve.
+
+<Warning>
+Sur un compte postpayé, `credit_limit = 0` signifie **pas de crédit**, pas illimité. Il n'y a nulle
+part dans le système de représentation de l'illimité, délibérément : une faute de frappe doit
+échouer en mode fermé.
+</Warning>
+
+## Refus
+
+FireFlo refuse plutôt que devine dans plus d'endroits que la plupart des gateways : un message
+entrant non mappé, une règle dont le filter est manquant, un import qui laisserait sans credential
+utilisable, une purge sur un jour sans rollup.
+
+Là où une page ici dit que quelque chose est refusé, c'est le comportement documenté et cela existe
+généralement parce que l'alternative perdait silencieusement un message ou de l'argent. Ce n'est
+pas une limitation en attente d'être levée.

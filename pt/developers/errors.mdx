@@ -1,0 +1,111 @@
+---
+title: "Tratamento de erros"
+description: "O que repetir, o que nunca repetir e por que um 500 é o seguro."
+---
+
+Toda falha é um objeto JSON com um único `message`. O status é a parte legível por máquina.
+
+```json
+{"message":"Insufficient credit"}
+```
+
+O catálogo completo está em [Erros da API](/reference/api/errors). Esta página é sobre o que seu
+cliente *deve fazer*.
+
+## A tabela de retry
+
+| Status | Repetir | Por quê |
+| :--- | :--- | :--- |
+| `400`, `412` | **Nunca** | Seu payload está errado. Vai continuar errado para sempre. |
+| `401`, `403` | **Nunca** | Credenciais ou aprovação. Alerte um humano. |
+| `402` | **Nunca** | Repetir não adiciona crédito. Alerte e pare de enviar. |
+| `415` | **Nunca** | Corrija o cabeçalho `Accept`. |
+| `429` | **Sim**, com backoff | Transitório por definição. |
+| `500` | **Sim**, uma ou duas vezes | A cobrança foi revertida. Veja abaixo. |
+| `502`, `503`, `504` | **Sim** | Não vem do gateway; vem de um proxy à frente dele. |
+
+<Warning>
+**Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com
+jitter. Um intervalo fixo em vários workers os ressincroniza no próximo pico, e é assim que um
+rate-limit breve vira um sustentado.
+</Warning>
+
+## Por que um 500 é seguro para repetir
+
+`500 Cannot send message` significa que o gateway aceitou sua requisição e não conseguiu enfileirá-la.
+**Qualquer cobrança é revertida.**
+
+Isso é uma propriedade deliberada do ingresso, e não um acidente: o crédito é reservado antes de
+enfileirar e devolvido quando o enfileiramento falha. Então um retry custa uma mensagem, não duas. É
+exatamente a garantia que torna um retry automático defensável aqui, e não em um `402`.
+
+## Construa para o recibo, não para a resposta
+
+O erro de integração mais comum é tratar um `200` como entrega.
+
+A resposta de submissão é enviada **antes do roteamento rodar**, então aceitação e entrega são
+afirmações não relacionadas. Uma mensagem pode ser aceita e depois recusada por um remetente não
+aprovado, descartada por falta de rota ou rejeitada pela operadora. E nada disso pode aparecer na
+chamada original.
+
+<Steps>
+  <Step title="Guarde o messageId">
+    É a única coisa que correlaciona seu registro com tudo o que vem depois.
+  </Step>
+  <Step title="Trate o envio como 'submetido', não 'enviado'">
+    Um estado separado no seu próprio modelo, para que a diferença fique visível.
+  </Step>
+  <Step title="Mova para um estado final somente em um recibo de nível 2">
+    `ACCEPTD` e `BUFFRED` chegam como nível 1 e outro recibo vem em seguida.
+  </Step>
+  <Step title="Expire no seu próprio relógio">
+    Uma mensagem que nunca recebe um recibo final também deve expirar no seu sistema, ou ela fica
+    "submetida" para sempre.
+  </Step>
+</Steps>
+
+## Erros que você encontra em produção, não em testes
+
+<AccordionGroup>
+
+<Accordion title="403 — sender ID não aprovado">
+Sua conta tem a aprovação de sender ID obrigatória. O `from` usado não foi aprovado, ou você o
+omitiu e o nome do seu login também não está aprovado.
+
+Não é passível de retry e não é corrigível em código. Precisa de uma aprovação do seu provedor.
+</Accordion>
+
+<Accordion title="403 — conteúdo não corresponde a nenhum template aprovado">
+Sua conta só envia textos aprovados. Uma mensagem que funciona em staging e falha em produção é
+geralmente isto.
+
+**Espaços em branco são normalizados antes da comparação**, então espaços e quebras de linha extras
+não são a causa. Uma palavra trocada, um ponto final adicionado ou uma variável em posição diferente
+é.
+</Accordion>
+
+<Accordion title="402 com saldo ainda na conta">
+O crédito é reservado em blocos, não por mensagem. Cerca de vinte mensagens por vez, e as recargas
+são assíncronas. Uma mensagem que chega enquanto a próxima reserva está em andamento é recusada
+mesmo com saldo remanescente.
+
+**Esse é transitório: repita.** Um `402` que persiste com saldo saudável não é, e vale reportar.
+</Accordion>
+
+<Accordion title="400 — Unknown argument: custom-tlvs">
+Todos os outros campos tratam `_` e `-` como o mesmo caractere. `custom_tlvs` é a única exceção e
+mantém o sublinhado.
+</Accordion>
+
+</AccordionGroup>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Todos os status" icon="table-list" href="/reference/api/errors">
+    O catálogo completo com o que provoca cada um.
+  </Card>
+  <Card title="Recibos de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    A metade da história que a resposta não conta.
+  </Card>
+</CardGroup>

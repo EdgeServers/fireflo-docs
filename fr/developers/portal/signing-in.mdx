@@ -1,0 +1,84 @@
+---
+title: "Se connecter"
+description: "Il n'y a pas de mot de passe. Vous entrez votre adresse email, vous suivez un lien à usage unique, et vous atterrissez sur votre compte. La même réponse revient quoi qu'il arrive."
+---
+
+Le portail n'a pas de mot de passe. Vous donnez l'adresse email que votre opérateur détient pour
+votre compte, et un lien à usage unique arrive par email.
+
+<Frame caption="L'écran de connexion du portail. Un champ, pas de mot de passe, et un numéro de version qui vous indique pour quelle version de passerelle ce panneau a été construit.">
+  <img src="/images/developers/portal/sign-in.png" alt="The FireFlo portal sign-in card, showing a single email address field and an 'Email me a link' button" />
+</Frame>
+
+> Connectez-vous avec l'adresse email de votre compte. Nous vous enverrons un lien. Pas de mot de
+> passe à retenir.
+
+## Ce qui se passe ensuite
+
+Quoi que vous tapiez, l'écran affiche la même chose :
+
+> **Vérifiez votre boîte de réception.** Si cette adresse est sur un compte, un lien de connexion
+> est en route. Il fonctionne une fois et expire au bout de 15 minutes.
+
+<Note>
+**Cette réponse ne change pas si l'adresse est incorrecte.** Elle est identique pour une adresse
+sur un compte, une adresse sur un compte désactivé et une adresse jamais vue.
+
+C'est délibéré. Un formulaire qui dirait "aucun compte de ce type" laisserait quiconque tester une
+liste d'adresses et apprendre qui sont les clients de votre fournisseur. Le coût de cette
+protection est qu'une faute de frappe ressemble exactement à un succès. Donc si rien n'arrive,
+vérifiez l'adresse avant de supposer une panne.
+</Note>
+
+Deux contrôles sont sous le formulaire. **Renvoyer** est désactivé pendant deux minutes et
+décompte ; le minuteur survit à un rechargement de page et se corrige quand vous revenez de votre
+client mail, plutôt que d'afficher un nombre périmé. **Utiliser une autre adresse** vous renvoie
+à un formulaire vide.
+
+> Rien après une minute ou deux ? Vérifiez le dossier spam, puis renvoyez-le. Le lien le plus
+> récent est celui qui fonctionne.
+
+Cette dernière phrase compte : demander un second lien ne laisse pas le premier valide. Suivez
+l'email le plus récent.
+
+## Suivre le lien
+
+Le lien vous connecte et vous fait atterrir sur **Aperçu**, pas sur vos messages, parce que la
+première question après la connexion est habituellement "comment ça se passe", pas "montrez-moi la
+ligne 4 000".
+
+Si le lien a déjà été utilisé, ou a plus de quinze minutes :
+
+> **Ce lien n'a pas fonctionné.** Les liens de connexion fonctionnent une fois et expirent après
+> 15 minutes. Demandez-en un nouveau.
+
+<Frame caption="Ce qu'affiche un lien utilisé ou expiré. Les deux cas sont normaux. Un lien est consommé dès qu'il réussit, donc suivre le même email deux fois produit ceci.">
+  <img src="/images/developers/portal/link-expired.png" alt="The portal verify screen reading 'That link did not work', with a button back to sign in" />
+</Frame>
+
+Les deux sont normaux. Un lien est consommé dès qu'il réussit, donc suivre le même email deux
+fois, ou avoir un scanner de mail le suivre avant vous, produira ceci.
+
+## Limites
+
+Les demandes de connexion sont limitées par compte et par réseau. La limite par compte répond avec
+la même phrase neutre qu'un succès, on ne vous dira donc pas que vous l'avez atteinte. La limite
+par réseau, elle, le dit :
+
+> Trop de demandes de connexion depuis cette adresse. Réessayez sous peu.
+
+## Quand ce n'est pas disponible du tout
+
+Si votre fournisseur n'a pas configuré le panneau pour envoyer du mail, vous obtenez une vraie
+erreur plutôt qu'un lien qui n'arrive jamais :
+
+> La connexion par email n'est pas disponible sur ce panneau. Demandez à votre account manager.
+
+C'est un paramètre de déploiement de leur côté, pas quelque chose que vous pouvez contourner.
+
+## Rester connecté
+
+Votre session est conservée dans un cookie dans le navigateur avec lequel vous vous êtes connecté,
+et **Déconnexion** dans la barre supérieure la termine. Vous connecter sur un téléphone ne vous
+déconnecte pas sur un poste de travail. Si vous utilisez le portail depuis une machine partagée,
+déconnectez-vous plutôt que de fermer l'onglet.

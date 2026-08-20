@@ -1,0 +1,116 @@
+---
+title: "Vendors pelos quais você envia"
+description: "Adicionando uma conexão de operadora, provando que funciona antes de o tráfego depender dela, e lendo os quatro estados em que pode estar."
+---
+
+Um **vendor** é uma conexão de saída para quem transporta seu tráfego. O FireFlo disca para ela.
+
+## Adicionando um
+
+<Tabs>
+  <Tab title="Painel de controle">
+    **Vendors → Add vendor.** Host, port, system id e password. O painel agrupa o resto pelo que
+    faz, e cada campo carrega seu default.
+  </Tab>
+  <Tab title="smsg.properties">
+```properties
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+outSms.instance.vendor1.connections.transceivers = 2
+```
+  </Tab>
+</Tabs>
+
+Todas as configurações estão em [Configurações do Vendor](/reference/smpp/client).
+
+## Prove antes de o tráfego depender
+
+```bash
+scripts/fireflo test-bind vendor1
+```
+
+Disca uma vez e reporta o que aconteceu. O painel tem a mesma coisa como **Test connection**.
+
+<Warning>
+**É recusado enquanto o vendor já está bindado.** Um segundo bind no mesmo `systemId` pode custar
+a sessão ativa. Muitas operadoras permitem apenas uma.
+</Warning>
+
+## Bound não é o mesmo que capaz de enviar
+
+| Campo | Significa |
+| :--- | :--- |
+| `bound` | Sessões estabelecidas |
+| `bound_transmittable` | Sessões que efetivamente podem carregar tráfego para fora |
+
+Uma sessão carrega tráfego se for um **transceiver**, ou um **transmitter** em uma sessão de
+cliente. Um vendor só-receiver binda perfeitamente e não envia nada.
+
+Quando esses dois números diferem, essa é a razão, e o painel mostra **Can send** como sua própria
+cifra exatamente para este caso.
+
+## Os quatro estados
+
+| Badge | Significa | Cor |
+| :--- | :--- | :--- |
+| **Connected** | Bindado e aceitando | Verde |
+| **Not connected** | Sem sessão — um vendor sem nenhuma está quebrado | Vermelho |
+| **Not accepting** | Suspenso; a fila drena de volta para o router para o tráfego re-rotear | Âmbar |
+| **Holding** | Aceitando mas não enviando; **a fila cresce** | Âmbar |
+| **Disabled** | Não carregado | Cinza |
+| **Not loaded** | O gateway nunca ouviu falar dele | Âmbar |
+
+<Note>
+**Not loaded** geralmente significa uma de duas coisas: o gateway não recarregou desde que o vendor
+foi adicionado, ou não está lendo workers do banco de forma alguma. O texto de detalhe do badge diz
+qual.
+</Note>
+
+## Retries, e o número que costumava mentir
+
+`maxRetries` limita o **total** de `submit_sm` que uma mensagem pode custar neste vendor —
+somando retries dentro do worker **e** toda volta pelo router.
+
+<Warning>
+Costumava limitar apenas a metade dentro do worker, e cada hop pelo router entregava uma nova cota.
+Um vendor podia ver aproximadamente 100 PDUs para uma mensagem enquanto o painel lia `1`.
+
+Se você ajustou em torno do comportamento antigo, revise o valor. Failing over para um vendor
+*diferente* ainda começa um budget fresco — o limite é por vendor.
+</Warning>
+
+`status.retry.worker` (default `20,88`) classifica quais status de operadora vale a pena retentar
+localmente; `status.retry.router` empurra de volta para outra rota.
+
+`ESME_RSUBMITFAIL` (`0x45`) é tratado como **permanente** — uma lane recusada com ele falha na
+primeira resposta em vez de após vinte. Operadoras que significam overload transitório por ele são
+reincluídas por vendor: `status.retry.worker = 20,88,69`.
+
+## Recibos
+
+`request.dlrs` (default ligado) configura `registered_delivery` em todo `submit_sm` para este vendor.
+
+<Warning>
+Desligue e este vendor para de reportar desfechos, portanto toda mensagem por ele se liquida como
+`EXPIRED` no prazo. Sua taxa de entrega para aquele vendor se torna **sem sentido**, não zero.
+</Warning>
+
+## Controlando um em execução
+
+| Verbo | Use quando |
+| :--- | :--- |
+| `suspend` | Você quer que o tráfego re-roteie para outro lugar agora — a fila drena de volta para o router |
+| `hold` | Você quer que pare de enviar mas mantenha sua fila |
+| `disable` | Você quer que suma em um intervalo de poll |
+
+O painel expõe estes como **Stop sending**, **Hold** e **Disable**, deliberadamente com palavras em
+vez de icônicos — cada um re-roteia ou para tráfego de produção no momento em que é pressionado.
+
+## Custo
+
+O scope de um vendor na rate table é o que ele cobra de **você**. Sem uma cost rule, a margem sobre
+o tráfego por ele é desconhecida em vez de 100%. Veja [rates.conf](/reference/files/rates-conf).

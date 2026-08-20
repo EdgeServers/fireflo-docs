@@ -1,0 +1,124 @@
+---
+title: "Sender IDs e templates"
+description: "Solicitar os nomes que você usa para enviar e o texto que envia. Os quatro estados de aprovação, a gramática de placeholders e por que editar um registro em uso o suspende."
+---
+
+Duas telas, o mesmo formato. **Sender IDs** são os nomes de onde suas mensagens podem partir.
+**Templates** são o texto que elas podem usar. Cada um é aprovado pelo seu provedor antes de poder
+ser usado.
+
+<Note>
+**Nada nessas telas aprova nada.** Cada save é uma solicitação. Essa é a parte que mais surpreende
+clientes: um registro que você acabou de criar e vê na lista ainda não é utilizável.
+</Note>
+
+Se algum dos dois é obrigatório é escolha do seu provedor. Onde é (o regime DLT indiano é o caso
+óbvio), um remetente não registrado ou texto não aprovado é recusado na submissão.
+
+## Os quatro estados
+
+| Badge | Significado |
+| :--- | :--- |
+| **Aguardando aprovação** | Submetido, ainda não revisado. Não utilizável |
+| **Em uso** | Aprovado e no ar |
+| **Não aprovado** | Recusado, com o motivo do seu provedor exibido |
+| **Retirado** | Foi aprovado, desligado pelo seu provedor. Não utilizável |
+
+Cada linha também diz a qual produto se aplica e a qual login: um específico ou **todos os seus
+logins**.
+
+<Frame caption="Sender IDs, todos aprovados e em uso. O produto ao qual cada um está vinculado aparece ao lado. Um remetente aprovado para um produto não é aprovado para outro.">
+  <img src="/images/developers/portal/senders.png" alt="The portal Sender IDs screen listing three approved sender IDs, each scoped to a product" />
+</Frame>
+
+<Frame caption="Templates, incluindo um em hindi. Os espaços {#var#} são o que pode mudar; tudo ao redor é comparado exatamente.">
+  <img src="/images/developers/portal/templates.png" alt="The portal Templates screen listing four approved templates with placeholder syntax" />
+</Frame>
+
+## Solicitando um sender ID
+
+Um campo. Vale conhecer as recusas antes de encontrá-las:
+
+- Um sender ID tem no máximo 64 caracteres, **mas o SMPP permite 21**. Qualquer coisa perto do
+  limite superior pode ficar armazenada aqui e nunca ser entregue.
+- Espaços iniciais ou finais são recusados diretamente. Um sender ID é comparado exatamente, e um
+  espaço final é invisível em todos os lugares em que é exibido.
+- Precisa ser ASCII imprimível.
+
+## Solicitando um template
+
+Um **nome**, para você e seu provedor reconhecerem, comparado com nada. Depois, o **texto**, que é
+comparado exatamente, exceto pelos espaços que você marca.
+
+> Coloque `{#var#}` onde a mensagem muda: um nome, um código, um número de pedido. Tudo o mais
+> precisa bater exatamente.
+
+Existem três placeholders:
+
+| Placeholder | Aceita |
+| :--- | :--- |
+| `{#var#}` | Qualquer coisa |
+| `{#num#}` | Dígitos 0–9 |
+| `{#alp#}` | Letras, espaços e pontuação de nome |
+
+Um preview ao vivo mostra uma mensagem de exemplo que seu template aceitaria. É o jeito mais rápido
+de detectar um template mais restrito ou mais amplo do que você pretendia.
+
+### Onde os templates dão errado
+
+O formulário recusa cada um destes com uma frase, e não com um código:
+
+**Um token escrito errado.** `{#VAR#}` ou `{#Var#}` não é placeholder. Escreva o token em
+minúsculas, sem espaços dentro. É a grafia, não uma afirmação sobre o que ele aceita.
+
+**Algo que parece placeholder e não é**, como `{#VAR}` ou `{{#var#}}`. Os caracteres em volta de um
+placeholder real são comparados literalmente, então isso só aprovaria uma mensagem que os carregue
+exatamente como escritos.
+
+**Dois placeholders colados.** Duas variáveis sem nada entre elas não podem ser separadas, então
+funcionam como uma variável do dobro do comprimento. Coloque o texto que as separa entre elas.
+
+**Um template feito só de um placeholder**, que aceita qualquer mensagem. É o mesmo que não ter
+template.
+
+Você também pode receber um aviso em vez de recusa, quando o texto se repete em volta da parte
+variável. Isso pode fazer o template casar menos do que você espera, e vale confirmar com seu
+provedor.
+
+## Stamps
+
+Em **Stamps a solicitar** você pode propor os valores que seu provedor anexa a cada mensagem neste
+registro. No DLT, os identificadores de entidade e template.
+
+> **Perguntar é grátis:** nada aqui chega a uma mensagem até que seu operador aceite, então um
+> registro aprovado continua funcionando enquanto isso.
+
+Se você já pediu e não teve resposta, salvar substitui o que seu provedor vai ver, em vez de
+enfileirar uma segunda solicitação.
+
+## Qual login
+
+Onde sua conta tem mais de um login de API, você pode vincular um registro a um deles.
+
+<Warning>
+**Deixe em "Todos os meus logins" a menos que você saiba que quer outra coisa.** Vinculado a um só
+login, o registro não faz nada pelos outros. E um login sem nada aprovado não consegue enviar nada.
+</Warning>
+
+## Editando algo que está em uso
+
+Mudar o texto, o sender ID, o nome, a nota ou o login em um registro ao vivo envia de volta para
+aprovação, e o botão de salvar pede confirmação:
+
+> Isso deixa de ser utilizável até que um operador aprove a mudança.
+
+Se for o seu único registro em uso, o aviso diz, porque a consequência é maior:
+
+> Isso deixa de ser utilizável até que um operador aprove a mudança. E é o seu único em uso, então
+> nada será aceito desta conta até lá.
+
+**Mudar apenas os stamps propostos não suspende nada** e salva sem confirmação, já que eles não
+entram em vigor até serem aceitos, de qualquer forma.
+
+Se você precisa do novo texto ao vivo antes do antigo sair, solicite o novo como um template
+separado e deixe seu provedor retirar o antigo em seguida.

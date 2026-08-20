@@ -1,0 +1,94 @@
+---
+title: "Files d'attente"
+description: "Ce qui a été accepté et pas encore envoyé — et pourquoi une file de routeur d'apparence calme peut signifier un backlog broker plutôt qu'une plateforme tranquille."
+---
+
+**Messages que le gateway a acceptés et pas encore envoyés. Rien ici n'est débité deux fois ni
+perdu — mais une file qui ne fait que grossir est un client qui attend.**
+
+L'écran lit en direct, re-interrogeant toutes les quelques secondes, et peut être mis en pause.
+Une case de recherche restreint ce qui est listé par compte, expéditeur, destination, product ou
+vendor, et un bouton **Retries only** sépare « il en est arrivé plus que ce que nous pouvions
+envoyer » de « le vendor refuse ».
+
+## Le broker et le routeur sont des files différentes
+
+<Warning>
+**Un backlog sur le broker de messages apparaît comme une file de routeur *plate*.**
+
+Une fois que la file in-process passe son highwater, le consommateur cesse de tirer, donc la file
+du routeur cesse de grossir et paraît calme — pendant que les messages s'empilent sur le broker
+derrière.
+
+Si la file du routeur est suspicieusement stable et que les clients rapportent des retards, lisez
+d'abord la carte du broker.
+</Warning>
+
+La carte du broker est toujours affichée, même là où il n'y a pas de broker, parce que *non
+configuré* et *configuré et ne répond pas* sont des faits entièrement différents et les deux
+autrement s'afficheraient comme rien.
+
+| État | Ce que cela signifie |
+| :--- | :--- |
+| **No broker configured** | Le défaut. Les soumissions REST vont directement à la file du routeur |
+| **Not answering** | Les publications retombent in-process ; ce qui est sur le broker est bloqué |
+| **Nothing draining it** | Des messages sont en file et aucun consommateur n'est attaché. Pas de lenteur — rien ne les lit |
+
+<Note>
+Lorsque le broker est injoignable sa profondeur se lit **unknown**, jamais zéro. Une file bloquée
+qui afficherait « 0 en attente » serait le nombre le plus dangereux à l'écran.
+</Note>
+
+## Les files in-process
+
+Une carte par file, chacune disant ce qu'elle contient :
+
+| Type | Contient |
+| :--- | :--- |
+| **Waiting to be routed** | Accepté, pas encore affecté à un vendor. Une file pour tout le gateway |
+| **Waiting for the vendor** | Routé, en attente que la session de ce vendor les prenne |
+| **Scheduled retries** | L'envoi a échoué ; en file pour réessayer |
+
+Chaque carte offre une lecture de son propre contenu, et ce sont les phrases sur lesquelles agir :
+
+- **Mostly retries** — le vendor échoue, pas simplement lent. Ajouter de la capacité n'aidera pas.
+- **All first attempts, all from one account** — le volume d'un expéditeur, pas un défaut vendor.
+- **All first attempts, spread across senders** — il en est arrivé plus que ce qui est drainé.
+
+Cette lecture disparaît quand vous filtrez, délibérément : une vue retries-only ne peut pas
+honnêtement se prononcer sur le mélange.
+
+La table montre quand chaque message a été mis en file, son compte, product, adresses, taille et
+encodage, s'il est une première tentative ou une retentative, sa cible, et — sur une file de
+retries — quand il est dû ensuite.
+
+<Note>
+**Le filtrage ne change jamais la profondeur d'une file.** La profondeur reste le vrai nombre et
+la liste en-dessous se restreint. « 3 correspondances » parmi « 412 en attente » signifie que
+trois de l'échantillon listé ont correspondu, pas que seuls trois des messages de ce client sont
+en file.
+</Note>
+
+## Pourquoi le texte du message n'est pas montré
+
+Délibérément absent, et non plus conservé dans les enregistrements d'appels. Faire fonctionner le
+gateway ne nécessite jamais de lire le message d'un client, donc la taille et l'encodage en
+tiennent lieu — assez pour distinguer un message Unicode de trois segments d'un court GSM sans
+lire le courrier de personne.
+
+## Un écran vide est le bon résultat
+
+**No in-process queues** signifie que chaque message qui est arrivé a déjà été remis à un vendor.
+C'est à quoi ressemble un gateway en bonne santé au repos, et c'est pourquoi cet écran n'est pas
+un tableau de bord — vous venez ici quand autre chose vous l'a déjà dit.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Files d'attente et retentatives" icon="rotate" href="/platform/routing/queues-and-retries">
+    Comment fonctionnent la planification des retentatives et le plafond de tentatives.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    État des binds et profondeur de file depuis le gateway lui-même.
+  </Card>
+</CardGroup>

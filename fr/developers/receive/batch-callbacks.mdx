@@ -1,0 +1,92 @@
+---
+title: "Callbacks de batch"
+description: "Les résultats par-message d'un batch arrivent ici et nulle part ailleurs. Un simple GET avec quatre paramètres de requête."
+---
+
+La réponse de `sendbatch` ne confirme **que l'acceptation**. Elle porte un `batchId`, un compte, et
+aucun id par-message.
+
+Les résultats par-message arrivent en callbacks.
+
+```json
+{
+  "messages": [ "…" ],
+  "batch_config": {
+    "callback_url": "https://yourapp.example.com/hooks/batch-done",
+    "errback_url":  "https://yourapp.example.com/hooks/batch-error"
+  }
+}
+```
+
+## Ce qui arrive
+
+**Un simple `GET` avec une query string. Il n'y a pas de corps.**
+
+```
+GET /hooks/batch-error?batchId=c0ffee12-…&to=61491570006&status=0&statusText=…
+```
+
+| Paramètre | Signification |
+| :--- | :--- |
+| `batchId` | Le `batchId` renvoyé par l'appel `sendbatch` |
+| `to` | La seule destination sur laquelle porte ce résultat |
+| `status` | `1` accepté, `0` refusé |
+| `statusText` | Le `messageId` en cas de succès ; le refus en toutes lettres en cas d'échec |
+
+<Tip>
+**`statusText` porte le `messageId` en cas de succès.** C'est le seul endroit où un batch vous en
+donne un, donc si vous devez corréler plus tard des accusés à des membres individuels d'un batch,
+c'est dans ce callback que vous les capturez.
+</Tip>
+
+## Un résultat par message, pas un par batch
+
+Un batch de 500 produit jusqu'à 500 callbacks. Votre endpoint doit être bon marché et idempotent :
+les mêmes règles de retry que pour les accusés s'appliquent, donc un handler lent sera rappelé.
+
+## L'échec silencieux
+
+<Warning>
+**Les clés inconnues dans `batch_config` sont ignorées, pas refusées.**
+
+`errback_url` mal orthographié en `errBack_url` ou `error_url` ne produit pas de `400`. Le batch
+est accepté, les messages sont envoyés, et chaque résultat par-message ne va nulle part. De
+l'extérieur, cela ressemble exactement à un batch où rien n'a échoué.
+
+C'est le seul endroit de l'API où une faute de frappe ne produit pas d'erreur, donc vérifiez-le
+délibérément : envoyez un batch contenant un message dont vous savez qu'il sera refusé — un sender
+ID non approuvé est le plus facile — et confirmez que le callback arrive.
+</Warning>
+
+## Succès, retries et timeouts
+
+Identiques aux accusés de livraison :
+
+| Règle | Valeur |
+| :--- | :--- |
+| Succès | HTTP **`200`–`399`** |
+| Retries | 10 par défaut, à 120 secondes d'intervalle |
+| Timeout | 5 secondes |
+
+Au budget par défaut, un endpoint inaccessible occupe un thread pendant vingt minutes par callback.
+Un endpoint down pendant un gros batch est donc coûteux pour votre fournisseur autant qu'inutile
+pour vous.
+
+## Ce que ceci n'est pas
+
+- **Ce n'est pas un accusé de livraison.** Un callback de batch dit que le message a été accepté ou
+  refusé à l'entrée. Savoir s'il a été *livré* passe toujours par un `dlr_url`, que vous placez
+  dans `globals` pour qu'il s'applique à chaque message du batch.
+- **Non ordonné.** Les résultats arrivent au fur et à mesure du traitement, pas dans l'ordre où
+  vous les avez listés.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Planification, globals et plafond d'expansion.
+  </Card>
+  <Card title="Accusés de livraison" icon="receipt" href="/developers/receive/delivery-receipts">
+    L'issue, par opposition à l'acceptation.
+  </Card>
+</CardGroup>

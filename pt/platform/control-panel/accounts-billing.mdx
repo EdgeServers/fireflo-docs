@@ -1,0 +1,133 @@
+---
+title: "A aba Billing"
+description: "O único lugar no FireFlo onde crédito é criado, e a única escrita no painel que não pode ser desfeita. Mais o ledger, e uma reconciliação que deliberadamente se recusa a corrigir qualquer coisa."
+---
+
+Abra uma account e escolha **Billing**. Quatro cards: o que a account tem, como adicionar a ela, se
+o crédito bate, e todo movimento.
+
+<Warning>
+**Adicionar crédito não pode ser desfeito pelo painel.** Não há "remover crédito" e não há reversão.
+Desfazer um top-up precisaria de uma entrada de ajuste negativa, e essa não existe.
+
+O formulário pede que você confirme o valor e a referência antes de escrever. Leia a confirmação em
+vez de clicar através dela. É o último ponto em que o número ainda é seu para mudar.
+</Warning>
+
+## O que a account tem
+
+Contas prepaid mostram **Available**. Contas postpaid mostram um **Credit limit** — o que podem
+acumular antes de o gateway recusá-las, que é a mesma recusa que uma conta prepaid recebe quando
+se esgota. As duas nunca recebem o mesmo nome.
+
+<Note>
+**Reserved não é um hold que encolhe conforme mensagens saem.** É crédito que foi movido para fora
+do balance, e só cresce até ser liberado.
+
+Vê-lo subir em uma conta ocupada está correto. Vê-lo parado em uma ociosa significa que crédito
+ficou preso por uma parada não limpa, e é devolvido liberando crédito retido — nada é perdido de
+qualquer forma, porque balance mais reserved é conservado.
+</Note>
+
+Uma linha de saldo ausente é lida como **No balance row — not zero, absent**, que é um estado
+diferente e mais consequente: um top-up contra uma conta sem linha fica pendente em vez de creditado.
+**Open for credit** cria a linha em zero.
+
+Moeda não é perguntada. Há uma moeda por plataforma, tomada do gateway, e o FireFlo nunca converte —
+um saldo em qualquer outra coisa nunca poderia ser gasto contra um preço. O campo aparece apenas
+quando o painel não consegue ler a moeda da plataforma de forma alguma.
+
+## Adicionando crédito
+
+Três campos: **Amount**, **Reference**, e uma **Note** opcional.
+
+Uma vez que um valor válido é digitado, o formulário ecoa exatamente o que será armazenado, porque
+dinheiro é mantido a quatro casas decimais e um decimal fora de lugar é o erro caro aqui.
+
+<Warning>
+**A referência é a proteção contra replay, não um memorando.** Um id de recibo ou transação é o
+que impede que o mesmo pagamento seja creditado duas vezes, e o banco só pode aplicar isso quando
+está configurada.
+
+É obrigatória exatamente por essa razão. Não coloque uma descrição ali — coloque o que identifica
+unicamente o pagamento.
+</Warning>
+
+Confirmar é em dois passos de propósito. Pressionar Enter em um campo não faz nada, e o botão se
+arma em uma confirmação nomeando o valor, a moeda e a referência antes que escreva.
+
+Depois de salvar, **o balance não se move imediatamente**. O painel escreve uma entrada de recharge
+e o gateway a aplica em seu próximo poll de configuração, em cerca de trinta segundos. Um balance
+que ainda não mudou não é uma falha.
+
+## Alternando entre prepaid e postpaid
+
+O mesmo card troca o billing mode, e avisa antes de salvar em ambos os sentidos:
+
+- **Para postpaid** — a account para de gastar seu balance. Qualquer coisa já reservada continua
+  reservada até ser liberada.
+- **Para prepaid** — o limite é limpo e a account gasta seu balance novamente. Uso desde a última
+  fatura ainda é devido.
+
+<Warning>
+**Um credit limit postpaid de zero não é ilimitado — é sem crédito**, e a account seria incapaz
+de enviar qualquer coisa. O formulário o recusa em vez de aceitar uma configuração que
+silenciosamente para um cliente.
+</Warning>
+
+**Switch credit off** deixa uma account enviando até o bloco que já mantém acabar, então para. Não
+é instantâneo.
+
+## O crédito bate?
+
+Duas identidades sobre a vida inteira da account: toda unidade creditada ainda está no balance ou
+reservada contra ele, e o que foi reservado cobre o que foi gasto.
+
+Não roda sozinho — pressione **Reconcile**. Duas cifras retornam. **Unexplained** é o resíduo, e a
+que vale a pena agir. **Reserved, not yet spent** é normal em uma conta que está enviando.
+
+Abaixo delas, uma contabilidade em linguagem simples de tudo que não bateu. As distinções que
+importam:
+
+| Veredicto | Significa |
+| :--- | :--- |
+| **Pending credit** | Top-ups que o gateway ainda não aplicou. Não é problema — espere um poll |
+| **Credit lost** | Creditado, e nem em balance nem em reserved |
+| **Credit minted** | Retido, sem top-up ou transferência contabilizando por ele — a direção mais séria |
+| **Charged without reserving** | Consumo é real, a reserva não |
+| **Held unspent** | Preso por uma parada não limpa. Liberado manualmente, não perdido |
+| **Missing rollup** | Dias sem rollup de uso — ainda contados aqui, mas de registros que o purge deleta |
+| **Unrated** | Mensagens enviadas sem preço. Em postpaid, receita que ninguém faturou |
+
+<Note>
+**Não há botão de "consertar", deliberadamente.** Reconciliação nunca escreve uma entrada de ajuste.
+
+Um resíduo é a parte que ninguém pôde explicar, e postar um ajuste para ela balancearia os livros
+escondendo a causa. Também é sempre lifetime-scoped, nunca um período — uma identidade que se
+mantém sobre um mês mas não sobre a vida da conta não se manteve.
+</Note>
+
+## Dinheiro entrando e saindo
+
+Todo recharge e transferência, buscável por referência, nota ou tipo, ordenável e paginado.
+
+Por padrão, o ledger lista apenas entradas que uma pessoa ou o sistema de billing escreveu. As
+reservas de crédito do próprio gateway são ocultadas e contadas em vez disso — aproximadamente uma
+a cada vinte mensagens, cada uma movendo crédito entre duas colunas de uma linha e resultando em
+zero. **Show them** revela o conjunto.
+
+A coluna **State** carrega a parte que as pessoas perdem: **Pending** significa que o gateway ainda
+não a aplicou. Onde uma conta não tem linha de saldo, uma entrada positiva diz ou que ela está
+esperando a linha e se creditará no momento em que ela existir, ou que foi aplicada antes de a
+linha sumir e nada agora pode dizer o que ela creditou.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Como o crédito prepaid funciona" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocos, reservas e o que o gateway faz quando o crédito acaba.
+  </Card>
+  <Card title="Contas postpaid" icon="file-invoice" href="/platform/billing/postpaid">
+    Billing em atraso contra um limite.
+  </Card>
+</CardGroup>

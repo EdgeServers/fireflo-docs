@@ -1,0 +1,46 @@
+---
+title: "Variáveis de ambiente"
+description: "O que cada verbo do CLI lê do ambiente, e as flags que existem apenas para tornar um comando destrutivo deliberado."
+---
+
+## Conectando
+
+| Variável | Usada por | Observações |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge` | As mesmas variáveis que o gateway lê, então importar seu arquivo de env é a configuração inteira. |
+| `FIREFLO_OPS_URL` | tudo na porta operacional | A interface de **gerenciamento**, 9000 por padrão. |
+| `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify` | Precisa bater com `smsg.ops.token`. |
+| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, os seis verbos de controle | Precisa bater com `smsg.ops.admin.token`. |
+| `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | Uma credencial de cliente. Esse verbo passa pela porta **de mensagens**. |
+| `FIREFLO_CONF_DIR` | `verify` | Onde procurar a configuração que ele verifica. |
+
+## As quatro flags de permissão
+
+Cada uma existe porque o comando que ela protege é destrutivo de um jeito que não é óbvio pelo
+nome. Nenhuma tem equivalente em linha de comando, de propósito: uma flag que você precisa exportar
+é uma flag que você não pode passar por acidente do histórico do shell.
+
+| Variável | Exigida por | Protege contra |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_MIGRATE=true` | `db migrate`, `db repair` | Aplicar DDL forward-only ao banco errado. |
+| `FIREFLO_CONFIG_IMPORT=true` | `import` (sem `--dry-run`) | Substituir as regras que decidem o que os clientes são cobrados. |
+| `FIREFLO_CDR_PURGE=true` | `usage purge` | Apagar call records. O único registro por mensagem do que foi cobrado. |
+| `FIREFLO_DB_RESET=true` | `purge --reset-database` | Esvaziar cada tabela. Também recusa enquanto o gateway está alcançável, e pede para você digitar o nome do banco. |
+
+<Note>
+`FIREFLO_DB_MIGRATE` e `FIREFLO_CONFIG_IMPORT` são separadas deliberadamente. Uma aplica mudanças
+de schema; a outra substitui preço e credenciais. Uma implantação feliz em auto-migrar não é
+necessariamente feliz em ter suas tarifas sobrescritas.
+</Note>
+
+## Códigos de saída
+
+| Código | Significado |
+| :--- | :--- |
+| `0` | OK |
+| `1` | Falhou |
+| `2` | Recusado ou mal usado. Nada foi tocado |
+| `4` | Só em `verify`: a implantação está saudável, mas os dados desta instalação não |
+
+A separação `1` / `2` é o que permite um pipeline de deploy distinguir uma flag ausente de uma
+migração quebrada.

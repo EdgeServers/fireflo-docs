@@ -1,0 +1,72 @@
+---
+title: "Revenue"
+description: "Coût, prix et marge par compte et product — et la règle de comptage qui explique pourquoi la marge paraît plus mince que ce que le tarif dit qu'elle devrait être."
+---
+
+**Le revenu compte chaque message une fois ; le coût compte chaque tentative vendor.**
+
+Cette phrase est tout l'écran. Un message que vous avez facturé à un taux peut avoir été soumis
+à un vendor trois fois avant de tenir, et vous avez été débité pour les trois. Le tarif dit que
+votre marge est un tiers ; le rapport dit qu'elle est bien moindre ; les deux sont corrects, et
+seul le rapport porte sur de l'argent qui a réellement bougé.
+
+Si la marge ici est systématiquement en-dessous de ce que le tarif prédit, la question à poser
+n'est pas « le pricing est-il faux » mais **« combien de tentatives chaque message prend »** —
+qui est une question de retry et de qualité vendor, à laquelle répondent
+[Qualité des accusés](/platform/control-panel/receipt-quality) et les pages propres aux vendors.
+
+## Les totaux
+
+| Chiffre | Signification |
+| :--- | :--- |
+| **Billed** | Ce que les clients ont été débités |
+| **Vendor cost** | Ce que les vendors vous ont facturé, chaque tentative |
+| **Margin** | La différence, avec son pourcentage, rouge si négatif |
+| **In flight** | Facturé, résultat inconnu |
+
+<Warning>
+**« In flight » n'est pas de l'argent perdu et pas une erreur.** C'est du trafic qui a été
+facturé et n'a pas encore de résultat.
+
+Il devrait toujours être petit et toujours récent. Le balayeur du gateway clôt les messages non
+rapportés comme expirés après 48 heures — donc **tout dans ce chiffre plus vieux que 48 heures
+signifie que le balayeur ne tourne pas**, et c'est un problème d'opérateur, pas un problème
+comptable.
+</Warning>
+
+## Par compte et product
+
+Une ligne par appariement compte et product :
+
+**Account · Product · Messages · Billed · Cost · Margin · In flight**
+
+Les marges négatives sont rouges, positives vertes. Un compte ou product manquant affiche un
+tiret plutôt que d'être replié dans un total qui le cacherait.
+
+Sur un écran étroit chaque ligne devient sa propre carte et la colonne in-flight est laissée
+tomber, gardant messages, billed, cost et margin.
+
+Il n'y a pas de recherche, pas de sélecteur de colonnes et pas d'export ici. C'est un résumé à
+lire ; le détail par message derrière vit dans les enregistrements d'appels, qui s'exportent.
+
+## Ce qui doit être vrai pour que ceci soit correct
+
+La marge ne peut être calculée que là où les deux côtés du marché ont été tarifés au moment où
+le message a été soumis :
+
+- un **taux côté vente** avec un scope sur le compte, et
+- un **taux de coût** avec un scope sur le vendor qui l'a porté.
+
+Le scope de tarif est un champ à deux significations — un id de compte est ce que vous facturez,
+un nom de vendor est ce qui vous est facturé — et rien dans le schéma ne les distingue. Sans
+taux de coût configuré, le coût est zéro, et la marge se lira comme le montant facturé complet.
+Ce n'est pas une plateforme saine ; c'est une plateforme non configurée.
+
+<Note>
+Les prix sont fixés à la soumission et ne bougent pas ensuite. Changer un tarif aujourd'hui ne
+refait pas la semaine dernière — ce qui rend une période clôturée sur le relevé d'un client
+définitive, et est délibéré. Voir
+[comment fonctionne le pricing](/platform/billing/how-pricing-works).
+</Note>
+
+Sans rien de facturé dans la fenêtre, l'écran se lit **No billed traffic in this period**.

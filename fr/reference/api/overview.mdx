@@ -1,0 +1,100 @@
+---
+title: "Vue d'ensemble de l'API REST"
+description: "L'URL de base, l'authentification Basic, l'enveloppe de réponse, et la règle de nommage des champs qui piège la plupart des gens migrant depuis une autre passerelle."
+---
+
+Cinq endpoints, tous JSON, tous renvoyant la même enveloppe. Quatre sont sous `/secure/` et
+utilisent l'authentification HTTP Basic ; `/ping` n'en utilise aucune.
+
+| Endpoint | Méthode | Rôle |
+| :--- | :--- | :--- |
+| [`/secure/send`](/reference/api/send) | POST | Mettre un message en file |
+| [`/secure/sendbatch`](/reference/api/sendbatch) | POST | En mettre plusieurs, éventuellement planifiés |
+| [`/secure/balance`](/reference/api/balance) | GET | Ce qu'il reste sur le compte |
+| [`/secure/rate`](/reference/api/rate) | GET | Ce que coûterait un message, sans rien envoyer |
+| [`/ping`](/reference/api/ping) | GET | Liveness, sans identifiants |
+
+## L'enveloppe
+
+Chaque réponse est un objet JSON avec **soit** `data` **soit** `message`, jamais les deux, et
+jamais une valeur nue au niveau supérieur.
+
+```json Success
+{ "data": { "status": "ok" } }
+```
+
+```json Failure
+{ "message": "Authentication required" }
+```
+
+Donc le branchement dans votre client est `res.ok`, et la raison lisible par un humain est
+toujours à `message`. Il n'y a pas de champ de code d'erreur : le statut HTTP est le code, et la
+chaîne est pour une personne lisant un log.
+
+## Authentification
+
+Basic, avec votre login HTTP comme nom d'utilisateur :
+
+```bash
+curl -u 'yourlogin:yourpassword' https://sms.example.com/secure/balance
+```
+
+<Warning>
+**Un login SMPP ne peut pas utiliser cette API**, et le refus ne le dit pas explicitement. C'est
+un `403` disant `Authentication failure`, la même réponse qu'un mauvais mot de passe. Si un login
+fonctionne en SMPP et renvoie 403 ici, vérifiez son type avant son mot de passe.
+</Warning>
+
+Les identifiants vont dans l'en-tête et **nulle part ailleurs**. `username` et `password` en tant
+que champs du corps ne sont pas ignorés, ils sont rejetés comme arguments inconnus, ce qui est la
+manière dont une charge utile copiée d'une autre passerelle s'annonce habituellement.
+
+## Underscores et hyphens désignent le même champ
+
+Chaque `_` est réécrit en `-` avant que le corps ne soit parsé. Donc `dlr_url` et `dlr-url` sont
+un seul champ, et vous pouvez écrire celui que votre langage préfère.
+
+Deux conséquences à connaître avant d'en être mordu :
+
+<AccordionGroup>
+
+<Accordion title="Envoyer les deux orthographes est un 400, pas last-one-wins">
+`{"dlr_url": "…", "dlr-url": "…"}` est un doublon d'un même champ, et l'API refuse plutôt que d'en
+choisir silencieusement une. C'est délibéré : choisir en silence signifierait qu'un accusé
+partirait vers un endroit non prévu par l'appelant.
+</Accordion>
+
+<Accordion title="`custom_tlvs` est la seule exception">
+Il conserve son underscore. **`custom-tlvs` est un argument inconnu** et renvoie un `400`, car le
+normaliseur excepte ce seul nom. Voir [TLVs personnalisés](/developers/send/custom-tlvs).
+</Accordion>
+
+</AccordionGroup>
+
+## Cette référence fait autorité
+
+Elle décrit ce que la passerelle accepte réellement, et ses exemples ont été exécutés contre une
+instance en production.
+
+<Warning>
+**Si on vous a remis un document OpenAPI ou Swagger, vérifiez-le contre ces pages avant de générer
+un client.** Une spécification plus ancienne a circulé qui est fausse à trois endroits que vous
+rencontrez dès le premier jour :
+
+1. **`custom_tlvs` est un objet**, pas un tableau de paires.
+2. **`validity_period` est un entier** de minutes, pas une chaîne.
+3. **`product` en est entièrement absent.**
+
+Un client généré depuis cette spec échoue à son premier appel.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Erreurs" icon="triangle-exclamation" href="/reference/api/errors">
+    Chaque statut renvoyé par cette API, et ce qui le provoque.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    Premier message en moins de cinq minutes.
+  </Card>
+</CardGroup>

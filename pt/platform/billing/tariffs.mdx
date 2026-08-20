@@ -1,0 +1,113 @@
+---
+title: "Tarifas e reconciliação"
+description: "Editando rates a partir do painel, overrides por conta e as duas identidades que dizem se o crédito de uma conta bate."
+---
+
+## Editando rates a partir do painel
+
+Duas operações na página de um product, e a diferença entre elas importa:
+
+| Ação | Escreve | Escopo |
+| :--- | :--- | :--- |
+| **Definir o que todos pagam** | O scope `*` para esse product | Toda account sem regra própria |
+| **Precificar uma account** | O scope de uma account nomeada | Somente aquela account |
+
+**Ambas salvam apenas as regras do product que você está olhando.** O restante do scope é intocado,
+portanto configurar `*` para `promo` não perturba `*` para nada mais.
+
+O editor de scope inteiro na página *Pricing* ainda substitui um scope por completo. E isso está
+correto ali, porque mostra tudo dele.
+
+<Warning>
+As regras próprias de uma account são tentadas primeiro e **a primeira que casar vence**, portanto
+qualquer coisa que a account carregue bate o default. **Inclusive um catch-all puro.**
+
+É isso que faz de uma tarifa negociada um override em vez de uma sugestão. Também significa que um
+catch-all no nível da account desabilita silenciosamente todos os defaults que você configurar depois.
+</Warning>
+
+## Duas identidades, não uma
+
+Se o crédito de uma conta bate é verificado contra **duas** equações. Errar isso reporta uma
+discrepância falsa em toda conta, portanto vale a pena declarar com precisão.
+
+```
+MONEY:        Σ(RECHARGE + TRANSFER)  =  balance + reserved
+CONSUMPTION:  reserved − consumed     =  credit reserved but not yet spent   (≥ 0)
+```
+
+<Warning>
+**A equação óbvia está errada.** `credited − consumed = balance + reserved` foi escrita dessa forma
+no design e os dados a refutaram imediatamente. Estava errada por exatamente o consumo em toda conta.
+
+Consumo nunca toca as colunas de balance. Crédito é reservado em blocos (`balance -= n, reserved
++= n`), gasto de um contador em memória, e **a parte gasta nunca é escrita de volta**. Portanto
+`reserved` é um contador de lifetime-consumed, não um hold, e todo movimento que o banco vê deixa
+`balance + reserved` inalterado.
+</Warning>
+
+A identidade do dinheiro se mantém no décimo em toda account, o que é o que torna uma discrepância
+genuína significativa.
+
+### O que é excluído, e por quê
+
+| Tipo de entrada | Contado? | Por quê |
+| :--- | :--- | :--- |
+| `RECHARGE`, `TRANSFER` | **Sim** | Dinheiro entrando na account |
+| `RESERVE`, `RELEASE` | Não | Movem um valor entre duas colunas da mesma linha, com net zero |
+| `BILL` | Não | Um período fechado registra o que foi faturado e não move nada |
+
+## Lifetime, nunca um período
+
+Crédito é um **total corrente**. Qualquer janela mais curta precisa de um saldo inicial que nada
+registra. E uma cifra inicial errada inventa uma discrepância toda vez que roda.
+
+<Tip>
+Portanto, "reconcilie esta conta para março" não é uma pergunta que os dados podem responder.
+"Reconcilie esta conta" é, e sempre foi.
+</Tip>
+
+## De onde vêm os dois lados
+
+| Lado | Fonte |
+| :--- | :--- |
+| Creditado | `Σ RECHARGE + TRANSFER`, **apenas aplicadas** — entradas pendentes não moveram dinheiro |
+| Consumido | `usage_daily` para dias resumidos **mais** `cdr_submit` para o rabo vivo |
+
+Nunca ambos para um dia. Esse é o join que faz a reconciliação sobreviver à janela de retenção: uma
+vez que um dia é resumido e purgado, seu consumo ainda conta.
+
+## Quando os números não batem
+
+Vá por esta ordem:
+
+<Steps>
+  <Step title="Há recharges pendentes?">
+    Um `RECHARGE` para uma account sem linha `account_balance` credita nada e permanece pendente.
+    Está no ledger e não no balance — o que é exatamente uma lacuna no lado do dinheiro.
+  </Step>
+  <Step title="Houve um shutdown não limpo?">
+    Um `kill -9` deixa crédito preso em `reserved`. `balance + reserved` ainda é conservado, portanto
+    a identidade do dinheiro se mantém — mas a account tem menos gastável do que deveria até que
+    `POST /ops/credit/release` rode.
+  </Step>
+  <Step title="O rollup está atrasado?">
+    Um dia nem resumido nem ainda em `cdr_submit` é consumo que ninguém conta. O purge deveria tornar
+    isso impossível; verifique se ele não foi contornado.
+  </Step>
+  <Step title="O painel está lendo o mesmo banco?">
+    `METRICS_DATABASE_URL` contra o `FIREFLO_DB_URL` do gateway. Uma divergência aqui faz toda cifra
+    discordar de uma forma que se parece com um bug de contabilidade.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Como o pricing funciona" icon="tag" href="/platform/billing/how-pricing-works">
+    Scopes, o default `*` e LCR.
+  </Card>
+  <Card title="Crédito prepaid" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocos, reservas e o ledger.
+  </Card>
+</CardGroup>

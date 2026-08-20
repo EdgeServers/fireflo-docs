@@ -1,0 +1,112 @@
+---
+title: "Gestión de errores"
+description: "Qué reintentar, qué no reintentar nunca, y por qué un 500 es el seguro."
+---
+
+Cada fallo es un objeto JSON con un único `message`. El estado es la parte legible por máquina.
+
+```json
+{"message":"Insufficient credit"}
+```
+
+El catálogo completo está en [Errores de la API](/reference/api/errors). Esta página trata sobre lo
+que su cliente debería *hacer*.
+
+## Tabla de reintentos
+
+| Estado | Reintentar | Por qué |
+| :--- | :--- | :--- |
+| `400`, `412` | **Nunca** | Su payload es incorrecto. Lo será siempre. |
+| `401`, `403` | **Nunca** | Credenciales o aprobación. Alerte a una persona. |
+| `402` | **Nunca** | Reintentar no añade saldo. Alerte y deje de enviar. |
+| `415` | **Nunca** | Corrija la cabecera `Accept`. |
+| `429` | **Sí**, con backoff | Transitorio por definición. |
+| `500` | **Sí**, una o dos veces | El cargo se revirtió: véase más abajo. |
+| `502`, `503`, `504` | **Sí** | No provienen de la pasarela, sino de un proxy delante. |
+
+<Warning>
+**No hay `Retry-After` en un `429`.** Aplique backoff propio: exponencial, con jitter. Un intervalo
+fijo entre muchos workers los resincroniza en la siguiente ráfaga, que es como un límite de tasa
+breve se convierte en sostenido.
+</Warning>
+
+## Por qué un 500 es seguro de reintentar
+
+`500 Cannot send message` significa que la pasarela aceptó su petición y no pudo encolarla. **Todo
+cargo se revierte.**
+
+Es una propiedad deliberada del ingress, no un accidente: el saldo se retira antes de encolar y se
+devuelve cuando el encolado falla. Así que un reintento cuesta un mensaje, no dos. Es exactamente la
+garantía que hace defendible un reintento automático aquí y no en un `402`.
+
+## Construya para el acuse, no para la respuesta
+
+El error de integración más común, con diferencia, es tratar un `200` como entrega.
+
+La respuesta al envío se emite **antes de que se ejecute el enrutamiento**, por lo que aceptación y
+entrega son afirmaciones independientes. Un mensaje puede ser aceptado y luego rechazado por un
+remitente no aprobado, descartado por falta de ruta o rechazado por el operador, y nada de eso
+puede aparecer en la llamada original.
+
+<Steps>
+  <Step title="Guarde el messageId">
+    Es lo único que correlaciona su registro con todo lo que viene después.
+  </Step>
+  <Step title="Trate el envío como 'submitted', no 'sent'">
+    Un estado separado en su propio modelo, para que la diferencia siga siendo visible.
+  </Step>
+  <Step title="Pase a estado final solo con un acuse de nivel 2">
+    `ACCEPTD` y `BUFFRED` llegan como nivel 1 y sigue otro acuse.
+  </Step>
+  <Step title="Aplique su propio timeout">
+    Un mensaje que nunca reciba un acuse final debería expirar también en su sistema, o quedará
+    "submitted" para siempre.
+  </Step>
+</Steps>
+
+## Errores que encontrará en producción, no en pruebas
+
+<AccordionGroup>
+
+<Accordion title="403 — not an approved sender ID">
+Su cuenta tiene la aprobación de sender ID obligatoria. El `from` que usó no ha sido aprobado, o lo
+omitió y su nombre de login tampoco está aprobado.
+
+No es reintentable ni corregible por código: requiere una aprobación de su proveedor.
+</Accordion>
+
+<Accordion title="403 — content does not match any approved template">
+Su cuenta solo envía redacciones aprobadas. Un mensaje que funciona en staging y falla en
+producción suele deberse a esto.
+
+**Los espacios en blanco se compactan antes de comparar**, así que los espacios y saltos de línea
+adicionales no son la causa. Una palabra cambiada, un punto añadido o una variable en otra
+posición sí lo son.
+</Accordion>
+
+<Accordion title="402 con dinero todavía en la cuenta">
+El saldo se reserva en bloques, no por mensaje —unos veinte mensajes de golpe— y las recargas son
+asíncronas. Un mensaje que llega mientras la siguiente reserva está en curso se rechaza aunque
+quede saldo.
+
+**Ese es transitorio: reinténtelo.** Un `402` que persiste con un saldo saludable no lo es, y
+merece la pena escalarlo.
+</Accordion>
+
+<Accordion title="400 — Unknown argument: custom-tlvs">
+Todos los demás campos tratan `_` y `-` como el mismo carácter. `custom_tlvs` es la única excepción
+y conserva su guion bajo.
+</Accordion>
+
+</AccordionGroup>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Todos los estados" icon="table-list" href="/reference/api/errors">
+    El catálogo completo con qué provoca cada uno.
+  </Card>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    La mitad de la historia que la respuesta no puede contarle.
+  </Card>
+</CardGroup>

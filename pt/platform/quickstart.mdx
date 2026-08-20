@@ -1,0 +1,111 @@
+---
+title: "Quickstart"
+description: "Um gateway rodando em Docker, e a primeira mensagem através dele."
+---
+
+O caminho mais rápido para ter um FireFlo em execução. Para uma implantação real, vá para
+[Instalar em um comando](/platform/install/one-command). Este guia deixa de fora a conta de serviço,
+a unit do systemd, retenção de logs e TLS.
+
+## O que você precisa
+
+- Docker.
+- Um diretório de trabalho com subdiretórios `conf`, `data` e `logs`.
+- Os arquivos de configuração em `conf`. Copie o diretório `conf.example` distribuído e substitua todos
+  os valores `REPLACE_WITH_*`.
+
+```text
+fireflo-runtime/
+  conf/
+    credentials.yml
+    smsg.properties
+    routingTable.conf
+    rates.conf
+  data/
+  logs/
+```
+
+## Inicie-o
+
+```bash
+docker run -d --name fireflo \
+  -e QUARKUS_LOG_FILE_ENABLE=true \
+  -e QUARKUS_LOG_CONSOLE_ENABLE=false \
+  -e QUARKUS_LOG_FILE_PATH=/work/logs/smsg.log \
+  -e QUARKUS_LOG_FILE_SMPPCLIENT_PATH=/work/logs/smppclient.log \
+  -e QUARKUS_LOG_FILE_SMPPSERVER_PATH=/work/logs/smppserver.log \
+  -e QUARKUS_HTTP_ACCESS_LOG_DIRECTORY=/work/logs \
+  -p 8080:8080 \
+  -p 127.0.0.1:9000:9000 \
+  -p 27777:27777 \
+  -v ./conf:/work/conf \
+  -v ./data:/work/data \
+  -v ./logs:/work/logs \
+  edgeservers/fireflo:latest
+```
+
+`edgeservers/fireflo:latest-native` é a build nativa da mesma coisa.
+
+<Warning>
+Observe que `9000` é publicado **apenas em loopback**. Ele carrega estado de binds, profundidades de
+fila e nomes de vendors, e os [dois tokens](/reference/config/operational-endpoint) são a única coisa
+à frente dele.
+</Warning>
+
+## Verifique se subiu
+
+<Steps>
+  <Step title="O container está em execução">
+    ```bash
+    docker ps
+    ```
+    Em execução, não em restart.
+  </Step>
+  <Step title="A API HTTP responde">
+    ```bash
+    curl -s http://localhost:8080/ping
+    ```
+  </Step>
+  <Step title="Se não iniciou, leia smsg.log primeiro">
+    ```bash
+    tail -50 logs/smsg.log
+    ```
+    Um gateway **sem routing table não inicia de forma alguma**, e diz isso nomeando uma estrutura
+    interna — `no default routing table in new targets!` — em vez da configuração ausente.
+    Essa mensagem significa que seu `routingTable.conf` está vazio, ausente, ou falhou no parse.
+  </Step>
+</Steps>
+
+## Envie algo através dele
+
+```bash
+curl -s -u 'your-login:your-password' \
+  -X POST http://localhost:8080/secure/send \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"61400000000","content":"hello from FireFlo"}'
+```
+
+Um `200` com um message id significa que foi aceita, cobrada e enfileirada. **Não** significa que foi
+entregue. A entrega é uma resposta separada que chega como recibo. Veja
+[Enviar uma mensagem](/developers/send/one-message).
+
+## O que este quickstart não oferece
+
+| Faltando | Por que importa | Onde |
+| :--- | :--- | :--- |
+| Um banco de dados | Sem crédito pré-pago, sem varredura de expiração, sem edição no painel | [Database](/platform/install/database) |
+| O painel de controle | Sem telas, sem statements, sem portal do cliente | [Instalar o painel](/platform/install/control-panel) |
+| Retenção de logs | `httpapi.log` cresce indefinidamente | [Logging](/reference/config/logging) |
+| Um vendor real | Nada sai do prédio | [Vendors](/platform/connections/vendors) |
+| TLS | Tudo em texto claro | [Instalar manualmente](/platform/install/by-hand) |
+
+## A seguir
+
+<CardGroup cols={2}>
+  <Card title="Conceitos" icon="book" href="/platform/concepts">
+    As palavras que o restante deste site usa. Leia antes das páginas de instalação.
+  </Card>
+  <Card title="Instalar corretamente" icon="server" href="/platform/install/one-command">
+    Conta de serviço, systemd, banco de dados, firewall, smoke test.
+  </Card>
+</CardGroup>

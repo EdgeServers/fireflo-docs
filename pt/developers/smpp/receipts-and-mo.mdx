@@ -1,0 +1,95 @@
+---
+title: "Recibos e mensagens de entrada"
+description: "deliver_sm carrega duas coisas diferentes, e distingui-las é o primeiro trabalho de qualquer receptor SMPP."
+---
+
+Em um bind de transceiver ou receiver, `deliver_sm` chega do gateway. Ele carrega **duas coisas
+diferentes**, e seu handler tem que separá-las antes de qualquer outra coisa.
+
+| `esm_class` | É | Contém |
+| :--- | :--- | :--- |
+| Bits de delivery receipt setados | Um **recibo** de uma mensagem que você enviou | O `id`, um estado e contagens |
+| Caso contrário | Uma **mensagem de entrada** de um aparelho | O texto real de alguém |
+
+<Warning>
+**Não trate um recibo como mensagem de entrada.** Um receptor ingênuo que encaminha todo
+`deliver_sm` para uma caixa de entrada da aplicação entrega `id:… sub:001 dlvrd:001 stat:DELIVRD` a
+um humano. E pior, geralmente também deixa de fechar o registro que o recibo estava lá para fechar.
+</Warning>
+
+## Lendo um recibo
+
+O corpo segue o formato convencional:
+
+```
+id:7a2a5b6c-… sub:001 dlvrd:001 submit date:2608190859 done date:2608190859 stat:DELIVRD err:000
+```
+
+`id` é o message id da sua `submit_sm_resp`. É a chave de correlação, e a única.
+
+`stat` é o estado bruto — `DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`,
+`REJECTD`, `FAILED`, `BUFFRED`, `SEEN`. `EXPIRED`, `REJECTD` e `UNDELIV` todos são cobrados como
+falha, mas significam coisas diferentes.
+
+<Tip>
+**`ACCEPTD` e `BUFFRED` não são desfechos.** Outro recibo vem em seguida. Se você pediu notificações
+intermediárias com o bit 4 de `registered_delivery`, seu handler tem que esperar por um estado final
+em vez de fechar no primeiro recibo.
+</Tip>
+
+## Três segmentos, três recibos
+
+Por padrão, você recebe um recibo por `submit_sm` enviado, cada um citando o id que você recebeu.
+Seu provedor pode reduzir para um com `conf.dlr.multipart` em `first` ou `last`, o que traz os
+totais reais de `sub:`/`dlvrd:`.
+
+**Todos os recibos reportam o mesmo desfecho** independentemente da escolha, porque os segmentos de
+saída são agregados antes de qualquer recibo ser construído. Então não há nada para reconciliar
+entre eles — escolha um e ignore o resto, ou peça ao seu provedor para mandar um.
+
+## Mensagens de entrada
+
+Um `deliver_sm` sem os bits de recibo é uma mensagem real que alguém enviou para o seu número.
+
+O gateway tem que resolver **qual conta é dona do número de destino** antes de poder rotear a você.
+Se esse mapeamento está faltando, a mensagem é registrada e entregue a lugar nenhum. E não há nada
+observável do seu lado, porque, do ponto de vista do roteamento, ela nunca foi endereçada a você.
+
+<Tip>
+Ao colocar um novo número de entrada em operação, envie uma mensagem e peça ao seu provedor para
+confirmar que ela resolveu para sua conta em vez de cair como unmapped. Isso separa "meu handler
+está quebrado" de "o número nunca foi meu", que de outra forma são indistinguíveis.
+</Tip>
+
+## Respondendo
+
+Responda cada `deliver_sm` com um `deliver_sm_resp`. Uma PDU não respondida consome um slot de
+janela no lado do gateway, e o bastante deles trava a sessão de um jeito que parece o gateway ter
+parado de enviar.
+
+## Se os recibos nunca chegam
+
+<Steps>
+  <Step title="Seu bind consegue receber?">
+    Um bind só de transmitter não consegue. Essa é a causa mais comum e a mais fácil de passar
+    batida, porque enviar funciona perfeitamente.
+  </Step>
+  <Step title="Você pediu?">
+    `registered_delivery` em `0x00` significa nenhum. Algumas bibliotecas usam zero por padrão.
+  </Step>
+  <Step title="O fornecedor os produz?">
+    Se seu provedor tem `request.dlrs` desligado para o fornecedor que transporta seu tráfego, nada
+    reporta desfecho e toda mensagem termina como `EXPIRED` no seu prazo.
+  </Step>
+</Steps>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Submetendo" icon="paper-plane" href="/developers/smpp/submitting">
+    `registered_delivery` e como ele mapeia para os níveis de recibo.
+  </Card>
+  <Card title="FAQ de SMPP" icon="circle-question" href="/developers/smpp/faq">
+    Janelas, throttling, reconexões e sessões zumbis.
+  </Card>
+</CardGroup>

@@ -1,0 +1,71 @@
+---
+title: "Diagnósticos"
+description: "Logs e configuração lidos da máquina rodando o gateway — o que ele efetivamente está lendo, que nem sempre é o que você escreveu."
+---
+
+**Lido da máquina rodando o gateway. Segredos são apagados antes de deixarem esse processo, portanto
+nada nesta página pode mostrar a você uma senha ou token.**
+
+Em todo outro lugar, o painel mostra o que foi *escrito* para o gateway. Esta página mostra o que
+o gateway está *lendo*. No modo file, os dois podem diferir indefinidamente, sem nada em nenhum
+lugar dizer que sim — uma edição na cópia errada de um arquivo, uma implantação que não reiniciou,
+um caminho que mudou. Esta é a tela que resolve isso.
+
+## Logs
+
+Quatro logs estão disponíveis — o log principal, o log de conexão de vendor, o log do listener e o
+log de acesso. Escolha um, escolha quantas linhas do fim ler, e opcionalmente filtre para linhas
+contendo algum texto.
+
+Mudar qual log você está lendo re-consulta imediatamente. Mudar a contagem de linhas ou o filtro
+não, até que você pressione **Refresh**. Um filtro que re-consultasse a cada tecla re-leria a
+janela do arquivo no gateway uma vez por caractere digitado.
+
+Acima da saída está o estado do arquivo, seu caminho e tamanho:
+
+| Estado | Significado |
+| :--- | :--- |
+| **In use** | Sendo escrito agora |
+| **Nothing written yet** | Existe, vazio |
+| **Not being written** | Configurado desligado |
+| **Not read (database mode)** | O gateway toma isso do banco em vez disso |
+
+<Warning>
+**Um resultado vazio não é prova de que a coisa que você procurou nunca aconteceu.** O filtro é
+aplicado à cauda que foi lida, não ao arquivo inteiro. Peça mais linhas antes de concluir qualquer
+coisa.
+
+Onde isso importa, o gateway fornece uma nota própria, e o painel a renderiza acima da saída em
+vez de sumarizá-la — porque "nada aqui" tem pelo menos três significados diferentes e apenas o
+gateway sabe qual se aplica.
+</Warning>
+
+## Configuração em vigor
+
+O mesmo tratamento para configuração: properties, roteamento, rates e credenciais, cada um mostrado
+como o gateway tem, com um badge dizendo **From database** ou **From file** e o caminho de onde veio.
+
+Credenciais renderizam como uma tabela em vez de texto — tipo, system id, account, product, secret e
+endereços IP permitidos. A coluna de secret reporta apenas **set** ou **missing**.
+
+<Note>
+**Não há campo nesta página que pudesse mostrar a você uma senha, e não vai haver.** A redação
+acontece no gateway antes de o texto ser enviado, não no navegador depois. Uma credencial sem
+restrições de IP mostra **any address**, que é um fato que vale a pena ver claramente.
+</Note>
+
+## Arquivos
+
+Uma barra listando todo arquivo que o gateway conhece com seu estado, caminho e tamanho, e um único
+controle para **download the bundle** — tudo, redigido, em um único arquivo, para anexar a uma
+solicitação de suporte.
+
+## Quando recorrer a esta página
+
+- Uma mudança de configuração que aparece salva em toda parte no painel e visivelmente não teve efeito.
+- Um vendor que não faz bind, onde você precisa do log de conexão em vez do resumo.
+- Confirmar de qual fonte um domínio está efetivamente sendo lido antes de editar o errado.
+- Montar evidências para **support@fireflo.au**, onde o bundle economiza uma ida e volta.
+
+Ela responde "o que esta máquina está fazendo", não "o que aconteceu com a mensagem X". Para isso,
+use os call records.

@@ -1,0 +1,117 @@
+---
+title: "Enviando uma mensagem"
+description: "Os campos que você realmente vai usar, o padrão de cada um e os quatro que mudam quanto uma mensagem custa ou se ela é aceita."
+---
+
+O mínimo são dois campos:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes."
+}
+```
+
+Todo o resto tem um padrão. A tabela completa está em [`/secure/send`](/reference/api/send). Esta
+página é sobre os que importam na prática.
+
+## Os campos comuns
+
+| Campo | Padrão | Observações |
+| :--- | :--- | :--- |
+| `to` | — | **Obrigatório.** Formato internacional, entre aspas. |
+| `content` | — | Obrigatório a menos que você envie `hex_content`. Nunca os dois. |
+| `from` | seu nome de login | Precisa ser aprovado, ou `403`. |
+| `coding` | `0` | `8` para qualquer coisa fora de GSM-7. Reduz sua capacidade pela metade. |
+| `dlr` | `no` | `yes` requer `dlr_url`. |
+| `dlr_url` | — | Para onde o recibo é enviado via POST. |
+
+## Coloque o destino entre aspas
+
+```json
+"to": "61491570006"    // correto
+"to": 61491570006      // JSON válido, e errado
+```
+
+Um número sem aspas é um inteiro no momento em que o parser o vê, então **qualquer zero à esquerda
+já sumiu**. O gateway não pode recuperá-lo, e a mensagem vai para um número diferente ou para lugar
+nenhum.
+
+## Os quatro campos que mudam um desfecho
+
+<AccordionGroup>
+
+<Accordion title="from — o sender ID">
+Omitir usa o nome do seu login, que numa conta com aprovação obrigatória geralmente **não** é
+aprovado. Então "funcionou sem `from` em testes" e "falha em produção" são o mesmo fato visto duas
+vezes.
+
+Veja [Sender IDs](/developers/send/sender-ids).
+</Accordion>
+
+<Accordion title="coding — o que custa">
+`0` te dá 160 caracteres. `8` te dá 70. Um único apóstrofo tipográfico no seu texto força UCS-2 de
+qualquer forma, então definir `coding` não te protege do custo. Normalizar a sua pontuação sim.
+
+Veja [Codificação e segmentos](/developers/send/encoding-and-segments).
+</Accordion>
+
+<Accordion title="product — contra o que ele é tarifado">
+Não é texto livre. Ele tarifa a mensagem contra um produto diferente, tirado de uma lista de
+permissões que seu provedor mantém por login. E **a maioria dos logins não tem nenhum**. Nomear um
+que você não pode usar é `403`.
+
+A mesma lista de permissões governa `/secure/rate`, então uma cotação e um envio não podem discordar
+sobre o que você pode nomear.
+</Accordion>
+
+<Accordion title="validity_period — um inteiro, em minutos">
+Minutos que a operadora deve continuar tentando. **Um número inteiro, não uma string de duração.**
+Uma especificação mais antiga tipa como string, e o gateway recusa.
+
+```json
+"validity_period": 60     // correto
+"validity_period": "1h"   // 400
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Pedindo um recibo
+
+Dois campos, e os dois são necessários. Definir um sem o outro não faz nada:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+`dlr_level` escolhe quais recibos você recebe: `1` só progresso, `2` o desfecho (padrão), `3` os
+dois.
+
+<Warning>
+**Nível 1 sozinho não envia o desfecho.** Um cliente que pede `1` e espera um estado final espera
+para sempre. Se você quer progresso *e* a resposta, peça `3`.
+</Warning>
+
+## Enviando binário
+
+`hex_content` recebe o corpo como octetos hex, decodificado com o charset do seu `coding`. Um número
+ímpar de caracteres é `400`.
+
+Envie `content` ou `hex_content`, nunca os dois.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Todos os campos" icon="list" href="/reference/api/send">
+    Padrões, recusas e parâmetros avançados.
+  </Card>
+  <Card title="Batches" icon="layer-group" href="/developers/send/batches">
+    Muitas mensagens em uma chamada, e agendamento.
+  </Card>
+</CardGroup>

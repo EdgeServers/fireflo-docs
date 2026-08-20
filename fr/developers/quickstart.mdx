@@ -1,0 +1,146 @@
+---
+title: "Quickstart"
+description: "Un message, en quatre langages, avec les trois choses qui le refuseront avant qu'il ne parte."
+---
+
+Il vous faut trois choses de la part de celui qui exploite votre passerelle : une **URL de base**,
+un **login HTTP** et un **mot de passe**. Si votre login a été créé pour SMPP, il ne fonctionnera
+pas ici. C'est une séparation délibérée, pas un bug.
+
+## Envoyer un message
+
+<CodeGroup>
+
+```bash curl
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "to": "61491570006",
+    "content": "Your OTP is 4417, valid for 10 minutes."
+  }' \
+  'https://sms.example.com/secure/send'
+```
+
+```javascript Node
+const auth = Buffer.from(`${process.env.SMS_LOGIN}:${process.env.SMS_PASSWORD}`).toString("base64");
+
+const res = await fetch("https://sms.example.com/secure/send", {
+  method: "POST",
+  headers: {
+    Authorization: "Basic " + auth,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    to: "61491570006",
+    content: "Your OTP is 4417, valid for 10 minutes.",
+  }),
+});
+
+const { data, message } = await res.json();
+if (!res.ok) throw new Error(message);
+console.log(data.messageId);
+```
+
+```python Python
+import os, requests
+
+r = requests.post(
+    "https://sms.example.com/secure/send",
+    auth=(os.environ["SMS_LOGIN"], os.environ["SMS_PASSWORD"]),
+    json={"to": "61491570006", "content": "Your OTP is 4417, valid for 10 minutes."},
+)
+r.raise_for_status()
+print(r.json()["data"]["messageId"])
+```
+
+```php PHP
+$ch = curl_init('https://sms.example.com/secure/send');
+curl_setopt_array($ch, [
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_USERPWD => getenv('SMS_LOGIN') . ':' . getenv('SMS_PASSWORD'),
+  CURLOPT_POST => true,
+  CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+  CURLOPT_POSTFIELDS => json_encode([
+    'to'      => '61491570006',
+    'content' => 'Your OTP is 4417, valid for 10 minutes.',
+  ]),
+]);
+
+$out = json_decode(curl_exec($ch), true);
+```
+
+</CodeGroup>
+
+Un succès renvoie l'id que vous reverrez sur chaque accusé :
+
+```json
+{
+  "data": {
+    "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46"
+  }
+}
+```
+
+<Warning>
+**Mettez le destinataire entre guillemets.** `"to": 61491570006` est un JSON valide et perd tout
+zéro initial avant même que le parseur ne le voie. Envoyez-le toujours sous forme de chaîne.
+</Warning>
+
+## Vérifiez que ça marche avant de déboguer
+
+Deux appels, dont aucun n'envoie de message ni ne coûte quoi que ce soit :
+
+```bash
+# La passerelle est-elle up ? Aucun identifiant nécessaire.
+curl 'https://sms.example.com/ping'
+
+# Mes identifiants sont-ils corrects, et ai-je du crédit ?
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+<Tip>
+`/secure/rate` tarifie un message sans l'envoyer et ne compte contre aucune limite de débit. C'est
+le moyen le moins coûteux de confirmer qu'une destination est routable et tarifée avant d'envoyer
+quoi que ce soit de réel.
+</Tip>
+
+## Les trois choses qui refusent un premier message
+
+Dans l'ordre où vous êtes susceptible de les rencontrer :
+
+<Steps>
+  <Step title="403 Authentication failure">
+    Mot de passe incorrect, login inconnu, **ou un login SMPP**, qui ne peut pas du tout utiliser
+    cette API. Le message est identique dans les trois cas.
+  </Step>
+  <Step title="403 not an approved sender ID">
+    Votre compte a l'approbation de sender ID activée et le `from` envoyé n'est pas sur la liste.
+    Omettre `from` utilise votre nom de login, qui n'est habituellement pas approuvé non plus.
+  </Step>
+  <Step title="402 Insufficient credit">
+    Prépayé, et le solde ne couvre pas l'envoi. **Rien n'a été envoyé et rien n'a été débité.**
+  </Step>
+</Steps>
+
+## Et ensuite ?
+
+Un `200` signifie *accepté pour routage*, pas livré. La réponse de soumission est envoyée avant
+l'exécution du routage. Pour savoir ce qui s'est réellement passé, demandez un accusé :
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Accusés de livraison" icon="receipt" href="/developers/receive/delivery-receipts">
+    La charge utile, les niveaux, et comment corréler sur `messageId`.
+  </Card>
+  <Card title="Chaque champ" icon="list" href="/reference/api/send">
+    Valeurs par défaut, refus et paramètres avancés.
+  </Card>
+</CardGroup>

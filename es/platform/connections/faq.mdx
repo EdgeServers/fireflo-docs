@@ -1,0 +1,107 @@
+---
+title: "FAQ de conexiones"
+description: "Binds, sesiones, acuses y tags: las preguntas que surgen una vez el tráfico fluye."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un vendor aparece como no conectado pero nada parece ir mal">
+Lea `last_error` en ese trabajador. Es la diferencia entre los dos casos que el badge no puede
+distinguir:
+
+- **Un valor**: el socket se abrió y el bind fue rechazado. Credenciales equivocadas, system type
+  equivocado, una IP que el operador no espera o un límite de binds ya alcanzado.
+- **Vacío**: el socket nunca se abrió. Cortafuegos, DNS o un operador caído.
+
+`fireflo test-bind vendor1` marca una vez y le dice cuál, sin esperar al ciclo de reconexión.
+</Accordion>
+
+<Accordion title="bound es 0. ¿Es que nadie se conectó o que el socket nunca se abrió?">
+Misma distinción, misma respuesta: `last_error`.
+
+En un **listener**, `bound: 0` normalmente no es ninguna: significa que ahora mismo no hay cliente
+conectado, lo cual es silencioso más que roto. Por eso un listener sin nadie bound no se pinta en
+rojo como un vendor sin sesión.
+</Accordion>
+
+<Accordion title="El vendor está bound pero nada sale">
+Compare `bound` con `bound_transmittable`. Una sesión lleva tráfico solo si es **transceiver**, o
+**transmitter** en una sesión cliente. Un vendor solo receiver hace bind perfectamente y no envía
+nada.
+
+Si ambos son distintos de cero, compruebe si el vendor está **held**: aceptando pero no enviando, con
+la cola creciendo, y si `tps_measured` es cero mientras `queue_depth` no lo es. Ese par es un
+atasco, y es invisible en cualquier número aislado.
+</Accordion>
+
+<Accordion title="¿Por qué no salió la pasarela cuando un listener no pudo tomar su puerto?">
+Porque en un despliegue con varios listeners, un conflicto de puerto no debe tumbar los que
+funcionan.
+
+Registra y sigue. El coste es que un arranque limpio **no** es prueba de que cada listener esté
+arriba. Compruebe `/ops/health` en lugar de la ausencia de error.
+</Accordion>
+
+<Accordion title="request.dlrs viene activado por defecto. ¿Qué me cuesta desactivarlo?">
+Cada mensaje por ese vendor se liquida como `EXPIRED` en la fecha límite en lugar de DELIVERED o
+FAILED, porque nada informa nunca un resultado.
+
+Su tasa de entrega para ese vendor se vuelve **sin significado en lugar de cero**, lo cual es peor:
+un cero parece un problema, un número sin significado parece datos.
+</Accordion>
+
+<Accordion title="¿De dónde viene realmente un TLV?">
+De cuatro sitios, componiendo en este orden: el `submit_sm` del cliente (solo si el listener declara
+el tag), el `defaultTlvs` de su credencial, el sello de whitelist y luego el `default.tlvs.submit`
+del vendor.
+
+**La precedencia es mensaje > credencial > vendor**, y los defaults solo rellenan huecos. La
+excepción es el sello de whitelist en modo `replace`, donde la sobrescritura *es* la aprobación.
+
+Los tags no declarados se **descartan**, no se pasan.
+</Accordion>
+
+<Accordion title="Mi valor default.tlvs.submit desapareció en silencio">
+Compruebe el formato. Es `<name>_<tag>=<value>`, separado por comas.
+
+`PEID=1101234567890123456` no tiene tag en el nombre, así que se parsea a nada y solo registra un
+WARN. El ajuste parece aplicado y no hace nada.
+
+Compruebe también la base del tag: **`vendor_1400` es decimal 1400, no `0x1400`.** Si un operador le
+dio un tag en hex y lo escribió sin el prefijo, todo carga y el tag equivocado va por el cable.
+</Accordion>
+
+<Accordion title="Un ajuste por listener parece no hacer nada como quiera que lo configure">
+Compruebe que la clave sea una que el listener lea por listener. Una clave que no lo hace conserva
+su forma desnuda, lee una global que nadie establece y por tanto devuelve su valor por defecto
+codificado, sea cual sea su configuración.
+
+`whitelist.tlvs.replace` se envió así una vez y no selló nada sobre SMPP mientras duró.
+Silenciosamente, porque no sellar se parece exactamente a no tener nada que sellar.
+</Accordion>
+
+<Accordion title="¿Necesito test-bind mientras el vendor ya está bound?">
+No puede: se rechaza, deliberadamente. Un segundo bind sobre el mismo `systemId` puede costarle la
+sesión viva, y muchos operadores solo permiten uno.
+
+Úselo antes de que el tráfico dependa del vendor, o después de suspenderlo.
+</Accordion>
+
+<Accordion title="Un cliente dice que envió tres segmentos y recibió tres acuses. ¿Es correcto?">
+Sí, por defecto. `conf.dlr.multipart` es `all`, así que hay un acuse por `submit_sm` que envió, cada
+uno citando el id que le dieron.
+
+`first` o `last` colapsa eso a uno, llevando los totales reales de `sub:`/`dlvrd:`, para agregadores
+que esperan un mensaje entra y un acuse sale. **Cada acuse informa el mismo resultado** sea cual sea
+la elección, porque los segmentos salientes se agregan antes de construir cualquier acuse.
+</Accordion>
+
+<Accordion title="¿Por qué se informa como failed un mensaje largo parcialmente entregado?">
+Porque el destinatario no recibió un mensaje legible. La resolución espera al último segmento e
+informa el **peor**, no el primero.
+
+Es la respuesta honesta, y mueve las cifras de tasa de entrega hacia abajo con respecto a pasarelas
+que informan del primer segmento. Vale la pena saberlo antes de comparar meses.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,72 @@
+---
+title: "Diagnósticos"
+description: "Logs y configuración leídos de la máquina que ejecuta la pasarela: lo que realmente está leyendo, que no siempre es lo que usted escribió."
+---
+
+**Leído de la máquina que ejecuta la pasarela. Los secretos se blanquean antes de salir de ese
+proceso, así que nada en esta página puede mostrarle una contraseña o un token.**
+
+En todos los demás sitios, el panel muestra lo que se ha *escrito* para la pasarela. Esta página
+muestra lo que la pasarela está *leyendo*. En modo archivo esos dos pueden diferir indefinidamente,
+sin nada en ninguna parte que lo diga: una edición sobre la copia equivocada de un archivo, un
+despliegue que no reinició, una ruta que se movió. Esta es la pantalla que lo zanja.
+
+## Logs
+
+Cuatro logs están disponibles: el log principal, el log de conexión de vendor, el log de listener y
+el log de acceso. Elija uno, elija cuántas líneas de la cola leer, y opcionalmente filtre a líneas
+que contengan algún texto.
+
+Cambiar qué log está leyendo vuelve a consultar de inmediato. Cambiar el conteo de líneas o el
+filtro no lo hace hasta que pulse **Refresh**: un filtro que volviera a consultar en cada
+pulsación releería la ventana del archivo en la pasarela una vez por carácter tecleado.
+
+Encima de la salida se sitúa el estado del archivo, su ruta y su tamaño:
+
+| Estado | Significado |
+| :--- | :--- |
+| **In use** | Se está escribiendo ahora |
+| **Nothing written yet** | Existe, vacío |
+| **Not being written** | Configurado como off |
+| **Not read (database mode)** | La pasarela toma esto de la base de datos en su lugar |
+
+<Warning>
+**Un resultado vacío no es prueba de que lo que buscó nunca ocurriera.** El filtro se aplica a la
+cola que se leyó, no a todo el archivo. Pida más líneas antes de concluir nada.
+
+Donde esto importa la pasarela suministra una nota propia, y el panel la renderiza sobre la salida
+en lugar de resumirla, porque "nada aquí" tiene al menos tres significados distintos y solo la
+pasarela sabe cuál aplica.
+</Warning>
+
+## Configuración en vigor
+
+El mismo tratamiento para la configuración: propiedades, enrutamiento, tasas y credenciales, cada
+una mostrada como la pasarela la tiene, con un badge que dice **From database** o **From file** y
+la ruta de la que vino.
+
+Las credenciales se renderizan como tabla en lugar de como texto: tipo, system id, cuenta, producto,
+secreto y direcciones IP permitidas. La columna de secreto informa solo **set** o **missing**.
+
+<Note>
+**No hay campo en esta página que pueda mostrarle una contraseña, y no lo va a haber.** La redacción
+ocurre en la pasarela antes de que el texto se envíe, no en el navegador después. Una credencial
+sin restricciones de IP muestra **any address**, un hecho que vale la pena ver claramente.
+</Note>
+
+## Archivos
+
+Un rail listando cada archivo del que la pasarela sabe con su estado, ruta y tamaño, y un único
+control para **download the bundle**: todo, redactado, en un archivo, para adjuntar a una petición
+de soporte.
+
+## Cuándo recurrir a esta página
+
+- Un cambio de configuración que aparece guardado en todos los sitios del panel y visiblemente no ha
+  surtido efecto.
+- Un vendor que no hace bind, donde necesita el log de conexión en lugar del resumen.
+- Confirmar de qué fuente se está leyendo realmente un dominio antes de editar la equivocada.
+- Reunir evidencia para **support@fireflo.au**, donde el bundle ahorra un ida y vuelta.
+
+Responde a "¿qué está haciendo esta máquina?", no a "¿qué le pasó al mensaje X?". Para eso, use los
+registros de llamada.

@@ -1,0 +1,92 @@
+---
+title: "Callbacks de lote"
+description: "Los resultados por mensaje de un lote llegan aquí y en ningún otro sitio. Un GET desnudo con cuatro parámetros de consulta."
+---
+
+La respuesta de `sendbatch` confirma **solo la aceptación**. Trae un `batchId`, un recuento y ningún
+id por mensaje.
+
+Los resultados por mensaje llegan como callbacks.
+
+```json
+{
+  "messages": [ "…" ],
+  "batch_config": {
+    "callback_url": "https://yourapp.example.com/hooks/batch-done",
+    "errback_url":  "https://yourapp.example.com/hooks/batch-error"
+  }
+}
+```
+
+## Qué llega
+
+**Un `GET` desnudo con una cadena de consulta. No hay cuerpo en absoluto.**
+
+```
+GET /hooks/batch-error?batchId=c0ffee12-…&to=61491570006&status=0&statusText=…
+```
+
+| Parámetro | Significado |
+| :--- | :--- |
+| `batchId` | El `batchId` que devolvió la llamada `sendbatch` |
+| `to` | El único destino sobre el que trata este resultado |
+| `status` | `1` aceptado, `0` rechazado |
+| `statusText` | El `messageId` en caso de éxito; el rechazo en palabras en caso de fallo |
+
+<Tip>
+**`statusText` lleva el `messageId` en caso de éxito.** Es el único lugar donde un lote se lo da,
+así que si necesita correlacionar acuses posteriores con miembros individuales del lote, este
+callback es donde lo captura.
+</Tip>
+
+## Un resultado por mensaje, no uno por lote
+
+Un lote de 500 produce hasta 500 callbacks. Su endpoint debería ser barato e idempotente. Se aplican
+las mismas reglas de reintento que a los acuses, así que un manejador lento será llamado de nuevo.
+
+## El fallo silencioso
+
+<Warning>
+**Las claves desconocidas en `batch_config` se ignoran, no se rechazan.**
+
+`errback_url` mal escrita como `errBack_url` o `error_url` no produce un `400`. El lote se acepta,
+los mensajes se envían, y cada resultado por mensaje no va a ninguna parte. Desde fuera parece
+exactamente un lote donde nada falló.
+
+Este es el único lugar de la API donde un tecleo erróneo no produce un error, así que verifíquelo
+deliberadamente: envíe un lote con un mensaje que sepa que será rechazado —un sender ID no aprobado
+es lo más fácil— y confirme que llega el callback.
+</Warning>
+
+## Éxito, reintentos y timeouts
+
+Idénticos a los acuses de entrega:
+
+| Regla | Valor |
+| :--- | :--- |
+| Éxito | HTTP **`200`–`399`** |
+| Reintentos | 10 por defecto, con 120 segundos entre ellos |
+| Timeout | 5 segundos |
+
+Con el presupuesto por defecto, un endpoint inalcanzable ocupa un hilo durante veinte minutos por
+callback. Así que un endpoint caído durante un lote grande es caro para su proveedor además de
+inútil para usted.
+
+## Qué no es esto
+
+- **No es un acuse de entrega.** Un callback de lote dice si el mensaje fue aceptado o rechazado en
+  el ingress. Si fue *entregado* sigue viniendo de un `dlr_url`, que usted fija en `globals` para
+  que se aplique a cada mensaje del lote.
+- **No está ordenado.** Los resultados llegan a medida que se procesan los mensajes, no en el orden
+  que los listó.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Lotes" icon="layer-group" href="/developers/send/batches">
+    Programación, globals y el tope de expansión.
+  </Card>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    El resultado, en contraposición a la aceptación.
+  </Card>
+</CardGroup>

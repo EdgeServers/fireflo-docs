@@ -1,0 +1,111 @@
+---
+title: "Soumettre des messages"
+description: "submit_sm sur un bind établi. Les champs qui comptent, comment registered_delivery mappe vers les niveaux d'accusé, et ce qui arrive à un tag que vous n'avez pas déclaré."
+---
+
+Une fois bindé, vous envoyez `submit_sm`. La réponse porte un id de message, et — comme en REST —
+**cette réponse signifie accepté, pas livré**.
+
+## Les champs qui décident d'une issue
+
+| Champ | Notes |
+| :--- | :--- |
+| `source_addr` | Votre sender ID. L'approbation s'applique ici exactement comme au `from` REST. |
+| `destination_addr` | Format international. |
+| `data_coding` | `0` GSM-7, `8` UCS-2. Décide de votre nombre de segments, donc de votre coût. |
+| `registered_delivery` | Quels accusés vous voulez. Voir ci-dessous. |
+| `esm_class` | Mode de message et indication UDH. De mauvais bits ici sont un `ESME_RINVESMCLASS` fréquent. |
+| TLVs optionnels | Extraits seulement si le listener déclare le tag. |
+
+## `registered_delivery` mappe vers des niveaux d'accusé
+
+FireFlo honore l'octet plutôt que de le traiter comme un booléen :
+
+| Bits | Signification |
+| :--- | :--- |
+| 1–0 | aucun / tout / échec seulement / succès seulement |
+| bit 4 (`0x10`) | Ajoute la notification intermédiaire |
+
+**`0x11` est l'écriture SMPP de `dlr_level: 3`.** Progression et issue. `0x01` vous donne les
+issues seules, ce que veulent la plupart des intégrations.
+
+<Warning>
+Une notification intermédiaire n'est **pas** l'issue. `ACCEPTD` et `BUFFRED` arrivent en niveau 1
+avec un autre accusé à suivre, donc demander `0x11` et clore votre enregistrement sur le premier
+accusé rapporte le mauvais état, en permanence.
+</Warning>
+
+## Longs messages
+
+Deux façons, et elles coûtent la même chose :
+
+- **Découpez-les vous-même**, en positionnant l'UDH et les bits de concaténation dans `esm_class`.
+  Vous envoyez N `submit_sm` et récupérez N ids.
+- **Envoyez un long corps** et laissez la passerelle le découper.
+
+Les tailles de segment sont les mêmes que partout : **160 GSM-7** ou **70 UCS-2** pour un message
+unique, **153** ou **67** par segment une fois découpé. Un message peut faire au plus 255
+segments.
+
+<Tip>
+Si vous découpez vous-même, les parties doivent atteindre la passerelle proches dans le temps.
+Elles sont retenues pour réassemblage et un ensemble qui ne se complète jamais est finalement
+abandonné. N'étalez pas un filet lent de segments d'un même message sur des minutes.
+</Tip>
+
+## TLVs
+
+Un paramètre optionnel est extrait **seulement si le listener déclare le tag** dans
+`registered.tlvs.submit`. **Les tags non déclarés sont rejetés, pas transmis**, silencieusement, à
+l'entrée, avant tout le reste.
+
+Donc si un tag que vous envoyez n'atteint jamais l'opérateur, la première question est de savoir
+si votre fournisseur l'a déclaré, pas si vous l'avez envoyé correctement.
+
+D'où une valeur peut finir par venir, par ordre de précédence : votre `submit_sm` bat les
+valeurs par défaut de votre identifiant, qui battent les valeurs par défaut du vendor. L'exception
+est un stamp de whitelist en mode `replace`, qui est censé l'emporter. Cet écrasement *est*
+l'approbation.
+
+## Approbation de contenu sur un long message
+
+<Warning>
+**Un message concaténé est vérifié contre les templates approuvés seulement après réassemblage**,
+parce qu'à la soumission le corps n'est encore qu'un fragment.
+
+Conséquence : chaque segment est acquitté, *puis* le message peut être abandonné et remboursé. Il
+n'y a pas d'erreur sur un `submit_sm_resp` que vous puissiez rattraper. L'accusé est le seul
+signal.
+
+C'est la forme normale pour les templates DLT en langue régionale, où l'UCS-2 met 67 caractères
+par segment.
+</Warning>
+
+## Débit
+
+Deux plafonds, et ce sont des choses différentes :
+
+- **Taille de fenêtre** (`conf.maxPending.default`, 1000 par défaut). Combien de `submit_sm` vous
+  pouvez avoir non acquittés. Attendre chaque réponse avant d'envoyer la suivante fait du
+  round-trip time votre limite, peu importe le reste.
+- **Le TPS de votre compte.** Le dépasser est throttled, pas silencieusement abandonné.
+
+## Le débogage est le commutateur de votre fournisseur, pas le vôtre
+
+Le logging des PDUs et au niveau octet est désactivé par défaut, délibérément : **les PDUs de bind
+contiennent des mots de passe, et les PDUs `submit_sm` contiennent des numéros de téléphone et
+des corps de messages.**
+
+`log.pdus` existe mais est opt-in et temporaire, et la sortie est sensible. Si vous en avez besoin,
+demandez, et attendez-vous à ce qu'il soit re-désactivé.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Codes de statut" icon="hashtag" href="/reference/smpp/status-codes">
+    Ce que signifie chaque `command_status` et s'il vaut la peine de le réessayer.
+  </Card>
+  <Card title="Accusés et MO" icon="arrow-right-arrow-left" href="/developers/smpp/receipts-and-mo">
+    `deliver_sm` dans ses deux rôles.
+  </Card>
+</CardGroup>

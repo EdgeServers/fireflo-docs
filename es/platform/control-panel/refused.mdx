@@ -1,0 +1,102 @@
+---
+title: "Rechazados"
+description: "Mensajes que la pasarela no envió y por qué. Incluidos los tres rechazos que ocurren después de haberle dicho sí al cliente, y que por tanto llevan un id de mensaje y un reembolso."
+---
+
+**Mensajes que la pasarela no envió, y por qué.** La primera pantalla a abrir cuando un cliente
+dice que no llega nada.
+
+La mayoría de rechazos ocurrieron en la puerta: no se envió nada y no se cobró nada. Tres no, y la
+diferencia es lo más importante en esta página.
+
+## Rechazados en la puerta, o rechazados tras la aceptación
+
+<Warning>
+**Tres motivos ocurren después de haberle dicho sí al cliente**: *never routed*, *vendor refused
+it* y *dropped by a filter*.
+
+Esos mensajes fueron aceptados, cargados y en dos casos realmente enviados. Llevan un **message
+id**, aparecen en los registros de llamada, y **su cargo se reembolsó**. Todo lo demás en esta
+página se rechazó antes de convertirse en tráfico en absoluto.
+
+El filtro **Stage** separa los dos, y es el filtro al que echar mano al conciliar el conteo de un
+cliente contra el suyo.
+</Warning>
+
+## Los motivos
+
+Tarjetas de resumen encabezan la página, una por motivo, con un conteo para toda la ventana. No se
+desplazan al paginar, y hacer clic en una filtra a ella.
+
+| Motivo | Normalmente significa |
+| :--- | :--- |
+| **Sender ID not approved** | El remitente no está en la lista aprobada de la cuenta para ese producto |
+| **Content not approved** | El cuerpo no coincidió con ninguna plantilla aprobada: una palabra cambiada basta |
+| **Out of credit** | El crédito prepago no lo cubriría |
+| **Required parameter missing** | Un TLV que la entrada requiere estaba ausente, y nada lo suministró |
+| **Rate limit exceeded** | Por encima de los mensajes por segundo de la cuenta |
+| **Product not sold** | El login nombró un producto sin fila activada en el catálogo |
+| **No price configured** | Ninguna tasa del lado de venta coincidió, y la pasarela rechaza en lugar de enviar sin facturar |
+| **Product not allowed for this login** | El login no puede nombrar ese producto |
+| **Queue full** | La cola del enrutador estaba a capacidad y rechazó en lugar de crecer el heap |
+| **Could not be queued** | Aceptado por las comprobaciones, pero no se pudo entregar: normalmente el broker |
+| **Never routed** | *Tras aceptación.* Ninguna regla activada coincidió; reembolsado |
+| **Vendor refused it** | *Tras aceptación.* El operador rechazó el submit; reembolsado |
+| **Dropped by a filter** | *Tras aceptación.* Un filtro de enrutamiento lo detuvo; reembolsado |
+
+<Note>
+**"Out of credit" inmediatamente tras un reinicio de la pasarela puede aparecer en una cuenta con
+fondos**, mientras el crédito se reserva por primera vez. Un mensaje lo informa y el siguiente
+tiene éxito. Persistir más allá de los primeros envíos es una escasez real.
+</Note>
+
+Dos motivos merecen su propia nota. **Content not approved** es una comparación exacta fuera de los
+placeholders: una sola palabra cambiada rechaza. Y en **vendor refused it**, el estado numérico del
+propio operador se sitúa junto a la fila; la familia 192–196 siempre trata de TLVs, lo cual en un
+lane DLT indio normalmente significa un id de entidad o plantilla faltante o sin sellar.
+
+Un resumen vacío lo dice claramente, y añade la comprobación que vale la pena hacer primero: si
+esperaba rechazos y no ve ninguno, confirme que la aplicación esté activada en absoluto: **una
+whitelist no cargada permite todo por diseño**.
+
+## Encontrar uno
+
+La red amplia es **Anything**, que busca dentro de cuenta, remitente, destino, producto, login,
+detalle del rechazo y extracto del mensaje a la vez. Existen filtros más estrechos para cuenta,
+destino, nombre de bind, producto, ingreso, listener, número de origen e id de mensaje.
+
+**Carrier status** toma el número del operador en decimal. 69 es el genérico "rechazado y no dirá
+por qué", y solo los rechazos de vendor llevan uno.
+
+## La tabla
+
+Nueve columnas por defecto: refused, why, vendor said, account, product, from, to, via, message. El
+selector añade el motivo en inglés, el detalle del rechazo, si se cobró y reembolsó, el nombre en
+código del vendor y los ids de fila y mensaje.
+
+El **extracto del mensaje** (los primeros 160 caracteres) se guarda **incondicionalmente**, a
+diferencia del cuerpo en un registro de llamada. Un rechazo de contenido no se puede diagnosticar
+sin ver lo que se envió, así que este es el único sitio donde el texto del mensaje siempre está
+disponible.
+
+<Note>
+Un guion bajo **Parts** significa que el mensaje se rechazó antes de contar sus segmentos, no cero
+partes. **Data coding** sí muestra `0`, que es real: eso es GSM 7-bit.
+</Note>
+
+## Exportar
+
+Preparado en segundo plano, guardado siete días, y (como en Messages) **lleva cada columna más el
+motivo en inglés llano y el código del operador**, sea lo que sea lo que eligiera en pantalla. Estos
+archivos los leen personas sin panel abierto.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Por qué se rechazó un mensaje" icon="circle-question" href="/platform/troubleshooting/refusals">
+    Retroceder desde un rechazo hasta su causa.
+  </Card>
+  <Card title="Rechazos de vendor" icon="triangle-exclamation" href="/platform/troubleshooting/vendor-rejections">
+    Qué significa cada código de estado del operador.
+  </Card>
+</CardGroup>

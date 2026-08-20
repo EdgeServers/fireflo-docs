@@ -1,0 +1,130 @@
+---
+title: "Acuses de entrega"
+description: "El payload, el nivel que indica si es la última palabra, y el campo que está ausente salvo que su proveedor lo active."
+---
+
+Un acuse de entrega es cómo se entera de qué le pasó a un mensaje. **Es la única forma**. La
+respuesta del envío le dice que el mensaje fue aceptado y nada más.
+
+Pídalo en el envío:
+
+```json
+{
+  "to": "61491570006",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "dlr": "yes",
+  "dlr_url": "https://yourapp.example.com/hooks/dlr"
+}
+```
+
+## Qué llega
+
+Un `POST` con `Content-Type: application/json`:
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "stat": "DELIVRD",
+  "level": 2,
+  "sub_date": "2026-08-05T08:58:59.672Z",
+  "done_date": "2026-08-05T08:59:07.104Z",
+  "to": "61491570006",
+  "from": "FireFlo",
+  "operator_msg_id": "a1b2c3",
+  "account_id": "acct-1001",
+  "system_id": "acme-http",
+  "parts": 1
+}
+```
+
+`id` es el `messageId` que devolvió su envío. **Así es como correlaciona:** no hay nada más.
+
+Los nombres de campo siguen los de Jasmin, así que un receptor escrito para Jasmin lee esto sin
+cambios. Los campos nulos se omiten en lugar de enviarse como nulls, así que un acuse de un mensaje
+que nunca llegó a un vendor no llega lleno de claves vacías.
+
+Cada llamada lleva `User-Agent: FireFlo/<version>`.
+
+## `level` decide si ha terminado
+
+<Warning>
+**Un acuse de nivel 1 no es el resultado.** `ACCEPTD` y `BUFFRED` llegan como nivel 1 y sigue otro
+acuse. Un receptor que cierre su registro con el primer acuse que ve reportará lo incorrecto, de
+forma permanente.
+</Warning>
+
+| `level` | Significa | Estados |
+| ---: | :--- | :--- |
+| `2` | El resultado. El mensaje ha terminado y se factura sobre esto. | `DELIVRD`, `EXPIRED`, `DELETED`, `UNDELIV`, `REJECTD`, `FAILED`, `SEEN`, `UNKNOWN` |
+| `1` | Progreso. Sigue otro acuse. | `ACCEPTD`, `BUFFRED` |
+
+Elija con `dlr_level` en el envío: `1` solo progreso, `2` el resultado (**por defecto**), `3` ambos.
+
+Sobre SMPP la misma elección es el octeto `registered_delivery`: los bits 1–0 eligen ninguno / todos
+/ solo fallos / solo éxitos, y el bit 4 (`0x10`) añade la notificación intermedia. `0x11` es la
+ortografía SMPP de `dlr_level: 3`.
+
+<Tip>
+Si solo quiere saber la respuesta final, el valor por defecto ya es correcto y puede ignorar `level`
+por completo. Ramifique en él solo si pidió `1` o `3`.
+</Tip>
+
+## `stat` es el estado en bruto, no una bandera de éxito
+
+`DELIVRD`, `UNDELIV`, `EXPIRED`, `DELETED`, `ACCEPTD`, `UNKNOWN`, `REJECTD`, `FAILED`, `BUFFRED`,
+`SEEN`.
+
+`EXPIRED`, `REJECTD` y `UNDELIV` se facturan todos como fallos pero significan cosas distintas y
+merece la pena diferenciarlos. La expiración es un terminal apagado durante un día; el rechazo suele
+ser una negativa sobre la que puede actuar.
+
+**No hay campo `err`.** Jasmin envía uno; el resolver de FireFlo solo recibe el estado de entrega y
+nunca un código de error, así que emitir uno significaría inventarlo.
+
+## El campo `vendor` está ausente salvo que su proveedor lo active
+
+Nombra qué proveedor transporta su tráfico. Los proveedores lo retienen de los clientes por
+construcción en otras partes, así que está desactivado por defecto y se habilita por despliegue.
+
+`operator_msg_id` **no** es la misma divulgación y se envía siempre: es el identificador propio del
+operador para el mensaje, que es lo que cita al escalar una consulta de entrega. Identifica al
+mensaje, no al proveedor.
+
+## Entrega, reintentos y qué cuenta como éxito
+
+| Regla | Valor |
+| :--- | :--- |
+| Éxito | HTTP **`200`–`399`** |
+| Reintentos | 10 por defecto, con 120 segundos entre ellos |
+| Timeout | 5 segundos, conexión y petición |
+
+<Warning>
+**Un `302` a una página de login cuenta como éxito** y se traga el acuse. Igual que cualquier `2xx`
+de un proxy que nunca llegó a su aplicación. Si los acuses "llegan" pero su manejador nunca se
+ejecuta, compruebe qué hay delante.
+</Warning>
+
+## Tres segmentos, tres acuses
+
+Por defecto recibe un acuse por cada `submit_sm` que envió, cada uno citando el id que se le dio.
+Su proveedor puede colapsar eso a uno con `first` o `last`.
+
+**Todos los acuses reportan el mismo resultado** hagan lo que hagan, porque los segmentos salientes
+se agregan antes de construir cualquier acuse.
+
+<Tip>
+Un mensaje largo parcialmente entregado se reporta como **FAILED**, no como parcialmente entregado.
+La resolución espera al último segmento y reporta el peor. Es la respuesta honesta, y hace que las
+tasas de entrega parezcan más bajas que las de pasarelas que reportan el primer segmento.
+</Tip>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Los callbacks no llegan" icon="triangle-exclamation" href="/platform/troubleshooting/callbacks">
+    El rango de éxito, el presupuesto de reintentos y la trampa de los marcadores.
+  </Card>
+  <Card title="Gestión de errores" icon="code-branch" href="/developers/errors">
+    Construir para el acuse en lugar de para la respuesta.
+  </Card>
+</CardGroup>

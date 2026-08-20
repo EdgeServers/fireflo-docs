@@ -1,0 +1,65 @@
+---
+title: "Enviar SMS con FireFlo"
+description: "Dos formas de entrada, un mismo conjunto de reglas detrás de ellas, y las pocas cosas que se comportan de forma distinta a otras pasarelas."
+---
+
+Puede llegar a FireFlo por dos vías, y la elección depende sobre todo del volumen y de lo que ya
+hable su stack.
+
+<CardGroup cols={2}>
+  <Card title="REST" icon="code" href="/developers/quickstart">
+    JSON sobre HTTPS. Una llamada, un mensaje. Empiece aquí a menos que tenga un motivo para no hacerlo.
+  </Card>
+  <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
+    Un bind persistente. Mayor throughput, y el idioma que hablan los propios operadores.
+  </Card>
+</CardGroup>
+
+**Todo lo posterior a la aceptación es idéntico.** Mismo enrutamiento, misma tarificación, mismas
+aprobaciones, mismos acuses. La elección afecta a cómo entrega usted un mensaje, no a lo que le
+ocurre después.
+
+## Tres cosas que sorprenden
+
+Vale la pena conocerlas antes de su primera integración, no durante su primer incidente.
+
+<AccordionGroup>
+
+<Accordion title="Una respuesta de éxito no significa entregado">
+La respuesta al envío se emite **antes de que se ejecute el enrutamiento**. Por tanto, `200` (o
+`ESME_ROK`) significa *aceptado para enrutar*, y nada más.
+
+Un mensaje puede ser aceptado y luego rechazado, descartado o fallar el enrutamiento, y la única
+forma de enterarse es un [acuse de recibo](/developers/receive/delivery-receipts). Si su integración
+trata la aceptación como entrega, se equivocará precisamente en los casos que le importan.
+</Accordion>
+
+<Accordion title="Tanto su sender ID como su redacción pueden requerir aprobación">
+En una cuenta con whitelisting obligatorio, un `from` no aprobado se rechaza, y también un cuerpo de
+mensaje que no coincide con ninguna plantilla aprobada.
+
+Esto es normal en destinos regulados: DLT en India es el ejemplo más visible. Si sus envíos
+funcionan en pruebas y fallan en producción, esto es lo primero que hay que comprobar.
+</Accordion>
+
+<Accordion title="Los guiones bajos y los guiones son el mismo campo, salvo una excepción">
+`dlr_url` y `dlr-url` son un único campo, y enviar **ambos** produce un `400` en lugar de que gane
+el último.
+
+La única excepción es `custom_tlvs`, que conserva su guion bajo. `custom-tlvs` es un argumento
+desconocido.
+</Accordion>
+
+</AccordionGroup>
+
+## Adónde ir a continuación
+
+| Usted quiere | Lea |
+| :--- | :--- |
+| Enviar su primer mensaje | [Quickstart](/developers/quickstart) |
+| Conocer todos los campos | [`/secure/send`](/reference/api/send) |
+| Enviar a muchas personas a la vez | [Lotes](/developers/send/batches) |
+| Saber por qué un mensaje largo cuesta tres | [Codificación y segmentos](/developers/send/encoding-and-segments) |
+| Recibir acuses de entrega | [Acuses de entrega](/developers/receive/delivery-receipts) |
+| Gestionar un error correctamente | [Errores](/developers/errors) |
+| Migrar desde Jasmin | [Migrar desde Jasmin](/developers/migrating/from-jasmin) |

@@ -1,0 +1,69 @@
+---
+title: "Uso"
+description: "Volume e entrega por account, com a única escolha aritmética que impede uma tarde ocupada de ser lida como um colapso."
+---
+
+Quanto tráfego saiu, se chegou, e quem enviou. Volume e entrega lideram; dinheiro é a última coluna
+em vez do título — a pergunta comercial é respondida em [Receita](/platform/control-panel/revenue).
+
+O selecionador de intervalo oferece **24 horas**, **7 dias** ou **30 dias** e **default é 7 dias**,
+que é o único lugar no painel que não default para 24 horas. Um dia é a unidade em que uma pergunta
+de uso é feita, e um único dia de baldes horários não pode mostrar um formato de dia útil versus fim
+de semana.
+
+## As cifras
+
+Quatro cards — **Sent**, **Delivered**, **Failed**, **Delivery rate** — com o card de rate
+notando quantas mensagens ainda aguardam recibo.
+
+<Warning>
+**A taxa de entrega é entregues sobre o que se liquidou, não sobre o que foi enviado.**
+
+Dividir por enviado contaria toda mensagem ainda in-flight como falha. A taxa colapsaria toda tarde
+ocupada e se recuperaria sozinha à noite, e ninguém poderia distinguir um problema real de entrega
+do tráfego normal.
+
+Portanto uma taxa de 98% significa 98% *das mensagens que têm um desfecho*. Mensagens ainda
+esperando são contadas em **Sent**, e em **Pending** na tabela, e estão em nenhuma metade da taxa.
+</Warning>
+
+## Tráfego
+
+Entregues e falhadas empilhadas por dia contra volume à esquerda, e a taxa de entrega como uma
+linha contra um eixo fixo 0–100% à direita.
+
+Duas escolhas deliberadas que vale saber:
+
+- **Mensagens ainda aguardando recibo são contadas nos totais mas não desenhadas.** Hoje seria de
+  outra forma sempre lido como um pico de desconhecidos.
+- **Um dia sem nada liquidado não tem taxa alguma**, e a linha quebra em vez de cair para zero.
+  Uma lacuna é "sem evidência"; um zero seria "tudo falhou".
+
+## Por account
+
+Remetente mais pesado primeiro: **Account · Sent · Delivered · Failed · Pending · Rate · Billed**.
+
+Cada account leva através para aquele cliente, onde a mesma pergunta é respondida apenas para eles.
+
+Tráfego que não nomeou uma account aparece como um **no account** acinzentado — não é erro, e não
+é uma account cujo nome está vazio. É tráfego que chegou sem uma, o que geralmente significa um
+login sem account anexada, e vale a pena investigar porque precifica e fatura diferentemente.
+
+## Uso contra o statement
+
+Esta tela conta mensagens. O [statement](/platform/billing/statements) de um cliente conta
+dinheiro, e é faturado na submissão em vez da entrega — portanto a cifra de entregues aqui continua
+se movendo depois que um statement é emitido enquanto o valor faturado não.
+
+Eles não devem concordar em entrega. Devem concordar em **enviado**.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Receita" icon="coins" href="/platform/control-panel/revenue">
+    O mesmo tráfego, valorizado.
+  </Card>
+  <Card title="Rollups de uso e retenção" icon="database" href="/platform/billing/usage-and-retention">
+    O rollup diário do qual esta tela depende, e o que o purge deleta.
+  </Card>
+</CardGroup>

@@ -1,0 +1,139 @@
+---
+title: "Migrar desde Jasmin"
+description: "Un cambio incompatible, dos diferencias en los acuses, y una larga lista de cosas que no tiene que tocar."
+---
+
+La API REST de FireFlo se mantiene deliberadamente cerca de la de Jasmin: mismas rutas, misma
+autenticación, misma ortografía de los campos. Así que la mayoría de las integraciones se mueven
+con un cambio de una línea.
+
+## El único cambio incompatible
+
+Jasmin responde con una **cadena** de la que extrae un UUID. FireFlo responde con un **objeto**.
+
+```json Jasmin
+{"data": "Success \"c723d42a-c3ee-452c-940b-3d8e8b944868\""}
+```
+
+```json FireFlo
+{"data": {"messageId": "c723d42a-c3ee-452c-940b-3d8e8b944868"}}
+```
+
+```python
+# Jasmin
+message_id = re.search(r'"(.+?)"', response["data"]).group(1)
+# FireFlo
+message_id = response["data"]["messageId"]
+```
+
+**Los errores no cambian**: `{"message": "…"}` en los mismos códigos de estado.
+
+## Acuses de entrega: parecidos, no idénticos
+
+Los nombres de campo siguen los de Jasmin, así que un receptor que lea `id` y `stat` funciona sin
+cambios. Dos diferencias:
+
+<AccordionGroup>
+
+<Accordion title="Un cuerpo JSON, no campos de formulario">
+FireFlo hace POST de `application/json`. Un receptor que parsee
+`application/x-www-form-urlencoded` necesita parsear JSON en su lugar.
+
+Este es el cambio con más probabilidades de pasarse por alto, porque el receptor sigue devolviendo
+`200` sin parsear nada.
+</Accordion>
+
+<Accordion title="No hay campo `err`">
+Jasmin envía uno. El resolver de FireFlo solo recibe el estado de entrega y nunca un código de
+error, así que emitir uno significaría inventarlo.
+
+`stat` sigue distinguiendo `UNDELIV`, `REJECTD` y `EXPIRED`, que es la información que realmente
+existe.
+</Accordion>
+
+</AccordionGroup>
+
+`dlr-level` sigue el significado de Jasmin: `1` la notificación de nivel SMSC, `2` la terminal,
+`3` ambas. Por defecto vale `2`. Cualquier valor fuera de `1`–`3` es un `400`.
+
+<Tip>
+`dlr-method` se **acepta pero no elige el formato.** Es un ajuste del lado de la pasarela. Si su
+integración de Jasmin dependía de él, pregunte a su proveedor qué formato reenvía, y tenga en
+cuenta que el formato `kannel` es un `GET` desnudo cuya URL **debe** llevar marcadores `%s`/`%d`.
+Sin ellos, el callback llega completamente vacío.
+</Tip>
+
+## Dos comportamientos que difieren
+
+| | Jasmin | FireFlo |
+| :--- | :--- | :--- |
+| `sms_count` en `/balance` | Cuota de mensajes prepago | Siempre `"ND"` |
+| Saldo insuficiente | Sin código propio | **`402 Payment Required`** |
+
+`sms_count` es `"ND"` porque el saldo es dinero, y cuántos mensajes compra depende de a dónde
+vayan. En lugar de inventar un número, el campo dice que no está determinado.
+
+`402` es un nuevo estado que gestionar. Deliberadamente no se pliega en `403`, donde sería
+indistinguible de una contraseña incorrecta. Un cliente que trate todo 4xx igual lo reintentará
+para siempre, lo cual no puede ayudar.
+
+## Lo que no tiene que cambiar
+
+- **Todas las rutas**: `/ping`, `/secure/send`, `/secure/sendbatch`, `/secure/balance`,
+  `/secure/rate`. Sin prefijo de versión.
+- **HTTP Basic** en `/secure/*`.
+- **Guion bajo y guion** son intercambiables. Con `custom_tlvs` conservando su guion bajo, como en
+  Jasmin.
+- `to` puede ser cadena o número, y un array en un lote.
+- `globals` se fusiona en cada mensaje, ganando los valores por mensaje.
+- `schedule_at` en formas `"3600s"` y `"YYYY-MM-DD HH:MM:SS"`.
+- `callback_url` / `errback_url` recibiendo `batchId`, `to`, `status`, `statusText`.
+- **No hay endpoint de estado de lote**, ni en Jasmin ni aquí.
+
+## Dos cosas que no se trasladan
+
+<Warning>
+**Los lotes programados no son durables por defecto.** Jasmin coloca una cola Celery detrás de los
+lotes; FireFlo envía en proceso, y un broker es opcional.
+
+Si depende de que un lote programado sobreviva a un reinicio de la pasarela, confirme con su
+proveedor que ejecuta RabbitMQ. Y que alerta ante `amqp.bridge.degraded`, porque la durabilidad
+se pierde silenciosamente mientras la conexión con el broker está caída.
+</Warning>
+
+**Sin Celery ni requisito de broker**, lo cual es una simplificación en todas partes salvo en la
+línea anterior.
+
+## Un orden de migración que funciona
+
+<Steps>
+  <Step title="Cambie la extracción de messageId">
+    El único cambio incompatible. Hágalo primero; todo lo demás sigue funcionando mientras lo hace.
+  </Step>
+  <Step title="Pase su manejador de acuses a JSON">
+    Y confírmelo consultando sus propios logs, no comprobando que los acuses devuelven 200,
+    porque lo devolverán de todos modos.
+  </Step>
+  <Step title="Añada una rama para el 402">
+    Alerte en lugar de reintentar.
+  </Step>
+  <Step title="Revise cualquier cosa que lea sms_count">
+    Ahora es siempre `"ND"`.
+  </Step>
+  <Step title="Ejecute ambos en paralelo sobre un porcentaje pequeño">
+    Compare las tasas de entrega sabiendo que FireFlo reporta el **peor** segmento de un mensaje
+    largo, así que sus cifras son legítimamente más bajas que las de una pasarela que reporta el
+    primero.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Visión general de la API" icon="book" href="/reference/api/overview">
+    El envelope, la autenticación y las reglas de nombrado de campos al completo.
+  </Card>
+  <Card title="Acuses de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    El payload que FireFlo envía, campo por campo.
+  </Card>
+</CardGroup>

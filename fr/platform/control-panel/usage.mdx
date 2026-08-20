@@ -1,0 +1,73 @@
+---
+title: "Usage"
+description: "Volume et livraison par compte, avec le seul choix arithmétique qui empêche un après-midi actif de se lire comme un effondrement."
+---
+
+Combien de trafic est sorti, s'il est arrivé, et qui l'a envoyé. Le volume et la livraison mènent ;
+l'argent est la dernière colonne plutôt que le titre — la question commerciale est répondue sur
+[Revenue](/platform/control-panel/revenue).
+
+Le sélecteur de plage offre **24 heures**, **7 jours** ou **30 jours** et **par défaut 7
+jours**, qui est le seul endroit dans le panneau qui ne défaut pas à 24 heures. Un jour est
+l'unité dans laquelle une question d'usage est posée, et un seul jour de buckets horaires ne peut
+pas vous montrer un profil semaine-vs-weekend.
+
+## Les chiffres
+
+Quatre cartes — **Sent**, **Delivered**, **Failed**, **Delivery rate** — avec la carte du taux
+notant combien de messages attendent encore un accusé.
+
+<Warning>
+**Le taux de livraison est delivered sur ce qui s'est réglé, pas sur ce qui a été envoyé.**
+
+Diviser par sent compterait chaque message encore en vol comme un échec. Le taux s'effondrerait
+chaque après-midi actif et récupérerait tout seul pendant la nuit, et personne ne pourrait
+distinguer un vrai problème de livraison du trafic ordinaire.
+
+Donc un taux de 98 % signifie 98 % *des messages qui ont un résultat*. Les messages encore en
+attente sont comptés dans **Sent**, et dans **Pending** dans la table, et ne sont dans aucune
+moitié du taux.
+</Warning>
+
+## Trafic
+
+Delivered et failed empilés par jour contre le volume à gauche, et le taux de livraison comme
+une ligne contre un axe fixe 0–100 % à droite.
+
+Deux choix délibérés à connaître :
+
+- **Les messages encore en attente d'accusé sont comptés dans les totaux mais pas dessinés.**
+  Aujourd'hui autrement se lirait toujours comme un pic d'inconnus.
+- **Un jour sans rien réglé n'a pas de taux du tout**, et la ligne se rompt plutôt que de tomber
+  à zéro. Un trou est « pas de preuve » ; un zéro serait « tout a échoué ».
+
+## Par compte
+
+L'expéditeur le plus lourd en premier : **Account · Sent · Delivered · Failed · Pending · Rate ·
+Billed**.
+
+Chaque compte mène à ce client, où la même question est répondue pour lui seul.
+
+Le trafic qui n'a nommé aucun compte apparaît comme un **no account** grisé — pas une erreur, et
+pas un compte dont le nom est vide. C'est du trafic qui est arrivé sans, ce qui signifie
+habituellement un login sans compte attaché, et cela vaut la peine d'être poursuivi parce qu'il
+se tarife et se facture différemment.
+
+## L'usage face au relevé
+
+Cet écran compte les messages. Le [relevé](/platform/billing/statements) d'un client compte de
+l'argent, et est facturé à la soumission plutôt qu'à la livraison — donc le chiffre delivered
+ici continue à bouger après qu'un relevé a été coupé tandis que le montant facturé non.
+
+Ils ne sont pas censés s'accorder sur la livraison. Ils sont censés s'accorder sur **sent**.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Revenue" icon="coins" href="/platform/control-panel/revenue">
+    Le même trafic, valorisé.
+  </Card>
+  <Card title="Rollups d'usage et rétention" icon="database" href="/platform/billing/usage-and-retention">
+    Le rollup quotidien sur lequel cet écran retombe, et ce que la purge supprime.
+  </Card>
+</CardGroup>

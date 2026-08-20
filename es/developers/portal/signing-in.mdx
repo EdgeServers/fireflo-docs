@@ -1,0 +1,82 @@
+---
+title: "Iniciar sesión"
+description: "No hay contraseña. Introduce su email, sigue un enlace que funciona una vez y aterriza en su cuenta. Y la misma respuesta llega pase lo que pase."
+---
+
+El portal no tiene contraseña. Usted da la dirección de email que su operador tiene para su cuenta,
+y llega un enlace de un solo uso por email.
+
+<Frame caption="La pantalla de inicio de sesión del portal. Un campo, sin contraseña, y un número de versión que le dice para qué versión de la pasarela se construyó este panel.">
+  <img src="/images/developers/portal/sign-in.png" alt="La tarjeta de inicio de sesión del portal FireFlo, mostrando un único campo de email y un botón 'Enviarme un enlace'" />
+</Frame>
+
+> Inicie sesión con la dirección de email de su cuenta. Le enviaremos un enlace. No hay contraseña
+> que recordar.
+
+## Qué ocurre a continuación
+
+Escriba lo que escriba, la pantalla dice lo mismo:
+
+> **Revise su bandeja de entrada.** Si esa dirección está en una cuenta, un enlace de inicio de
+> sesión está en camino. Funciona una vez y caduca en 15 minutos.
+
+<Note>
+**Esa respuesta no cambia si la dirección es incorrecta.** Es idéntica para una dirección de una
+cuenta, una dirección de una cuenta deshabilitada y una dirección que nunca se ha visto.
+
+Es deliberado. Un formulario que dijera "no existe esa cuenta" permitiría a cualquiera probar una
+lista de direcciones y averiguar quiénes son los clientes de su proveedor. El coste de esa
+protección es que un tecleo erróneo parece exactamente un éxito. Así que si no llega nada,
+compruebe la dirección antes de asumir un fallo.
+</Note>
+
+Debajo hay dos controles. **Enviar de nuevo** se deshabilita durante dos minutos y hace cuenta
+atrás; el temporizador sobrevive a una recarga de la página y se corrige a sí mismo cuando vuelve
+del cliente de correo, en lugar de mostrar un número obsoleto. **Usar otra dirección** le devuelve
+a un formulario vacío.
+
+> ¿Nada tras un minuto o dos? Revise la carpeta de spam y envíelo de nuevo. El enlace más nuevo es
+> el que funciona.
+
+Esa última cláusula importa: pedir un segundo enlace no deja válido el primero. Siga el email más
+reciente.
+
+## Seguir el enlace
+
+El enlace le firma dentro y le deja en **Overview**. No en sus mensajes, porque la primera pregunta
+tras iniciar sesión suele ser "cómo va todo", no "muéstrame la fila 4000".
+
+Si el enlace ya se ha usado, o tiene más de quince minutos:
+
+> **Ese enlace no funcionó.** Los enlaces de inicio de sesión funcionan una vez y caducan a los 15
+> minutos. Pida uno nuevo.
+
+<Frame caption="Lo que muestra un enlace usado o caducado. Ambos son normales: un enlace se consume en el momento en que tiene éxito, así que seguir el mismo email dos veces produce esto.">
+  <img src="/images/developers/portal/link-expired.png" alt="La pantalla de verificación del portal indicando 'Ese enlace no funcionó', con un botón de vuelta al inicio de sesión" />
+</Frame>
+
+Ambos son normales. Un enlace se consume en el momento en que tiene éxito, así que seguir el mismo
+email dos veces —o que un escáner de correo lo siga antes que usted— producirá esto.
+
+## Límites
+
+Las peticiones de inicio de sesión están limitadas por cuenta y por red. El límite por cuenta
+responde con la misma frase neutra que un éxito, así que no se le dirá que lo ha alcanzado. El
+límite por red sí lo dice:
+
+> Demasiadas peticiones de inicio de sesión desde esta dirección. Inténtelo en breve.
+
+## Cuando no está disponible en absoluto
+
+Si su proveedor no ha configurado el panel para enviar correo, obtiene un error real en lugar de
+un enlace que nunca llega:
+
+> El inicio de sesión por email no está disponible en este panel. Pregunte a su gestor de cuenta.
+
+Es un ajuste de despliegue del lado de ellos, no algo que pueda sortear.
+
+## Mantenerse conectado
+
+Su sesión se guarda en una cookie en el navegador con el que inició sesión, y **Cerrar sesión** en
+la barra superior la termina. Iniciar sesión en un teléfono no cierra su sesión en un escritorio.
+Si usa el portal desde una máquina compartida, cierre sesión en lugar de cerrar la pestaña.
