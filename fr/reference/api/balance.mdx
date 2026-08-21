@@ -1,0 +1,87 @@
+---
+title: "GET /secure/balance"
+description: "Ce qu'il reste sur le compte que ce login facture. Et pourquoi le nombre de messages vaut toujours ND."
+---
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+Aucun paramètre.
+
+## Les deux champs
+
+| Champ | Signification |
+| :--- | :--- |
+| `balance` | Argent sur le compte que ce login facture. `"ND"` quand le crédit prépayé n'est pas activé. |
+| `sms_count` | **Toujours `"ND"`** — non déterminé. |
+
+<Tip>
+**`sms_count` vaut `"ND"` par conception, pas par omission.** Jasmin rapporte un quota de messages
+prépayés ; FireFlo n'a pas un tel compteur, parce que le crédit est de l'argent et le nombre de
+messages qu'il achète dépend de leur destination.
+
+Plutôt que d'inventer un nombre, le champ dit qu'il n'est pas déterminé.
+</Tip>
+
+## Quel compte
+
+Celui que le **login facture** — `app_credential.account_id`, pas le nom du login. Plusieurs
+logins sur un même compte rapportent tous le même solde, et dépensent tous le même crédit.
+
+## Un solde positif peut quand même refuser un message
+
+<Warning>
+Le crédit est réservé en **blocs** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
+l'équivalent de vingt messages par défaut — et les recharges sont **asynchrones**.
+
+Donc un message qui arrive pendant que la réservation suivante est prise obtient `402` alors même
+que cet endpoint rapporte un solde positif. **C'est transitoire ; le retry réussit.**
+
+La taille de bloc ne piège pas le crédit : une réservation retombe sur le bloc, le plancher, puis
+finalement sur le message unique qui l'a demandée. Un compte dépense donc chaque unité qu'il
+détient.
+</Warning>
+
+## Ne sondez pas cet endpoint par message
+
+C'est une lecture en base, cela ne vous dit rien quant à l'acceptation de *ce* message précis, et
+cela double votre volume de requêtes.
+
+Sondez-le périodiquement pour l'alerting, et laissez un `402` être votre signal par message.
+
+## Décimales
+
+`balance` est affiché avec `smsg.money.scale` décimales — `0` à `4`, `4` par défaut. L'Inde utilise
+`2`.
+
+**Le stockage ne change jamais** : les montants sont des entiers de dix-millièmes. Ceci n'est
+qu'une présentation.
+
+Les tarifs sur [`/secure/rate`](/reference/api/rate) conservent toujours quatre décimales quoi
+qu'il arrive, parce qu'un tarif affiché `0.05` au lieu de `0.0450` s'écarte de 11% sur chaque
+message.
+
+## Erreurs
+
+Uniquement les erreurs partagées. Voir [Erreurs de l'API](/reference/api/errors).
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Solde et devis" icon="wallet" href="/developers/billing/balance-and-quotes">
+    Utiliser ceci en parallèle de `/secure/rate`.
+  </Card>
+  <Card title="Crédit prépayé" icon="coins" href="/platform/billing/prepaid-credit">
+    Le côté opérateur : blocs, ledger et l'identité de l'argent.
+  </Card>
+</CardGroup>

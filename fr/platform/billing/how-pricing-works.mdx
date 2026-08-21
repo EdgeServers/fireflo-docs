@@ -1,0 +1,156 @@
+---
+title: "Comment fonctionne le pricing"
+description: "Deux côtés pour chaque message, réglés à des moments différents — et la différence entre un prix inconnu et un prix gratuit."
+---
+
+Chaque message a **deux prix** : ce que vous facturez au client, et ce que le vendor vous facture.
+Ils sont réglés à des moments différents dans la vie du message, et la différence est la marge.
+
+## Où chaque côté est réglé
+
+<CardGroup cols={2}>
+  <Card title="Prix — à l'entrée" icon="arrow-right-to-bracket">
+    Par `submit_sm` entrant. Ne dépend que du tarif du client — compte, product, destination — jamais
+    du vendor finalement choisi.
+  </Card>
+  <Card title="Coût — au vendor" icon="arrow-right-from-bracket">
+    Une fois qu'une route est choisie et que le corps est découpé, parce que ce n'est qu'à ce
+    moment-là que le nombre de segments est connu.
+  </Card>
+</CardGroup>
+
+**Chaque PDU entrant est une unité facturable.** Un message concaténé arrivant en trois PDU
+correspond à trois débits, et rien n'a besoin de prédire le nombre de segments pour que la facture
+du client soit juste.
+
+Le coût est **recalculé à chaque tentative**. Un message re-routé après un NACK va vers un autre
+vendor à un autre coût, et chaque tentative est costée séparément — tandis que le client est
+facturé **une seule fois**, quel que soit le nombre de vendors essayés.
+
+## La table de tarifs
+
+Les tarifs utilisent la grammaire de routage avec le montant à la place où le routage met la cible :
+
+```
+Amount:Attribute:Operator:Value
+```
+
+```properties
+[vendor1]
+0.0450:to:matches:^61[45][0-9]{8}$
+0.0620:to:matches:^61[0-9]{9}$
+0.0900::default:
+
+[acct-1001]
+0.0800:product~~to:equals~~matches:premium~~^61[45][0-9]{8}$
+0.1200::default:
+```
+
+Un `[scope]` est **soit un nom d'instance de vendor** — ce que ce vendor vous facture — **soit un
+id de compte** — ce que vous facturez à ce client. Les règles sont évaluées de haut en bas et **la
+première qui correspond gagne**, donc un attrape-tout se met en dernier.
+
+Les attributs et opérateurs sont ceux du moteur de routage, donc tout ce sur quoi vous pouvez
+router vous pouvez le tarifer, y compris `product` et `systemId`. Combinez les conditions avec `~~`
+dans les trois positions.
+
+<Warning>
+**`matches` est une regex et est ancrée.** `^61.*` correspond à un numéro complet ; un `61` seul
+non.
+
+Et `startsWith` compare du **texte littéral** — une expression régulière écrite dedans ne peut
+jamais être vraie, donc la règle ne tarife rien et le trafic passe à ce qui suit.
+</Warning>
+
+## Le défaut que tout le monde devrait définir
+
+`[*]` tarife **tout compte n'ayant pas sa propre règle** :
+
+```properties
+[*]
+0.1200:product:equals:sms
+```
+
+Définissez-le une fois et chaque compte est tarifé, y compris les comptes créés plus tard. Les
+règles propres à un compte sont essayées en premier et la première qui correspond gagne toujours,
+donc tout ce qu'il porte bat le défaut — **y compris un attrape-tout nu**, ce qui fait qu'un tarif
+négocié est un override plutôt qu'une suggestion.
+
+<Warning>
+**Sans défaut, un compte que personne n'a tarifé n'est pas refusé — il envoie non tarifé et non
+facturé**, avec une ligne en `debug`.
+
+C'est du trafic offert plutôt que du trafic bloqué, et c'est l'échec pour lequel le défaut existe
+réellement. Définissez-le au premier jour.
+</Warning>
+
+**Il ne s'applique qu'au prix, jamais au coût.** Un vendor sans règles de coût reste *inconnu*
+plutôt que d'hériter du prix de vente — sinon chaque marge se calculerait à zéro au lieu
+d'inconnu, et rien ne le dirait.
+
+`*` est réservé : aucun compte ni vendor ne peut être nommé ainsi.
+
+## Inconnu n'est pas zéro
+
+**Une règle qui ne correspond à rien laisse le montant inconnu, jamais zéro.** Zéro est un vrai
+prix signifiant gratuit, et un côté inconnu rend la marge inconnue plutôt que fausse.
+
+Cette distinction est pourquoi un vendor non tarifé apparaît comme une lacune dans un rapport de
+marge plutôt que comme 100 % de profit.
+
+## Précision
+
+Les montants portent **au plus quatre décimales** et sont parsés exactement, jamais via de la
+virgule flottante. Un montant avec plus de précision est **rejeté plutôt que tronqué**. Tronquer
+`0.00001` à zéro offrirait silencieusement du trafic.
+
+`smsg.money.scale` (`0`–`4`, par défaut `4`) contrôle le nombre de décimales avec lesquelles un
+**total** est affiché. L'Inde utilise `2`.
+
+<Tip>
+**Les taux gardent toujours quatre décimales quoi qu'il arrive.** `/secure/rate` rapporte `0.0450` ;
+affiché `0.05` cela fait un écart de 11 % sur chaque message, et un client calculant sa facture
+depuis un devis aurait tort. Les exports CSV gardent quatre décimales pour la même raison — un
+tableur somme cette colonne.
+</Tip>
+
+Le stockage ne change jamais : les montants sont des entiers de dix-millièmes. Le paramètre est
+purement de présentation et peut être changé à tout moment.
+
+## Routage au moindre coût
+
+Une table marquée `->function(LCR)` choisit le vendor le moins cher plutôt que la première règle
+correspondante :
+
+```properties
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+La sémantique diffère d'une table normale d'une manière qui compte :
+
+| | Table normale | Table LCR |
+| :--- | :--- | :--- |
+| Évaluation | S'arrête à la première correspondance | Scanne chaque règle |
+| Les correspondances sont | Une chaîne de repli | **Des alternatives** |
+| L'ordre des règles | Est la priorité | N'a aucune signification |
+
+- Les vendors en panne ou n'acceptant pas sont ignorés, donc le suivant le moins cher porte le
+  trafic.
+- Un vendor **sans tarif correspondant** n'est utilisé que si rien d'autre ne correspond — une
+  ligne de tarif oubliée dégrade plutôt que de provoquer une panne.
+- Les règles pointant vers une autre table sont **ignorées** dans une table LCR : un coût imbriqué
+  ne peut pas être comparé, et router à un prix inconnu serait pire.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Tarifs" icon="table" href="/platform/billing/tariffs">
+    Éditer les tarifs depuis le panneau, et les overrides par compte.
+  </Card>
+  <Card title="Enregistrements d'appels" icon="database" href="/platform/billing/cdrs">
+    Où les deux côtés du marché sont enregistrés.
+  </Card>
+</CardGroup>

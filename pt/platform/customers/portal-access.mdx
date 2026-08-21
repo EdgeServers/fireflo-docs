@@ -1,0 +1,78 @@
+---
+title: "Concedendo acesso ao portal para um cliente"
+description: "Duas configurações na conta, um requisito de deployment, e o motivo pelo qual o painel nunca confirmará se o endereço de um cliente foi reconhecido."
+---
+
+Os clientes acessam o portal informando seu endereço de email e seguindo um link de uso único. Não há
+senha para emitir, nem convite para enviar, e nada a revogar exceto as duas configurações abaixo.
+
+## O que um operador configura
+
+Abra a conta, vá em **Settings** e defina dois itens no cartão **Organisation**.
+
+<Steps>
+<Step title="Defina o endereço de email">
+O campo **Email** na conta. Uma conta por endereço, ignorando maiúsculas/minúsculas — uma segunda conta
+reivindicando o mesmo endereço é recusada em vez de silenciosamente sobrepor a primeira.
+
+Um endereço malformado é recusado enquanto você digita, então um endereço que foi salvo é um endereço
+que o portal consegue reconhecer.
+</Step>
+
+<Step title="Mantenha a conta listada">
+A caixa de seleção **Listed**, em **Advanced**. Um link de acesso só é emitido para uma conta que
+esteja tanto correspondida por endereço **quanto** habilitada.
+</Step>
+</Steps>
+
+<Warning>
+**Desmarcar "Listed" desliga o acesso ao portal da conta, e a caixa de seleção não diz isso.**
+
+A descrição dela fala sobre listagens no painel e observa corretamente que o tráfego continua fluindo
+de qualquer forma — desmarcar não interrompe nada que o gateway faz. Mas *interrompe* sim a emissão
+de links de acesso pelo portal, o que a torna o mais próximo de um interruptor liga/desliga do portal
+que a conta possui. Esse é o comportamento atual; o texto ao lado da caixa de seleção ainda não foi
+atualizado.
+
+Para interromper o tráfego, desabilite os logins. Para interromper gastos, use o saldo. Para
+interromper o acesso ao portal, desmarque "Listed".
+</Warning>
+
+## O que o deployment precisa
+
+O painel precisa ser capaz de enviar email, e precisa conhecer seu próprio endereço público, ou nenhum
+link poderá ser emitido. Onde qualquer um dos dois estiver ausente, o cliente é informado claramente
+que o acesso por email não está disponível neste painel e que deve procurar seu gerente de conta. É
+uma recusa honesta, em vez de um link que nunca chega. Consulte [a configuração do painel de
+controle](/reference/config/control-panel).
+
+## O que o cliente vê, e o que não será dito a você
+
+Depois de enviar um endereço, o cliente sempre recebe a mesma resposta:
+
+> If that address is on an account, a sign-in link is on its way. It expires in 15 minutes.
+
+<Note>
+**Essa resposta é idêntica quer o endereço exista, pertença a uma conta desabilitada, ou nunca tenha
+sido visto.** Um formulário que dissesse "conta não encontrada" permitiria que qualquer pessoa
+testasse uma lista de endereços contra sua base de clientes e descobrisse quais clientes dos seus
+concorrentes também são seus.
+
+A consequência para o suporte vale a pena saber: **o painel não pode confirmar a você que o endereço
+de um cliente foi reconhecido.** Se um cliente relatar que nenhum link chegou, verifique o endereço
+na conta em vez de procurar uma rejeição que nunca foi exibida.
+</Note>
+
+Os links funcionam uma única vez e expiram após quinze minutos. Um link usado ou expirado informa isso
+e oferece um novo. As solicitações têm limites por conta e por rede, e atingir o limite por conta é
+respondido com a mesma frase neutra — o cliente não é informado de que foi limitado.
+
+## O que o acesso ao portal não é
+
+**A aba Logins não é acesso ao portal.** Ela armazena credenciais SMPP e HTTP, que são como o
+*software* do cliente se conecta. Nada nela concede ou revoga o acesso de uma pessoa. Uma conta pode
+ter uma dúzia de logins e nenhum acesso ao portal, ou acesso ao portal e nenhum login.
+
+Uma vez dentro, um cliente vê seu próprio tráfego, extrato, IDs de remetente, templates e o playground
+da API. E nunca vê seu custo, sua margem ou qual fornecedor carregou o quê. O que eles podem fazer
+por lá está descrito para eles em [o portal](/developers/portal/signing-in).

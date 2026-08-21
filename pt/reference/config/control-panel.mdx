@@ -1,0 +1,70 @@
+---
+title: "Ambiente do painel de controle"
+description: "Toda variável em panel.env, quais são obrigatórias, e as duas que decidem se clientes conseguem entrar."
+---
+
+O painel de controle é um processo separado com seu próprio arquivo de ambiente — `panel.env`,
+instalado por `fireflo-panel-install` e **nunca substituído por um update**.
+
+<Note>
+Ele **não está no caminho de mensagens**. Um painel fora do ar custa a você a capacidade de fazer
+mudanças, não a capacidade de enviar.
+</Note>
+
+## Obrigatórias
+
+| Variável | Obrigatória | Descrição |
+| :--- | :--- | :--- |
+| `AUTH_SECRET` | sim | Assina o cookie de sessão. Mudar desconecta todo mundo. |
+| `AUTH_URL` | sim em produção | O origin público do painel. Não definido, um sign-out redireciona para localhost. |
+| `NODE_ENV` | sim | `production`. Decide se o cookie de sessão é marcado como secure, então é definido para o **build** também, não só para o run. |
+| `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` | sim | Não há tabela de usuários. **Essas duas são a conta inteira do operador.** Rotacione com `fireflo-panel-install passwd`. |
+| `METRICS_DATABASE_URL` | sim | Conexão só de leitura para call records e métricas. |
+| `CDR_EXPORT_DIR` | sim | Onde exports CSV preparados são gravados. |
+| `PORT` | não | Porta de escuta, padrão `3000`. |
+
+## Conectando ao gateway
+
+| Variável | Necessária para | Descrição |
+| :--- | :--- | :--- |
+| `CONFIG_DATABASE_URL` | edição | Conexão de leitura e escrita para as tabelas de configuração. Não definida, o painel reporta todo domínio de configuração como não editável em vez de falhar no primeiro save. |
+| `GATEWAY_OPS_URL` | health ao vivo | A porta de **management** (9000), não a de mensagens. |
+| `GATEWAY_OPS_TOKEN` | health ao vivo | Precisa bater com `smsg.ops.token`. |
+| `GATEWAY_OPS_ADMIN_TOKEN` | os controles | Precisa bater com `smsg.ops.admin.token`. Sem ele o painel consegue ler o estado do gateway mas não mudar. |
+| `GATEWAY_API_URL` | o playground | A porta de **mensagens**. |
+| `NEXT_PUBLIC_APP_VERSION` | não | Mostrado ao lado da versão do gateway para que um par incompatível fique visível. Inlineado no build. |
+
+<Warning>
+`GATEWAY_API_URL` apontado para a porta ops resulta em 404s em toda chamada do playground. É o espelho
+de apontar `GATEWAY_OPS_URL` para a porta de mensagens. As duas são portas diferentes carregando
+coisas diferentes.
+</Warning>
+
+<Warning>
+Sob `--vhost`, `CDR_EXPORT_DIR` também precisa estar dentro de um root de `BindPaths=`. **Essa falha
+é silenciosa.** Exports são preparados e depois não podem ser lidos.
+</Warning>
+
+## E-mail de sign-in do portal do cliente
+
+Um cliente entra por um magic link. Com estas não definidas, **nenhum cliente consegue entrar**. O
+portal diz que o link não pode ser enviado em vez de falhar em silêncio, mas ninguém entra.
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `MIS_PANEL_BASE_URL` | *(não definido)* | Origin para o qual o link aponta. Não definido, o link é construído relativo. |
+| `FIREFLO_SMTP_HOST` | *(não definido)* | Obrigatória. Com essa ou o endereço de remetente não definidos, nenhum link é enviado. |
+| `FIREFLO_SMTP_FROM` | *(não definido)* | Obrigatória, como acima. |
+| `FIREFLO_SMTP_PORT` | `587` | |
+| `FIREFLO_SMTP_USER` / `FIREFLO_SMTP_PASSWORD` | *(não definido)* | Omita as duas para um relay não autenticado. |
+| `FIREFLO_SMTP_SECURE` | *(a partir da porta)* | TLS implícito. |
+
+<Note>
+`FIREFLO_SMTP_SECURE` é **parseada como sim ou não**, não testada por presença. Foi um dia o
+segundo, o que fazia `FIREFLO_SMTP_SECURE=0` significar "sim". Um valor não reconhecível agora cai
+de volta para a porta e loga.
+</Note>
+
+Veja [Instalando o painel de controle](/platform/install/control-panel) para como estes são derivados
+na hora da instalação, e [Acesso ao portal](/platform/customers/portal-access) para o lado do
+operador de fazer um cliente entrar.

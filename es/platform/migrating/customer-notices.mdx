@@ -1,0 +1,125 @@
+---
+title: "Avisos a clientes"
+description: "Contar a los clientes sobre un cambio que altera sus números: la regla, la consulta que encuentra a quién afecta, y la proporción que casi todos calculan mal."
+---
+
+Algunas releases cambian lo que un cliente ve en una factura o en un portal. Esas necesitan un aviso, y un
+aviso que es vago es peor que ninguno.
+
+## La regla
+
+**Di el número, di la dirección, di la fecha.**
+
+Un cliente al que se le dice *"algunas cifras pueden cambiar ligeramente"* lo lee como ruido y redescubre el cambio
+a través de una consulta financiera tres semanas después. Un cliente al que se le dice *"tu factura de marzo será alrededor de un 18%
+más alta y aquí está por qué"* puede planificar.
+
+<Warning>
+**Nunca describas una corrección como una mejora.**
+
+Estos avisos son correcciones a defectos, y en cada caso el cliente estaba en el lado equivocado del defecto
+en al menos un aspecto. Rodearlo con palabras es precisamente lo que destruye la confianza que el aviso se envió
+a proteger.
+</Warning>
+
+**Envía desde la propia dirección de la plataforma al contacto de facturación de la cuenta**, no a través del portal. Un
+banner in-app llega a quien inicie sesión la próxima vez, que en una cuenta máquina-a-máquina es nadie.
+`app_account.email` es el contacto de registro.
+
+## La proporción que casi todos calculan mal
+
+Cuando un arreglo significa que los mensajes reintentados empiezan a contarse, las cifras del cliente suben. **El tamaño de esa
+subida no es `retried / total`.**
+
+Su cifra vieja era el **tráfico no reintentado solo**, así que el paso de lo que veían a la verdad
+se mide contra *eso*, no contra el total.
+
+```
+lo que veían         = no-reintentado
+lo que ahora ven     = no-reintentado + reintentado
+la subida            = reintentado / no-reintentado
+```
+
+<Tip>
+**Con una tasa de reintentos del 20% las cifras suben un 25%, no un 20%.** Cita `pct_count_rises`, nunca
+`pct_of_traffic`. Son preguntas diferentes y la brecha se ensancha a medida que sube la tasa de reintentos.
+</Tip>
+
+## Encontrar a quién afecta
+
+```sql
+SELECT account_id,
+       count(*)                                                             AS messages,
+       count(*) FILTER (WHERE retry_count > 0)                              AS were_retried,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*), 0), 1)                                      AS pct_of_traffic,
+       round(100.0 * count(*) FILTER (WHERE retry_count > 0)
+             / nullif(count(*) FILTER (WHERE retry_count = 0), 0), 1)       AS pct_count_rises,
+       round(100.0 * COALESCE(sum(price) FILTER (WHERE retry_count > 0), 0)
+             / nullif(sum(price) FILTER (WHERE retry_count = 0), 0), 1)     AS pct_spend_rises
+  FROM cdr_submit
+ WHERE part_no = 1 AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id ORDER BY pct_count_rises DESC NULLS LAST;
+```
+
+**El gasto tiene su propia columna en lugar de tomar prestada la de mensajes**, porque el tráfico reintentado no se
+tarifica como el promedio. Es cualquier destino y producto que resulte estar fallando. Una cuenta
+cuyos reintentos están concentrados en una ruta cara ve una subida de dinero mayor que la de mensajes.
+
+`part_no = 1` porque el dinero vive enteramente en la parte 1 de un mensaje concatenado.
+
+## Dos frases que no deben suavizarse
+
+Cualquiera que sea la reescritura para adecuar a la voz de tu plataforma, estas sobreviven intactas:
+
+<AccordionGroup>
+
+<Accordion title="Tus facturas no están afectadas y no se están reemitiendo. Siempre fueron correctas.">
+Cuando un arreglo eleva las cifras *visibles* de un cliente hacia su factura, los números del cliente estaban
+por debajo de lo que se les facturó.
+
+Un cliente al que se le dice que sus números están cambiando **sin decirle qué lado estaba mal** asume razonablemente
+que se le sobrefacturó. Y cada uno de ellos pregunta. Decirlo por adelantado es más barato que
+responderlo treinta veces.
+</Accordion>
+
+<Accordion title="credit_limit = 0 significa sin crédito, no ilimitado.">
+Nunca redactado como "sin límite" en nada enviado fuera.
+
+No hay representación de ilimitado en ninguna parte del sistema, deliberadamente: un typo que se lea como
+ilimitado regala un mes de tráfico que nadie puede facturar.
+</Accordion>
+
+</AccordionGroup>
+
+## Un aviso que funciona
+
+<Steps>
+  <Step title="Qué está cambiando, en una frase">
+    En términos del cliente: "los conteos de mensajes en tu portal", no "la agregación de CDR".
+  </Step>
+  <Step title="El número, para ellos específicamente">
+    De la consulta de arriba. Una cifra por cuenta gana a un promedio de plataforma cada vez.
+  </Step>
+  <Step title="Qué dirección, y si el dinero se mueve">
+    Di explícitamente si las facturas no están afectadas. Asume que de otro modo concluirán que se les
+    sobrefacturó.
+  </Step>
+  <Step title="La fecha en que entra en vigor">
+    Para que puedan alinearla con su propio periodo de reporte.
+  </Step>
+  <Step title="Qué necesitan hacer">
+    Normalmente nada. Dilo, en lugar de dejarles resolverlo.
+  </Step>
+</Steps>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Migrar un despliegue" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Los cambios que necesitan un aviso en primer lugar.
+  </Card>
+  <Card title="Estados de cuenta" icon="file-invoice" href="/platform/billing/statements">
+    Por qué un periodo cerrado nunca se rehace.
+  </Card>
+</CardGroup>

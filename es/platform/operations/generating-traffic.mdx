@@ -1,0 +1,110 @@
+---
+title: "Generar tráfico"
+description: "Impulsar cada una de las cuatro direcciones por sí sola, y los dos errores de orden de enrutamiento que ya han mordido a un despliegue real."
+---
+
+Un mensaje puede cruzar el gateway de **cuatro maneras**. Son caminos de código genuinamente diferentes y fallan
+diferentemente, así que poder impulsar cada uno por sí solo es lo que convierte "algo está mal" en una
+bisección.
+
+| # | Dirección | Ejercita |
+| :-- | :--- | :--- |
+| 1 | **MT out**. El cliente envía por SMPP, el gateway envía a un proveedor | Auth de bind, whitelist, rating, crédito, enrutamiento, ventana del proveedor |
+| 2 | **MT in por HTTP**. El cliente envía por REST | El ingreso REST, luego todo lo que hay aguas abajo de la fila 1 |
+| 3 | **DLR back**. El recibo del proveedor llega a la sesión conectada del cliente | Parseo de recibos, correlación de id, el almacén DLR |
+| 4 | **MO in**. Un abonado envía un mensaje a tu shortcode y llega al cliente | Decodificación entrante, propiedad del MO, entrega a una sesión conectada |
+
+## Preparar un carril
+
+```bash
+psql "$CONFIG_DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/seed-traffic-lane.sql
+./scripts/fireflo reload
+./scripts/fireflo show routing
+```
+
+Eso crea una cuenta con crédito, un producto con whitelisting apagado, un login SMPP y un login
+HTTP, una tarifa plana, y las reglas de enrutamiento que las cuatro direcciones necesitan. Es **idempotente**, y un
+script de desmontaje correspondiente elimina exactamente lo que añadió.
+
+<Warning>
+**Cambia las dos contraseñas** antes de apuntar cualquier cosa a esto que no sea tu propia máquina.
+</Warning>
+
+## Lee el orden de emparejamiento antes de enviar nada
+
+```
+seq  target   rule
+ 10  smpp     type == 18                       ← recibos al cliente
+ 20  smpp     ingateway startsWith smppclient. ← MOs entrantes al cliente
+ 31  vendor1  to matches ^91[6-9][0-9]{9}$
+ 90  vendor1  (sin condiciones)                ← todo lo demás
+```
+
+El router toma la **primera** regla que coincide, y la última regla coincide con todo. Dos cosas
+se siguen, y **ambas ya han mordido a un despliegue real**:
+
+<AccordionGroup>
+
+<Accordion title="Las reglas que seleccionan por clase de mensaje deben estar arriba de las que seleccionan por destino">
+Un recibo de entrega para un mensaje cuyo emisor era una dirección india numérica llega con ese número
+en `to`, una vez que `flag.reverseDlrSrcDst` ha intercambiado origen y destino.
+
+Colocado **debajo** de una regla `to matches ^91…`, ese recibo va a un **proveedor** en lugar de al
+cliente.
+
+Por eso el seed mueve las reglas de destino hacia abajo en lugar de simplemente insertar una regla de clase arriba
+del catch-all.
+</Accordion>
+
+<Accordion title="Un gateway sin regla `type == 18` se traga cada recibo de entrega">
+Cae al catch-all, llega al worker de proveedor, y se **envía aguas arriba como un mensaje saliente
+nuevo.**
+
+`conf/routingTable.conf` siempre ha llevado esta regla. La base de datos no. Y en modo base de datos
+gana la base de datos.
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Ambos fallos son silenciosos desde el lado del cliente: en el primero el recibo simplemente nunca llega, en
+el segundo llega a un operador como tráfico por el que pagas. Ninguno produce un error en ningún sitio.
+</Tip>
+
+## Qué prueba cada dirección
+
+<Steps>
+  <Step title="Dirección 1 primero: MT out sobre SMPP">
+    Si esta falla, nada más funcionará tampoco. Cubre el camino más largo.
+  </Step>
+  <Step title="Dirección 2: el ingreso REST">
+    Fallar aquí mientras 1 funciona aísla el problema al ingreso HTTP: auth, parseo, límites de tasa.
+  </Step>
+  <Step title="Dirección 3: recibos de vuelta">
+    La más frecuentemente rota por el orden de enrutamiento en lugar de por el camino del recibo en sí.
+  </Step>
+  <Step title="Dirección 4: MO in">
+    Necesita el número de destino mapeado a una cuenta. Un mensaje sin mapear se registra y se entrega
+    a ningún sitio, sin nada observable en el lado del cliente.
+  </Step>
+</Steps>
+
+## Leer el resultado
+
+No juzgues un carril por si el envío devolvió `200`. Eso solo significa aceptado para enrutar. Comprueba:
+
+- `cdr_submit` para una fila, y `cdr_final` para un resultado
+- `cdr_rejected` para cualquier cosa rechazada, con su razón
+- `/ops/health` para `submitted` moviéndose en el proveedor
+- El log para `message.accepted`, `message.submitted`, `message.dlr`
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Throughput" icon="gauge-high" href="/platform/operations/throughput">
+    Una línea base medida contra la que comparar una ejecución de carga.
+  </Card>
+  <Card title="Primeras comprobaciones" icon="magnifying-glass" href="/platform/troubleshooting/first-checks">
+    Cuando un carril no funciona.
+  </Card>
+</CardGroup>

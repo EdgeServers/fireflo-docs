@@ -1,0 +1,73 @@
+---
+title: "FireFlo"
+sidebarTitle: "Ce qu'est FireFlo"
+description: "Une passerelle SMS sans interface, avec un panneau de contrôle pour vous et un portail pour vos clients."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+FireFlo s'intercale entre les applications qui veulent envoyer des SMS et les opérateurs qui les
+acheminent réellement. Il parle HTTP à vos applications et SMPP à vos fournisseurs, dans les deux
+sens, et il conserve le routage, la tarification et l'enregistrement de chaque message sur votre
+propre infrastructure.
+
+Il regroupe trois éléments livrés ensemble :
+
+<CardGroup cols={3}>
+  <Card title="La passerelle" icon="server">
+    Un service Java/Quarkus. Il accepte les binds SMPP et les soumissions HTTP, route, tarifie et
+    enregistre chaque message, puis appelle vos fournisseurs.
+  </Card>
+  <Card title="Le panneau de contrôle" icon="sliders">
+    L'écran de vos opérateurs. Fournisseurs, listeners, routage, clients, tarifs, relevés et santé
+    en direct. La configuration et le diagnostic au même endroit.
+  </Card>
+  <Card title="Le portail client" icon="users">
+    La moitié de l'application qui appartient à vos clients : leurs messages, leur relevé, leurs
+    enregistrements de sender ID, la rotation des identifiants et un playground API.
+  </Card>
+</CardGroup>
+
+Version actuelle : <Versions />.
+
+## Quelle partie de ce site vous intéresse
+
+<CardGroup cols={3}>
+  <Card title="Plateforme" icon="wrench" href="/platform/concepts">
+    **Vous exploitez FireFlo.** L'installer, connecter des fournisseurs, écrire des règles de
+    routage, intégrer des clients, tarifer leur trafic et savoir quand quelque chose ne va pas.
+  </Card>
+  <Card title="Développeurs" icon="code" href="/developers">
+    **Vous envoyez des messages via le FireFlo de quelqu'un.** Faire sortir un message en HTTP ou
+    SMPP, gérer les accusés de livraison et lire ce qui vous a été facturé.
+  </Card>
+  <Card title="Référence" icon="book" href="/reference/api/overview">
+    **Vous cherchez quelque chose de précis.** Chaque champ de requête, clé de configuration,
+    paramètre de worker, verbe CLI et code de statut, avec sa valeur par défaut et ce qui se passe
+    quand elle est incorrecte.
+  </Card>
+</CardGroup>
+
+## Si vous avez dix minutes
+
+<Steps>
+  <Step title="Lisez le vocabulaire">
+    [Concepts](/platform/concepts) fixe la poignée de mots sur lesquels s'appuie le reste du site :
+    **vendor**, **server**, **product**, **account**, **scope**. Deux d'entre eux signifient le
+    contraire de ce qu'un profil Kannel ou Jasmin laisserait supposer.
+  </Step>
+  <Step title="Démarrez-le">
+    [Quickstart](/platform/quickstart) exécute une passerelle dans Docker avec une seule commande,
+    et [Install](/platform/install/one-command) l'installe correctement sur un serveur.
+  </Step>
+  <Step title="Envoyez quelque chose">
+    [Envoyer un message](/developers/send/one-message) tient dans un unique `curl`. Tout ce qui
+    vient ensuite consiste à le router vers un vrai destinataire.
+  </Step>
+</Steps>
+
+<Note>
+  FireFlo est un logiciel commercial, sous licence par déploiement. Il est créé et maintenu par
+  [Remotiq](https://fireflo.au). Contactez-nous pour la licence, ou écrivez à
+  [support@fireflo.au](mailto:support@fireflo.au) si vous l'utilisez déjà.
+</Note>

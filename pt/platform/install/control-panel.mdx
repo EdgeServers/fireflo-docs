@@ -1,0 +1,102 @@
+---
+title: "Instalando o painel de controle"
+description: "O installer do painel, o que ele deriva da configuração do gateway, e a única conexão que ele nunca adivinha."
+---
+
+O painel de controle serve tanto as telas do operador quanto o portal do cliente. É um processo
+separado com seu próprio installer e seu próprio arquivo de ambiente.
+
+<Note>
+**Instale-o depois do gateway.** O gateway é dono do schema do banco; o painel apenas lê e escreve
+linhas nele.
+
+Ele **não está no caminho da mensagem** — um painel fora do ar custa a você a capacidade de fazer
+mudanças, não a capacidade de enviar.
+</Note>
+
+## Instalar
+
+```bash
+./scripts/fireflo-panel-install check
+sudo ./scripts/fireflo-panel-install install
+```
+
+`install` faz Node, usuário de serviço, diretórios, código, `npm ci`, build, ambiente, systemd unit, e
+depois verifica se ele responde. Ele pede o que precisa primeiro e não muda nada até você concordar.
+
+## O que ele deriva
+
+Dado o diretório de configuração do gateway, o installer lê os **tokens operacionais** e a **conexão
+somente-leitura do banco** em vez de pedir que você os copie à mão.
+
+<Warning>
+**`--config-url` nunca é derivado.** A conexão de leitura-escrita com as tabelas de configuração é a
+que pode mudar o que os clientes são cobrados, então sempre é fornecida explicitamente.
+
+Sem ela o painel reporta cada domínio de configuração como **não editável**, em vez de falhar no
+primeiro save.
+</Warning>
+
+## A conta de operador são duas variáveis de ambiente
+
+Não há tabela de usuários.
+
+```bash
+sudo ./scripts/fireflo-panel-install passwd
+```
+
+Essa é a forma suportada de trocá-la — ela reescreve o arquivo de ambiente e reinicia a unit em um só
+passo, em vez de deixar você editar um arquivo que o installer promete nunca substituir.
+
+## As duas URLs que é fácil confundir
+
+| Variável | Aponta para | Se você errar |
+| :--- | :--- | :--- |
+| `GATEWAY_OPS_URL` | A porta de **gerenciamento**, 9000 | Live health lê 404 em tudo |
+| `GATEWAY_API_URL` | A porta de **mensageria**, 8080 | Toda chamada do playground dá 404 |
+
+São portas diferentes carregando coisas diferentes e sem paths em comum. Ambas as falhas parecem uma
+indisponibilidade e não são.
+
+## TLS na frente
+
+O painel fala HTTP puro em `PORT` (3000 por padrão). Coloque nginx ou similar na frente dele, e defina
+`AUTH_URL` para a origem pública — se não for definido, um sign-out redireciona para localhost.
+
+`NODE_ENV=production` é definido também para o **build**, além do run, porque isso decide se o cookie
+de sessão é marcado como secure.
+
+## Sign-in de cliente precisa de mail
+
+Um cliente entra por um magic link. Com `FIREFLO_SMTP_HOST` ou `FIREFLO_SMTP_FROM` não definido,
+**nenhum cliente consegue entrar** — o portal diz que o link não pode ser enviado em vez de falhar
+silenciosamente, mas ninguém entra.
+
+Veja [Portal access](/platform/customers/portal-access).
+
+## Atualizando
+
+```bash
+sudo ./scripts/fireflo-panel-install update
+```
+
+Substitui o build. **Nunca toca no arquivo de ambiente.**
+
+<Warning>
+Atualize o painel e o gateway **juntos**. A versão do painel repete a release do gateway contra a qual
+foi construído em seus três primeiros números — `0.7.3.1` combina com o gateway `0.7.3` — e ele checa
+o par em runtime e avisa quando eles não combinam.
+</Warning>
+
+## Sob um virtualhost
+
+`--tenant NAME` coloca o painel em `/srv/fireflo/NAME/panel` como unit `fireflo-NAME-panel`, e a mesma
+palavra nomeia a mesma instância para o installer do gateway. Com `--vhost PATH` a raiz muda para
+`PATH/panel`, com o gateway em `PATH/gateway`.
+
+<Warning>
+Sob `--vhost`, `CDR_EXPORT_DIR` precisa ficar dentro de uma raiz `BindPaths=`. **Essa falha é
+silenciosa** — exports são preparados e depois não conseguem ser lidos.
+</Warning>
+
+Cada variável está em [Control panel environment](/reference/config/control-panel).

@@ -1,0 +1,88 @@
+---
+title: "Déclarations TLV"
+description: "La grammaire des tags, les cinq niveaux de déclaration et leur préséance, et pourquoi le tag est décimal sauf indication contraire."
+---
+
+Les TLVs sont déclarés comme des tokens `<name>_<tag>`. **Le nom est cosmétique — le tag fait
+autorité**, donc la passerelle, un credential et un fournisseur peuvent chacun nommer le même tag
+différemment tout en étant d'accord sur lui.
+
+## Le tag est décimal sauf préfixé `0x`
+
+C'est la seule partie vraiment surprenante de la syntaxe, et c'est ainsi parce que des
+déploiements existants déclarent déjà des tags décimaux.
+
+| Token | Tag |
+| :--- | :--- |
+| `vendor_1400` | 1400 **décimal** (`0x578`) |
+| `peid_0x1400` | `0x1400` |
+| `source_network_id_5120` | 5120 — le nom peut contenir des soulignements ; le tag est ce qui suit le **dernier** |
+
+Les tags valides sont `0x0000`–`0xFFFF`. Un token dont le tag ne parse pas est journalisé et
+ignoré.
+
+<Warning>
+`vendor_1400` et `peid_0x1400` sont des **tags différents**. Si un opérateur vous donne un tag comme
+`0x1400` et que vous écrivez `1400`, tout se charge, rien n'avertit, et le mauvais tag va sur le
+fil.
+</Warning>
+
+## Cinq niveaux de déclaration
+
+| Niveau | Propriété ou champ | Objet |
+| :--- | :--- | :--- |
+| Listener | `registered.tlvs.submit` | Tags extraits d'un `submit_sm` entrant vers le message |
+| Listener | `mandatory.tlvs.submit` | Tags qui doivent se résoudre, sinon le `submit_sm` est rejeté `0xC3` |
+| Credential | `defaultTlvs` | Valeurs par client remplissant les tags que le client n'a pas envoyés |
+| Fournisseur | `registered.tlvs.submit` | Tags écrits sur le `submit_sm` sortant |
+| Fournisseur | `default.tlvs.submit` | Valeurs remplissant les tags encore non définis au moment d'envoyer |
+
+## Préséance : message > credential > fournisseur
+
+**Les défauts ne remplissent que des trous. Ils n'écrasent jamais une valeur déjà présente.**
+
+Donc une valeur envoyée par le client bat un défaut de credential, qui bat un défaut de fournisseur.
+L'exception est le tampon de whitelist en mode `replace`, où l'écrasement *est* l'approbation —
+voir [Whitelisting](/reference/config/whitelisting).
+
+## Valeurs par défaut
+
+Un défaut peut être :
+
+| Forme | Signification |
+| :--- | :--- |
+| un littéral | Utilisé tel quel |
+| `MESSAGE:<field>` | Copier un attribut de message, en utilisant les noms de champ du moteur de routage |
+| `hex:<bytes>` | Un TLV binaire |
+
+<Warning>
+**Les valeurs ne peuvent pas contenir `,` ou `=`.** Il n'y a pas d'échappement — utilisez `hex:`
+quand un fournisseur en a besoin.
+
+Le format est `<name>_<tag>=<value>`, séparé par virgules. Une entrée mal formée comme `PEID=…`,
+sans tag sur le nom, parse en rien et journalise seulement un WARN. Le réglage paraît appliqué et
+ne fait rien.
+</Warning>
+
+## Les tags non listés sont jetés
+
+`registered.tlvs.submit` sur un listener est une allow-list : un tag que le client envoie qui n'y
+est pas déclaré est **abandonné**, pas passé à travers. La même chose côté fournisseur décide de ce
+qui atteint réellement l'opérateur.
+
+<Warning>
+Le `mandatory.tlvs.submit` par fournisseur est vérifié **après** que `registered.tlvs.submit` a
+filtré. Exiger un tag qui n'est pas aussi enregistré ne peut donc jamais être satisfait — la
+passerelle avertit à propos de cet appariement au chargement.
+</Warning>
+
+## Où un tag manquant apparaît
+
+| Point | Résultat |
+| :--- | :--- |
+| Listener, après les défauts du credential et tout tampon | `0xC3` `ESME_RMISSINGOPTPARAM` |
+| Fournisseur, contre ce qui va sur le fil | Accusé FAILED, remboursement, ligne `cdr_rejected` — **pas re-routé** |
+
+Voir [Codes de statut](/reference/smpp/status-codes) et, pour la vue opérateur de quelles lignes
+approuvées ont des tags que rien ne fournira, le rapport de couverture décrit dans
+[IDs d'expéditeur](/platform/customers/sender-ids).

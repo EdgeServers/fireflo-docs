@@ -1,0 +1,100 @@
+---
+title: "Visión general de la API REST"
+description: "La URL base, la autenticación Basic, la envoltura de respuesta y la regla de nombres de campo que pilla a la mayoría de quienes portan desde otra pasarela."
+---
+
+Cinco endpoints, todos JSON, todos devolviendo la misma envoltura. Cuatro cuelgan de `/secure/` y
+usan autenticación HTTP Basic; `/ping` no usa ninguna.
+
+| Endpoint | Método | Qué hace |
+| :--- | :--- | :--- |
+| [`/secure/send`](/reference/api/send) | POST | Encolar un mensaje |
+| [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Encolar muchos, opcionalmente programados |
+| [`/secure/balance`](/reference/api/balance) | GET | Lo que queda en la cuenta |
+| [`/secure/rate`](/reference/api/rate) | GET | Lo que costaría un mensaje, sin enviar nada |
+| [`/ping`](/reference/api/ping) | GET | Liveness, sin credenciales |
+
+## La envoltura
+
+Cada respuesta es un objeto JSON con **o bien** `data` **o bien** `message`. Nunca ambos, y nunca
+un valor desnudo en el nivel superior.
+
+```json Success
+{ "data": { "status": "ok" } }
+```
+
+```json Failure
+{ "message": "Authentication required" }
+```
+
+Así que la ramificación en su cliente es `res.ok`, y la razón legible siempre está en `message`.
+No hay campo de código de error: el estado HTTP es el código, y la cadena es para una persona
+leyendo un log.
+
+## Autenticación
+
+Basic, con su login HTTP como nombre de usuario:
+
+```bash
+curl -u 'yourlogin:yourpassword' https://sms.example.com/secure/balance
+```
+
+<Warning>
+**Un login SMPP no puede usar esta API**, y el rechazo no lo dice con esas palabras. Es un `403`
+que lee `Authentication failure`, la misma respuesta que da una contraseña incorrecta. Si un login
+funciona sobre SMPP y devuelve 403 aquí, compruebe su tipo antes que la contraseña.
+</Warning>
+
+Las credenciales van en la cabecera y **en ningún otro sitio**. `username` y `password` como
+campos del cuerpo no se ignoran: se rechazan como argumentos desconocidos, que es como suele
+anunciarse un payload copiado de otra pasarela.
+
+## Guiones bajos y guiones son el mismo campo
+
+Cada `_` se reescribe a `-` antes de que se parsee el cuerpo. Así que `dlr_url` y `dlr-url` son un
+único campo, y puede escribir el que prefiera su lenguaje.
+
+Dos consecuencias que merece la pena conocer antes de que muerdan:
+
+<AccordionGroup>
+
+<Accordion title="Enviar ambas ortografías es un 400, no gana la última">
+`{"dlr_url": "…", "dlr-url": "…"}` es un duplicado de un campo, y la API rechaza en lugar de
+elegir silenciosamente una. Es deliberado: elegir en silencio significaría que un acuse iría a
+un sitio que el llamante no pretendía.
+</Accordion>
+
+<Accordion title="`custom_tlvs` es la única excepción">
+Conserva su guion bajo. **`custom-tlvs` es un argumento desconocido** y devuelve un `400`, porque
+el normalizador exime este único nombre. Véase [TLV personalizadas](/developers/send/custom-tlvs).
+</Accordion>
+
+</AccordionGroup>
+
+## Esta referencia es la autoritativa
+
+Describe lo que la pasarela realmente acepta, y sus ejemplos se han ejecutado contra una instancia
+en vivo.
+
+<Warning>
+**Si le han dado un documento OpenAPI o Swagger, compruébelo contra estas páginas antes de
+generar un cliente a partir de él.** Circuló una especificación antigua que está equivocada en
+tres puntos con los que se topa el primer día:
+
+1. **`custom_tlvs` es un objeto**, no un array de pares.
+2. **`validity_period` es un entero** de minutos, no una cadena.
+3. **`product` falta por completo.**
+
+Un cliente generado a partir de esa spec falla en su primera llamada.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Errores" icon="triangle-exclamation" href="/reference/api/errors">
+    Cada estado que devuelve esta API y qué lo provoca.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    Primer mensaje en menos de cinco minutos.
+  </Card>
+</CardGroup>

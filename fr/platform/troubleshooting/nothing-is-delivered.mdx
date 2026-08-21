@@ -1,0 +1,106 @@
+---
+title: "Rien n'est livré"
+description: "Quand cdr_rejected dit maxAttempts : les cinq lignes de log qui nomment la cause, les deux nombres de file qui comptent, et le drapeau de trace à utiliser au lieu de celui qui semble correct."
+---
+
+Vous êtes passé par les [premières vérifications](/platform/troubleshooting/first-checks) et la raison
+de refus est `maxAttempts`. C'est la seule valeur qui signifie réellement routage.
+
+## Le log nomme la cause
+
+Chacune de ces lignes est en WARN ou ERROR et n'a besoin d'aucun drapeau de debug.
+
+| Ligne de log | Cause |
+| :--- | :--- |
+| `routing.rule.broken cause=unknown-target` | La règle nomme quelque chose qui n'est ni une table de routage ni un worker. Elle n'envoie rien. |
+| `routing.rule.broken cause=target-not-accepting` | La cible existe mais est suspendue ou en cours d'arrêt. Souvent temporaire — vérifiez le fournisseur. |
+| `message.routing.miss.first action=requeue` | Le message n'a correspondu à aucune règle activée. Attrape-tout manquant ou mal placé, ou une condition qui ne peut pas être vraie. |
+| `Error parsing new routing table` (ERROR) | Toute la table a été rejetée. La passerelle a conservé la **précédente**, ou n'en a aucune si cela s'est produit au démarrage. |
+| `message.dropped reason=maxAttempts attempts=… limit=…` | Le message a abandonné. La raison au-dessus dit pourquoi. |
+
+<Warning>
+**`routing.rule.broken` est journalisé une fois par règle, pas une fois par message**, et le compteur
+ne se remet à zéro que lorsqu'une nouvelle table de routage est publiée.
+
+Donc après avoir corrigé une règle, guettez que la ligne **réapparaisse** plutôt qu'elle reste absente
+— un log silencieux ne prouve rien. `routing_rules_broken` sur `/ops/health` est le même fait sous
+forme de nombre, et c'est la façon fiable de distinguer « corrigé » de « déjà signalé ».
+</Warning>
+
+## Deux choses à écarter avant d'éditer une règle
+
+<AccordionGroup>
+
+<Accordion title="Un fournisseur est-il seulement bindé ?">
+Un attrape-tout parfait pointant vers un fournisseur déconnecté ne livre rien et ressemble
+exactement à un bug de routage.
+
+```bash
+fireflo verify
+```
+
+Répond en mots : *« N vendor(s) configured, none bound — nothing can be sent yet. »*
+</Accordion>
+
+<Accordion title="Un filtre manque-t-il ou est-il désactivé ?">
+Une règle qui en référence un est **entièrement ignorée** plutôt que chargée avec moins de conditions
+— parce qu'abandonner des conditions *élargirait* silencieusement la règle.
+
+Cherchez `Skipping … filter '…' is missing or disabled`. Si cela a vidé la table `default`, toute la
+configuration de routage est refusée et vous êtes dans le cas ERROR ci-dessus.
+</Accordion>
+
+</AccordionGroup>
+
+## Pourquoi une règle n'a pas correspondu
+
+Six causes, et les deux dernières comptent pour la plupart des surprises :
+
+- Les règles sont évaluées de haut en bas ; une table NORMAL s'arrête à la première correspondance.
+- Le repli doit être à la **fin**. Un attrape-tout au-dessus d'autres règles rend tout ce qui le suit
+  inaccessible — la page de routage du panneau avertit dans les deux cas.
+- Les noms d'attribut doivent correspondre à ceux de la référence de routage.
+- Les comparaisons de chaînes distinguent la casse sauf si on utilise `equalsIgnoreCase`.
+- **`startsWith` compare du texte littéral.** Une expression régulière qu'on y écrit ne peut jamais
+  être vraie — utilisez `matches`. Le panneau avertit ; un fichier édité à la main non.
+- **Un champ non défini ne correspond à aucun opérateur positif**, à l'exception de `isNull`.
+  `product:equals:premium` ne correspond pas à un message ne portant aucun produit — mais
+  `product:!equals:premium` le fait.
+
+## Tracer un message
+
+Réglez `outSms.routing.trace` sur un seul numéro de série de message ou identifiant de compte. Chaque
+règle contre laquelle ce message est testé journalise alors quelle condition a échoué et ce que le
+message contenait réellement :
+
+```
+routing.trace table=default rule=(vendor1:type:==:0) did not match: type:==:0 actual=18
+```
+
+Cela s'applique en direct — réglez-le pendant l'incident, effacez-le après. Laissé vide, il coûte une
+lecture volatile par règle.
+
+<Warning>
+**N'attrapez pas `outSms.routing.debug`.** Il journalise chaque règle de chaque message et rend
+l'objet message complet pour le faire — trente `String.replace` enchaînés par ligne — donc il est
+inutilisable aux débits où les questions de routage se posent réellement. Il n'est utile que sur une
+passerelle inactive reproduisant un seul envoi.
+</Warning>
+
+## Les deux nombres de file
+
+| Sur `/ops/health` | Ce que signifie une valeur non nulle |
+| :--- | :--- |
+| **`routing_failed_queue`** | Messages parqués par un échec de routage *inattendu*. **Pas de CDR et pas d'accusé.** Ils ne se vident que si `outSms.enqueueFailedRouting` est activé, donc dans la configuration ordinaire, ce sont des messages perdus. **Alertez dessus.** |
+| **`routing_retry_queue`** | Messages qui attendent la fin de `outSms.routing.retryBackoffMillis`. De petits nombres sont ordinaires sous retry ; un nombre qui reste élevé est une table de routage qui ne couvre pas le trafic qui arrive. |
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Comment fonctionne le routage" icon="route" href="/platform/routing/how-it-works">
+    Tables, règles et ordre de résolution.
+  </Card>
+  <Card title="Rejets du fournisseur" icon="circle-xmark" href="/platform/troubleshooting/vendor-rejections">
+    Quand le fournisseur est bindé et refuse chaque submit.
+  </Card>
+</CardGroup>

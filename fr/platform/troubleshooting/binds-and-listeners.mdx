@@ -1,0 +1,134 @@
+---
+title: "Binds et listeners"
+description: "Trois défaillances distinctes qui se présentent toutes comme « personne n'est connecté » : un bind sortant refusé, un bind entrant rejeté, et un listener qui n'a jamais ouvert son port."
+---
+
+Trois problèmes différents portent le même visage. Distinguez-les d'abord, car les correctifs n'ont
+rien en commun.
+
+| Symptôme | Ce que c'est |
+| :--- | :--- |
+| Un **fournisseur** n'affiche aucune session | FireFlo n'a pas pu bind vers l'extérieur |
+| Un **client** ne peut pas se connecter | FireFlo a rejeté son bind |
+| Un client ne peut pas se connecter **et il n'y a de rejet nulle part** | Le listener n'a jamais ouvert son port |
+
+## Distinguer « refusé » de « jamais atteint »
+
+`bound: 0` seul ne peut pas distinguer « personne n'est connecté en ce moment » de « aucun socket n'a
+jamais été ouvert ». **`last_error` est ce qui les sépare**, et il s'efface au moment où un bind
+réussit.
+
+| `last_error` | Signification |
+| :--- | :--- |
+| Une valeur | Le socket s'est ouvert et le bind a été refusé — identifiants, system type, IP ou une limite de bind |
+| Vide | Le socket ne s'est jamais ouvert — pare-feu, DNS ou l'extrémité distante est en panne |
+
+```bash
+fireflo test-bind vendor1
+```
+
+Compose une fois et vous dit lequel, sans attendre le cycle de reconnexion.
+
+<Warning>
+**`test-bind` est refusé pendant que le fournisseur est déjà bindé**, délibérément. Un second bind sur
+le même `systemId` peut vous coûter la session vivante, et beaucoup d'opérateurs n'en autorisent
+qu'un. Utilisez-le avant que le trafic ne dépende du fournisseur, ou après l'avoir suspendu.
+</Warning>
+
+## Un fournisseur ne se bind pas
+
+- `host`, `port`, `username` et `password` sont corrects.
+- `connections.transceivers`, `connections.transmitters` ou `connections.receivers` est **supérieur à
+  zéro** — un fournisseur avec les trois à zéro ne bind rien et ne signale aucune erreur.
+- Les réglages TLS correspondent à ce que le fournisseur exige.
+- Le pare-feu autorise le trafic sortant vers le fournisseur.
+- Le fournisseur a mis votre IP source en liste blanche, s'il l'exige.
+
+<Tip>
+**Bindé mais rien ne sort ?** Comparez `bound` avec `bound_transmittable`. Une session ne porte du
+trafic que si c'est un **transceiver**, ou un **transmitter** sur une session client. Un fournisseur
+en receiver-only se bind parfaitement et n'envoie rien.
+</Tip>
+
+## Le bind d'un client est rejeté
+
+- Le credential est `type: SMPP`. Un credential HTTP ne peut pas se bind, et le refus ne le dit pas.
+- Le client utilise les `systemId` et `password` configurés.
+- Aucune limite de connexion n'est dépassée : `srv.maxConnections`, `srv.maxConnectionsPerIP`,
+  `conf.maxConnectionsPerUser.default`, ou la limite par utilisateur.
+- Si `allowedIps` est configuré, l'IP source du bind y figure.
+
+## Le listener ne s'est jamais ouvert
+
+Différent de chaque cas ci-dessus : pas un bind rejeté, mais un socket qui n'a jamais été créé. La
+passerelle tourne normalement — routage, tarification, facturation et connexions fournisseurs tous en
+service, systemd rapporte `active` — pendant qu'aucun client ne peut se connecter.
+
+**La passerelle ne quitte pas quand un listener ne peut pas prendre son port.** C'est délibéré : un
+port occupé ne doit pas mettre toute la passerelle hors ligne, et les listeners TLS ou proxy sont
+souvent tout simplement pas configurés. Donc la preuve se trouve à trois endroits plutôt que dans le
+statut de sortie.
+
+Sur `/ops/health` :
+
+```json
+{ "name": "smppserver.smpp", "bound": 0,
+  "last_error": "the listener could not take port 22775 because something already holds it -- ...",
+  "last_error_at": "2026-08-11T18:58:47Z" }
+```
+
+Dans le journal :
+
+```
+ERROR [smsg.out.smppserver.smpp] listener.bind.failed listener=smppserver.smpp port=22775 --
+      the listener could not take port 22775 because something already holds it
+```
+
+Et le port nomme son détenteur :
+
+```bash
+sudo ss -ltnp | grep 22775
+```
+
+### La cause habituelle, ce sont deux passerelles
+
+Soit une seconde instance configurée sur le même port, soit la même instance tournant deux fois sous
+deux noms d'unité — ce que produisait autrefois un `update` avec un mauvais `--service-name`.
+
+<Steps>
+  <Step title="Listez toutes les unités">
+    `systemctl list-units 'fireflo*' --all`
+  </Step>
+  <Step title="Comparez le PID géré à celui qui détient le port">
+    `systemctl show <unit> -p MainPID` — une JVM orpheline détenant le port en est une que systemd ne
+    gère plus.
+  </Step>
+  <Step title="Arrêtez le service, tuez l'orpheline par PID, puis relancez">
+    **Par PID, jamais par motif.** D'autres JVM peuvent être sur l'hôte, et un kill par motif a déjà
+    supprimé des services non liés.
+  </Step>
+</Steps>
+
+<Tip>
+Un listener qui a échoué à bind **réessaie au prochain poll de configuration ou rechargement** — il
+n'a pas besoin d'un redémarrage une fois le port libre. (Avant 0.3.4, il en avait besoin : le serveur
+en échec était conservé, donc chaque tentative ultérieure journalisait `not (re)starting` et
+retournait.)
+</Tip>
+
+<Warning>
+**Un démarrage propre n'est pas la preuve que tous les listeners sont en service.** Puisque la
+passerelle journalise et continue, l'absence d'erreur au démarrage ne signifie rien. Vérifiez plutôt
+`/ops/health`.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Serveurs" icon="server" href="/platform/connections/servers">
+    Réglages des listeners et ce que chacun fait.
+  </Card>
+  <Card title="Fournisseurs" icon="tower-broadcast" href="/platform/connections/vendors">
+    Connexions sortantes, TPS et mise en attente.
+  </Card>
+</CardGroup>

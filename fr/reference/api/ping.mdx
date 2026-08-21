@@ -1,0 +1,57 @@
+---
+title: "GET /ping"
+description: "Liveness sans identifiants. Ce qu'il vous dit et ce qu'il ne vous dit pas."
+---
+
+Le seul endpoint qui ne nécessite pas d'authentification. Prévu pour un moniteur.
+
+```bash
+curl -i https://sms.example.com/ping
+```
+
+Réponse réelle d'une 0.7.3 en production :
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=UTF-8
+
+{"data":{"status":"ok"}}
+```
+
+Aucun paramètre. Aucune authentification. Ne compte contre aucune limite de débit.
+
+## Ce qu'un 200 ici prouve réellement
+
+Que l'ingress HTTP est up et sert. C'est tout, et l'écart importe quand vous choisissez ce sur
+quoi alerter.
+
+| Un `200` de `/ping` prouve | Il **ne** prouve pas |
+| :--- | :--- |
+| Le processus tourne et accepte du HTTP | Qu'un vendor est bindé |
+| La couche REST est initialisée | Que la base est joignable |
+| Votre chemin réseau l'atteint | Que les messages sont routés plutôt qu'en file |
+
+<Warning>
+**Une passerelle avec tous ses vendors down répond quand même à `/ping` avec `200`.** Les binds,
+la profondeur de file et le débit vivent sur le port de management, qui n'est pas celui-ci. Voir
+[le port de management](/reference/management/endpoints). Alerter sur `/ping` seul vous donne un
+moniteur qui reste vert pendant les incidents que vous voulez le plus connaître.
+</Warning>
+
+## L'utiliser comme health check
+
+Raisonnable comme sonde de liveness d'un load balancer, où "ce processus sert-il ?" est
+exactement la question. Pour la readiness — "cette instance devrait-elle recevoir du trafic ?" —
+utilisez `/ops/health` sur le port de management à la place, et lisez `bound_transmittable`
+plutôt que le champ de statut.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Le port de management" icon="heart-pulse" href="/reference/management/endpoints">
+    Binds, sessions, profondeur de file et TPS mesuré.
+  </Card>
+  <Card title="Santé en direct" icon="chart-line" href="/platform/operations/live-health">
+    La poignée de signaux qui méritent une alerte.
+  </Card>
+</CardGroup>

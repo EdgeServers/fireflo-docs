@@ -1,0 +1,118 @@
+---
+title: "Lotes"
+description: "Muchos mensajes en una sola llamada, programación, y la respuesta que le dice mucho menos de lo que parece."
+---
+
+`/secure/sendbatch` encola muchos mensajes en una sola llamada.
+
+```json
+{
+  "messages": [
+    { "to": "61491570006", "content": "Your OTP is 4417." },
+    { "to": "61491570007", "content": "Your OTP is 9921." }
+  ]
+}
+```
+
+Cada elemento toma los mismos campos que un envío único. El `to` de un mensaje puede ser a su vez
+un array, que se multiplica.
+
+## La respuesta confirma solo la aceptación
+
+```json
+{
+  "data": {
+    "batchId": "c0ffee12-9f3a-4a1e-8d55-1b2c3d4e5f60",
+    "messageCount": 3,
+    "scheduled": "3600s"
+  }
+}
+```
+
+<Warning>
+**No hay ids por mensaje en esta respuesta, ni resultados por mensaje.** `messageCount` es a
+cuántos se expandió el lote, no cuántos tuvieron éxito.
+
+Los resultados por mensaje llegan a su **URL de errback** como callbacks separados. Un cliente que
+trate un `200` aquí como "los tres enviados" se equivoca exactamente en los casos que interesa
+conocer.
+</Warning>
+
+## Valores por defecto y configuración
+
+```json
+{
+  "messages": [
+    { "to": "61491570006", "content": "Your OTP is 4417." },
+    { "to": "61491570007", "content": "Your OTP is 9921." }
+  ],
+  "globals": {
+    "from": "SUNOTP",
+    "dlr": "yes",
+    "dlr_url": "https://yourapp.example.com/hooks/dlr"
+  },
+  "batch_config": {
+    "schedule_at": "3600s",
+    "callback_url": "https://yourapp.example.com/hooks/batch-done",
+    "errback_url": "https://yourapp.example.com/hooks/batch-error"
+  }
+}
+```
+
+**`globals` se fusiona *bajo* cada mensaje**, así que un campo fijado en un mensaje individual gana.
+
+<Warning>
+**Las claves desconocidas en `batch_config` se ignoran, no se rechazan.** Un tecleo erróneo en
+`errback_url` le cuesta cada resultado por mensaje, silenciosamente. El lote se acepta y los
+callbacks simplemente no llegan.
+
+Este es el único lugar de la API donde un campo mal escrito no produce un `400`, así que
+compruébelo enviando un mensaje que fallará deliberadamente y confirmando que el callback llega.
+</Warning>
+
+## Programación
+
+`schedule_at` toma exactamente dos formas:
+
+| Forma | Significado |
+| :--- | :--- |
+| `3600s` | Relativa: dentro de una hora |
+| `2026-08-20 09:30:00` | Absoluta, `YYYY-MM-DD HH:MM:SS` |
+
+Cualquier otra cosa es `412 Got unknown format`. **Una fecha en el pasado también se rechaza**, en
+lugar de enviarse inmediatamente.
+
+<Tip>
+Los lotes programados sobreviven a un reinicio solo cuando la pasarela se ejecuta con un broker
+RabbitMQ. Y ni siquiera entonces cuando la conexión con el broker está degradada. Si la
+programación durable le importa, pregunte a su proveedor qué proveedor de colas ejecuta y si
+alerta ante `amqp.bridge.degraded`.
+</Tip>
+
+## Límites
+
+| Límite | Valor |
+| :--- | :--- |
+| Mensajes por lote tras expansión | **10 000** |
+| Por encima de eso | `400 a batch may expand to at most 10000 messages` |
+
+Los destinos con valor de array multiplican: 100 mensajes con 200 destinatarios cada uno son 20 000,
+y se rechazan.
+
+## Ritmo
+
+Los lotes se ritman contra la profundidad de la cola del router, pausándose por encima de una marca
+alta. No necesita ritmar usted mismo el envío de un lote. Pero **sí** necesita seguir respetando el
+límite de mensajes por segundo de su cuenta en los envíos ordinarios, que es un techo aparte y
+devuelve `429`.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Enviar un lote" icon="layer-group" href="/reference/api/sendbatch">
+    Todos los campos, con los rechazos.
+  </Card>
+  <Card title="Callbacks de lote" icon="phone-arrow-down-left" href="/developers/receive/batch-callbacks">
+    Qué llega a `callback_url` y `errback_url`.
+  </Card>
+</CardGroup>

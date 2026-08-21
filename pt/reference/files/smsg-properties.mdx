@@ -1,0 +1,98 @@
+---
+title: "smsg.properties"
+description: "Como instâncias de worker são declaradas, as três camadas de propriedade, e o único arquivo que ainda é lido no startup em modo de banco."
+---
+
+Definições de worker e suas configurações, mais as propriedades `smsg.*` do gateway inteiro.
+
+## Declarando um worker
+
+Todo worker é um conjunto de propriedades `outSms.instance.<name>.*`. O `type` decide o que ele é:
+
+```properties
+# Um listener em que clientes fazem bind
+outSms.instance.smpp.type      = smppserver
+outSms.instance.smpp.srv.port  = 27777
+outSms.instance.smpp.enable    = true
+
+# Uma conexão de saída para uma carrier
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+```
+
+<Note>
+`smppclient` e `smppserver` são os valores de configuração. Este site e o painel de controle chamam
+de **vendor** e **server** em todo lugar. Veja [Conceitos](/platform/concepts).
+</Note>
+
+Toda chave disponível em cada um está listada em [Configurações de listener](/reference/smpp/server),
+[Configurações de fornecedor](/reference/smpp/client) e [Configurações base](/reference/smpp/worker-base).
+
+## Três camadas
+
+```properties
+# camada 2: a baseline que todo worker herda
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+
+# camada 1: só este worker, vence sobre o acima
+outSms.instance.vendor1.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+Resolução é instância → `outSms.default.*` → o padrão codificado na tabela `prms`. Explicação
+completa em [Caminhos e camadas de propriedade](/reference/config/paths).
+
+<Note>
+A palavra duplicada em `outSms.default.default.tlvs.submit` está correta. O primeiro `default` é a
+camada de fallback; o segundo é parte do nome da propriedade `default.tlvs.submit`.
+</Note>
+
+## Propriedades globais do gateway
+
+Tudo sob `smsg.*` também vive aqui: rating, CDR, crédito, whitelisting, limites de fila, egress de
+webhook, os tokens operacionais. Estão catalogados por tarefa em
+[Chaves de configuração](/reference/config/paths).
+
+```properties
+smsg.config.source        = file
+smsg.rates.currency       = AUD
+smsg.cdr.sink             = auto
+smsg.balance.enabled      = true
+smsg.ops.token            = REPLACE_ME
+smsg.ops.admin.token      = REPLACE_ME_DIFFERENTLY
+```
+
+## O único arquivo ainda lido em modo de banco
+
+Em modo `db` todo file watcher recua e `credentials.yml`, `routingTable.conf` e `rates.conf` não são
+lidos depois do startup.
+
+<Warning>
+**`smsg.properties` continua sendo lido no startup**, porque `smsg.config.source` e o datasource
+precisam vir de algum lugar antes de o banco poder ser consultado.
+
+Isso significa que a chave de origem e os detalhes de conexão ficam neste arquivo mesmo em uma
+implantação totalmente orientada a banco. E uma mudança em qualquer um dos dois ainda precisa de
+restart.
+</Warning>
+
+Uma vez rodando em modo `db`, configurações de worker vêm de `app_worker_property` e propriedades do
+gateway de `app_config`, ambos projetados nos mesmos nomes de chave. Se uma chave está definida na
+tabela de worker e em `app_config`, **a tabela de worker vence e a duplicata é logada**.
+
+## Propriedades de roteamento e trace de mensagem
+
+```properties
+outSms.routing.maxAttempts = 20
+outSms.routing.trace       = acct-1001
+message.trace.mode         = necessary
+```
+
+<Warning>
+`message.trace.mode` é **só global**. Apesar de aparecer em tabelas por instância, um
+`outSms.instance.<name>.message.trace.mode` nunca é lido. Configure sem prefixo.
+</Warning>

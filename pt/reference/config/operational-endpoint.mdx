@@ -1,0 +1,58 @@
+---
+title: "O endpoint operacional"
+description: "Os dois tokens, por que não definido significa 404 e não aberto, e por que isso vive longe da porta que carrega mensagens."
+---
+
+| Propriedade | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `smsg.ops.token` | *(não definido)* | Segredo compartilhado para `GET /ops/health` e `/q/metrics`. As leituras. |
+| `smsg.ops.admin.token` | *(não definido)* | Segredo compartilhado para tudo que muda o que o gateway está fazendo: `/ops/reload`, `test-bind`, `disconnect` e os seis verbos de controle. |
+
+## Dois tokens, não um
+
+Ler o estado do gateway não deve carregar a capacidade de parar um fornecedor. Um dashboard, uma
+sonda de monitoramento ou um painel só de leitura recebe `smsg.ops.token` e consegue ver estado de
+bind, profundidades de fila e throughput; não consegue desabilitar nada.
+
+<Warning>
+`smsg.ops.admin.token` **não definido, ou definido como a mesma string do token de leitura,
+desabilita os verbos de controle** e eles respondem 404. Definir os dois com o mesmo valor não
+"simplifica" a configuração. Desliga os controles.
+</Warning>
+
+## Não definido significa desabilitado, não aberto
+
+Não definido significa **desabilitado e respondendo 404**, não sem autenticação.
+
+Um token errado recebe o mesmo 404 que um endpoint desabilitado, em vez de um 401, então nada anuncia
+que existe um segredo aqui valendo a pena adivinhar.
+
+<Note>
+O custo dessa escolha: um dashboard reportando 404 deve ser lido como **"cheque o token dos dois
+lados"** antes de "o gateway está fora". O gateway não consegue distinguir os dois casos para o
+chamador, nem o CLI, então ambos reportam as possibilidades em vez de chutar.
+</Note>
+
+## Por que não fica sob `/secure`
+
+Esse prefixo é autenticado com credenciais de **mensagens**, que pertencem a clientes. Os dados aqui
+— estado de bind, profundidades de fila, nomes de fornecedores — são do gateway inteiro, e nenhuma
+credencial de cliente deve alcançar isso.
+
+O endpoint vive na interface de management, porta **9000** por padrão, longe da porta que carrega
+mensagens.
+
+```bash
+export FIREFLO_OPS_URL=http://localhost:9000   # a porta operacional, NÃO a de mensagens
+export FIREFLO_OPS_TOKEN=...                   # precisa bater com smsg.ops.token
+export FIREFLO_OPS_ADMIN_TOKEN=...             # precisa bater com smsg.ops.admin.token
+```
+
+<Warning>
+Apontar o `GATEWAY_API_URL` do painel de controle para esta porta resulta em 404s em toda chamada do
+playground, e apontar `GATEWAY_OPS_URL` para a porta de mensagens resulta em 404s em toda leitura de
+health. As duas portas carregam coisas diferentes e não compartilham nenhum path.
+</Warning>
+
+Veja [Management API](/reference/management/endpoints) para os endpoints em si, e
+[Tokens e acesso](/platform/operations/tokens-and-access) para como distribuí-los.

@@ -1,0 +1,115 @@
+---
+title: "FAQ de facturación"
+description: "Las preguntas que hacen los operadores una vez el dinero se mueve: discrepancias, crédito varado, tráfico sin tarificar y periodos que no se cierran."
+---
+
+<AccordionGroup>
+
+<Accordion title="Una cuenta rechaza mensajes y tiene dinero encima">
+Casi siempre es una **recarga en vuelo**, no crédito varado.
+
+El crédito se reserva en bloques y las recargas son asíncronas por diseño, así que un mensaje que
+llega mientras se toma la siguiente reserva puede ser rechazado con dinero aún en la cuenta.
+Reintentar tiene éxito.
+
+**El suelo del bloque no vara nada.** Una reserva intenta el bloque completo, luego el suelo
+denominado en mensajes y por último el único mensaje que lo pidió, por lo que una cuenta gasta cada
+unidad que tiene. Una financiada para tres mensajes envía tres.
+
+Si esto ocurre en una cuenta **bien financiada**, la causa es distinta e histórica: el suelo solía
+ser un importe monetario, que podía dimensionar un bloque en exactamente un mensaje para un destino
+caro. Eso es lo que `smsg.balance.block.min.messages` existe para evitar.
+</Accordion>
+
+<Accordion title="Una recarga no llegó">
+La cuenta casi con toda seguridad no tiene fila `account_balance`. Un `RECHARGE` para tal cuenta no
+acredita nada, permanece **pendiente** y se aplica en el momento en que aparece la fila, con un WARN
+que nombra la cuenta.
+
+**Crear una credencial no crea una fila de saldo.** Use *Abrir para crédito* en la página de la
+cuenta.
+</Accordion>
+
+<Accordion title="La conciliación dice que una cuenta se desvía por exactamente su consumo">
+Está usando la identidad equivocada. `acreditado − consumido = saldo + reservado` es **incorrecto**
+y falla así en todas las cuentas.
+
+El consumo nunca toca las columnas de saldo: `reserved` es un contador de consumo vitalicio, no una
+retención. El par correcto es:
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+reserved − consumed    = reserved but not yet spent  (≥ 0)
+```
+</Accordion>
+
+<Accordion title="El crédito quedó atascado en reservado tras un fallo">
+Un `kill -9` lo vara. `balance + reserved` sigue conservándose. **El dinero está aparcado, no
+perdido.** Y `POST /ops/credit/release` lo devuelve. Un apagado limpio hace esto automáticamente.
+</Accordion>
+
+<Accordion title="Se envía tráfico y no se cobra nada por él">
+Una cuenta que nadie ha tarificado **no es rechazada**: envía sin tarifa y sin cargo, con una línea
+en `debug`.
+
+Establezca el ámbito `[*]`. Tarifa a cualquier cuenta sin regla propia, incluidas las cuentas creadas
+después, y es lo más valioso que se puede configurar el primer día. Sin él, este fallo es silencioso
+y acumulativo.
+</Accordion>
+
+<Accordion title="El margen de un vendor aparece como desconocido en lugar de un número">
+Funciona como se espera. **Una regla que no coincide con nada deja el importe desconocido, nunca
+cero.** Y el valor por defecto `[*]` se aplica *solo al precio, nunca al coste*.
+
+Si también se aplicara por defecto al lado del coste, todos los márgenes se calcularían como cero
+en lugar de desconocido, y nada le diría que un vendor no tiene tarifas.
+</Accordion>
+
+<Accordion title="Una cuenta postpago dejó de enviar y está por debajo de su límite">
+Su periodo probablemente no se ha cerrado. La fila `BILL` más reciente es el inicio de la ventana no
+facturada. **Cerrar es lo que devuelve margen.**
+
+Nada está roto; la factura no se ha cortado.
+</Accordion>
+
+<Accordion title="Un reembolso llegó después de cerrar el periodo. ¿Lo reabro?">
+No: un periodo cerrado nunca se reescribe. El panel vuelve a ejecutar el resumen, lo compara con la
+cifra almacenada y muestra la diferencia como una **nota de crédito contra el próximo periodo**.
+
+Reformular en silencio significaría que la factura que el cliente pagó el mes pasado deja de coincidir
+con lo que muestra el panel este mes, sin que nada registre que se movió ni por qué.
+</Accordion>
+
+<Accordion title="La purga se negó a ejecutarse">
+Encontró un día sin fila `usage_daily`. Eso es un rechazo de toda la ejecución, por diseño: borrar
+un día sin resumir destruye el registro de consumo permanentemente.
+
+Ejecute `fireflo usage rollup --catch-up`, luego purgue. Los dos son comandos separados
+deliberadamente: una purga que en silencio hiciera el rollup primero significaría que un bug de
+rollup se descubre con el comando que borra la evidencia.
+</Accordion>
+
+<Accordion title="Los totales diarios están desviados unas horas de tráfico">
+`FIREFLO_BILLING_ZONE`. Un día de facturación es un día **local**, y en UTC las últimas cinco horas
+y media de la tarde de un cliente indio caen en la línea del día siguiente.
+
+Establézcalo antes del primer rollup. Cambiarlo después significa borrar y recomputar cada día ya
+resumido.
+</Accordion>
+
+<Accordion title="Un mensaje que sé que se envió no aparece en ninguna lista">
+Normalmente el escritor y el lector apuntan a bases de datos distintas. Compruebe `smsg.cdr.sink` y
+el `FIREFLO_DB_URL` de la pasarela frente al `METRICS_DATABASE_URL` del panel antes de mirar en
+cualquier otro sitio.
+</Accordion>
+
+<Accordion title="Los ingresos parecen demasiado altos tras una ráfaga de rechazos de vendor">
+No deberían, y si lo hacen, revise la consulta. Un mensaje rechazado no lleva **ningún dinero**:
+`price`, `cost` y `margin` son null, porque el crédito se devolvió en el momento del rechazo.
+
+Toda consulta de ingresos incorporada suma esas columnas *sin* filtro de resultado, precisamente
+para que un mensaje reembolsado no pueda sobreestimar los ingresos. Una consulta escrita a mano que
+trate `NULL` como cero rompe eso.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,94 @@
+---
+title: "El dashboard"
+description: "Cuatro números, un gráfico de tráfico y un desglose de fallos: qué responde la pantalla Overview y las dos cifras que más se leen mal en ella."
+---
+
+La pantalla Overview responde a una pregunta: **¿está la plataforma llevando lo que debe, y está
+aterrizando?** Deliberadamente no es una pantalla de salud. Si el software tiene la memoria y las
+conexiones para seguir funcionando es una pregunta distinta, hecha en
+[Runtime](/platform/control-panel/runtime-metrics), y las dos se mantienen aparte porque un operador
+mirando un problema de entrega no quiere estar leyendo sobre el tamaño del heap.
+
+Todo en la página obedece a un control de rango: **24 horas**, **7 días** o **30 días**, por defecto
+24 horas. Las cifras se refrescan cada sesenta segundos, y dejan de refrescarse mientras la pestaña
+del navegador está en segundo plano.
+
+## Las cuatro cifras
+
+| Tarjeta | Qué cuenta |
+| :--- | :--- |
+| **Messages** | Todo lo enviado en el periodo |
+| **Delivery rate** | Entregado frente a fallado, con ambos conteos debajo |
+| **In flight** | Enviado, aún sin acuse |
+| **Margin** | Facturado menos coste del vendor, en rojo cuando es negativo |
+
+<Note>
+**Una tarjeta en blanco sigue cargando, no es cero.** Las tarjetas muestran un placeholder hasta que
+llega la cifra, y luego muestran o bien el número o bien el error. Nunca inventarán un `0` para
+llenar el hueco, porque "sin tráfico" y "no pudimos preguntar" son respuestas distintas y solo una
+de ellas es su problema.
+</Note>
+
+**In flight no es un backlog.** Es tráfico que se ha enviado y facturado y sencillamente no se ha
+informado sobre él aún. Un mensaje que nunca recibe un acuse se cierra en su fecha límite de
+expiración; hasta entonces se queda aquí, y en una plataforma ocupada siempre lo hará.
+
+## Traffic
+
+Tres series (enviados, entregados, fallados) sobre el rango elegido. Sin nada en la ventana el
+gráfico se reemplaza por **No traffic in this period**, que es una afirmación tanto sobre el rango
+que eligió como sobre la plataforma.
+
+## Por qué fallaron los mensajes
+
+Un desglose de cada resultado que no fue una entrega, cada uno nombrado en lenguaje llano en lugar
+de por su código de acuse:
+
+- Failed at the vendor
+- Rejected on submission
+- Dropped before sending
+- No receipt within the deadline
+
+Junto a cada nombre, en tipo más pequeño, se sitúan el estado numérico del acuse y el código de
+error propio del vendor. Eso parece duplicación y no lo es. `EXPIRED`, `REJECTD` y `UNDELIV`
+facturan idénticamente y significan cosas completamente distintas, y cuando va a un vendor a
+preguntar por un pico, **el número es por el que su documentación está indexada**. El nombre es
+para usted; el número es para ellos.
+
+### Descartar un fallo
+
+Cada fila se puede descartar, lo que la oculta de la lista sin borrar nada. Un pie cuenta lo que ha
+ocultado y puede volver a mostrarlo.
+
+<Tip>
+**Un fallo descartado vuelve por su cuenta la próxima vez que ocurra.** Descartar oculta lo que ya
+ha tratado, no lo que empieza de nuevo.
+</Tip>
+
+Los descartes viven en el navegador en el que los hizo. Otro operador, o el mismo operador en otra
+máquina, ve la lista completa: lo cual es deliberado, ya que la clasificación de una persona no es
+una afirmación de hecho a escala de plataforma.
+
+Esa distinción aparece en los dos estados vacíos. **No failures in this period** significa que nada
+falló. **Every failure in this period has been dismissed** significa que algo sí falló y usted
+decidió no mirarlo. La pantalla no informará de un periodo limpio a partir de sus propios archivos.
+
+## Gateway health
+
+Una franja de seis tiles al pie de la página (memoria, procesador, tareas ejecutándose, peticiones
+API, tareas internas, uptime), cada uno con un sparkline y un enlace al detalle. Es un vistazo, no
+una investigación.
+
+<Warning>
+**"Internal tasks" no son las conexiones de vendor.** Es el trabajo de fondo propio de la pasarela:
+escrituras a base de datos, manejo de acuses. En todo el resto del panel un *worker* significa una
+conexión SMPP, así que este tile evita la palabra por completo. Leerlo como un vendor atascado le
+manda a buscar un problema de operador que no existe.
+</Warning>
+
+El tile **API requests** informa una media desde que el proceso arrancó. Responde a "¿es este
+endpoint lento en general?" y no puede responder "¿era lento hace cinco minutos?".
+
+Si un refresco falla mientras cifras más antiguas siguen en pantalla, una nota al pie dice que el
+sondeo falló y los números se quedan puestos. La pantalla prefiere una lectura obsoleta de la que
+se le avisa a una en blanco de la que no.

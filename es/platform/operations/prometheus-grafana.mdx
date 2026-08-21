@@ -1,0 +1,111 @@
+---
+title: "Prometheus y Grafana"
+description: "Cada métrica que el gateway publica sobre sí mismo, cuáles cuatro merecen una alerta, y la actualización que silenciosamente da 404 a tu job de scrape."
+---
+
+Las métricas son compatibles con Prometheus a través de Quarkus Micrometer, en el **puerto de gestión**:
+
+```bash
+curl http://localhost:9000/q/metrics
+```
+
+Todo lo que el gateway publica sobre sí mismo lleva el prefijo `fireflo_`, así que una coincidencia encuentra todo:
+
+```bash
+curl -s http://localhost:9000/q/metrics | grep '^fireflo_'
+```
+
+<Warning>
+**Habilitar el puerto de gestión *mueve* `/q/metrics`.** Un job de Prometheus aún apuntando a 8080 empieza a
+obtener `404` en lugar de fallar sonoramente, así que cambia el destino de scrape al mismo tiempo.
+
+Un job de scrape devolviendo 404 se ve como "sin datos" en un dashboard, que se lee como un sistema tranquilo en lugar
+de como un monitor roto.
+</Warning>
+
+## Las métricas
+
+| Métrica | Significa |
+| :--- | :--- |
+| `fireflo_router_queue` | Mensajes esperando ser enrutados |
+| `fireflo_routing_retry_queue` | Esperando un backoff tras un fallo o requeue de filtro |
+| `fireflo_routing_failed_queue` | **Alerta si es distinto de cero.** Aparcado por un fallo inesperado de enrutamiento. Sin CDR, sin recibo |
+| `fireflo_routing_rules_broken` | Reglas distintas reportadas rotas desde que se publicó la tabla |
+| `fireflo_cdr_written` / `fireflo_cdr_failed` | **Un CDR fallado es ingreso que no puede facturarse** |
+| `fireflo_dlr_awaiting_receipt` | Enviados y aún esperando un recibo |
+| `fireflo_dlr_correlation_size` | Ids de proveedor aún emparejables de vuelta a un envío |
+| `fireflo_dlr_unpushed_size` | Recibos retenidos para un cliente que no está conectado |
+| `fireflo_rating_unrated` | **Dinero.** Entregado sin tarifa del lado venta. Cobrado nada |
+| `fireflo_whitelist_header_rejects` / `_template_rejects` | Rechazado por un emisor o contenido no aprobado |
+| `fireflo_whitelist_would_reject` | Lo que el modo solo-informativo **habría** rechazado |
+| `fireflo_balance_debits_refused` | Rechazado por falta de crédito prepago |
+| `fireflo_balance_refills_attempted` / `_failed` | Reservas de bloque iniciadas, y las que no encontraron nada |
+
+Todos son gauges, leídos en el momento del scrape, así que **ninguno cuesta nada por mensaje**.
+
+## Los cuatro que merecen una alerta
+
+<CardGroup cols={2}>
+  <Card title="fireflo_routing_failed_queue" icon="triangle-exclamation">
+    Distinto de cero significa que mensajes están **perdidos**. Sin CDR y sin recibo. A menos que
+    `outSms.enqueueFailedRouting` esté establecido.
+  </Card>
+  <Card title="fireflo_cdr_failed" icon="database">
+    Ingresos que no puedes facturar. Silencioso en todas partes.
+  </Card>
+  <Card title="fireflo_rating_unrated" icon="tag">
+    Tráfico entregado y cobrado nada. Crece silenciosamente y nunca se auto-corrige.
+  </Card>
+  <Card title="amqp.bridge.degraded" icon="link-slash">
+    En el log en lugar de una métrica. La durabilidad REST se fue y **nada más te lo dirá.**
+  </Card>
+</CardGroup>
+
+## `routing_rules_broken` es como distingues arreglado de ya-reportado
+
+El log dice cada regla rota **una vez por regla, no una vez por mensaje**. Deliberadamente, ya que sin guardar
+sería una línea por mensaje por intento sobre exactamente el tráfico que ya va mal.
+
+El contador se resetea solo cuando se publica una nueva tabla de enrutamiento. Así que **un log silencioso no es prueba de que el
+problema se haya ido**, y este gauge es la forma fiable de la misma pregunta.
+
+## `whitelist_would_reject` antes de aplicar
+
+El modo solo-informativo cuenta lo que se *habría* rechazado sin rechazarlo.
+
+<Tip>
+Lee esto durante un día antes de cambiar una cuenta a enforcement. Convierte toda una clase de incidente de
+go-live en un número que miras cuando te conviene.
+</Tip>
+
+## La profundidad de cola por worker no está aquí
+
+Requeriría un meter por worker, registrado y retirado a medida que los workers arrancan y paran. **`/ops/health`
+lo reporta por worker** mientras tanto, así que una alerta de backlog por proveedor tiene que venir de ahí en lugar
+de Prometheus.
+
+## Configuración de scrape
+
+```yaml
+scrape_configs:
+  - job_name: fireflo
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ['fireflo-host:9000']
+```
+
+<Warning>
+**El puerto 9000 lleva profundidades de cola, nombres de proveedor, estado de bind y los controles que detienen a un proveedor.**
+Nada de eso pertenece al puerto al que llegan los clientes. Mantenlo en una red admin y no lo publiques.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Salud en vivo" icon="heart-pulse" href="/platform/operations/live-health">
+    El estado que no está en Prometheus.
+  </Card>
+  <Card title="Tokens y acceso" icon="key" href="/platform/operations/tokens-and-access">
+    Qué endpoints necesitan qué token.
+  </Card>
+</CardGroup>

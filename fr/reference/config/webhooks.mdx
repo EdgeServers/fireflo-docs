@@ -1,0 +1,77 @@
+---
+title: "Webhooks et magasin d'accusés"
+description: "Comment la passerelle appelle les endpoints clients, à quoi ressemble un accusé transmis, et où est conservé l'état de corrélation."
+---
+
+## Sortie
+
+S'applique à la fois à `dlr_url` sur une soumission et à `forward.mo.url` sur un connecteur.
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. |
+| `smsg.webhook.schemes` | `https,http` | Schémas que la passerelle appellera. |
+| `smsg.webhook.private.targets` | `allow` | `deny` refuse les cibles privées, loopback et link-local. |
+| `smsg.webhook.retries` | `10` | Tentatives avant que l'accusé ne soit abandonné. |
+| `smsg.webhook.retry.interval.ms` | `120000` | Attente entre tentatives. |
+| `smsg.webhook.timeout.ms` | `5000` | Timeout de connexion et de requête. |
+
+<Warning>
+`smsg.webhook.redirects` **est passé de suivre les redirections à ne pas les suivre.** C'est le
+réglage dont les autres dépendent : une fois qu'une redirection est suivie, l'adresse qui a été
+vérifiée n'est pas l'adresse qui est appelée. Un endpoint qui dépendait d'une redirection échoue
+désormais bruyamment plutôt que d'aller silencieusement ailleurs.
+</Warning>
+
+`private.targets` vaut par défaut `allow` pour que les déploiements qui postent à une application
+sur leur propre réseau continuent de fonctionner. Réglez `deny` là où les clients sont externes.
+
+<Note>
+Il résout l'hôte puis se connecte, donc un nom qui répond différemment entre les deux le contourne.
+Il élève le coût plutôt que de fermer le trou — ce sont les règles pare-feu de sortie qui le ferment.
+</Note>
+
+Au budget de retry par défaut, un endpoint injoignable occupe un thread virtuel pendant vingt
+minutes.
+
+## Transfert d'accusés
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.dlr.forward.format` | `json` | `json` POSTe un corps JSON ; `kannel` émet un GET nu avec `%s`/`%d` substitués dans l'URL enregistrée. |
+| `smsg.dlr.forward.fields.vendor` | `false` | Si l'accusé JSON nomme le fournisseur qui a pris le message. |
+
+<Warning>
+`kannel` porte l'information **uniquement** là où l'URL enregistrée a des placeholders pour elle.
+Une URL sans eux reçoit une requête sans rien dedans, et rien ne signale de problème. Cet échec
+silencieux est la raison pour laquelle `json` est le défaut.
+</Warning>
+
+`vendor` est éteint par défaut car il divulgue votre fournisseur à votre client, sur un endpoint
+qu'il contrôle — habituellement commercialement sensible.
+
+La charge utile est documentée à [Accusés de livraison](/developers/receive/delivery-receipts).
+
+## Le magasin d'accusés de livraison
+
+État de corrélation pour les messages en attente d'accusé, et accusés retenus pour un client SMPP
+déconnecté. **Le seul état persistant en dehors de PostgreSQL.**
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.dlr.store.path` | `data/dlr-mvstore.db` | Emplacement du fichier de magasin. |
+| `smsg.dlr.retention.days` | `7` | Combien de temps un message soumis est mémorisé. |
+| `smsg.dlr.correlation.days` | `3` | Combien de temps un ID de message fournisseur peut encore être apparié en retour. |
+| `smsg.dlr.expiry.check.minutes` | `60` | Intervalle de balayage. |
+
+Le chemin ne pouvait auparavant être réglé que comme propriété système `-D fireflo.dlr.db.path`.
+Elle est encore honorée quand `smsg.dlr.store.path` n'est pas défini, donc un déploiement existant
+n'est pas relocalisé à la mise à niveau.
+
+<Note>
+**`smsg.dlr.correlation.days` borne `smsg.cdr.deadline.hours`.** Au-delà de la fenêtre de
+corrélation, un accusé ne peut plus être apparié à sa soumission, donc attendre plus longtemps ne
+retarde que la même réponse. Le sweeper d'expiration dérive son plafond de cette valeur plutôt que
+de porter une constante propre, donc élargir la fenêtre relève le plafond et la réduire l'abaisse.
+Une deadline au-dessus du plafond est clampée et journalisée.
+</Note>

@@ -1,0 +1,94 @@
+---
+title: "Colas"
+description: "Lo que se ha aceptado y aún no se ha enviado. Y por qué una cola de enrutador que parece tranquila puede significar un backlog en el broker en lugar de una plataforma silenciosa."
+---
+
+**Mensajes que la pasarela ha aceptado y aún no ha enviado. Nada aquí se cobra dos veces ni se
+pierde. Pero una cola que solo crece es un cliente esperando.**
+
+La pantalla lee en vivo, releyendo cada pocos segundos, y se puede pausar. Un cuadro de búsqueda
+estrecha lo listado por cuenta, remitente, destino, producto o vendor, y un toggle **Retries only**
+separa "llegaron más de los que pudimos enviar" de "el vendor está rechazando".
+
+## El broker y el enrutador son colas distintas
+
+<Warning>
+**Un backlog en el broker de mensajes aparece como una cola de enrutador *plana*.**
+
+Una vez que la cola en proceso pasa su marca de agua alta, el consumidor deja de tirar, así que la
+cola del enrutador deja de crecer y parece tranquila. Mientras que los mensajes se amontonan en el
+broker detrás.
+
+Si la cola del enrutador está sospechosamente estable y los clientes reportan retrasos, lea la
+tarjeta del broker primero.
+</Warning>
+
+La tarjeta del broker siempre se muestra, incluso donde no hay broker, porque *no configured* y
+*configured and not answering* son hechos completamente distintos y ambos, si no, se renderizarían
+como nada.
+
+| Estado | Qué significa |
+| :--- | :--- |
+| **No broker configured** | El valor por defecto. Los envíos REST van directos a la cola del enrutador |
+| **Not answering** | Las publicaciones caen en proceso; lo que sea que esté en el broker está varado |
+| **Nothing draining it** | Los mensajes se encolan y no hay consumidor conectado. No es lentitud: nada los lee |
+
+<Note>
+Cuando el broker es inalcanzable su profundidad se lee como **unknown**, nunca cero. Una cola
+varada que mostrara "0 waiting" sería el número más peligroso en pantalla.
+</Note>
+
+## Las colas en proceso
+
+Una tarjeta por cola, cada una diciendo qué contiene:
+
+| Tipo | Contiene |
+| :--- | :--- |
+| **Waiting to be routed** | Aceptados, aún no asignados a un vendor. Una cola para toda la pasarela |
+| **Waiting for the vendor** | Enrutados, esperando a que la sesión de ese vendor los tome |
+| **Scheduled retries** | Envío falló; encolado para volver a intentar |
+
+Cada tarjeta ofrece una lectura de su propio contenido, y estas son las frases sobre las que
+actuar:
+
+- **Mostly retries**: el vendor está fallando, no meramente lento. Añadir capacidad no ayudará.
+- **All first attempts, all from one account**: el volumen de un solo remitente, no un fallo de
+  vendor.
+- **All first attempts, spread across senders**: llegaron más de los que se drenan.
+
+Esa lectura desaparece cuando filtra, deliberadamente: una vista solo-retries no puede pronunciarse
+honestamente sobre la mezcla.
+
+La tabla muestra cuándo se encoló cada mensaje, su cuenta, producto, direcciones, tamaño y
+codificación, si es un primer intento o un reintento, su objetivo y, en una cola de retries, cuándo
+toca el próximo.
+
+<Note>
+**Filtrar nunca cambia la profundidad de una cola.** La profundidad se queda con el número real y
+la lista debajo se estrecha. "3 matches" entre "412 waiting" significa que tres de la muestra
+listada coincidieron, no que solo tres de los mensajes de ese cliente están encolados.
+</Note>
+
+## Por qué el texto del mensaje no se muestra
+
+Deliberadamente ausente, y no se guarda en los registros de llamada tampoco. Operar la pasarela
+nunca requiere leer el mensaje de un cliente, así que el tamaño y la codificación lo sustituyen:
+suficiente para distinguir un mensaje Unicode de tres segmentos de un GSM corto sin leer el correo
+de nadie.
+
+## Una pantalla vacía es el resultado bueno
+
+**No in-process queues** significa que cada mensaje que llegó ya se ha entregado a un vendor. Así
+es como se ve una pasarela sana en reposo, y por eso esta pantalla no es un dashboard: viene aquí
+cuando algo más ya le ha dicho que lo haga.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Colas y reintentos" icon="rotate" href="/platform/routing/queues-and-retries">
+    Cómo funcionan la planificación de reintentos y el techo de intentos.
+  </Card>
+  <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
+    Estado de bind y profundidad de cola desde la propia pasarela.
+  </Card>
+</CardGroup>

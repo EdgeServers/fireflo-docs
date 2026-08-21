@@ -1,0 +1,94 @@
+---
+title: "Enrutamiento por menor coste"
+description: "Cómo una tabla marcada con ->function(LCR) elige al proveedor más barato en lugar de la primera regla coincidente, y el nombre de función mal escrito que enruta por primera coincidencia mientras aparenta enrutar por precio."
+---
+
+## La tabla que nunca fue de menor coste
+
+<Warning>
+**Un nombre de función escrito y no reconocido cae a `NORMAL`.** `->function(LRC)` es una transposición que cualquiera puede cometer, y entonces la tabla enruta por primera coincidencia mientras su autor cree que está enrutando por precio. Cada tarifa de proveedor en ella se ignora y cada mensaje va a la regla que resulte estar en la parte superior.
+
+Registra `routing.table.unknown-function` y sigue funcionando. La caída a `NORMAL` es deliberada: rechazar aquí rechazaría todo el conjunto de tablas, y un nombre mal escrito no debería dejar caído el enrutamiento. Comprueba el nombre carácter a carácter, y comprueba el registro.
+</Warning>
+
+Hay exactamente dos funciones, `NORMAL` y `LCR`. Una tabla que no declara función es `NORMAL`.
+
+<Note>
+Una tercera función, `RC`, se eliminó en `V1.28.0`. Estaba en el enum, permitida por la restricción de la base de datos y descrita en el panel, y nada en ningún sitio hacía bifurcación por ella, así que una tabla configurada como `RC` se enrutaba como `NORMAL` mientras cada superficie que un operador podía consultar decía lo contrario. Las filas existentes se reescriben a `NORMAL`, que es lo que ya estaban haciendo.
+</Note>
+
+## Qué cambia
+
+```ini
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+Una tabla `NORMAL` se detiene en la primera regla coincidente, lo que hace que el orden del archivo sea la prioridad. Una tabla `LCR` escanea **todas** las reglas, trata las coincidencias como alternativas en lugar de como una cadena de repliegue, y deja que solo la tarifa en `rates.conf` decida.
+
+<Warning>
+**El orden de las reglas es irrelevante dentro de una tabla LCR.** Mover una regla hacia arriba no la hace preferida, y poner un catch-all al principio no oculta nada por debajo. Si estás reordenando reglas aquí para cambiar el comportamiento, estás cambiando el archivo equivocado. Las tarifas de coste son las que deciden.
+</Warning>
+
+| En una tabla `NORMAL` | En una tabla `LCR` |
+| :--- | :--- |
+| Gana la primera coincidencia | Cada coincidencia es un candidato |
+| El orden es la prioridad | El orden no tiene significado |
+| Un catch-all por encima de otras las mata | Nada se oculta, por lo que los avisos `unreachable-rules` y `no-catch-all` no se aplican |
+| Una regla puede encadenarse a otra tabla | Las reglas que apuntan a otra tabla se **ignoran** |
+
+## Cómo se elige un ganador
+
+<Steps>
+  <Step title="Se escanea cada regla de la tabla">
+    Sin salida anticipada. Una regla cuyo objetivo sea otra tabla se salta con un aviso: un coste anidado no puede compararse, y enrutar a un precio desconocido sería peor que no enrutar allí.
+  </Step>
+  <Step title="Los proveedores caídos se descartan">
+    Un objetivo que esté caído, suspendido o que por cualquier otra razón no acepte se salta, así que el siguiente más barato asume el tráfico. Esta es la misma señal que usa un grupo; consulta [Proveedores](/platform/connections/vendors) para los cuatro estados.
+  </Step>
+  <Step title="Los supervivientes se tarifican">
+    Cada candidato restante se tarifica para el producto de este mensaje contra el lado de **coste** de [rates.conf](/reference/files/rates-conf). Gana el más barato.
+  </Step>
+  <Step title="Un candidato sin tarifa es el último recurso">
+    Un proveedor sin una tarifa de coste coincidente se guarda aparte y se usa solo si nada más coincidió, registrando `No candidate in least-cost table … has a rate`.
+  </Step>
+</Steps>
+
+<Note>
+**Una línea de tarifa faltante degrada en lugar de bloquear.** Rechazar el enrutamiento de un mensaje sin tarifa convertiría una línea olvidada en `rates.conf` en una caída del servicio; preferirla enviaría todo por el proveedor menos configurado. El último recurso es la única respuesta que no es ninguna de las dos.
+
+Aun así merece la pena alertar sobre ello, porque un proveedor que está ganando tráfico con una tarifa faltante lo está ganando con un margen desconocido. Consulta [Cómo funciona la tarificación](/platform/billing/how-pricing-works).
+</Note>
+
+## Dos cosas rechazadas de plano
+
+Ambas se rechazan en la carga, en bloque, porque ninguna tiene un estado parcial que se enrute como cualquiera pretendería. El conjunto de tablas deja de actualizarse hasta que se corrija.
+
+<AccordionGroup>
+  <Accordion title="Un grupo de proveedores dentro de una tabla LCR">
+    El menor coste elige por precio y un grupo elige por política. Expandir los miembros en candidatos tarificados descartaría silenciosamente la política, y un grupo ponderado no tiene ningún significado que aportar a una comparación de precios.
+
+    Usa uno u otro en una tabla dada: un grupo cuando quieras conmutación por fallo y reparto proporcional, una tabla LCR cuando quieras el proveedor activo más barato.
+  </Accordion>
+  <Accordion title="Un nombre que es a la vez un grupo y una tabla, o a la vez un grupo y un worker">
+    La resolución es tabla, luego grupo, luego worker, así que uno de los dos sería silenciosamente inalcanzable. Renombra uno de ellos.
+  </Accordion>
+</AccordionGroup>
+
+## Copiar y continuar no tiene significado aquí
+
+`+copied` marca una regla como "añade este objetivo y sigue escaneando". Una tabla LCR ya escanea la tabla completa y luego elige un candidato más barato, así que no hay nada que una copia pueda saltarse. El panel lo indica en lugar de dejar que la bandera parezca significativa.
+
+## Diagnosticar una elección
+
+`outSms.routing.trace`, configurado con un número de serie o un id de cuenta, explica qué reglas coincidieron. La selección en sí, qué candidato ganó y a qué tarifa, se registra bajo `outSms.routing.debug`, que solo es utilizable en una pasarela inactiva; consulta [Cómo funciona el enrutamiento](/platform/routing/how-it-works).
+
+Si una tabla LCR envía todo a un proveedor, comprueba en este orden:
+
+- ¿El nombre de la función está escrito como `LCR`?
+- ¿Los otros candidatos tienen alguna tarifa de coste, para **el producto de este mensaje**?
+- ¿Los otros candidatos están aceptando? Un proveedor que está vinculado pero no puede transmitir se salta.
+
+Las tarifas se configuran por separado; consulta [rates.conf](/reference/files/rates-conf) y [routingTable.conf](/reference/files/routing-table).

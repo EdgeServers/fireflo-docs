@@ -1,0 +1,100 @@
+---
+title: "Visão geral da API REST"
+description: "A base URL, autenticação Basic, o envelope de resposta e a regra de nome de campo que pega a maioria dos que migram de outro gateway."
+---
+
+Cinco endpoints, todos JSON, todos retornando o mesmo envelope. Quatro ficam em `/secure/` e usam
+autenticação HTTP Basic; `/ping` não usa nenhuma.
+
+| Endpoint | Método | O que faz |
+| :--- | :--- | :--- |
+| [`/secure/send`](/reference/api/send) | POST | Enfileira uma mensagem |
+| [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Enfileira várias, opcionalmente agendadas |
+| [`/secure/balance`](/reference/api/balance) | GET | O que sobrou na conta |
+| [`/secure/rate`](/reference/api/rate) | GET | Quanto uma mensagem custaria, sem enviar |
+| [`/ping`](/reference/api/ping) | GET | Liveness, sem credenciais |
+
+## O envelope
+
+Toda resposta é um objeto JSON com **ou** `data` **ou** `message`, nunca os dois, e nunca um valor
+nu no topo.
+
+```json Success
+{ "data": { "status": "ok" } }
+```
+
+```json Failure
+{ "message": "Authentication required" }
+```
+
+Então o branch no seu cliente é `res.ok`, e o motivo legível por humano fica sempre em `message`.
+Não há um campo de código de erro: o status HTTP é o código, e a string é para uma pessoa lendo um
+log.
+
+## Autenticando
+
+Basic, com seu login HTTP como nome de usuário:
+
+```bash
+curl -u 'yourlogin:yourpassword' https://sms.example.com/secure/balance
+```
+
+<Warning>
+**Um login SMPP não pode usar essa API**, e a recusa não diz isso com todas as letras. É um `403`
+com `Authentication failure`, a mesma resposta que uma senha errada recebe. Se um login funciona
+via SMPP e retorna 403 aqui, verifique o tipo antes de verificar a senha.
+</Warning>
+
+As credenciais vão no cabeçalho e **em nenhum outro lugar**. `username` e `password` como campos do
+corpo não são ignorados: são rejeitados como argumentos desconhecidos, e é assim que um payload
+copiado de outro gateway costuma se anunciar.
+
+## Sublinhados e hifens são o mesmo campo
+
+Cada `_` é reescrito para `-` antes do corpo ser parseado. Então `dlr_url` e `dlr-url` são um único
+campo, e você pode escrever aquele que sua linguagem preferir.
+
+Duas consequências para conhecer antes que mordam:
+
+<AccordionGroup>
+
+<Accordion title="Enviar as duas grafias é 400, não vale o último">
+`{"dlr_url": "…", "dlr-url": "…"}` é duplicata de um campo, e a API recusa em vez de escolher em
+silêncio. É deliberado: escolher silenciosamente significaria um recibo indo para um lugar que o
+chamador não pretendia.
+</Accordion>
+
+<Accordion title="`custom_tlvs` é a única exceção">
+Ele mantém o sublinhado. **`custom-tlvs` é um argumento desconhecido** e retorna `400`, porque o
+normalizador isenta esse único nome. Veja [Custom TLVs](/developers/send/custom-tlvs).
+</Accordion>
+
+</AccordionGroup>
+
+## Esta referência é a autoritativa
+
+Ela descreve o que o gateway de fato aceita, e seus exemplos foram executados contra uma instância
+ao vivo.
+
+<Warning>
+**Se você recebeu um documento OpenAPI ou Swagger, confira contra estas páginas antes de gerar um
+cliente a partir dele.** Uma especificação mais antiga circulou que está errada em três lugares que
+você encontra no primeiro dia:
+
+1. **`custom_tlvs` é um objeto**, não um array de pares.
+2. **`validity_period` é um inteiro** em minutos, não uma string.
+3. **`product` está completamente ausente.**
+
+Um cliente gerado dessa spec falha na primeira chamada.
+</Warning>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Erros" icon="triangle-exclamation" href="/reference/api/errors">
+    Todo status que esta API retorna, e o que provoca cada um.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/developers/quickstart">
+    Primeira mensagem em menos de cinco minutos.
+  </Card>
+</CardGroup>

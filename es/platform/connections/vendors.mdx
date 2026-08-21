@@ -1,0 +1,118 @@
+---
+title: "Vendors por los que envía"
+description: "Añadir una conexión de operador, probar que funciona antes de que el tráfico dependa de ella y leer los cuatro estados en los que puede estar."
+---
+
+Un **vendor** es una conexión hacia afuera con quien transporta su tráfico. FireFlo la marca.
+
+## Añadir uno
+
+<Tabs>
+  <Tab title="Panel de control">
+    **Vendors → Añadir vendor.** Host, puerto, system id y contraseña. El panel agrupa el resto por
+    lo que hace, y cada campo lleva su valor por defecto.
+  </Tab>
+  <Tab title="smsg.properties">
+```properties
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+outSms.instance.vendor1.connections.transceivers = 2
+```
+  </Tab>
+</Tabs>
+
+Todos los ajustes están en [Ajustes de vendor](/reference/smpp/client).
+
+## Pruébelo antes de que el tráfico dependa de ello
+
+```bash
+scripts/fireflo test-bind vendor1
+```
+
+Marca una vez e informa lo que pasó. El panel tiene lo mismo como **Test connection**.
+
+<Warning>
+**Se rechaza mientras el vendor ya está bound.** Un segundo bind sobre el mismo `systemId` puede
+costarle la sesión viva. Muchos operadores permiten uno.
+</Warning>
+
+## Bound no es lo mismo que capaz de enviar
+
+| Campo | Significa |
+| :--- | :--- |
+| `bound` | Sesiones establecidas |
+| `bound_transmittable` | Sesiones que pueden realmente llevar tráfico hacia afuera |
+
+Una sesión lleva tráfico si es **transceiver**, o **transmitter** en una sesión cliente. Un vendor
+solo receiver hace bind perfectamente y no envía nada.
+
+Cuando esos dos números difieren, esa es la razón, y el panel muestra **Can send** como cifra
+propia exactamente para este caso.
+
+## Los cuatro estados
+
+| Badge | Significa | Color |
+| :--- | :--- | :--- |
+| **Connected** | Bound y aceptando | Verde |
+| **Not connected** | Sin sesión: un vendor sin ninguna está roto | Rojo |
+| **Not accepting** | Suspendido; la cola drena de vuelta al enrutador y el tráfico se reenruta | Ámbar |
+| **Holding** | Aceptando pero no enviando; **la cola crece** | Ámbar |
+| **Disabled** | No cargado | Gris |
+| **Not loaded** | La pasarela nunca ha oído hablar de él | Ámbar |
+
+<Note>
+**Not loaded** normalmente significa una de dos cosas: la pasarela no ha recargado desde que se
+añadió el vendor, o no está leyendo trabajadores de la base de datos en absoluto. El texto de
+detalle del badge indica cuál.
+</Note>
+
+## Reintentos, y el número que solía mentir
+
+`maxRetries` acota el **total** de `submit_sm` que un mensaje puede costar en este vendor: entre los
+reintentos dentro del trabajador **y** cada vuelta por el enrutador.
+
+<Warning>
+Antes acotaba solo la mitad dentro del trabajador, y cada salto del enrutador entregaba una nueva
+asignación. Un vendor podía ver aproximadamente 100 PDUs por un mensaje mientras el panel leía `1`.
+
+Si ajustó en torno al comportamiento antiguo, revise el valor. Hacer failover a un vendor *distinto*
+sigue empezando un presupuesto nuevo: el límite es por vendor.
+</Warning>
+
+`status.retry.worker` (por defecto `20,88`) clasifica qué estados de operador merecen la pena
+reintentarse localmente; `status.retry.router` empuja de vuelta para otra ruta.
+
+`ESME_RSUBMITFAIL` (`0x45`) se trata como **permanente**: un lane rechazado con él falla en la
+primera respuesta en lugar de tras veinte. Los operadores que quieren decir sobrecarga transitoria
+con él vuelven a incluirlo por vendor: `status.retry.worker = 20,88,69`.
+
+## Acuses
+
+`request.dlrs` (por defecto activado) pone `registered_delivery` en cada `submit_sm` a este vendor.
+
+<Warning>
+Desactívelo y este vendor deja de informar resultados, así que cada mensaje por él se liquida como
+`EXPIRED` en la fecha límite. Su tasa de entrega para ese vendor se vuelve **sin significado**, no
+cero.
+</Warning>
+
+## Controlar uno en vivo
+
+| Verbo | Úselo cuando |
+| :--- | :--- |
+| `suspend` | Quiere que el tráfico se reenrute a otro sitio ahora: la cola drena de vuelta al enrutador |
+| `hold` | Quiere que deje de enviar pero conserve su cola |
+| `disable` | Quiere que se vaya en un intervalo de sondeo |
+
+El panel los expone como **Stop sending**, **Hold** y **Disable**, formulados a propósito en lugar
+de con iconos: cada uno reenruta o detiene tráfico productivo en el momento en que se pulsa.
+
+## Coste
+
+El ámbito de un vendor en la tabla de tasas es lo que le cobra a **usted**. Sin una regla de coste,
+el margen sobre el tráfico por él es desconocido en lugar de 100%. Consulte
+[rates.conf](/reference/files/rates-conf).

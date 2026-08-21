@@ -1,0 +1,151 @@
+---
+title: "Como o pricing funciona"
+description: "Dois lados em toda mensagem, liquidados em momentos diferentes. E a diferença entre um preço desconhecido e um gratuito."
+---
+
+Toda mensagem tem **dois preços**: o que você cobra do cliente e o que o vendor cobra de você. Eles
+são liquidados em pontos diferentes da vida da mensagem, e a diferença é a margem.
+
+## Onde cada lado é liquidado
+
+<CardGroup cols={2}>
+  <Card title="Price — na entrada" icon="arrow-right-to-bracket">
+    Por `submit_sm` de entrada. Depende apenas da tarifa do cliente — account, product, destino —
+    nunca de qual vendor será eventualmente escolhido.
+  </Card>
+  <Card title="Cost — no vendor" icon="arrow-right-from-bracket">
+    Uma vez que uma rota é escolhida e o corpo é dividido, porque só então a contagem de segmentos é
+    conhecida.
+  </Card>
+</CardGroup>
+
+**Cada PDU de entrada é uma unidade cobrável.** Uma mensagem concatenada que chega como três PDUs é
+três cobranças, e nada precisa prever contagens de segmentos para acertar a conta do cliente.
+
+O cost é **recomputado em toda tentativa**. Uma mensagem re-roteada após um NACK vai para um vendor
+diferente a um custo diferente, e cada tentativa é custeada separadamente. Enquanto isso, o cliente é
+cobrado **uma vez**, quantos vendors tenham sido tentados.
+
+## A rate table
+
+Rates usam a gramática de roteamento com o valor onde o roteamento coloca o alvo:
+
+```
+Amount:Attribute:Operator:Value
+```
+
+```properties
+[vendor1]
+0.0450:to:matches:^61[45][0-9]{8}$
+0.0620:to:matches:^61[0-9]{9}$
+0.0900::default:
+
+[acct-1001]
+0.0800:product~~to:equals~~matches:premium~~^61[45][0-9]{8}$
+0.1200::default:
+```
+
+Um `[scope]` é **ou o nome de uma instância de vendor** — o que aquele vendor cobra de você — **ou um
+account id** — o que você cobra daquele cliente. Regras são avaliadas de cima para baixo e **a primeira
+que casar vence**, portanto um catch-all fica por último.
+
+Atributos e operadores são os do engine de roteamento, então qualquer coisa que você pode rotear você
+pode ratear, incluindo `product` e `systemId`. Combine condições com `~~` nas três posições.
+
+<Warning>
+**`matches` é regex e é ancorado.** `^61.*` casa com um número completo; um `61` puro não.
+
+E `startsWith` compara **texto literal**. Uma expressão regular escrita ali nunca pode ser verdadeira,
+então a regra não precifica nada e o tráfego cai para o que vier a seguir.
+</Warning>
+
+## O default que todos deveriam configurar
+
+`[*]` precifica **qualquer account sem regra própria**:
+
+```properties
+[*]
+0.1200:product:equals:sms
+```
+
+Configure-o uma vez e toda account é precificada, incluindo accounts criadas depois. As regras
+próprias de uma account são tentadas primeiro e a primeira que casar ainda vence, portanto qualquer
+coisa que ela carregue bate o default. **Inclusive um catch-all puro**, o que faz de uma tarifa
+negociada um override e não uma sugestão.
+
+<Warning>
+**Sem um default, uma account que ninguém precificou não é recusada — ela envia sem preço e sem
+cobrança**, com uma linha em `debug`.
+
+Isso é tráfego dado de graça, não tráfego bloqueado, e é a falha para a qual o default realmente
+existe. Configure-o no dia um.
+</Warning>
+
+**Aplica-se apenas ao price, nunca ao cost.** Um vendor sem cost rules permanece *desconhecido* em
+vez de herdar o preço de venda — caso contrário, toda margem seria computada como zero em vez de
+desconhecida, e nada informaria isso.
+
+`*` é reservado: nenhuma account ou vendor pode ser nomeada assim.
+
+## Desconhecido não é zero
+
+**Uma regra que não casa com nada deixa o valor desconhecido, nunca zero.** Zero é um preço real
+significando gratuito, e um lado desconhecido torna a margem desconhecida em vez de errada.
+
+Essa distinção é por que um vendor sem preço aparece como uma lacuna em um relatório de margem em
+vez de aparecer como 100% de lucro.
+
+## Precisão
+
+Valores carregam **no máximo quatro casas decimais** e são parseados exatamente, nunca através de
+ponto flutuante. Um valor com mais precisão é **rejeitado em vez de truncado**. Truncar `0.00001`
+para zero silenciosamente daria tráfego de graça.
+
+`smsg.money.scale` (`0`–`4`, default `4`) controla com quantas casas um **total** é exibido. A
+Índia usa `2`.
+
+<Tip>
+**Rates sempre mantêm quatro casas, independentemente.** `/secure/rate` reporta `0.0450`; exibido
+como `0.05` está 11% errado em toda mensagem, e um cliente calculando sua conta a partir de uma
+cotação estaria errado. Exports CSV mantêm quatro pela mesma razão: uma planilha soma essa coluna.
+</Tip>
+
+O armazenamento nunca muda: valores são inteiros de décimos de milésimos. A configuração é apenas
+de apresentação e pode ser mudada a qualquer momento.
+
+## Least-cost routing
+
+Uma tabela marcada como `->function(LCR)` escolhe o vendor mais barato em vez da primeira regra
+que casar:
+
+```properties
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+A semântica difere de uma tabela normal de forma que importa:
+
+| | Tabela normal | Tabela LCR |
+| :--- | :--- | :--- |
+| Avaliação | Para na primeira que casar | Escaneia toda regra |
+| Matches são | Uma cadeia de fallback | **Alternativas** |
+| Ordem das regras | É a prioridade | Não carrega significado |
+
+- Vendors que estão fora ou não aceitam são pulados, portanto o próximo mais barato carrega o tráfego.
+- Um vendor **sem rate correspondente** é usado somente se nenhum outro casar. Uma linha de rate
+  esquecida degrada em vez de causar outage.
+- Regras apontando para outra tabela são **ignoradas** dentro de uma tabela LCR: um custo aninhado
+  não pode ser comparado, e rotear a um preço desconhecido seria pior.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Tariffs" icon="table" href="/platform/billing/tariffs">
+    Editando rates a partir do painel, e overrides por account.
+  </Card>
+  <Card title="Call records" icon="database" href="/platform/billing/cdrs">
+    Onde os dois lados da negociação são registrados.
+  </Card>
+</CardGroup>

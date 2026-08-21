@@ -1,0 +1,70 @@
+---
+title: "Fonctionner en cluster"
+description: "Un enregistrement de décision. La réponse courte est non, pas aujourd'hui. Et voici exactement ce qui casse."
+---
+
+<Warning>
+**Statut : un enregistrement de décision, pas un élément de roadmap.** Rien sur cette page n'est implémenté. Il existe pour que la prochaine personne à demander « peut-on faire tourner deux de ceci ? » obtienne une vraie réponse au lieu de redécouvrir les contraintes depuis le source.
+</Warning>
+
+**Non, pas aujourd'hui.** Deux instances contre une seule base perdront la plupart des accusés de réception, et jusqu'à récemment double-créditaient chaque recharge prépayée. Ce qui suit est pourquoi, et ce qu'il faudrait.
+
+Pour des gateways indépendants sur un hôte, ce qui fonctionne bien, voir [Plusieurs instances](/platform/install/multiple-instances).
+
+## Ce qui est déjà cluster-safe
+
+Plus que vous ne le penseriez. Le chemin d'envoi a été construit sans cluster en tête et est néanmoins correct à travers les instances.
+
+| | Pourquoi ça tient |
+| :--- | :--- |
+| **Les identifiants de message n'entrent pas en collision** | `msg.serial` est un UUID aléatoire aux trois sites de génération, donc les clés d'enregistrements d'appels sont globalement uniques sans ordinal de nœud |
+| **Le crédit prépayé n'entre pas en découvert** | Le crédit est réservé en blocs avec un `UPDATE` conditionnel atomique, puis dépensé depuis la mémoire. Deux instances réservant en même temps sont sérialisées par verrouillage de ligne ; le perdant prend un bloc plus petit |
+| **Les enregistrements d'appels ne se dupliquent pas sur le chemin normal** | `cdr_submit` insère avec `ON CONFLICT ... DO NOTHING` |
+| **La configuration converge** | Le sondeur est strictement en lecture seule et n'écrit rien en retour, donc chaque instance atteint le même état indépendamment |
+
+## Ce qui casse
+
+### Argent et enregistrements
+
+| Problème | Conséquence |
+| :--- | :--- |
+| ~~Les sondages de recharge et de transfert tournaient sur chaque instance sans verrouillage de ligne ni garde anti-réapplication~~ **Corrigé en 0.7.3**. Les selects prennent `FOR UPDATE SKIP LOCKED`, la marque porte `AND NOT applied`, et une entrée est réclamée avant que l'argent ne bouge | Était : une recharge de 100 unités créditait N × 100. Argent créé. Reproduit à 2×, puis corrigé |
+| Le **sweeper d'expiration CDR** tourne sur chaque instance sans `ON CONFLICT`, et `cdr_final` n'a pas de clé unique sur `(gateway_msg_id, part_no)` | Des lignes `EXPIRED` en doublon élargissent le join profits-pertes et **gonflent le revenu rapporté** |
+| Le **sink CDR fichier** ajoute à un fichier par jour | Deux JVM partageant un répertoire de données entrelacent les vidages de buffer en milieu de ligne et le corrompent. Ne mord que quand le sink est `file` |
+
+### Perte de messages
+
+Toute la corrélation des accusés vit dans un stockage **local au nœud**.
+
+- Un accusé arrivant à une instance qui n'a pas soumis le message ne trouve rien, est **supprimé avec une seule ligne de log**, et ne produit pas d'accusé client, pas de webhook et pas de ligne `cdr_final`. Avec N instances c'est environ (N−1)/N de tous les accusés.
+- Le stockage prend un **verrou fichier exclusif**. La seconde instance à démarrer sur le même chemin échoue, l'échec est attrapé, journalisé en WARN, et elle **continue silencieusement sans aucune persistance** — donc « deux instances partageant un répertoire de données » ressemble à « en bonne santé ».
+- Les accusés non poussés sont parqués localement, donc un client se reconnectant à une instance différente ne les reçoit jamais.
+- Les sessions bindées sont suivies par JVM, donc une instance ne peut pas dire qu'un client est connecté ailleurs.
+
+### Messages concaténés, concrètement
+
+Des segments arrivant sur différentes instances ne se réassemblent jamais. Pour un message à trois segments divisé deux-et-un sur deux instances :
+
+- chaque instance répond `ESME_ROK` et **facture** les segments qu'elle a reçus ;
+- chacune attend l'expiration de `reassembling.timeoutMillis`, 30 secondes par défaut ;
+- chacune transmet alors ses segments comme **fragments orphelins** portant un en-tête de concaténation pour un message qui ne se complètera jamais.
+
+Le combiné les garde jusqu'à ce que son propre minuteur expire et ne montre typiquement rien. **Le client est facturé pour les trois.** La seule trace est un avertissement `message.parts.incomplete` par instance, dont aucune ne sait que l'autre existe.
+
+<Note>
+La session SMPP d'un client est normalement sticky au niveau TCP, donc ceci mord à la reconnexion en milieu de message, au rééquilibrage du load balancer, et sur des clients tenant plusieurs binds qui répartissent les segments entre eux.
+
+Le whitelisting de contenu s'applique toujours à ce que chaque instance envoie. Le chemin de timeout est vérifié en contenu. L'échec est donc la livraison et la facturation, pas l'application.
+</Note>
+
+### Dégradé mais pas perdu
+
+TPS vendeur, limites de débit d'ingress, échantillonnage de débit et curseurs de groupe de routage sont tous **par processus**. N instances envoient jusqu'à **N × le débit contractuel** à un opérateur.
+
+C'est un garde-fou contre un émetteur emballé, pas un quota distribué. Voir [Limites](/reference/config/limits).
+
+## Ce qu'il faudrait
+
+En gros : déplacer la corrélation des accusés et le réassemblage dans un stockage partagé, donner à `cdr_final` une clé unique et un upsert, et rendre le sweeper élu-leader ou idempotent. Chacun est traitable ; aucun n'est fait.
+
+Jusque-là, mettez à l'échelle **verticalement**, et utilisez plusieurs instances indépendantes là où le trafic peut être partitionné par client.

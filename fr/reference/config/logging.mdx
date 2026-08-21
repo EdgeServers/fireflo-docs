@@ -1,0 +1,88 @@
+---
+title: "Journalisation et bornes de log"
+description: "Les quatre fichiers de log, lequel est borné, celui qui remplira un disque, et les drapeaux qui écrivent des secrets."
+---
+
+## Les quatre logs
+
+| Log | Enregistre |
+| :--- | :--- |
+| `smsg.log` | Log principal de l'application |
+| `smppclient.log` | Activité de connexion et de messages des fournisseurs |
+| `smppserver.log` | Activité de bind, de session et de messages du listener |
+| `httpapi.log` | Log d'accès HTTP, quand la journalisation en fichier est activée |
+
+## Bornes — et celui qui n'en a pas
+
+| Variable | Défaut | Description |
+| :--- | :--- | :--- |
+| `FIREFLO_LOG_MAX_SIZE` | `100M` | Taille à laquelle `smsg.log`, `smppclient.log` et `smppserver.log` roulent. |
+| `FIREFLO_LOG_BACKUPS` | `1` | Combien de fichiers roulés chacun de ces trois conserve. |
+
+<Note>
+`conf.example/fireflo.env` livre `5`, donc une installation faite à partir de là en conserve cinq et
+une construite à la main en conserve une. Aucune n'est erronée ; elles sont juste différentes, et il
+vaut la peine de savoir laquelle vous avez.
+</Note>
+
+<Warning>
+**`httpapi.log` n'est couvert par aucune.** Quarkus le fait tourner quotidiennement et n'offre
+aucune rétention avec — il n'y a aucun paramètre pour cela — donc il écrit un fichier par jour et
+les garde tous pour toujours. **Rien dans la passerelle ne les supprimera jamais.**
+
+`fireflo-install` gère ceci avec une règle `tmpfiles.d` qui supprime les fichiers roulés plus
+anciens que `--log-retain-days`, sans jamais toucher aux quatre en direct. **Installer à la main
+signifie arranger cela vous-même, ou accepter une croissance illimitée.**
+</Warning>
+
+## Ce que le log d'accès omet délibérément
+
+`httpapi.log` enregistre méthode, chemin, protocole, statut, octets envoyés, temps de réponse,
+referer et user agent. **Il omet intentionnellement la query string.**
+
+Les identifiants voyagent dans un en-tête `Authorization` plutôt que dans l'URL, mais
+`GET /secure/rate` prend encore `to` et `content` comme paramètres de query, et `dlr_url` et
+`callback_url` sont fournis par le client et portent régulièrement des tokens qui leur sont propres.
+
+<Warning>
+N'ajoutez pas `%U`, `%r`, `%q`, ou `%{i,Authorization}` à `quarkus.http.access-log.pattern`. Si vous
+le personnalisez, évitez `%r`, `%q`, `%{QUERY_STRING}` et `%{q,...}` sauf si les logs résultants
+sont traités comme des données sensibles.
+</Warning>
+
+## Drapeaux de diagnostic qui écrivent des secrets
+
+Les drapeaux de worker `log.pdus`, `log.bytes`, `print.msgs`, `print.resps` et `print.mos` sont
+désactivés par défaut. En activer un peut écrire des identifiants SMPP, des numéros de téléphone,
+des identifiants de fournisseur, des URLs de callback et des corps de message dans les logs.
+
+<Note>
+Pour diagnostiquer une session, préférez [capture](/platform/operations/capture) à `log.pdus` : une
+capture est bornée, retenue en mémoire, cantonnée à une seule session, et expire d'elle-même, là où
+`log.pdus` écrit les PDUs de chaque session dans un fichier partagé jusqu'à ce que quelqu'un se
+souvienne de l'éteindre.
+</Note>
+
+## Traçage du cycle de vie des messages
+
+Les logs de cycle de vie `message.*` sont contrôlés par `message.trace.mode` :
+
+| Valeur | Conserve |
+| :--- | :--- |
+| `necessary` *(défaut)* | `message.accepted`, `message.submitted`, `message.dlr`, `message.deliver.sent` |
+| `off` | Rien |
+| `all` | Ci-dessus plus les détails de route, enqueue, réponse et retry |
+
+## Variables de log Docker
+
+| Variable | Exemple | Description |
+| :--- | :--- | :--- |
+| `QUARKUS_LOG_LEVEL` | `INFO` | Niveau de log racine Quarkus |
+| `LOG_LEVEL` | `INFO` | Niveau de log des packages FireFlo |
+| `QUARKUS_LOG_CONSOLE_ENABLE` | `false` | Journalisation console on/off |
+| `QUARKUS_LOG_FILE_ENABLE` | `true` | Journalisation fichier on/off |
+| `QUARKUS_LOG_FILE_PATH` | `/work/logs/smsg.log` | Chemin du log applicatif principal |
+| `QUARKUS_LOG_FILE_SMPPCLIENT_PATH` | `/work/logs/smppclient.log` | Chemin du log fournisseur |
+| `QUARKUS_LOG_FILE_SMPPSERVER_PATH` | `/work/logs/smppserver.log` | Chemin du log listener |
+| `QUARKUS_HTTP_ACCESS_LOG_ENABLE` | `true` | Journalisation d'accès HTTP |
+| `QUARKUS_HTTP_ACCESS_LOG_DIRECTORY` | `/work/logs` | Répertoire du log d'accès |

@@ -1,0 +1,116 @@
+---
+title: "Playground de la API"
+description: "Peticiones reales contra su cuenta en vivo, con sus propias credenciales y sus propios sender IDs aprobados ya rellenados. Un envío llega a un terminal y consume saldo."
+---
+
+**Peticiones reales contra su cuenta en vivo. Un envío llega al terminal y consume saldo.**
+
+No hay sandbox. El playground existe porque la brecha entre un ejemplo documentado y una llamada
+que funciona es donde se pierden las integraciones: un número entrecomillado que perdió sus ceros
+iniciales, un `custom_tlvs` enviado como lista en lugar de objeto, un sender ID que nunca se
+aprobó. Todo eso falla aquí, donde puede ver las propias palabras de la pasarela, en lugar de en
+su código a las tres de la madrugada.
+
+<Warning>
+**Un envío es un envío.** No hay diálogo de confirmación previo, deliberadamente. El coste se
+indica en la descripción de la página y de nuevo junto al botón. Y no hay manera de deshacerlo.
+Diríjalo a un terminal de su propiedad.
+
+Tarificar un mensaje es la única llamada que no envía nada, no cobra nada y no cuenta contra
+ningún límite de tasa. Úsela libremente.
+</Warning>
+
+<Frame caption="El playground, con la petición construida en el lenguaje que elija, desde su propia URL base y login. La contraseña vive en la pestaña y en ningún otro sitio.">
+  <img src="/images/developers/portal/playground.png" alt="El playground de API del portal mostrando el formulario de envío junto a una petición curl generada" />
+</Frame>
+
+## Conectar
+
+Elija un login de API e introduzca su contraseña. Se comprueba contra la pasarela antes de habilitar
+nada más, y una incorrecta se rechaza con las propias palabras de la pasarela en lugar de con una
+suposición del panel.
+
+> Guardada solo en esta pestaña. Nunca almacenada, nunca registrada. Es la misma contraseña que usa
+> su propio software, así que una incorrecta falla aquí en lugar de en su código.
+
+Solo los logins HTTP pueden usar esta API. Un login SMPP se rechaza con un fallo de autenticación
+que se lee exactamente como una contraseña incorrecta.
+
+## Los cinco endpoints
+
+| Endpoint | Hace |
+| :--- | :--- |
+| **Enviar un mensaje** | Encola un único mensaje y devuelve el id que verá en su acuse |
+| **Enviar un lote** | Encola muchos en una llamada. La respuesta solo confirma la aceptación |
+| **Consultar el saldo** | Lo que queda en la cuenta a la que este login factura |
+| **Tarificar un mensaje** | Lo que costaría un mensaje. No envía nada, no cobra nada |
+| **Ping** | Liveness. El único endpoint que no necesita credenciales. Útil para un monitor |
+
+Cada campo lleva su nombre de cable, marca de obligatorio u opcional con su valor por defecto, y
+una nota de una línea. Varias de esas notas existen por un error concreto:
+
+- `to` — **entrecomíllelo.** Un número sin comillas pierde sus ceros iniciales.
+- `content` — dé este o `hex_content`, nunca ambos.
+- `from` — debe ser uno aprobado para su cuenta, o el envío se rechaza. El selector ofrece solo
+  sender IDs **aprobados**; los pendientes se omiten deliberadamente, porque ofrecer uno que
+  todavía no puede usar produciría un rechazo que el formulario podría haber previsto.
+- `coding` — use 8 para cualquier cosa fuera de GSM-7, que reduce a la mitad la longitud del
+  segmento.
+- `validity_period` — minutos enteros, no una cadena de duración.
+
+`custom_tlvs` tiene un editor por filas, porque la forma JSON es el error de integración más
+común, con diferencia:
+
+> Parámetros SMPP extra como objeto JSON —`{"0x1401": "…"}`— no como lista de pares y no como
+> cadena entrecomillada.
+
+El editor también avisa cuando dos filas nombran la misma etiqueta: la pasarela rechaza la petición
+entera en lugar de elegir una por usted.
+
+## Leer la respuesta
+
+El panel de respuesta le da el estado HTTP, el tiempo de ida y vuelta y —la parte útil— una
+explicación en lenguaje llano de lo que significa el estado. *"Su saldo prepago no cubrirá el
+mensaje. No se envió ni cobró nada."* es más accionable que un 402 pelado.
+
+Cuando un envío tuvo éxito, se ofrece el message id con un botón de copiar. Ese id es lo que
+aparecerá en el acuse de entrega y en su
+[lista de mensajes](/developers/portal/messages-and-statement).
+
+Al lado, un panel **Request** muestra la misma llamada como curl, Node, PHP o Python, rellenada
+con su propia URL base y login. Cópielo directamente a su código.
+
+Las últimas llamadas se guardan en un pequeño historial que puede recargar en el formulario. Vive
+en la pestaña y muere con ella.
+
+## Lotes
+
+El endpoint de lotes toma una lista JSON, y el textarea se niega a enviar JSON malformado en lugar
+de dejar que la pasarela lo rechace.
+
+<Warning>
+**Una respuesta de lote confirma la aceptación, no la entrega, ni siquiera la aceptación por
+mensaje.** Un mensaje rechazado dentro de un lote —sender no aprobado, saldo vacío, límite de
+tasa— nunca cambia la respuesta HTTP, y no hay endpoint para preguntar después cómo fue un lote.
+
+Los rechazos por mensaje aparecen en **un único lugar**: su URL de errback. Si envía lotes y no
+ha configurado una, esos rechazos son invisibles para usted.
+</Warning>
+
+## La referencia junto al playground
+
+La **referencia de la API REST** en la misma sección documenta cada endpoint, rellenado con los
+valores de su cuenta, más acuses de entrega, callbacks de lote, la tabla de errores compartida y
+la gramática de las TLV personalizadas. También gestiona la **rotación de credenciales**:
+sustituir una contraseña o una API key usted mismo, con el nuevo valor mostrado exactamente una
+vez.
+
+<Note>
+Tras rotar, la pasarela recarga credenciales según un temporizador. Durante aproximadamente el
+siguiente medio minuto su credencial **antigua** sigue funcionando y la nueva todavía no. La
+página le indica cuánto esperar.
+
+Cuando una API key hace también de nombre de usuario, rotarla cambia también el nombre de
+usuario. Así que ambas mitades de su configuración deben cambiar juntas, y no hay período de
+gracia.
+</Note>

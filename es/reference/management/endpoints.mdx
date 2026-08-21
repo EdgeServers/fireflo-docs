@@ -1,0 +1,60 @@
+---
+title: "API de gestión"
+description: "Los endpoints en el puerto 9000, qué token toma cada uno y por qué cada rechazo es un 404."
+---
+
+Puerto **9000** por defecto, lejos del puerto que lleva mensajes. Autenticación Bearer, dos tokens.
+
+<Warning>
+Esto está deliberadamente **no** descrito como OpenAPI, y no hay Swagger UI para ello. Es una
+superficie operacional para los operadores de un despliegue, no una API con la que los clientes integran.
+</Warning>
+
+| Método | Ruta | Token | Propósito |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/ops/health` | read | Todo lo que la pasarela sabe sobre sí misma ahora mismo |
+| `GET` | `/q/metrics` | read | Exposición Prometheus, como texto |
+| `POST` | `/ops/reload` | admin | Releer configuración ahora, en lugar de esperar al sondeo |
+| `POST` | `/ops/workers/{name}/test-bind` | admin | Marca un proveedor una vez y reporta qué ocurrió |
+| `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Descarta el bind de un cliente, dejando otros en paz |
+| `POST` | `/ops/workers/{name}/{action}` | admin | `enable`, `disable`, `suspend`, `resume`, `hold`, `release` |
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://localhost:9000/ops/health
+```
+
+## Cada rechazo es un 404
+
+Un token incorrecto, un endpoint deshabilitado y una ruta que no existe todos responden **404**. Nada
+anuncia que haya un secreto aquí que valga la pena adivinar.
+
+<Note>
+Eso significa que una comprobación de monitorización reportando 404 tiene cuatro causas posibles, y la pasarela no te dirá
+cuál: token incorrecto, token admin sin establecer, token admin igual al token de lectura, o ruta genuinamente
+incorrecta. Comprueba los tokens en ambos lados antes de concluir que la pasarela está caída.
+</Note>
+
+## Qué no está en este puerto
+
+`/openapi.json`, `/swagger-ui` y `/ping` viven en el puerto de **mensajería**. Apuntar una herramienta al puerto
+equivocado produce 404s que parecen una caída.
+
+## `/ops/health`
+
+El payload lleva, al nivel superior: la versión en ejecución, fuentes de configuración por dominio,
+profundidad de cola del router, cuenta de esperando-acuse, contadores CDR, la profundidad de cola del broker cuando uno está configurado, y
+una sección `balance` cuando la aplicación de crédito está activa.
+
+Por worker lleva `accepting`, `paused`, `suspended_manually`, `suspended_automatically`, `bound`,
+`bound_transmittable`, `queue_depth`, `retry_queue_depth`, `tps_limit`, `tps_measured`, `submitted`,
+`last_error` con su timestamp, `last_submit_error` con `submit_rejected`, una **muestra** de sesiones
+limitada a 20, y `sessions_total`.
+
+<Warning>
+Nunca cuentes el array `sessions` para responder "cuántos están conectados". Es una muestra limitada.
+`sessions_total` es el recuento, y `bound` es el número de binds vivos.
+</Warning>
+
+Consulta [Salud en vivo](/platform/operations/live-health) para cómo leerlo, y
+[El endpoint operacional](/reference/config/operational-endpoint) para los tokens.

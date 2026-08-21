@@ -1,0 +1,83 @@
+---
+title: "Declaraciones TLV"
+description: "La gramática de tags, los cinco niveles de declaración y su precedencia, y por qué el tag es decimal a menos que digas lo contrario."
+---
+
+Los TLVs se declaran como tokens `<name>_<tag>`. **El nombre es cosmético; el tag es autoritativo**, así que
+la pasarela, una credencial y un proveedor pueden nombrar el mismo tag de forma diferente y aun así estar de acuerdo en él.
+
+## El tag es decimal a menos que se prefije con `0x`
+
+Esta es la única parte genuinamente sorprendente de la sintaxis, y es así porque los despliegues
+existentes ya declaran tags decimales.
+
+| Token | Tag |
+| :--- | :--- |
+| `vendor_1400` | 1400 **decimal** (`0x578`) |
+| `peid_0x1400` | `0x1400` |
+| `source_network_id_5120` | 5120. El nombre puede contener guiones bajos; el tag es lo que sigue al **último** |
+
+Los tags válidos son `0x0000`–`0xFFFF`. Un token cuyo tag no parseará se registra y se omite.
+
+<Warning>
+`vendor_1400` y `peid_0x1400` son **tags diferentes**. Si un operador te da un tag como `0x1400` y
+escribes `1400`, todo carga, nada avisa, y el tag equivocado va por el cable.
+</Warning>
+
+## Cinco niveles de declaración
+
+| Nivel | Propiedad o campo | Propósito |
+| :--- | :--- | :--- |
+| Listener | `registered.tlvs.submit` | Tags extraídos de un `submit_sm` entrante al mensaje |
+| Listener | `mandatory.tlvs.submit` | Tags que deben resolver, o el `submit_sm` se rechaza `0xC3` |
+| Credencial | `defaultTlvs` | Valores por cliente rellenando tags que el cliente no envió |
+| Proveedor | `registered.tlvs.submit` | Tags escritos al `submit_sm` saliente |
+| Proveedor | `default.tlvs.submit` | Valores rellenando tags aún sin establecer al momento del envío |
+
+## Precedencia: mensaje > credencial > proveedor
+
+**Los defaults solo rellenan huecos. Nunca sobrescriben un valor ya presente.**
+
+Así que un valor que el cliente envió gana sobre un default de credencial, que gana sobre un default de proveedor. La excepción
+es la estampa de whitelist en modo `replace`, donde la sobrescritura *es* la aprobación. Consulta
+[Whitelisting](/reference/config/whitelisting).
+
+## Valores por defecto
+
+Un default puede ser:
+
+| Forma | Significado |
+| :--- | :--- |
+| un literal | Usado tal cual |
+| `MESSAGE:<field>` | Copia un atributo del mensaje, usando los nombres de campo del motor de enrutamiento |
+| `hex:<bytes>` | Un TLV binario |
+
+<Warning>
+**Los valores no pueden contener `,` o `=`.** No hay escape. Usa `hex:` cuando un proveedor los necesite.
+
+El formato es `<name>_<tag>=<value>`, separado por coma. Una entrada mal formada como `PEID=…`, sin
+tag en el nombre, parsea a nada y registra solo un WARN. El ajuste parece aplicado y no hace nada.
+</Warning>
+
+## Los tags no listados se descartan
+
+`registered.tlvs.submit` en un listener es una allow-list: un tag que el cliente envía que no está declarado
+allí se **descarta**, no se pasa. Lo mismo en el lado del proveedor decide qué realmente alcanza al
+operador.
+
+<Warning>
+El `mandatory.tlvs.submit` por proveedor se comprueba **tras** que `registered.tlvs.submit` haya filtrado.
+Requerir un tag que no esté también registrado por tanto nunca puede satisfacerse. La pasarela advierte sobre
+ese emparejamiento al cargar.
+</Warning>
+
+## Dónde emerge un tag faltante
+
+| Punto | Resultado |
+| :--- | :--- |
+| Listener, tras defaults de credencial y cualquier estampa | `0xC3` `ESME_RMISSINGOPTPARAM` |
+| Proveedor, contra lo que va por el cable | Acuse FAILED, reembolso, fila `cdr_rejected`. **No re-enrutado** |
+
+Consulta [Códigos de estado](/reference/smpp/status-codes) y, para la vista del operador de qué filas aprobadas
+tienen tags que nada suministrará, el informe de cobertura descrito en
+[Sender IDs](/platform/customers/sender-ids).

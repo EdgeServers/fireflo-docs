@@ -1,0 +1,120 @@
+---
+title: "Callbacks que no llegan"
+description: "Acuses de recibo y reenvíos de MO que nunca aterrizan. El rango de éxito, el presupuesto de reintentos y el error de placeholder que envía una petición que no lleva nada."
+---
+
+Ambas direcciones (acuses de recibo hacia una `dlr_url` y mensajes MO hacia una `forward.mo.url`)
+comparten un mecanismo de entrega, así que comparten estas reglas.
+
+## Las dos reglas que lo deciden todo
+
+| Regla | Valor |
+| :--- | :--- |
+| **Éxito** | HTTP **`200`–`399`**. Cualquier otra cosa es un fallo. |
+| **Reintentos** | `smsg.webhook.retries`, predeterminado **10**, separados por `smsg.webhook.retry.interval.ms`, predeterminado **120000** |
+| **Timeout** | `smsg.webhook.timeout.ms`, predeterminado **5000**. Conexión *y* petición |
+
+<Warning>
+**Con el presupuesto predeterminado, un endpoint inalcanzable ocupa un hilo virtual durante veinte minutos.**
+Diez intentos, con dos minutos de separación. Un cliente cuyo endpoint está caído durante una hora no solo pierde
+acuses de recibo. Está reteniendo hilos durante toda la hora, y también lo hacen todos los demás clientes en el mismo
+estado.
+
+Si ejecutas muchos clientes con endpoints poco fiables, baja el número de reintentos antes de subir el
+techo de hilos.
+</Warning>
+
+## Un acuse de recibo nunca llega
+
+<Steps>
+  <Step title="¿Se proporcionó dlr_url?">
+    Sobre HTTP debe estar presente y URL-codificada, y `dlr` debe ser `yes`. Establecer uno sin el
+    otro no hace nada.
+  </Step>
+  <Step title="¿El endpoint es alcanzable desde el host de la pasarela?">
+    No desde tu portátil, desde el host o contenedor donde se ejecuta la pasarela. La política de egreso, split DNS
+    y subredes privadas muerden aquí.
+  </Step>
+  <Step title="¿Devuelve 200–399?">
+    Un `401` detrás de un proxy con autenticación es el fallo silencioso más común. También lo es un `302` a una página de login,
+    que *sí* cuenta como éxito y se traga el acuse de recibo.
+  </Step>
+  <Step title="¿Registró la pasarela el fallo?">
+    Los fallos de reenvío y los reintentos se registran. Diez intentos silenciosos significan que el endpoint respondió.
+  </Step>
+</Steps>
+
+## La trampa de los placeholders
+
+En formato `kannel`, el callback es un **`GET` simple con placeholders sustituidos. No se
+anexa nada**.
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%s` | ID de mensaje de la pasarela |
+| `%d` | `1` entregado, `2` fallido, `4` bufferizado, `8` enviado al SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Una URL sin placeholders recibe una petición que no lleva nada.** Sin body, sin query, sin
+identificador. Se llama al endpoint en horario, devuelve `200`, y el cliente concluye que los acuses de recibo
+"funcionan pero están vacíos".
+
+Este es el error de integración de acuses de recibo más común, y nada en el sistema lo marca: un
+callback vacío es indistinguible de uno correctamente configurado que resulta no llevar datos.
+</Warning>
+
+## Los reenvíos de MO nunca llegan
+
+Los callbacks MO son **`POST`**, y aplican las mismas reglas de `200`–`399` y reintentos.
+
+- `forward.mo.url` se establece en el worker cliente SMPP que **recibe** el MO. No en el listener, ni
+  globalmente.
+- `forward.mo.format` es `JSON` o `FORM`.
+- La URL puede llevar placeholders, URL-codificados antes de la sustitución:
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%p` | Dirección de origen (`from`) |
+| `%P` | Dirección de destino (`to`) |
+| `%a` | Texto del mensaje |
+| `%t` | Timestamp |
+| `%i` | Identificador de pasarela entrante |
+| `%I` | Centro de mensajes |
+| `%o` | Valor de data coding |
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+```
+
+<Tip>
+El detalle completo del MO entrante requiere `print.mos = true` **temporalmente**. Trata esa salida como sensible:
+contiene contenido del mensaje y ambas direcciones.
+</Tip>
+
+## Acuses que llegan pero dicen algo incorrecto
+
+No es un problema de entrega, y vale la pena descartarlo antes de mirar la red:
+
+- **`request.dlrs` está apagado en el proveedor.** Todo mensaje entonces se resuelve como `EXPIRED` al vencimiento,
+  porque nada reporta un resultado. La tasa de entrega se vuelve *sin significado* en lugar de cero.
+  Lo cual es peor, ya que un cero parece un problema y un número sin significado parece datos.
+- **Un acuse de nivel 1 no es el resultado.** `ACCEPTD` y `BUFFRED` llegan ambos como nivel 1 y sigue otro
+  acuse. Un cliente que trate el primer acuse como final reportará algo incorrecto
+  para siempre.
+- **Tres segmentos, tres acuses.** `conf.dlr.multipart` es `all` por defecto, así que un cliente recibe un
+  acuse por cada `submit_sm` que envió. `first` o `last` lo colapsa a uno.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Acuses de recibo" icon="receipt" href="/developers/receive/delivery-receipts">
+    El payload, los niveles y cómo correlacionar.
+  </Card>
+  <Card title="Calidad de acuses" icon="chart-simple" href="/platform/control-panel/receipt-quality">
+    Tasa reportada frente a tasa de entrega.
+  </Card>
+</CardGroup>

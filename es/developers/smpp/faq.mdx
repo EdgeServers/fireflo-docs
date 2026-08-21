@@ -1,0 +1,104 @@
+---
+title: "FAQ de SMPP"
+description: "Ventanas, throttling, reconexiones, sesiones obsoletas y los códigos de estado que realmente aparecen."
+---
+
+<AccordionGroup>
+
+<Accordion title="Estoy enlazado, y no sale nada">
+Compruebe primero el **tipo de bind**. Una sesión solo de receptor se enlaza perfectamente y no
+envía nada, y no hay ningún error que se lo diga.
+
+Si es transceiver o transmitter y los mensajes siguen sin moverse, mire la ventana: un cliente
+que nunca recibe respuestas llena su ventana y se detiene, lo que parece idéntico a estar
+bloqueado.
+</Accordion>
+
+<Accordion title="¿Qué throughput debería esperar?">
+Depende de su tamaño de ventana y de su tiempo de ida y vuelta, no solo de la pasarela.
+
+**El tamaño de ventana** (`conf.maxPending.default`, 1000 por defecto) es cuántos `submit_sm`
+pueden estar pendientes. Si su cliente espera cada respuesta antes de enviar el siguiente, su
+techo es `1 / RTT`. Alrededor de 20 mensajes por segundo en un enlace de 50 ms, por grande que
+sea la ventana.
+
+Envíe de forma asíncrona y ajuste su recuento en vuelo a la ventana.
+</Accordion>
+
+<Accordion title="Sigo recibiendo ESME_RTHROTTLED (88)">
+Está por encima del límite de mensajes por segundo de su cuenta. Vaya más despacio. Este es
+genuinamente transitorio y reintentar tras una pausa es correcto.
+
+No responda abriendo más sesiones. El límite es por cuenta, no por sesión, así que le cuesta
+huecos de conexión y no cambia nada.
+</Accordion>
+
+<Accordion title="Mi bind se rechaza pero las credenciales son correctas">
+Normalmente es un límite, y a menudo obra suya: **una sesión obsoleta que aún contaba contra su
+tope por usuario**.
+
+Si se reconecta más rápido de lo que el servidor deja caer su sesión anterior, compite consigo
+mismo. Deshaga el bind limpiamente al apagar, y deje que `enquire_link` detecte un peer muerto en
+lugar de reconectar agresivamente.
+
+Compruebe también si se aplica una lista de IP permitidas. Todo lo demás puede ser correcto y el
+bind sigue fallando.
+</Accordion>
+
+<Accordion title="¿Qué significa ESME_RSUBMITFAIL (69)?">
+"Rechazado, y sin motivo dado." Es el rechazo menos informativo del protocolo.
+
+Se clasifica como reintentable, lo cual es genuinamente discutible. El mismo código lo usan
+distintos SMSCs para sobrecarga transitoria y para rechazo permanente. Si lo ve constantemente en
+una ruta, trátelo como permanente y pregunte a su proveedor qué está rechazando realmente el
+upstream.
+</Accordion>
+
+<Accordion title="Todo falla con un estado entre 192 y 196">
+Ese bloque es **siempre sobre TLVs**:
+
+| | |
+| ---: | :--- |
+| 192 | El flujo de TLV está malformado |
+| 193 | Una TLV que el vendor no permite |
+| 194 | Una TLV con longitud errónea |
+| 195 | Una TLV obligatoria no fue enviada |
+| 196 | Un valor de TLV fue rechazado |
+
+En una ruta DLT, 195 y 196 casi siempre significan un id de entidad o de plantilla ausente o
+incorrecto. Que a su vez casi siempre significa que no había nada aprobado, así que nada se
+estampó.
+</Accordion>
+
+<Accordion title="Una etiqueta que envío nunca llega al operador">
+El listener no la declara. **Las etiquetas no declaradas se descartan en el ingress**, antes de
+que se ejecute cualquier otra cosa, y nada lo reporta.
+
+Pregunte a su proveedor si la etiqueta está en `registered.tlvs.submit` para su listener.
+</Accordion>
+
+<Accordion title="¿Debería partir yo mismo los mensajes largos?">
+De cualquier manera cuesta lo mismo. Partirlos usted le da un id por segmento y control total del
+UDH; enviar un cuerpo largo es más sencillo y deja que lo haga la pasarela.
+
+Si parte, **envíe los segmentos juntos en el tiempo**. Se retienen para reensamblado y un
+conjunto incompleto acaba descartándose.
+</Accordion>
+
+<Accordion title="¿Puedo ver las PDU en crudo?">
+Solo su proveedor puede, y solo temporalmente. El logging de PDU está desactivado por defecto
+porque **las PDU de bind contienen contraseñas** y las PDU `submit_sm` contienen números de
+teléfono y cuerpos de mensaje.
+
+También hay una utilidad de captura que graba las PDU recientes en un ring buffer justamente
+para esto, sin dejar el logging encendido permanentemente. Pídalo por nombre.
+</Accordion>
+
+<Accordion title="¿Puedo usar un login para SMPP y la API REST?">
+No. Las credenciales tienen tipo `HTTP` o `SMPP` y no son intercambiables. Pida una de cada.
+
+El rechazo es inútilmente genérico en ambos sentidos —un `403 Authentication failure` en REST y
+un fallo de autenticación en el bind— así que compruebe el tipo antes que la contraseña.
+</Accordion>
+
+</AccordionGroup>

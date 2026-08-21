@@ -1,0 +1,96 @@
+---
+title: "FAQ envoi"
+description: "Les questions qui se posent une fois que les messages circulent : coût, encodage, ids, doublons et planification."
+---
+
+<AccordionGroup>
+
+<Accordion title="Pourquoi un message a coûté trois ?">
+Vous êtes facturé par segment. Un message de plus de 160 caractères GSM-7 — ou de plus de **70** si
+quelque chose dedans force l'UCS-2 — est découpé, et chaque segment est facturé.
+
+La cause la plus fréquente d'un triplement inattendu est une seule apostrophe typographique `’`
+collée depuis un document, qui force tout le message en UCS-2. Appelez `/secure/rate` pour voir
+`submit_sm_count` avant l'envoi.
+</Accordion>
+
+<Accordion title="J'ai eu un 200 et le message n'est jamais arrivé">
+`200` signifie *accepté pour routage*, pas livré. La réponse de soumission est envoyée avant
+l'exécution du routage.
+
+Demandez un accusé de livraison et traitez-le comme l'issue. Sans lui, vous n'avez aucun moyen de
+distinguer livré d'abandonné, et le tableau de bord de votre fournisseur non plus pour vos propres
+messages.
+</Accordion>
+
+<Accordion title="Puis-je envoyer le même message deux fois par accident ?">
+Oui. Il n'y a **pas de clé d'idempotence** sur `/secure/send`. Un retry après un timeout envoie un
+second message et vous le facture.
+
+Si vous réessayez automatiquement, ne réessayez que sur `429` et `500`. Un `500` est sûr parce que
+le débit est inversé ; un timeout n'est *pas* sûr, parce que le message a fort bien pu être accepté
+et que vous n'avez simplement pas vu la réponse.
+
+Pour tout ce qui est financier ou visible d'un utilisateur, gardez votre propre clé de
+dé-duplication et vérifiez-la avant l'envoi.
+</Accordion>
+
+<Accordion title="À quoi sert le messageId ?">
+À la corrélation, et à rien d'autre. Il apparaît sur chaque accusé de livraison sous `id`, sur le
+call record, et dans la recherche de votre fournisseur. C'est donc la seule valeur qui mérite
+d'être stockée avec votre propre enregistrement.
+
+Ce n'est pas un statut. Le récupérer n'est pas la manière d'apprendre l'issue ; l'accusé l'est.
+</Accordion>
+
+<Accordion title="Pourquoi mon validity_period est-il rejeté ?">
+C'est un **entier de minutes**, pas une chaîne de durée. `60` est correct, `"1h"` est un `400`.
+
+Une spécification plus ancienne le type comme une chaîne. Si votre client a été généré depuis
+elle, c'est de là que cela vient.
+</Accordion>
+
+<Accordion title="Puis-je planifier un message unique ?">
+Pas sur `/secure/send`. La planification vit sur `/secure/sendbatch` sous
+`batch_config.schedule_at`, et un batch d'un seul message est une manière parfaitement raisonnable
+de planifier un message.
+
+`sdt` sur un envoi unique est passé à l'opérateur inchangé et **n'est ni validé ni exploité par la
+passerelle**. Ne l'utilisez pas comme mécanisme de planification.
+</Accordion>
+
+<Accordion title="Mon batch a été accepté mais rien ne s'est passé">
+La réponse de `sendbatch` ne confirme que l'acceptation, elle ne porte aucun id par-message ni
+aucun résultat par-message. Ceux-ci arrivent sur votre `errback_url`.
+
+**Les clés inconnues dans `batch_config` sont ignorées plutôt que refusées**, donc un `errback_url`
+mal orthographié fait perdre chaque résultat silencieusement. Testez-le en envoyant délibérément
+un message dont vous savez qu'il va échouer.
+</Accordion>
+
+<Accordion title="Dois-je me limiter moi-même ?">
+Pour un batch, non. Les batches se cadencent contre la queue du router.
+
+Pour les envois ordinaires, oui : votre compte a une limite messages-par-seconde et la dépasser
+renvoie `429` avec **aucun `Retry-After`**. Faites un backoff exponentiel avec du jitter ; un
+intervalle fixe partagé entre plusieurs workers les resynchronise sur la rafale suivante.
+</Accordion>
+
+<Accordion title="Puis-je envoyer à plusieurs numéros en un appel ?">
+Oui, deux façons. Un batch prend un tableau `messages`, et le `to` d'un message peut lui-même être
+un tableau de destinations, ce qui multiplie.
+
+L'expansion est plafonnée à **10 000** messages par batch. 100 messages ayant chacun 200
+destinataires font 20 000 et sont refusés.
+</Accordion>
+
+<Accordion title="Pourquoi ma valeur de custom_tlvs n'atteint jamais l'opérateur ?">
+Trois causes probables, dans cet ordre :
+
+1. **Vous avez écrit un décimal nu.** `1401` est le tag `0x0579`, pas `0x1401`. Il parse, s'envoie
+   et est ignoré par l'opérateur, sans erreur nulle part.
+2. **Le listener ne déclare pas le tag.** Les tags non déclarés sont écartés à l'entrée.
+3. **Quelque chose l'a écrasé.** Un stamp de whitelist en mode `replace` est censé l'emporter.
+</Accordion>
+
+</AccordionGroup>

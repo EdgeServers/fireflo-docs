@@ -1,0 +1,74 @@
+---
+title: "Dar acceso al portal a un cliente"
+description: "Dos ajustes en la cuenta, un requisito de despliegue, y la razón por la que el panel nunca confirmará que se ha reconocido la dirección de un cliente."
+---
+
+Los clientes acceden al portal introduciendo su dirección de correo electrónico y siguiendo un enlace de un solo uso. No hay
+contraseña que emitir, ni invitación que enviar, y nada que revocar salvo los dos ajustes de abajo.
+
+## Lo que configura un operador
+
+Abre la cuenta, ve a **Settings** y ajusta dos cosas en la tarjeta **Organisation**.
+
+<Steps>
+<Step title="Establecer la dirección de correo">
+El campo **Email** en la cuenta. Una cuenta por dirección, sin distinguir mayúsculas. Una segunda cuenta que
+reclame la misma dirección es rechazada en lugar de ocultar silenciosamente la primera.
+
+Una dirección mal formada se rechaza mientras la escribes, así que una dirección que se guardó es una dirección que el portal puede
+emparejar.
+</Step>
+
+<Step title="Dejar la cuenta listada">
+La casilla **Listed**, en **Advanced**. Solo se emite un enlace de inicio de sesión para una cuenta que
+esté a la vez emparejada por dirección **y** habilitada.
+</Step>
+</Steps>
+
+<Warning>
+**Desmarcar una cuenta desactiva su acceso al portal, y la casilla no lo indica.**
+
+Su propia descripción habla de listados en el panel y correctamente señala que el tráfico sigue fluyendo de cualquier
+manera. Desmarcarla no detiene nada de lo que hace el gateway. Pero *sí* impide que el portal emita un enlace de inicio de sesión,
+lo que la convierte en lo más parecido a un interruptor de encendido/apagado del portal que tiene la cuenta. Ese comportamiento es el
+actual; la redacción junto a la casilla no se ha puesto al día.
+
+Para detener el tráfico, desactiva los logins. Para detener el gasto, usa el saldo. Para detener el acceso al portal, desmarca.
+</Warning>
+
+## Lo que necesita el despliegue
+
+El panel debe poder enviar correo y debe conocer su propia dirección pública, o no se podrá emitir ningún enlace
+en absoluto. Cuando falta cualquiera de las dos, se le dice al cliente claramente que el inicio de sesión por correo no está disponible
+en este panel y que consulte con su gestor de cuenta. Un rechazo honesto en lugar de un enlace que nunca
+llega. Consulta [la configuración del panel de control](/reference/config/control-panel).
+
+## Lo que ve el cliente, y lo que a ti no se te dirá
+
+Después de enviar una dirección, el cliente siempre obtiene la misma respuesta:
+
+> If that address is on an account, a sign-in link is on its way. It expires in 15 minutes.
+
+<Note>
+**Esa respuesta es idéntica exista o no la dirección, pertenezca a una cuenta deshabilitada o no se haya visto
+nunca.** Un formulario que dijera "no existe tal cuenta" permitiría a cualquiera probar una lista de direcciones contra
+tu base de clientes y averiguar cuáles de los clientes de tus competidores también son tuyos.
+
+La consecuencia para el soporte merece la pena conocerse: **el panel no puede confirmarte que se haya reconocido la
+dirección de un cliente.** Si un cliente informa de que no le llega ningún enlace, comprueba la dirección en la cuenta
+en lugar de buscar un rechazo que nunca se mostró.
+</Note>
+
+Los enlaces funcionan una vez y caducan a los quince minutos. Un enlace usado o caducado lo indica y ofrece uno
+nuevo. Las solicitudes se limitan por tasa por cuenta y por red, y alcanzar el límite por cuenta se
+responde con la misma frase neutral. No se le dice al cliente que se le ha limitado.
+
+## Lo que no es el acceso al portal
+
+**La pestaña Logins no es acceso al portal.** Contiene credenciales SMPP y HTTP, que son la forma en que se conecta el
+*software* de un cliente. Nada en ella otorga ni revoca el inicio de sesión de una persona. Una cuenta puede
+tener una docena de logins y ningún acceso al portal, o acceso al portal y ningún login en absoluto.
+
+Una vez dentro, un cliente ve su propio tráfico, extracto, sender IDs, plantillas y API playground. Y
+nunca tu coste, tu margen o qué proveedor cursó nada. Lo que puede hacer allí se describe
+para ellos en [el portal](/developers/portal/signing-in).

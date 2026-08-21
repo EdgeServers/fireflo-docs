@@ -1,0 +1,129 @@
+---
+title: "Versionamento e upgrades"
+description: "Quais releases existem, o que um número de versão te diz, e as cinco coisas para checar antes de pegar uma nova."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+O FireFlo usa versionamento semântico padrão. O que importa para você é o que um número de versão
+promete e o que checar antes de pegá-la.
+
+## O que o número significa
+
+| Mudança | Significa |
+| :--- | :--- |
+| **Major** — `1.0.0` → `2.0.0` | Uma quebra. Espere ler as notas e mudar algo. |
+| **Minor** — `0.7.0` → `0.8.0` | Nova capacidade. O comportamento existente deve sobreviver, mas **padrões podem se mover** — veja abaixo. |
+| **Patch** — `0.7.3` → `0.7.4` | Uma correção. O tipo mais seguro de pegar, e geralmente o motivo para pegar prontamente. |
+
+Suas release notes acompanham cada build. Elas são a lista autoritativa do que mudou; esta página é
+sobre o que procurar nelas.
+
+## Releases
+
+O par atual é <Versions />.
+
+| Gateway | Painel | Data | Sobre o que foi a release |
+| :--- | :--- | :--- | :--- |
+| **0.7.4** | 0.7.4.1 | 2026-08-20 | Três defeitos no caminho de crédito pré-pago |
+| **0.7.3** | 0.7.3.3 | 2026-08-19 | Contas postpaid, extratos e fechamento de período |
+| **0.7.2** | 0.7.2.1 | 2026-08-19 | Placeholders de template alargados para aceitar nomes e frases |
+| **0.7.1** | 0.7.1.1 | 2026-08-19 | Matching de template — um template aprovado estava recusando toda mensagem |
+| **0.7.0** | 0.7.0.1 | 2026-08-19 | Mensagens concatenadas de ponta a ponta, e o defeito de billing por segmento |
+
+<Note>
+**0.7.0 é onde esta tabela começa, não onde o FireFlo começa.** Releases anteriores existem e estão
+em serviço; suas notas estão disponíveis em [support@fireflo.au](mailto:support@fireflo.au). O
+histórico publicado começa aqui porque 0.7.0 abriu a linha de trabalho de billing em que o produto
+está atualmente.
+</Note>
+
+Duas coisas que a tabela não vai te dizer sozinha.
+
+**A coluna do painel de controle mostra a revisão mais nova para aquela release do gateway.** O
+quarto número é uma revisão apenas do painel e se move por conta própria — 0.7.3 teve três delas.
+Qualquer versão do painel cujos três primeiros números casem com o gateway é um par válido; o painel
+checa isso em runtime e avisa quando não.
+
+**Cinco releases do gateway em dois dias não é um erro.** 0.7.0 abriu uma peça de trabalho de
+billing, e cada release depois dela fechou algo que a anterior expôs — um defeito de billing por
+segmento, depois o matching de template do qual dependia, depois a gramática de placeholders, depois
+o trabalho de postpaid, depois três defeitos no caminho de crédito. Releases se agrupam quando uma
+costura está sendo trabalhada; é assim que se parece.
+
+## Antes de atualizar
+
+O padrão que vale internalizar: **as mudanças que doem são as quietas.** Uma mudança quebradora de
+API se anuncia; um padrão alterado não.
+
+<AccordionGroup>
+
+<Accordion title="Leia as release notes buscando padrões alterados">
+Um padrão que se move muda o comportamento em todo deployment que nunca setou o valor — que é a
+maior parte deles. Estas são as entradas para ler com atenção, mais do que as features novas.
+</Accordion>
+
+<Accordion title="Cheque se algo se moveu entre portas">
+Habilitar a porta de gerenciamento **moveu** `/q/metrics` da 8080 para a 9000. Um job do Prometheus
+ainda apontando para a antiga recebe `404`s em vez de falhar ruidosamente, então um dashboard aparece
+como um sistema quieto em vez de um monitor quebrado.
+</Accordion>
+
+<Accordion title="Cheque se uma migration de banco está incluída">
+Migrations são **unidirecionais**. Não há migration de descida, então o caminho de rollback é um
+restore em vez de uma migration reversa — faça o backup antes, não depois.
+</Accordion>
+
+<Accordion title="Cheque se o comportamento de receipt mudou">
+A semântica de receipt mudou duas vezes de formas invisíveis até um cliente notar. `level` costumava
+sempre ser `2`, então `ACCEPTD` era reportado como um outcome; e o `User-Agent` em chamadas de
+webhook mudou do padrão do JDK para `FireFlo/<version>`, o que importa para qualquer receiver com
+allow-list.
+</Accordion>
+
+<Accordion title="Decida se um aviso ao cliente é necessário">
+Se cifras que um cliente pode ver vão mudar, eles precisam ser informados antes disso acontecer —
+com o número, a direção e a data. Veja [Customer notices](/platform/migrating/customer-notices).
+</Accordion>
+
+</AccordionGroup>
+
+## Pareamento de versão
+
+O gateway publica sua versão em execução em `/ops/health`, e o painel de controle mostra tanto a
+sua quanto a do gateway.
+
+<Warning>
+**Um par descasado é sinalizado deliberadamente.** O painel se degrada em vez de quebrar quando fala
+com um gateway mais antigo — uma coluna simplesmente sai das suas queries — mas uma feature que
+parece ausente por causa de um gap de versão parece exatamente uma feature que está quebrada.
+
+Cheque o par antes de investigar qualquer coisa que "deveria estar aí e não está".
+</Warning>
+
+## Reportando problemas
+
+Tudo vai para [support@fireflo.au](mailto:support@fireflo.au). O que muda é como você o enquadra:
+
+| | Inclua |
+| :--- | :--- |
+| **Um bug reproduzível** | O par de versão, o que você fez, o que aconteceu, e um serial de mensagem que mostra |
+| **Uma pergunta ou ajuda de setup** | O que você está tentando alcançar, não apenas o erro — a resposta muitas vezes é uma abordagem diferente |
+| **Qualquer coisa security-sensitive** | **Diga isso no assunto.** Não anexe logs ou configuração não redatados a um primeiro email; vamos te dizer para onde enviar |
+
+<Warning>
+**Redate antes de compartilhar.** Credenciais, system IDs, endereços IP, números de telefone e
+conteúdo de mensagem aparecem em configuração e logs. `fireflo` redate o que pode; uma linha de log
+copiada à mão é sua responsabilidade.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Customer notices" icon="envelope" href="/platform/migrating/customer-notices">
+    Quando uma release muda o que um cliente vê.
+  </Card>
+  <Card title="Migrating a deployment" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Vindo de Jasmin ou Kannel.
+  </Card>
+</CardGroup>

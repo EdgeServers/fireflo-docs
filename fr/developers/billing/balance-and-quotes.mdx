@@ -1,0 +1,98 @@
+---
+title: "Solde et devis"
+description: "Vérifier ce qu'il vous reste et combien va coûter un message. Et pourquoi un refus peut apparaître alors que le solde est encore positif."
+---
+
+Deux endpoints, dont aucun n'envoie de message.
+
+## Ce qu'il reste
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+`balance` est l'argent sur le compte que ce login facture. `sms_count` vaut `"ND"` — non déterminé —
+chaque fois que la plateforme ne peut pas convertir de l'argent en nombre de messages, ce qui est le
+cas normal dès que vous avez plus d'un tarif.
+
+<Warning>
+**Ne le sondez pas avant chaque envoi.** C'est une lecture en base, cela ne vous dit rien quant à
+l'acceptation de *ce* message précis, et cela double votre volume de requêtes. Sondez-le
+périodiquement pour l'alerting, et laissez un `402` être votre signal par message.
+</Warning>
+
+## Combien coûtera un message
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**Le coût est `unit_rate × submit_sm_count`.** `submit_sm_count` est le nombre de segments, et c'est
+donc aussi la manière de découvrir qu'un message que vous pensiez unique en fait trois.
+
+`/secure/rate` **n'envoie rien, ne débite rien et ne compte contre aucune limite de débit.** Il est
+donc sûr à appeler sur du contenu généré par les utilisateurs avant de valider un envoi. La seule
+vérification pré-envoi vraiment gratuite.
+
+<Tip>
+Le prix peut varier selon le pays et le réseau, d'où `to` obligatoire plutôt qu'optionnel. Un devis
+sans destination serait une devinette.
+</Tip>
+
+## Le comportement par blocs, qui explique un refus occasionnel
+
+Le crédit est **réservé par blocs, pas par message**, à peu près l'équivalent de vingt messages à la
+fois, ce qui évite à la voie d'envoi de toucher la base.
+
+<Warning>
+**Vous pouvez voir un `402` alors qu'il reste de l'argent sur le compte.** Les recharges sont
+asynchrones, donc un message qui arrive pendant que la réservation suivante est en cours est refusé.
+**Un retry réussit**, et c'est le seul `402` qui vaille la peine d'un retry.
+
+Un `402` *persistant* avec un solde sain, c'est une autre affaire. Remontez-le à votre fournisseur.
+</Warning>
+
+**La taille de bloc ne piège pas votre crédit.** Une réservation retombe sur le bloc complet, puis
+sur le plancher, puis sur le message unique qui l'a demandée. Un compte dépense donc chaque unité
+qu'il détient, et une petite recharge fonctionne exactement comme on s'y attendrait.
+
+## `product` change le prix
+
+`product` sur l'un ou l'autre endpoint tarifie contre un produit différent, à partir d'une liste
+d'autorisations que votre fournisseur maintient par login, et **la plupart des logins n'en ont
+aucun**.
+
+La même liste régit les deux endpoints, délibérément : un devis et un envoi ne peuvent pas
+diverger sur ce que vous êtes autorisé à nommer.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Relevés et limites" icon="file-invoice" href="/developers/billing/statements-and-limits">
+    Votre historique d'utilisation, et les plafonds qui s'appliquent à vous.
+  </Card>
+  <Card title="Tarifer un message" icon="calculator" href="/reference/api/rate">
+    Chaque champ de `/secure/rate`.
+  </Card>
+</CardGroup>

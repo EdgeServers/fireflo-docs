@@ -1,0 +1,118 @@
+---
+title: "FAQ facturation"
+description: "Les questions que les opérateurs posent une fois que l'argent bouge — écarts, crédit bloqué, trafic non tarifé et périodes qui ne veulent pas se clôturer."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un compte refuse des messages et il a de l'argent dessus">
+Presque toujours un **rechargement en cours**, pas du crédit bloqué.
+
+Le crédit est réservé par blocs, et les rechargements sont asynchrones par conception — donc un
+message arrivant pendant que la prochaine réservation est prélevée peut être refusé avec encore de
+l'argent sur le compte. Une nouvelle tentative réussit.
+
+**Le plancher de bloc ne bloque rien.** Une réservation essaie le bloc complet, puis le plancher
+libellé en messages, puis juste le message unique qui a demandé, donc un compte dépense chaque
+unité qu'il détient. Un compte financé pour trois messages envoie trois.
+
+Si cela arrive sur un compte **bien approvisionné**, la cause est différente et historique : le
+plancher était autrefois un montant en devise, ce qui pouvait dimensionner un bloc à exactement un
+message pour une destination coûteuse. C'est ce que `smsg.balance.block.min.messages` existe pour
+empêcher.
+</Accordion>
+
+<Accordion title="Un rechargement n'est pas arrivé">
+Le compte n'a presque certainement pas de ligne `account_balance`. Un `RECHARGE` pour un tel compte
+ne crédite rien, reste **pending**, et s'applique dès que la ligne apparaît — avec un WARN nommant
+le compte.
+
+**Créer un credential ne crée pas de ligne de solde.** Utilisez *Ouvrir pour crédit* sur la page du
+compte.
+</Accordion>
+
+<Accordion title="La réconciliation dit qu'un compte est décalé exactement de sa consommation">
+Vous utilisez la mauvaise identité. `credited − consumed = balance + reserved` est **faux** et
+échoue de cette manière sur chaque compte.
+
+La consommation ne touche jamais les colonnes de solde — `reserved` est un compteur consommé sur la
+vie du compte, pas un blocage. La bonne paire est :
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+reserved − consumed    = reserved but not yet spent  (≥ 0)
+```
+</Accordion>
+
+<Accordion title="Du crédit est bloqué en reserved après un crash">
+Un `kill -9` le bloque. `balance + reserved` est toujours conservé — **l'argent est garé, pas
+perdu** — et `POST /ops/credit/release` le restitue. Un arrêt propre le fait automatiquement.
+</Accordion>
+
+<Accordion title="Du trafic est envoyé et rien n'est facturé pour lui">
+Un compte que personne n'a tarifé n'est **pas refusé** — il envoie non tarifé et non facturé, avec
+une ligne en `debug`.
+
+Définissez le scope `[*]`. Il tarife tout compte n'ayant pas sa propre règle, y compris les comptes
+créés ultérieurement, et c'est la chose de plus haute valeur à configurer au premier jour. Sans
+cela, cet échec est silencieux et cumulatif.
+</Accordion>
+
+<Accordion title="La marge d'un vendor apparaît comme inconnue plutôt qu'un nombre">
+Fonctionne comme prévu. **Une règle qui ne correspond à rien laisse le montant inconnu, jamais à
+zéro** — et le défaut `[*]` s'applique *au prix seulement, jamais au coût*.
+
+S'il s'appliquait par défaut au côté coût aussi, chaque marge se calculerait à zéro plutôt qu'à
+inconnu, et rien ne vous dirait qu'un vendor n'avait pas de tarifs.
+</Accordion>
+
+<Accordion title="Un compte postpayé a cessé d'envoyer et est sous sa limite">
+Sa période n'a probablement pas été clôturée. La ligne `BILL` la plus récente est le début de la
+fenêtre non facturée — **la clôture est ce qui restitue de la marge de manœuvre.**
+
+Rien n'est cassé ; la facture n'a pas été coupée.
+</Accordion>
+
+<Accordion title="Un remboursement est arrivé après que j'ai clôturé la période. Dois-je la rouvrir ?">
+Non — une période clôturée n'est jamais réécrite. Le panneau re-exécute le résumé, le compare au
+chiffre stocké, et affiche la différence comme un **avoir sur la période suivante**.
+
+Réécrire silencieusement signifierait que la facture que le client a payée le mois dernier cesse de
+correspondre à ce que le panneau montre ce mois-ci, sans que rien n'enregistre que cela a bougé ni
+pourquoi.
+</Accordion>
+
+<Accordion title="La purge a refusé de tourner">
+Elle a trouvé un jour sans ligne `usage_daily`. C'est un refus de toute l'exécution, par
+conception. Supprimer un jour non résumé détruit l'enregistrement de consommation de façon
+permanente.
+
+Exécutez `fireflo usage rollup --catch-up`, puis purgez. Les deux sont délibérément des commandes
+distinctes : une purge qui roulerait discrètement d'abord signifierait qu'un bug de rollup est
+découvert par la commande qui supprime les preuves.
+</Accordion>
+
+<Accordion title="Les totaux quotidiens sont décalés de quelques heures de trafic">
+`FIREFLO_BILLING_ZONE`. Un jour de facturation est un jour **local**, et en UTC les cinq heures et
+demie finales de la soirée d'un client indien atterrissent sur la ligne du jour suivant.
+
+Définissez-le avant le premier rollup. Le changer après signifie supprimer et recalculer chaque
+jour déjà résumé.
+</Accordion>
+
+<Accordion title="Un message dont je sais qu'il a été envoyé n'apparaît dans aucune liste">
+Habituellement, l'écrivain et le lecteur pointent vers des bases différentes. Vérifiez
+`smsg.cdr.sink` et le `FIREFLO_DB_URL` du gateway par rapport au `METRICS_DATABASE_URL` du panneau
+avant de chercher ailleurs.
+</Accordion>
+
+<Accordion title="Le revenu semble trop élevé après une salve de refus vendor">
+Il ne devrait pas, et s'il l'est, vérifiez la requête. Un message refusé porte **pas d'argent** —
+`price`, `cost` et `margin` sont null, parce que le crédit a été restitué au moment du refus.
+
+Chaque requête de revenu intégrée somme ces colonnes *sans* filtre de résultat, précisément pour
+qu'un message remboursé ne puisse pas surestimer les recettes. Une requête écrite à la main qui
+traite `NULL` comme zéro rompt cela.
+</Accordion>
+
+</AccordionGroup>

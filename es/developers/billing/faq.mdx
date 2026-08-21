@@ -1,0 +1,100 @@
+---
+title: "FAQ de facturación"
+description: "Conciliación, reembolsos, mensajes discutidos y las cifras que legítimamente no coinciden."
+---
+
+<AccordionGroup>
+
+<Accordion title="Envié 1000 mensajes y me facturaron 1240. ¿Por qué?">
+Segmentos. Se factura por segmento, no por mensaje, y 240 de los suyos duraban más de uno.
+
+Un mensaje de más de 160 caracteres GSM-7 se parte en 153 por segmento. Si algo del texto fuerza
+UCS-2 —una comilla curva es el culpable habitual—, los límites bajan a 70 y 67, así que un mensaje
+de 150 caracteres se convierte en tres segmentos.
+
+`/secure/rate` devuelve `submit_sm_count` para cualquier cuerpo, gratis, antes de enviarlo.
+</Accordion>
+
+<Accordion title="Envié 1000 y me facturaron 960. ¿Es un error?">
+No. Los rechazos no cuestan nada. Sender IDs no aprobados, plantillas no coincidentes, TLVs
+obligatorios ausentes y saldo insuficiente le dejan sin cargo, o con reembolso si el cargo ya se
+había tomado.
+
+**El número de mensajes que envió y el número por el que le facturaron son cifras legítimamente
+distintas.** Los rechazos son la diferencia, y su proveedor puede listarlos.
+</Accordion>
+
+<Accordion title="¿Por qué me rechazan si tengo dinero en la cuenta?">
+Casi siempre una **recarga en curso**. El saldo se reserva en bloques y las recargas son
+asíncronas, así que un mensaje que llega en mitad de una reserva se rechaza con dinero todavía
+ahí. Reintentar funciona.
+
+**El tamaño de bloque no deja saldo varado.** Una reserva baja hasta el único mensaje que lo
+solicitó si es todo lo que cubre el saldo, así que gasta cada unidad que posee.
+
+Un rechazo que persiste con una cuenta con fondos es un problema distinto; escálelo.
+</Accordion>
+
+<Accordion title="¿Me reembolsan un mensaje fallido?">
+Depende de dónde falló:
+
+| | ¿Cobrado? |
+| :--- | :--- |
+| Rechazado en el ingress | **No**: no se tomó nada |
+| Aceptado, luego descartado antes de un vendor | **Reembolsado** |
+| Enviado a un vendor y rechazado por él | **Reembolsado** |
+| Entregado | Cobrado |
+| `UNDELIV` o `EXPIRED` tras un intento real | **Cobrado**: se hizo el intento |
+
+La última fila merece interiorizarse: un terminal apagado durante un día le cuesta el mensaje,
+porque su proveedor pagó por intentarlo.
+</Accordion>
+
+<Accordion title="Un cliente dice que nunca recibió un mensaje por el que me facturaron">
+Mire el estado final en el registro. `DELIVRD` significa que el operador reportó entrega. Más allá
+es una consulta para el operador, y `operator_msg_id` es el identificador que cita al escalarla.
+
+Si el estado es `UNKNOWN` o el mensaje se estabilizó como `EXPIRED` sin que llegara nunca un
+acuse, pregunte a su proveedor si se solicitan acuses en esa ruta. **Si cada mensaje en una ruta
+se estabiliza como `EXPIRED`, nada está reportando resultados**, y la tasa de entrega no tiene
+significado, más que cero.
+</Accordion>
+
+<Accordion title="¿Por qué se factura un mensaje largo parcialmente entregado en su totalidad?">
+Porque cada segmento fue enviado y pagado. La resolución reporta el resultado del **peor**
+segmento, así que el mensaje aparece como FAILED, pero los segmentos que sí fueron también se
+transportaron.
+
+La facturación sigue lo que se envió y el reporte de entrega sigue lo que el destinatario pudo
+leer. Contestan preguntas distintas.
+</Accordion>
+
+<Accordion title="¿Puede un reintento cobrarme dos veces?">
+Solo si reintenta algo que realmente tuvo éxito. **No hay clave de idempotencia** en
+`/secure/send`, así que un reintento tras un timeout envía un segundo mensaje y cobra por él.
+
+Reintente solo con `429` y `500`. Un `500` es explícitamente seguro (el cargo se revierte antes de
+que le llegue), pero un **timeout no lo es**, porque el mensaje pudo haber sido aceptado y usted
+simplemente no vio la respuesta. Mantenga su propia clave de deduplicación para cualquier cosa
+visible al usuario.
+</Accordion>
+
+<Accordion title="¿Cuesta algo una cotización?">
+No. `/secure/rate` no envía nada, no cobra nada y no cuenta contra ningún límite de tasa. Es la
+única verificación previa realmente gratuita en la API.
+</Accordion>
+
+<Accordion title="¿Por qué el mismo mensaje cuesta importes distintos a países distintos?">
+El precio es por destino: país y a menudo red. Por eso `to` es obligatorio en una cotización: un
+precio sin destino sería una suposición.
+
+`product` puede cambiarlo de nuevo, si su proveedor ha permitido más de uno para su login.
+</Accordion>
+
+<Accordion title="¿Cuánto tiempo se guarda mi historial?">
+La política de retención de su proveedor lo decide, y los registros se purgan según un calendario.
+Si necesita historial más allá, **exporte según un calendario propio** en lugar de asumir que
+seguirá ahí.
+</Accordion>
+
+</AccordionGroup>

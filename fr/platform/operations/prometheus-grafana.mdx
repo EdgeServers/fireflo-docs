@@ -1,0 +1,102 @@
+---
+title: "Prometheus et Grafana"
+description: "Chaque métrique que le gateway publie sur lui-même, lesquelles quatre valent une alerte, et la mise à niveau qui fait silencieusement retourner 404 à votre job de scrape."
+---
+
+Les métriques sont compatibles Prometheus via Quarkus Micrometer, sur le **port de gestion** :
+
+```bash
+curl http://localhost:9000/q/metrics
+```
+
+Tout ce que le gateway publie sur lui-même est préfixé `fireflo_`, donc un seul match trouve tout :
+
+```bash
+curl -s http://localhost:9000/q/metrics | grep '^fireflo_'
+```
+
+<Warning>
+**Activer le port de gestion *déplace* `/q/metrics`.** Un job Prometheus encore pointé sur 8080 commence à obtenir des `404` plutôt que d'échouer bruyamment, donc changez la cible de scrape en même temps.
+
+Un job de scrape retournant 404 ressemble à « pas de données » sur un tableau de bord, ce qui se lit comme un système silencieux plutôt qu'un moniteur cassé.
+</Warning>
+
+## Les métriques
+
+| Métrique | Signifie |
+| :--- | :--- |
+| `fireflo_router_queue` | Messages en attente de routage |
+| `fireflo_routing_retry_queue` | En attente d'un backoff après une manque ou une remise en file par filtre |
+| `fireflo_routing_failed_queue` | **Alerter sur non-zéro.** Parqué par un échec de routage inattendu. Pas de CDR, pas d'accusé |
+| `fireflo_routing_rules_broken` | Règles distinctes rapportées cassées depuis que la table a été publiée |
+| `fireflo_cdr_written` / `fireflo_cdr_failed` | **Un CDR échoué est du revenu non facturable** |
+| `fireflo_dlr_awaiting_receipt` | Soumis et toujours en attente d'un accusé |
+| `fireflo_dlr_correlation_size` | Ids vendeur encore matchables à une soumission |
+| `fireflo_dlr_unpushed_size` | Accusés retenus pour un client non connecté |
+| `fireflo_rating_unrated` | **Argent.** Livré sans tarif côté vente. Facturé rien |
+| `fireflo_whitelist_header_rejects` / `_template_rejects` | Refusés pour un expéditeur ou contenu non approuvé |
+| `fireflo_whitelist_would_reject` | Ce que le mode report-only **aurait** refusé |
+| `fireflo_balance_debits_refused` | Refusés faute de crédit prépayé |
+| `fireflo_balance_refills_attempted` / `_failed` | Réservations de blocs commencées, et celles qui n'ont rien trouvé |
+
+Toutes des jauges, lues au moment du scrape, donc **aucune ne coûte quoi que ce soit par message**.
+
+## Les quatre qui valent une alerte
+
+<CardGroup cols={2}>
+  <Card title="fireflo_routing_failed_queue" icon="triangle-exclamation">
+    Non nul signifie que des messages sont **partis**. Pas de CDR et pas d'accusé. Sauf si `outSms.enqueueFailedRouting` est réglé.
+  </Card>
+  <Card title="fireflo_cdr_failed" icon="database">
+    Du revenu que vous ne pouvez pas facturer. Silencieux partout ailleurs.
+  </Card>
+  <Card title="fireflo_rating_unrated" icon="tag">
+    Trafic livré et facturé rien. Croît silencieusement et ne s'auto-corrige jamais.
+  </Card>
+  <Card title="amqp.bridge.degraded" icon="link-slash">
+    Dans le log plutôt qu'une métrique. La durabilité REST est partie et **rien d'autre ne vous le dira.**
+  </Card>
+</CardGroup>
+
+## `routing_rules_broken` est comment distinguer corrigé de déjà rapporté
+
+Le log dit chaque règle cassée **une fois par règle, pas une fois par message**. Délibérément, puisque non gardé ce serait une ligne par message par tentative sur exactement le trafic déjà en erreur.
+
+Le compteur ne se remet à zéro que quand une nouvelle table de routage est publiée. Donc **un log silencieux n'est pas la preuve que le problème est parti**, et cette jauge est la forme fiable de la même question.
+
+## `whitelist_would_reject` avant d'appliquer
+
+Le mode report-only compte ce qui *aurait* été refusé sans le refuser.
+
+<Tip>
+Lisez ceci pendant une journée avant de passer un compte à l'application. Cela transforme une classe entière d'incident de mise en production en un nombre que vous regardez quand c'est pratique.
+</Tip>
+
+## La profondeur de file par worker n'est pas ici
+
+Il faudrait un mètre par worker, enregistré et retiré à mesure que les workers démarrent et s'arrêtent. **`/ops/health` la rapporte par worker** en attendant, donc une alerte de backlog par vendeur doit venir de là plutôt que de Prometheus.
+
+## Configuration de scrape
+
+```yaml
+scrape_configs:
+  - job_name: fireflo
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ['fireflo-host:9000']
+```
+
+<Warning>
+**Le port 9000 porte les profondeurs de file, les noms de vendeurs, l'état des binds et les contrôles qui arrêtent un vendeur.** Rien de tout cela n'a sa place sur le port que les clients atteignent. Gardez-le sur un réseau admin et ne le publiez pas.
+</Warning>
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Santé en direct" icon="heart-pulse" href="/platform/operations/live-health">
+    L'état qui n'est pas dans Prometheus.
+  </Card>
+  <Card title="Tokens et accès" icon="key" href="/platform/operations/tokens-and-access">
+    Quels endpoints ont besoin de quel token.
+  </Card>
+</CardGroup>

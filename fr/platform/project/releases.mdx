@@ -1,0 +1,103 @@
+---
+title: "Versioning et mise à niveau"
+description: "Quelles releases existent, ce qu'un numéro de version vous dit, et les cinq choses à vérifier avant d'en prendre une nouvelle."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+FireFlo utilise le versioning sémantique standard. Ce qui compte pour vous est ce qu'un numéro de version promet et ce qu'il faut vérifier avant d'en prendre un.
+
+## Ce que le numéro signifie
+
+| Changement | Signifie |
+| :--- | :--- |
+| **Majeur**, `1.0.0` → `2.0.0` | Un changement cassant. Attendez-vous à lire les notes et à changer quelque chose. |
+| **Mineur**, `0.7.0` → `0.8.0` | Nouvelle capacité. Le comportement existant est censé survivre, mais **les défauts peuvent bouger**. Voir ci-dessous. |
+| **Patch**, `0.7.3` → `0.7.4` | Une correction. Le type le plus sûr à prendre, et généralement la raison de le prendre promptement. |
+
+Vos notes de release accompagnent chaque build. Elles sont la liste faisant autorité de ce qui a changé ; cette page porte sur ce qu'il faut y chercher.
+
+## Releases
+
+La paire actuelle est <Versions />.
+
+| Gateway | Control panel | Date | De quoi parlait la release |
+| :--- | :--- | :--- | :--- |
+| **0.7.4** | 0.7.4.1 | 2026-08-20 | Trois défauts sur le chemin du crédit prépayé |
+| **0.7.3** | 0.7.3.3 | 2026-08-19 | Comptes postpayés, relevés et clôture de période |
+| **0.7.2** | 0.7.2.1 | 2026-08-19 | Espaces réservés de template élargis pour accepter noms et phrases |
+| **0.7.1** | 0.7.1.1 | 2026-08-19 | Correspondance de templates. Un template approuvé refusait chaque message |
+| **0.7.0** | 0.7.0.1 | 2026-08-19 | Messages concaténés de bout en bout, et le défaut de facturation par segment |
+
+<Note>
+**0.7.0 est où cette table commence, pas où FireFlo commence.** Des releases antérieures existent et sont en service ; leurs notes sont disponibles auprès de [support@fireflo.au](mailto:support@fireflo.au). L'historique publié commence ici parce que 0.7.0 a ouvert la ligne de travail de facturation sur laquelle le produit est actuellement.
+</Note>
+
+Deux choses que la table ne vous dira pas seule.
+
+**La colonne control panel montre la révision la plus récente pour cette release gateway.** Le quatrième numéro est une révision panel-only et bouge seul. 0.7.3 en a eu trois. Toute version panel dont les trois premiers numéros correspondent au gateway est une paire valide ; le panel vérifie cela à l'exécution et le dit quand ce n'est pas le cas.
+
+**Cinq releases gateway en deux jours n'est pas une erreur.** 0.7.0 a ouvert un morceau de travail de facturation, et chaque release après a fermé quelque chose que la précédente exposait. Un défaut de facturation par segment, puis la correspondance de templates dont il dépendait, puis la grammaire des espaces réservés, puis le travail postpayé, puis trois défauts sur le chemin du crédit. Les releases se groupent quand une couture est travaillée ; c'est à quoi ça ressemble.
+
+## Avant de mettre à niveau
+
+Le motif à intérioriser : **les changements qui font mal sont les silencieux.** Un changement d'API cassant s'annonce ; un défaut changé non.
+
+<AccordionGroup>
+
+<Accordion title="Lisez les notes de release pour les défauts changés">
+Un défaut qui bouge change le comportement sur chaque déploiement qui n'a jamais défini la valeur. Ce qui est la plupart. Ce sont les entrées à lire attentivement, plus que les nouvelles fonctionnalités.
+</Accordion>
+
+<Accordion title="Vérifiez si quelque chose a bougé entre ports">
+Activer le port de gestion **a déplacé** `/q/metrics` de 8080 à 9000. Un job Prometheus encore pointé sur l'ancien obtient des `404` plutôt que d'échouer bruyamment, donc un tableau de bord se lit comme un système silencieux plutôt qu'un moniteur cassé.
+</Accordion>
+
+<Accordion title="Vérifiez si une migration de base est incluse">
+Les migrations sont **uniquement en avant**. Il n'y a pas de migration en arrière, donc le chemin de rollback est une restauration plutôt qu'une migration inverse. Prenez la sauvegarde avant, pas après.
+</Accordion>
+
+<Accordion title="Vérifiez si le comportement des accusés a changé">
+La sémantique des accusés a changé deux fois de manières qui étaient invisibles jusqu'à ce qu'un client remarque. `level` lisait toujours `2`, donc `ACCEPTD` était rapporté comme un résultat ; et le `User-Agent` sur les appels webhook a changé du défaut JDK à `FireFlo/<version>`, ce qui compte pour tout récepteur avec une allow-list.
+</Accordion>
+
+<Accordion title="Décidez si un avis client est nécessaire">
+Si des chiffres qu'un client peut voir vont changer, il faut le lui dire avant que cela n'arrive. Avec le nombre, la direction et la date. Voir [Avis clients](/platform/migrating/customer-notices).
+</Accordion>
+
+</AccordionGroup>
+
+## Appariement de version
+
+Le gateway publie sa version en cours sur `/ops/health`, et le control panel montre à la fois la sienne et celle du gateway.
+
+<Warning>
+**Une paire non correspondante est signalée délibérément.** Le panel se dégrade plutôt que de casser quand il parle à un gateway plus ancien. Une colonne disparaît simplement de ses requêtes. Mais une fonctionnalité qui semble absente à cause d'un écart de version ressemble exactement à une fonctionnalité cassée.
+
+Vérifiez la paire avant d'enquêter sur quoi que ce soit qui « devrait être là et ne l'est pas ».
+</Warning>
+
+## Signaler des problèmes
+
+Tout va à [support@fireflo.au](mailto:support@fireflo.au). Ce qui change est comment vous le cadrez :
+
+| | Inclure |
+| :--- | :--- |
+| **Un bug reproductible** | La paire de versions, ce que vous avez fait, ce qui s'est passé, et un serial de message qui le montre |
+| **Une question ou de l'aide de mise en place** | Ce que vous essayez d'atteindre, pas seulement l'erreur. La réponse est souvent une approche différente |
+| **Quoi que ce soit de sensible à la sécurité** | **Dites-le dans le sujet.** N'attachez pas de logs ou configuration non expurgés à un premier mail ; nous vous dirons où les envoyer |
+
+<Warning>
+**Expurgez avant de partager.** Identifiants, system IDs, adresses IP, numéros de téléphone et contenu de messages apparaissent tous dans la configuration et les logs. `fireflo` expurge ce qu'il peut ; une ligne de log copiée à la main est votre propre responsabilité.
+</Warning>
+
+## Connexes
+
+<CardGroup cols={2}>
+  <Card title="Avis clients" icon="envelope" href="/platform/migrating/customer-notices">
+    Quand une release change ce qu'un client voit.
+  </Card>
+  <Card title="Migrer un déploiement" icon="right-left" href="/platform/migrating/from-jasmin-or-kannel">
+    Venant de Jasmin ou Kannel.
+  </Card>
+</CardGroup>

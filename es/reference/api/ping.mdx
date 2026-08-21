@@ -1,0 +1,56 @@
+---
+title: "GET /ping"
+description: "Liveness sin credenciales: qué le dice y qué no."
+---
+
+El único endpoint que no necesita autenticación. Pensado para un monitor.
+
+```bash
+curl -i https://sms.example.com/ping
+```
+
+Respuesta real de una 0.7.3 en ejecución:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json;charset=UTF-8
+
+{"data":{"status":"ok"}}
+```
+
+Sin parámetros. Sin autenticación. No cuenta contra ningún límite de tasa.
+
+## Qué prueba realmente un 200 aquí
+
+Que el ingress HTTP está arriba y sirviendo. Eso es todo, y el matiz importa cuando decide sobre
+qué alertar.
+
+| Un `200` de `/ping` prueba | **No** prueba |
+| :--- | :--- |
+| El proceso está corriendo y aceptando HTTP | Que ningún vendor esté enlazado |
+| La capa REST está inicializada | Que la base de datos sea alcanzable |
+| Su ruta de red llega hasta él | Que los mensajes se estén enrutando en lugar de encolarse |
+
+<Warning>
+**Una pasarela con todos los vendors caídos aún responde `/ping` con `200`.** Los binds, la
+profundidad de cola y el throughput viven en el puerto de gestión, que no es este. Véase
+[el puerto de gestión](/reference/management/endpoints). Alertar solo sobre `/ping` le da un
+monitor que se mantiene en verde durante justamente las incidencias que más le interesa conocer.
+</Warning>
+
+## Usarlo como health check
+
+Razonable como sonda de liveness de un balanceador, donde "¿está sirviendo este proceso?" es
+exactamente la pregunta. Para readiness —"¿debería recibir tráfico esta instancia?"— use
+`/ops/health` en el puerto de gestión, y lea `bound_transmittable` en lugar del campo de estado.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="El puerto de gestión" icon="heart-pulse" href="/reference/management/endpoints">
+    Binds, sesiones, profundidad de cola y TPS medido.
+  </Card>
+  <Card title="Estado en vivo" icon="chart-line" href="/platform/operations/live-health">
+    El puñado de señales que merecen una alerta.
+  </Card>
+</CardGroup>

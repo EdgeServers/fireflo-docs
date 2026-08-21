@@ -1,0 +1,95 @@
+---
+title: "FAQ réception"
+description: "Ordre, doublons, accusés manquants, et les états qui ressemblent à des échecs sans en être."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un accusé n'est jamais arrivé. Par où commencer ?">
+Dans cet ordre, car chaque étape écarte plus de causes que la suivante :
+
+1. **En avez-vous demandé un ?** `dlr: "yes"` *et* `dlr_url`. L'un sans l'autre ne fait rien.
+2. **Votre endpoint est-il joignable depuis le host de la passerelle**, pas depuis votre portable ?
+3. **Renvoie-t-il 200–399 ?** Un `401` derrière un proxy authentifiant est l'échec silencieux le
+   plus courant, et un `302` vers une page de connexion *compte comme succès* et avale l'accusé.
+4. **Le vendor est-il seulement sollicité pour produire des accusés ?** Si votre fournisseur a
+   `request.dlrs` désactivé pour ce vendor, rien ne rapporte jamais d'issue et chaque message se
+   règle en `EXPIRED`.
+</Accordion>
+
+<Accordion title="Puis-je recevoir le même accusé deux fois ?">
+Oui. La livraison est at-least-once avec 10 retries. Si votre endpoint est lent, timeout, ou
+renvoie un `5xx` après avoir fait le travail, vous serez rappelé.
+
+**Rendez votre handler idempotent sur `id` plus `level`.** Pas sur `id` seul : un message peut
+légitimement produire un accusé de niveau 1 puis un de niveau 2, et dé-dupliquer sur `id` seul
+écarterait l'issue.
+</Accordion>
+
+<Accordion title="Les accusés sont-ils ordonnés ?">
+Non. Un accusé de niveau 1 et un de niveau 2 pour le même message peuvent arriver dans le désordre
+sous retry, et les accusés pour des messages différents n'ont aucun ordre.
+
+Stockez l'état que vous recevez et laissez un niveau 2 gagner sur un niveau 1 quel que soit l'ordre
+d'arrivée.
+</Accordion>
+
+<Accordion title="Que signifie ACCEPTD ? Ça sonne définitif.">
+Non. `ACCEPTD` et `BUFFRED` sont de **niveau 1**. Progression, avec un autre accusé à suivre.
+
+Celui-ci a mordu de vraies intégrations : `level` valait autrefois toujours `2`, donc un `ACCEPTD`
+d'un vendor était étiqueté comme une issue et les récepteurs clôturaient leurs enregistrements
+dessus. Si votre intégration date d'avant ce correctif, branchez sur `level`, ou demandez
+simplement `dlr_level: 2`, la valeur par défaut, qui n'envoie que les issues.
+</Accordion>
+
+<Accordion title="Pourquoi ai-je eu EXPIRED plutôt qu'un échec ?">
+Le message a atteint sa date limite de validité sans qu'aucune issue n'ait été rapportée.
+Habituellement, un combiné éteint ou hors couverture pendant toute la période.
+
+Mais **si chaque message sur une route se règle en `EXPIRED`, ce ne sont pas les combinés**. Cela
+signifie que rien ne rapporte d'issues du tout, et votre taux de livraison est dénué de sens plutôt
+que zéro.
+</Accordion>
+
+<Accordion title="Pourquoi trois accusés pour un message ?">
+Vous avez envoyé trois `submit_sm`. Un long message est découpé en segments et, par défaut, chacun
+reçoit son propre accusé citant l'id qui vous a été remis pour lui.
+
+Votre fournisseur peut ramener cela à un seul. **Chaque accusé rapporte la même issue** dans les
+deux cas, parce que les segments sont agrégés avant qu'un accusé ne soit construit.
+</Accordion>
+
+<Accordion title="Un long message dit FAILED mais le destinataire a eu presque tout">
+La résolution attend le dernier segment et rapporte la **pire** issue, pas la première ni la
+majoritaire. Un message que le destinataire ne pouvait pas lire en entier n'est pas une livraison.
+
+C'est délibéré et cela fait paraître les taux de livraison de FireFlo plus bas que ceux des
+passerelles qui rapportent le premier segment. À savoir avant de comparer deux fournisseurs sur ce
+chiffre.
+</Accordion>
+
+<Accordion title="Pourquoi n'y a-t-il pas de code d'erreur sur un accusé en échec ?">
+Parce qu'il n'y en a aucun à donner. Jasmin envoie un champ `err` ; le résolveur de FireFlo reçoit
+seulement l'état de livraison et jamais de code d'erreur, donc en émettre un signifierait
+l'inventer.
+
+`stat` distingue `UNDELIV`, `REJECTD` et `EXPIRED`, ce qui est l'information qui existe réellement.
+</Accordion>
+
+<Accordion title="Un accusé est-il enregistré même s'il ne m'est pas envoyé ?">
+Oui. **Supprimer un accusé est une décision sur ce qui vous est dit, jamais sur ce qui est
+enregistré.** Les issues arrivent dans le call record et les accusés de progression à côté, et
+votre fournisseur peut voir les deux sur la page de détail du message avec ce que vous avez
+demandé.
+
+Donc "je n'ai jamais reçu d'accusé" a toujours une réponse, même quand aucun accusé n'a été
+transmis.
+</Accordion>
+
+<Accordion title="Puis-je voir les accusés sans exploiter un endpoint ?">
+Oui. Le portail client montre vos messages avec leur état final et vous permet de les exporter. Un
+endpoint est la manière de réagir en temps réel ; le portail est la manière de vérifier après coup.
+</Accordion>
+
+</AccordionGroup>

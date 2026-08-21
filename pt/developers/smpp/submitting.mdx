@@ -1,0 +1,108 @@
+---
+title: "Submetendo mensagens"
+description: "submit_sm sobre um bind estabelecido. Os campos que importam, como registered_delivery mapeia para níveis de recibo, e o que acontece com uma tag que você não declarou."
+---
+
+Depois de conectado, você envia `submit_sm`. A resposta traz um message id, e (como no REST)
+**essa resposta significa aceito, não entregue**.
+
+## Os campos que decidem um desfecho
+
+| Campo | Observações |
+| :--- | :--- |
+| `source_addr` | Seu sender ID. A aprovação vale aqui exatamente como no `from` do REST. |
+| `destination_addr` | Formato internacional. |
+| `data_coding` | `0` GSM-7, `8` UCS-2. Decide sua contagem de segmentos e, portanto, seu custo. |
+| `registered_delivery` | Quais recibos você quer. Veja abaixo. |
+| `esm_class` | Modo da mensagem e indicação de UDH. Bits errados aqui são um `ESME_RINVESMCLASS` comum. |
+| TLVs opcionais | Só extraídas se o listener declara a tag. |
+
+## `registered_delivery` mapeia para níveis de recibo
+
+O FireFlo respeita o octeto em vez de tratá-lo como boolean:
+
+| Bits | Significado |
+| :--- | :--- |
+| 1–0 | none / all / failure-only / success-only |
+| bit 4 (`0x10`) | Adiciona a notificação intermediária |
+
+**`0x11` é a forma SMPP de `dlr_level: 3`**: progresso e desfecho. `0x01` te dá apenas desfechos, o
+que a maioria das integrações quer.
+
+<Warning>
+Uma notificação intermediária **não** é o desfecho. `ACCEPTD` e `BUFFRED` chegam como nível 1 com
+outro recibo por vir, então pedir `0x11` e fechar seu registro no primeiro recibo reporta o estado
+errado permanentemente.
+</Warning>
+
+## Mensagens longas
+
+Dois caminhos, e custam o mesmo:
+
+- **Dividir você mesmo**, setando o UDH e os bits de concatenação em `esm_class`. Você envia N
+  `submit_sm` e recebe N ids.
+- **Enviar um corpo longo** e deixar o gateway dividir.
+
+Os tamanhos de segmento são os mesmos de sempre: **160 GSM-7** ou **70 UCS-2** para uma mensagem
+única, **153** ou **67** por segmento depois de dividida. Uma mensagem pode ter no máximo 255
+segmentos.
+
+<Tip>
+Se você dividir, as partes precisam chegar ao gateway próximas entre si. Elas são mantidas para
+reagrupamento, e um conjunto que nunca se completa é eventualmente descartado. Não intercale um
+gotejamento lento de segmentos de uma mensagem ao longo de minutos.
+</Tip>
+
+## TLVs
+
+Um parâmetro opcional é extraído **só se o listener declara a tag** em `registered.tlvs.submit`.
+**Tags não declaradas são descartadas, não repassadas**, silenciosamente, no ingresso, antes de
+qualquer coisa mais rodar.
+
+Então, se uma tag que você envia nunca chega à operadora, a primeira pergunta é se o seu provedor a
+declarou, não se você a enviou corretamente.
+
+De onde um valor acaba vindo, em ordem de precedência: o seu `submit_sm` vence os padrões da sua
+credencial, que vencem os padrões do fornecedor. A exceção é um stamp de whitelist em modo
+`replace`, que é feito para vencer. Essa sobrescrição *é* a aprovação.
+
+## Aprovação de conteúdo em uma mensagem longa
+
+<Warning>
+**Uma mensagem concatenada é verificada contra templates aprovados apenas após o reagrupamento**,
+porque, no momento da submissão, o corpo ainda é um fragmento.
+
+A consequência: cada segmento é confirmado, e *então* a mensagem pode ser descartada e reembolsada.
+Não há erro em nenhum `submit_sm_resp` para você capturar. O recibo é o único sinal.
+
+Este é o formato normal para templates DLT em idiomas regionais, onde UCS-2 coloca 67 caracteres em
+um segmento.
+</Warning>
+
+## Throughput
+
+Dois tetos, e são coisas diferentes:
+
+- **Tamanho da janela** (`conf.maxPending.default`, 1000 por padrão): quantos `submit_sm` você pode
+  ter sem ack. Esperar cada resposta antes de mandar o próximo faz o round-trip ser seu limite,
+  independentemente disso.
+- **O TPS da sua conta**: exceder é limitado, não silenciosamente descartado.
+
+## Depuração é o botão do seu provedor, não seu
+
+Log de PDU e em nível de byte vem desligado por padrão, deliberadamente: **PDUs de bind contêm
+senhas, e PDUs de `submit_sm` contêm números de telefone e corpos de mensagem.**
+
+`log.pdus` existe, mas é opt-in e temporário, e a saída é sensível. Se você precisa, peça. E espere
+que seja desligado de novo.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Códigos de status" icon="hashtag" href="/reference/smpp/status-codes">
+    O que cada `command_status` significa e se vale a pena repetir.
+  </Card>
+  <Card title="Recibos e MO" icon="arrow-right-arrow-left" href="/developers/smpp/receipts-and-mo">
+    `deliver_sm` nos seus dois papéis.
+  </Card>
+</CardGroup>

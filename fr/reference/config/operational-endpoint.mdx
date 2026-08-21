@@ -1,0 +1,59 @@
+---
+title: "Le endpoint opérationnel"
+description: "Les deux tokens, pourquoi non défini signifie 404 plutôt que ouvert, et pourquoi ceci vit à l'écart du port qui porte les messages."
+---
+
+| Propriété | Défaut | Description |
+| :--- | :--- | :--- |
+| `smsg.ops.token` | *(non défini)* | Secret partagé pour `GET /ops/health` et `/q/metrics` — les lectures. |
+| `smsg.ops.admin.token` | *(non défini)* | Secret partagé pour tout ce qui change ce que fait la passerelle : `/ops/reload`, `test-bind`, `disconnect` et les six verbes de contrôle. |
+
+## Deux tokens, pas un
+
+Lire l'état de la passerelle ne doit pas emporter la capacité d'arrêter un fournisseur. Un tableau
+de bord, une sonde de supervision ou un panneau en lecture seule obtient `smsg.ops.token` et peut
+voir l'état des binds, les profondeurs de files et le débit ; il ne peut rien désactiver.
+
+<Warning>
+`smsg.ops.admin.token` **non défini, ou réglé sur la même chaîne que le token de lecture, désactive
+les verbes de contrôle** et ils répondent 404. Régler les deux sur la même valeur ne « simplifie »
+pas la configuration — cela éteint les contrôles.
+</Warning>
+
+## Non défini signifie désactivé, pas ouvert
+
+Non défini signifie **désactivé et répondant 404**, pas non authentifié.
+
+Un mauvais token obtient le même 404 qu'un endpoint désactivé, plutôt qu'un 401, pour que rien
+n'annonce qu'il y a ici un secret qui vaut la peine d'être deviné.
+
+<Note>
+Le coût de ce choix : un tableau de bord qui rapporte 404 doit être lu comme **« vérifiez le token
+des deux côtés »** avant « la passerelle est en panne ». La passerelle ne peut pas distinguer les
+deux cas pour l'appelant, et la CLI non plus, donc les deux rapportent les possibilités plutôt que
+de deviner.
+</Note>
+
+## Pourquoi il n'est pas sous `/secure`
+
+Ce préfixe est authentifié avec des identifiants **de messagerie**, qui appartiennent aux clients.
+Les données ici — état des binds, profondeurs de files, noms de fournisseurs — sont à l'échelle de
+la passerelle, et aucun credential client ne doit y accéder.
+
+Le endpoint vit sur l'interface de gestion, port **9000** par défaut, à l'écart du port qui porte
+les messages.
+
+```bash
+export FIREFLO_OPS_URL=http://localhost:9000   # le port opérationnel, PAS celui de messagerie
+export FIREFLO_OPS_TOKEN=...                   # doit correspondre à smsg.ops.token
+export FIREFLO_OPS_ADMIN_TOKEN=...             # doit correspondre à smsg.ops.admin.token
+```
+
+<Warning>
+Pointer le `GATEWAY_API_URL` du panneau de contrôle vers ce port produit des 404 sur chaque appel
+du playground, et pointer `GATEWAY_OPS_URL` vers le port de messagerie produit des 404 sur chaque
+lecture de santé. Les deux ports portent des choses différentes et ne partagent aucun chemin.
+</Warning>
+
+Voir [API de gestion](/reference/management/endpoints) pour les endpoints eux-mêmes, et
+[Tokens et accès](/platform/operations/tokens-and-access) pour comment les distribuer.

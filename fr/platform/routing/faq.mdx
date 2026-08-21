@@ -1,0 +1,134 @@
+---
+title: "FAQ routage"
+description: "Les questions de routage qui arrivent pendant un incident, répondues dans l'ordre où elles arrivent habituellement. En commençant par la modification qui a semblé ne rien faire."
+---
+
+<AccordionGroup>
+
+<Accordion title="J'ai édité la table de routage et rien n'a changé">
+Une règle mal formée fait échouer **tout** le rechargement, et le gateway continue de servir la table précédente. Le trafic continue de couler, donc rien ne semble incorrect.
+
+```bash
+grep "Error parsing new routing table" /var/log/fireflo/fireflo.log
+```
+
+`no default routing table in new targets!` sur la même ligne signifie que la nouvelle configuration n'avait pas de règles dans `default`. Souvent parce qu'un [filtre](/platform/routing/filters) auquel chaque règle référait est manquant ou désactivé.
+</Accordion>
+
+<Accordion title="Pourquoi vendor1:from:==:MyBrand ne fonctionne pas ?">
+`==` est un opérateur **numérique**. Cette ligne ne fait pas simplement échouer la correspondance. Elle échoue à parser, et emporte tout le rechargement avec elle. Utilisez `equals` pour du texte :
+
+```
+vendor1:from:equals:MyBrand
+```
+
+Le control panel refuse un opérateur numérique sur un champ texte avant d'enregistrer. Un fichier édité à la main n'a pas ce contrôle.
+</Accordion>
+
+<Accordion title="Mon motif ne correspond à rien et rien ne se plaint">
+Deux pièges différents.
+
+`matches` est une expression régulière et elle est **ancrée**. Elle doit correspondre à toute la valeur. `^61.*` correspond à une destination complète ; un `61` nu ne correspond qu'à la chaîne de deux caractères `61`.
+
+`startsWith` compare du **texte littéral**. Une expression régulière qui lui est remise demande si la valeur commence littéralement par `^(?:\+61`, ce que rien ne fait, donc la règle charge, s'affiche et ne se déclenche jamais. Le panel avertit à ce sujet ; le gateway non.
+</Accordion>
+
+<Accordion title="Pourquoi product:equals:premium rate-t-il les messages sans produit ?">
+Un champ non défini ne correspond à **aucun opérateur positif**. `isNull` est le seul qui y correspond.
+
+La négation va dans l'autre sens et surprend les gens autant : `product:!equals:premium` **se déclenche** pour un message ne portant aucun produit du tout.
+</Accordion>
+
+<Accordion title="Les règles sous mon catch-all ne s'exécutent jamais">
+Elles ne peuvent pas. Une table `NORMAL` s'arrête à la première correspondance, et un catch-all correspond à tout. Donc tout ce qui est en dessous est inaccessible. Rien ne refuse la table ; les règles parsent parfaitement.
+
+Déplacez-le en dernier. La table est rapportée sous `unreachable-rules` dans `routing_warnings` sur `/ops/health`, et le panel compte les règles mortes pour vous.
+</Accordion>
+
+<Accordion title="J'ai désactivé un filtre pour élargir une règle et la règle a cessé de correspondre du tout">
+C'est le comportement conçu. Un filtre manquant ou désactivé **saute chaque règle qui y réfère** plutôt que de charger la règle avec moins de conditions.
+
+Une règle est une conjonction, donc laisser tomber une condition la fait correspondre à *plus* de trafic. Ce qui routerait les mauvaises choses, avec succès et silencieusement. Sauter échoue dans la seule direction sûre. Détails dans [Filtres](/platform/routing/filters).
+</Accordion>
+
+<Accordion title="J'ai désactivé un filtre pour retirer une route et rien ne s'est passé">
+Si sauter les règles a laissé `default` sans règles, tout le rechargement a été rejeté et les tables précédentes sont toujours en service.
+
+Désactiver un filtre n'est pas une façon de retirer une route. Supprimez ou désactivez la **règle**.
+</Accordion>
+
+<Accordion title="Comment trouver pourquoi un message spécifique n'a pas correspondu ?">
+```properties
+outSms.routing.trace = acct-1001
+```
+
+Il prend un serial de message **ou** un id de compte, s'applique en direct, et journalise quelle condition a échoué et ce que le message contenait réellement. Réglez-le pendant l'incident, effacez-le après.
+
+**Ne cherchez pas `outSms.routing.debug`.** Il journalise chaque règle de chaque message et rend tout l'objet message pour cela, donc il est inutilisable aux débits où les questions de routage se posent.
+</Accordion>
+
+<Accordion title="Le log est devenu silencieux. La règle cassée est-elle réparée ?">
+Pas nécessairement. `routing.rule.broken` est journalisé **une fois par règle**, et le compteur ne se remet à zéro que lorsqu'une nouvelle table de routage est publiée. Le silence est également cohérent avec « déjà rapporté ».
+
+Surveillez `routing_rules_broken` sur `/ops/health`. Le même fait sous forme de nombre. Et après une correction, surveillez la ligne pour la voir *réapparaître* plutôt que pour qu'elle reste absente.
+</Accordion>
+
+<Accordion title="routing_failed_queue n'est pas à zéro. Que signifie-t-il ?">
+Des messages parqués par un échec de routage inattendu. Ils n'ont pas d'enregistrement d'appel et pas d'accusé de livraison, et ils ne drainent que si `outSms.enqueueFailedRouting` est réglé. Donc dans la configuration ordinaire ces messages sont partis, et ce compteur est le seul endroit où ce fait existe.
+
+**Alertez dessus.** `routing_retry_queue` est le voisin bénin : des messages attendant un backoff, ordinaire en petits nombres, un écart de routage quand il reste haut.
+</Accordion>
+
+<Accordion title="L'ordre des règles compte-t-il dans une table au moindre coût ?">
+Non. Une table `LCR` scanne chaque règle, traite les correspondances comme des alternatives, et laisse le taux de coût décider. Réordonner ne change rien.
+
+Si une table au moindre coût se comporte comme une table premier-match, vérifiez le nom de la fonction. Un nom non reconnu, comme `->function(LRC)`, retombe sur `NORMAL` avec seulement une ligne de log. Voir [Routage au moindre coût](/platform/routing/least-cost).
+</Accordion>
+
+<Accordion title="Un vendeur dans ma table LCR n'a pas de taux de coût. Va-t-il bloquer le trafic ?">
+Non. Un candidat sans taux correspondant est mis de côté et utilisé **seulement si rien d'autre n'a correspondu**, donc une ligne de taux manquante dégrade plutôt que de bloquer.
+
+Cela vaut toujours la peine de le trouver : un vendeur gagnant du trafic ainsi le gagne à une marge inconnue.
+</Accordion>
+
+<Accordion title="Pourquoi mon groupe de vendeurs ignore-t-il ses poids, ou ses membres ?">
+Deux causes séparées. Un poids n'est lu **que** par `weighted`. En définir un sous `round-robin` ou `failover` et rien ne se répartit, ce que le gateway dit en WARN plutôt que de vous laisser croire autrement.
+
+Et **les blocs de groupe doivent venir avant le premier en-tête `[table]`**. À l'intérieur d'un bloc table une ligne de membre ne correspond à rien et est supprimée silencieusement, donc le groupe a moins de membres qu'il ne semble en avoir.
+</Accordion>
+
+<Accordion title="Une règle peut-elle envoyer un message à chaque membre d'un groupe ?">
+Non, et délibérément. Un groupe sélectionne toujours exactement un membre, parce que le message a été facturé une fois à l'ingress. En diffuser N serait N envois contre un seul débit. `+copied` sur une règle de groupe copie toujours vers un membre.
+
+Si chaque membre est en panne la règle n'envoie rien, journalise `cause=group-all-dead` nommant tous ceux qu'elle a essayés, et le scan **continue**, ce qui est ce qui garde une règle de repli écrite en dessous accessible.
+</Accordion>
+
+<Accordion title="Que se passe-t-il quand une file se remplit ?">
+Seuls les deux ingress refusent. **SMPP** avec `ESME_RMSGQFUL` (`0x14`) et rien de facturé, **REST** avec `503 queueFull` et tout ce qui a déjà été facturé remboursé. À l'intérieur du gateway une file pleine est du backpressure : le routeur attendant sur une file worker pleine est le routeur allant à la vitesse que le vendeur peut prendre.
+
+`smsg.queue.capacity` et `inQueue.capacity` ont tous deux pour défaut `0`, signifiant non borné. Il n'y a pas de limite par défaut parce qu'une limite est une déclaration sur votre propre trafic et heap.
+</Accordion>
+
+<Accordion title="Combien de submit_sm un message peut-il me coûter ?">
+`maxRetries` borne le **total** à un vendeur, à travers les retries en worker et chaque aller-retour par le routeur.
+
+Cela ne bornait avant que la moitié en worker, chaque hop routeur remettant une nouvelle allocation. Donc `1` à côté de vingt tentatives de routage signifiait environ 100 PDU pour un message. Revérifiez la valeur si vous avez ajusté autour. Basculer vers un vendeur *différent* démarre toujours un nouveau budget.
+</Accordion>
+
+<Accordion title="Ai-je besoin de RabbitMQ ?">
+Non. Il est optionnel et sert le chemin **REST** uniquement ; le chemin SMPP est in-process dans les deux cas.
+
+Sans lui la file routeur est en mémoire, et un redémarrage supprime tout ce qui n'a pas atteint un vendeur. Avec lui, les messages REST et les batches planifiés survivent à un redémarrage. Jusqu'à ce que le broker disparaisse, moment où REST retombe silencieusement en mémoire. Alertez sur `amqp.bridge.degraded`.
+</Accordion>
+
+<Accordion title="Les messages sont acceptés puis disparaissent. Par où je commence ?">
+Pas dans la table de routage. La réponse de soumission part **avant** que le routage ne tourne, donc demandez à la base d'abord :
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+`maxAttempts` est la **seule** raison qui signifie routage. `headerNotApproved`, `templateNotMatched`, `missingMandatoryTlv`, `insufficientCredit` et `filtered` signifient tous que le message a été refusé avant que le routage ne soit atteint. Marche à suivre complète : [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered).
+</Accordion>
+
+</AccordionGroup>

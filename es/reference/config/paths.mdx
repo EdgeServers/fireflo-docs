@@ -1,0 +1,108 @@
+---
+title: "Rutas y niveles de propiedades"
+description: "Dónde viven los cuatro archivos de configuración, cómo una anulación por archivo gana y los tres niveles por los que se resuelve un ajuste de worker."
+---
+
+## El directorio de configuración
+
+`FIREFLO_CONF_DIR` decide dónde viven los cuatro archivos de configuración, y mueve los cuatro a la vez.
+
+| Variable | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `FIREFLO_CONF_DIR` | `conf` | El directorio que contiene los cuatro archivos de abajo. |
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.routing.file.path` | `${FIREFLO_CONF_DIR}/routingTable.conf` | Reglas de enrutamiento. |
+| `smsg.properties.file.path` | `${FIREFLO_CONF_DIR}/smsg.properties` | Configuración de worker y SMPP. |
+| `smsg.credentials.file.path` | `${FIREFLO_CONF_DIR}/credentials.yml` | Credenciales HTTP y SMPP. |
+| `smsg.rates.file.path` | `${FIREFLO_CONF_DIR}/rates.conf` | Tabla de tarifas para costo y precio. |
+
+<Warning>
+Un valor relativo (**incluyendo el `conf` predeterminado**) resuelve contra el **directorio de trabajo del
+proceso**, no contra el artefacto.
+
+Eso es correcto para un checkout y equivocado para un servicio. Una unidad con `WorkingDirectory=/opt/fireflo` y
+sin `FIREFLO_CONF_DIR` lee `/opt/fireflo/conf/`, que no es donde nadie editó nada. Una
+instalación empaquetada lo establece a una ruta absoluta.
+</Warning>
+
+Cada archivo aún puede moverse por su cuenta, y una anulación por archivo gana sobre `FIREFLO_CONF_DIR`.
+Las fuentes de entorno se sitúan en mayor precedencia que `application.properties`:
+
+| Variable | Anula |
+| :--- | :--- |
+| `SMSG_ROUTING_FILE_PATH` | `smsg.routing.file.path` |
+| `SMSG_PROPERTIES_FILE_PATH` | `smsg.properties.file.path` |
+| `SMSG_CREDENTIALS_FILE_PATH` | `smsg.credentials.file.path` |
+| `SMSG_RATES_FILE_PATH` | `smsg.rates.file.path` |
+
+En la imagen Docker el directorio de trabajo es `/work`, así que el directorio de configuración predeterminado es
+`/work/conf`. Consulta [Docker](/reference/config/docker).
+
+## Valores por defecto de propiedad a nivel de pasarela
+
+Cualquier búsqueda `outSms.instance.<name>.<property>` que no encuentre valor cae a
+`outSms.default.<property>` antes del predeterminado incorporado. Eso da un baseline que cada worker
+hereda, anulable por instancia:
+
+```properties
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+```
+
+<Note>
+La palabra duplicada en `outSms.default.default.tlvs.submit` es correcta. El primer `default` es el
+nivel de fallback; el segundo es parte del nombre de propiedad `default.tlvs.submit`.
+</Note>
+
+Así que un ajuste de worker resuelve a través de tres niveles, el más específico primero:
+
+<Steps>
+  <Step title="outSms.instance.<name>.<key>">
+    El valor propio de este worker, de `smsg.properties` o de `app_worker_property` en modo base de datos.
+  </Step>
+  <Step title="outSms.default.<key>">
+    El baseline para todo el despliegue.
+  </Step>
+  <Step title="El predeterminado codificado">
+    A qué recurre el proveedor o listener cuando nada lo establece. Están listados en
+    [Ajustes SMPP](/reference/smpp/worker-base).
+  </Step>
+</Steps>
+
+<Warning>
+**No todo ajuste puede acotarse a un listener.** Uno que no puede mantiene su forma escueta, lee un
+global que nadie establece, y por tanto lee su predeterminado codificado independientemente de cómo lo configures.
+
+`whitelist.tlvs.replace` se distribuyó así una vez, y no selló nada sobre SMPP durante todo lo que
+duró. Si un ajuste por listener parece no hacer nada, esto es lo primero que comprobar.
+</Warning>
+
+## Los cuatro archivos
+
+| Archivo | Contiene |
+| :--- | :--- |
+| `credentials.yml` | Perfiles de autenticación HTTP y SMPP. [formato](/reference/files/credentials-yml) |
+| `smsg.properties` | Workers, ajustes de servidor y cliente SMPP, comportamiento de reintento, logging. [formato](/reference/files/smsg-properties) |
+| `routingTable.conf` | Tablas de enrutamiento, reglas y fallbacks. [formato](/reference/files/routing-table) |
+| `rates.conf` | Reglas de coste y precio. [formato](/reference/files/rates-conf) |
+
+En modo `db` cada watcher de archivo se retira y ninguno de estos se lee tras el arranque. Excepto
+`smsg.properties`, que aún se lee **al** arranque, porque el interruptor de fuente y el datasource
+tienen que venir de algún sitio. Consulta [Base de datos](/reference/config/database).
+
+## Endpoints OpenAPI
+
+Mientras el servidor HTTP está ejecutándose:
+
+| Endpoint | Descripción |
+| :--- | :--- |
+| `/swagger-ui` | Swagger UI interactivo |
+| `/openapi.json` | Documento JSON OpenAPI |
+
+<Warning>
+**Prefiere [la referencia de la API REST](/reference/api/overview) en este sitio** sobre cualquier documento OpenAPI
+del que generes un cliente. Una especificación más antigua aún está en circulación que tipa `custom_tlvs`
+como un array que el parser rechaza y omite `product` por completo.
+</Warning>

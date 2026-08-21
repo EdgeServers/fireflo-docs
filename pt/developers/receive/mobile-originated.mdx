@@ -1,0 +1,79 @@
+---
+title: "Mensagens de entrada"
+description: "Mensagens enviadas *para* o seu número: como chegam a você, os placeholders e por que são configuradas no fornecedor, e não por você."
+---
+
+Uma **MO** — mobile-originated — é uma mensagem que um aparelho envia *para* um número que você
+possui. Uma resposta a um alerta, um `STOP`, uma palavra-chave de entrada.
+
+## Esta não é sua para configurar
+
+Diferente de um `dlr_url`, que você define por mensagem, o encaminhamento de MO é configurado **no
+worker de fornecedor que recebe o tráfego**, por quem opera o gateway.
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+outSms.instance.testRoute.forward.mo.format = JSON
+```
+
+Então, se mensagens de entrada não estão chegando a você, a solução é uma conversa com seu provedor
+em vez de uma mudança no seu código. Duas coisas para perguntar a ele: se `forward.mo.url` está
+definido no worker certo, e se o número que você espera está mapeado para sua conta.
+
+## O que chega
+
+Um **`POST`**, em formato `JSON` ou `FORM`. A mesma regra de sucesso `200`–`399` e o mesmo orçamento
+de retries dos recibos de entrega: 10 tentativas, 120 segundos de intervalo, 5 segundos de timeout.
+
+A URL pode carregar placeholders. Os valores são URL-encoded antes da substituição:
+
+| Placeholder | Valor |
+| :--- | :--- |
+| `%p` | Endereço de origem: o aparelho |
+| `%P` | Endereço de destino: o seu número |
+| `%a` | Texto da mensagem |
+| `%t` | Timestamp |
+| `%i` | Identificador do gateway de entrada |
+| `%I` | Centro de mensagens |
+| `%o` | Valor de data coding |
+
+<Warning>
+**`%p` é o remetente e `%P` é o destino.** A diferença entre os dois é só a caixa da letra, e trocar
+produz um sistema que funciona perfeitamente até alguém tentar responder ao número que foi
+registrado.
+</Warning>
+
+## A titularidade precisa ser resolvida
+
+Uma mensagem de entrada chega ao gateway com um número de destino e sem conta anexada. O gateway
+mapeia esse número para uma conta antes de poder encaminhar qualquer coisa.
+
+Se o mapeamento está faltando, a mensagem é **unmapped**: ela chega, é registrada, e é encaminhada
+para lugar nenhum. Não há erro do seu lado para observar, porque nada foi endereçado a você do ponto
+de vista do roteamento.
+
+<Tip>
+Ao testar um novo número de entrada, envie uma mensagem e peça ao seu provedor para confirmar que
+ela resolveu para sua conta em vez de cair como unmapped. Essa checagem única separa "meu endpoint
+está quebrado" de "o número nunca foi meu".
+</Tip>
+
+## Depurando
+
+O detalhe completo de entrada precisa de `print.mos = true` no gateway, **temporariamente**. Essa
+saída contém conteúdo de mensagem e os dois endereços, então é sensível e não é algo para deixar
+ligado.
+
+Seu provedor tem que fazer isso, e vale pedir em vez de adivinhar, já que a alternativa é inferir um
+caminho de entrada pela sua ausência.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Recibos de entrega" icon="receipt" href="/developers/receive/delivery-receipts">
+    A direção de saída, que você controla por mensagem.
+  </Card>
+  <Card title="FAQ de recebimento" icon="circle-question" href="/developers/receive/faq">
+    Ordenação, duplicidades e o que fazer com um recibo faltando.
+  </Card>
+</CardGroup>

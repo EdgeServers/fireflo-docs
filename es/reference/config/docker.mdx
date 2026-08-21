@@ -1,0 +1,84 @@
+---
+title: "Docker"
+description: "Variantes de imagen, los volúmenes y puertos que importan, y el entorno que necesita una ejecución de contenedor."
+---
+
+## Imágenes
+
+| Imagen | Runtime |
+| :--- | :--- |
+| `edgeservers/fireflo:latest` | Imagen JVM, Eclipse Temurin 25 JRE |
+| `edgeservers/fireflo:latest-native` | Imagen ejecutable nativa |
+
+## Directorio de trabajo y rutas
+
+El directorio de trabajo del contenedor es `/work`, así que el directorio de configuración predeterminado es `/work/conf`.
+Cada ruta relativa en [Rutas](/reference/config/paths) resuelve bajo él.
+
+| Ruta del host | Ruta del contenedor | Propósito |
+| :--- | :--- | :--- |
+| `./conf` | `/work/conf` | Los cuatro archivos de configuración |
+| `./data` | `/work/data` | Registros de llamadas en modo archivo, y el almacén de acuses de recibo |
+| `./logs` | `/work/logs` | Logs de aplicación, SMPP y acceso |
+
+```text
+fireflo-runtime/
+  conf/
+    credentials.yml
+    smsg.properties
+    routingTable.conf
+    rates.conf
+  data/
+  logs/
+```
+
+## Puertos
+
+| Puerto | Propósito |
+| :--- | :--- |
+| `8080` | API HTTP, Swagger UI, OpenAPI JSON |
+| `9000` | Interfaz de gestión: `/ops/*` y `/q/metrics` |
+| `27777` | El puerto de listener del quick start; depende de `outSms.instance.<name>.srv.port` |
+
+<Warning>
+Publica `9000` solo en loopback, como `-p 127.0.0.1:9000:9000`. Lleva estado de bind, profundidades de cola y
+nombres de proveedores, y los [dos tokens](/reference/config/operational-endpoint) son lo único delante
+de él.
+</Warning>
+
+## Ejecutar
+
+```bash
+docker run -d --name fireflo \
+  -e QUARKUS_LOG_FILE_ENABLE=true \
+  -e QUARKUS_LOG_CONSOLE_ENABLE=false \
+  -e QUARKUS_LOG_FILE_PATH=/work/logs/smsg.log \
+  -e QUARKUS_LOG_FILE_SMPPCLIENT_PATH=/work/logs/smppclient.log \
+  -e QUARKUS_LOG_FILE_SMPPSERVER_PATH=/work/logs/smppserver.log \
+  -e QUARKUS_HTTP_ACCESS_LOG_DIRECTORY=/work/logs \
+  -p 8080:8080 \
+  -p 127.0.0.1:9000:9000 \
+  -p 27777:27777 \
+  -v ./conf:/work/conf \
+  -v ./data:/work/data \
+  -v ./logs:/work/logs \
+  edgeservers/fireflo:latest
+```
+
+## Comprobaciones al arranque
+
+<Steps>
+  <Step title="El contenedor está activo">
+    `docker ps` lo muestra ejecutándose en lugar de reiniciándose.
+  </Step>
+  <Step title="La API HTTP responde">
+    `http://localhost:8080/swagger-ui` y `http://localhost:8080/openapi.json`.
+  </Step>
+  <Step title="Si no arrancó">
+    Lee `logs/smsg.log` primero, luego `smppclient.log` y `smppserver.log`. Una pasarela sin tabla
+    de enrutamiento no arranca en absoluto, y lo dice nombrando una estructura interna en lugar de la fila
+    faltante. Consulta [Primera configuración](/platform/install/first-configuration).
+  </Step>
+</Steps>
+
+Las variables de log están listadas en [Logging](/reference/config/logging).

@@ -1,0 +1,140 @@
+---
+title: "L'onglet Billing"
+description: "Le seul endroit dans FireFlo où du crédit est créé, et la seule écriture du panneau qui ne peut pas être annulée — plus le grand livre, et une réconciliation qui refuse délibérément de tout corriger."
+---
+
+Ouvrez un compte et choisissez **Billing**. Quatre cartes : ce que le compte détient, comment y
+ajouter, si le crédit s'additionne, et chaque mouvement.
+
+<Warning>
+**Ajouter du crédit ne peut pas être annulé depuis le panneau.** Il n'y a pas de « retirer du
+crédit » et pas d'annulation. Défaire un rechargement nécessiterait une entrée d'ajustement
+négative, et cela n'existe pas.
+
+Le formulaire vous demande de confirmer le montant et la référence avant d'écrire. Lisez la
+confirmation plutôt que de cliquer au travers. C'est le dernier point auquel le nombre vous
+appartient encore.
+</Warning>
+
+## Ce que détient le compte
+
+Les comptes prépayés affichent **Available**. Les comptes postpayés affichent une **Credit
+limit** — ce qu'ils peuvent accumuler avant que le gateway ne les refuse, ce qui est le même refus
+qu'un compte prépayé obtient quand il s'épuise. Les deux ne portent jamais le même nom.
+
+<Note>
+**Reserved n'est pas un blocage qui rétrécit à mesure que les messages sortent.** C'est du crédit
+qui a été déplacé hors du solde, et il ne fait toujours que grossir jusqu'à ce qu'il soit
+restitué.
+
+Le voir grimper sur un compte actif est correct. Le voir stagner sur un compte inactif signifie
+que du crédit a été bloqué par un arrêt non propre, et il est restitué en libérant le crédit
+retenu. Rien n'est perdu dans les deux cas, parce que balance plus reserved est conservé.
+</Note>
+
+Une ligne de solde manquante se lit comme **No balance row — not zero, absent**, ce qui est un
+état différent et plus conséquent : un rechargement contre un compte sans ligne est laissé
+pending plutôt que crédité. **Open for credit** crée la ligne à zéro.
+
+La devise n'est pas demandée. Il y a une devise par plateforme, prise depuis le gateway, et
+FireFlo ne convertit jamais. Un solde en toute autre chose ne pourrait jamais être dépensé face
+à un prix. Le champ n'apparaît que lorsque le panneau ne peut pas du tout lire la devise de la
+plateforme.
+
+## Ajouter du crédit
+
+Trois champs : **Amount**, **Reference**, et une **Note** optionnelle.
+
+Une fois qu'un montant valide est tapé, le formulaire renvoie exactement ce qui sera stocké, parce
+que l'argent est tenu à quatre décimales et un décimal mal placé est l'erreur coûteuse ici.
+
+<Warning>
+**La référence est le garde-fou anti-rejeu, pas un mémo.** Un id de reçu ou de transaction est
+ce qui empêche le même paiement d'être crédité deux fois, et la base ne peut appliquer cela que
+lorsque c'est défini.
+
+C'est requis pour exactement cette raison. N'y mettez pas de description. Mettez la chose qui
+identifie uniquement le paiement.
+</Warning>
+
+Confirmer se fait en deux étapes à dessein. Appuyer sur Entrée dans un champ ne fait rien, et le
+bouton s'arme en une confirmation nommant le montant, la devise et la référence avant qu'il
+n'écrive.
+
+Après qu'il sauvegarde, **le solde ne bouge pas immédiatement**. Le panneau écrit une entrée de
+rechargement et le gateway l'applique lors de son prochain sondage de configuration, dans environ
+trente secondes. Un solde qui n'a pas encore changé n'est pas un échec.
+
+## Basculer entre prépayé et postpayé
+
+La même carte bascule le mode de facturation, et avertit avant de sauvegarder dans les deux sens :
+
+- **Vers postpayé** — le compte cesse de dépenser son solde. Tout ce qui est déjà réservé reste
+  réservé jusqu'à ce qu'il soit libéré.
+- **Vers prépayé** — la limite est effacée et le compte dépense à nouveau son solde. L'usage
+  depuis la dernière facture est toujours dû.
+
+<Warning>
+**Une limite de crédit postpayée de zéro n'est pas illimitée — c'est pas de crédit**, et le
+compte serait incapable d'envoyer quoi que ce soit. Le formulaire le refuse plutôt que d'accepter
+un paramètre qui arrête silencieusement un client.
+</Warning>
+
+**Switch credit off** laisse un compte envoyer jusqu'à ce que le bloc qu'il détient déjà
+s'épuise, puis arrête. Ce n'est pas instantané.
+
+## Le crédit s'additionne-t-il ?
+
+Deux identités sur toute la vie du compte : chaque unité créditée est toujours dans le solde ou
+réservée contre lui, et ce qui a été réservé couvre ce qui a été dépensé.
+
+Cela ne tourne pas tout seul — appuyez sur **Reconcile**. Deux chiffres reviennent.
+**Unexplained** est le résidu, et celui sur lequel il vaut la peine d'agir. **Reserved, not yet
+spent** est normal sur un compte qui envoie.
+
+En-dessous, un récit en langage clair de tout ce qui ne s'est pas équilibré. Les distinctions qui
+comptent :
+
+| Verdict | Signifie |
+| :--- | :--- |
+| **Pending credit** | Rechargements que le gateway n'a pas encore appliqués. Pas un problème — attendez un sondage |
+| **Credit lost** | Crédité, et ni dans balance ni dans reserved |
+| **Credit minted** | Détenu, sans rechargement ni transfert pour l'expliquer — la direction la plus sérieuse |
+| **Charged without reserving** | La consommation est réelle, la réservation ne l'est pas |
+| **Held unspent** | Bloqué par un arrêt non propre. Libéré à la main, pas perdu |
+| **Missing rollup** | Jours sans rollup d'usage — encore comptés ici, mais depuis des enregistrements que la purge supprime |
+| **Unrated** | Messages envoyés sans prix. Sur postpayé, du revenu que personne n'a facturé |
+
+<Note>
+**Il n'y a pas de bouton « corriger », délibérément.** La réconciliation n'écrit jamais d'entrée
+d'ajustement.
+
+Un résidu est la partie que personne n'a pu expliquer, et poster un ajustement pour cela
+équilibrerait les livres en cachant la cause. C'est aussi toujours sur la vie du compte, jamais
+une période — une identité qui tient sur un mois mais pas sur la vie du compte n'a pas tenu.
+</Note>
+
+## Argent entrant et sortant
+
+Chaque rechargement et transfert, cherchable par référence, note ou type, triable et paginé.
+
+Par défaut le grand livre ne liste que les entrées écrites par une personne ou le système de
+facturation. Les réservations de crédit propres au gateway sont cachées et comptées à la place —
+environ une toutes les vingt messages, chacune déplaçant du crédit entre deux colonnes d'une
+même ligne et se compensant à zéro. **Show them** révèle l'ensemble.
+
+La colonne **State** porte la partie que les gens ratent : **Pending** signifie que le gateway ne
+l'a pas encore appliquée. Là où un compte n'a pas de ligne de solde, une entrée positive dit soit
+qu'elle attend la ligne et se créditera au moment où elle existera, soit qu'elle a été appliquée
+avant que la ligne ne disparaisse et rien ne peut désormais dire ce qu'elle a crédité.
+
+## En lien
+
+<CardGroup cols={2}>
+  <Card title="Comment fonctionne le crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocs, réservations et ce que fait le gateway quand le crédit s'épuise.
+  </Card>
+  <Card title="Comptes postpayés" icon="file-invoice" href="/platform/billing/postpaid">
+    Facturation à terme échu face à une limite.
+  </Card>
+</CardGroup>

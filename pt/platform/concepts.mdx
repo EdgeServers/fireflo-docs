@@ -1,0 +1,138 @@
+---
+title: "Conceitos"
+description: "A dúzia de palavras nas quais este site se apoia. Duas delas significam o oposto do que uma origem em Kannel ou Jasmin sugere."
+---
+
+Leia esta página primeiro. Todas as outras páginas assumem estas palavras, e duas delas são um afastamento
+deliberado do vocabulário do próprio arquivo de configuração.
+
+## Vendor e server
+
+<CardGroup cols={2}>
+  <Card title="Vendor" icon="antenna">
+    Uma conexão **de saída** para quem transporta seu tráfego. O FireFlo disca para ele. A configuração
+    chama isso de `smppclient`.
+  </Card>
+  <Card title="Server" icon="server">
+    Um **listener** ao qual seus clientes se conectam (bind). O FireFlo aceita. A configuração chama isso
+    de `smppserver`.
+  </Card>
+</CardGroup>
+
+Os valores de configuração permanecem `smppclient` e `smppserver`, e sempre permanecerão. É o que o
+gateway lê. **Eles nunca aparecem na interface** e não são usados em prosa neste site fora de
+blocos de código e nomes de chaves.
+
+<Warning>
+É aqui que uma origem em Kannel ou Jasmin engana. "Client" e "server" descrevem qual ponta de um
+socket o FireFlo é, o que é um fato de implementação. **Vendor** e **server** descrevem quem está do
+outro lado e quem está pagando a quem. É sobre isso que você realmente raciocina quando uma mensagem
+não vai sair.
+
+A camada de dados sempre concordou: `cdr_submit.vendor` e o payload de delivery-receipt sempre disseram
+*vendor*.
+</Warning>
+
+Ambos são **workers** e compartilham [um conjunto de configurações base](/reference/smpp/worker-base).
+
+## Account, login, product
+
+| Palavra | É | Não é |
+| :--- | :--- | :--- |
+| **Account** | A chave de faturamento. Saldo, limite de crédito, statement e tarifa estão todos ligados a ela. | Uma pessoa, ou um login |
+| **Login** (credencial) | Uma forma de autenticar — um `system_id` SMPP ou um usuário REST. Uma account pode ter várias. | O que é cobrado |
+| **Product** | Uma tarifa nomeada sob a qual uma mensagem é precificada, resolvida por mensagem. | Um feature flag |
+
+<Note>
+**Uma account, muitos logins.** É por isso que o teto de taxa é indexado pela account em vez da
+credencial. Um limite por login permitiria que um cliente aumentasse o próprio limite criando outro login.
+</Note>
+
+Um product é resolvido, nesta ordem: o `system_type` em um bind SMPP e, em seguida, o campo `product`
+da credencial. Chamadores HTTP não têm bind, portanto o valor da credencial é a única fonte.
+
+<Warning>
+**Um product não definido é um estado suportado que pode enviar mensagens gratuitamente.** Uma mensagem
+sem product vê apenas as rate rules que também não têm product, portanto em uma implantação cujas
+regras todas carregam um, ela não corresponde a nada e nada é cobrado. Veja [Limits](/reference/config/limits)
+para as duas chaves que fecham isso.
+</Warning>
+
+## Routing table, rule, chain, group
+
+Uma **routing table** é uma lista nomeada de **rules**, avaliadas de cima para baixo; a primeira que
+corresponder vence.
+
+O alvo de uma rule pode ser um worker, outra **table** — o que constitui uma *chain*, e é como
+`[default]` envia mensagens de texto para `[MESSAGE]` — ou um **group**.
+
+Um **group** é um conjunto de vendors com uma política: `round-robin`, `weighted` ou `failover`. Ele
+pula membros que estão suspensos ou que não aceitam, o que é o failover que uma rule de alvo único não
+consegue fazer.
+
+Uma **LCR table** é marcada como `->function(LCR)` e inverte a regra usual: toda rule que casar é um
+candidato, e o vendor mais barato vence. A ordem das rules é irrelevante nesse caso.
+
+## Filter
+
+Um conjunto nomeado e reutilizável de condições, compartilhado por roteamento e rating para que o mesmo
+predicado não seja escrito duas vezes.
+
+<Warning>
+**Um filter ausente ou desabilitado pula toda rule que o referencie.** Ele não carrega a rule com
+menos condições. Remover uma condição faz uma rule casar *mais*, então falhar dessa forma silenciosamente
+rotearia ou precificaria as coisas erradas.
+</Warning>
+
+## Scope e tariff
+
+Um **scope** é o lado esquerdo de uma rate rule, e qual lado da troca ele é depende inteiramente
+do que ele nomeia:
+
+| Scope nomeia | Ele é |
+| :--- | :--- |
+| Um vendor | **Cost** — o que você paga |
+| Uma account | **Price** — o que você cobra |
+| `[*]` | O padrão do lado de venda para qualquer account sem regras próprias |
+
+Nada no schema os distingue. O gateway os diferencia por qual lookup pergunta, e é por isso que o
+painel os agrupa como **What we pay** e **What we charge** em vez de uma única lista.
+
+Uma **tariff** é o conjunto de price rules para uma account.
+
+## Message, segment, part
+
+Uma **message** é o que um cliente submete. Se mais longa do que um SMS, ela sai como vários **segments**,
+e `smsg.restapi.billing.units` decide se isso é cobrado uma vez ou por segmento.
+
+<Note>
+Qualquer que seja a unidade de faturamento, uma mensagem deixa **exatamente uma** linha `part_no = 1`
+em `cdr_submit`. Retentativas não adicionam linhas. Esse invariante é o que faz contar mensagens e
+somar dinheiro serem a mesma pergunta.
+</Note>
+
+## Prepaid e postpaid
+
+| Modo | A account mantém | Recusa quando |
+| :--- | :--- | :--- |
+| **Prepaid** | Um saldo, debitado à medida que envia | O saldo acaba |
+| **Postpaid** | Um limite de crédito, faturado a posteriori | O uso não faturado atinge o limite |
+
+Ambos recusam **identicamente** — `0x402` sobre SMPP, `402` com `insufficientCredit` sobre HTTP — para
+que a integração de um cliente nunca precise saber em qual dos dois ele está.
+
+<Warning>
+Em uma conta postpaid, `credit_limit = 0` significa **sem crédito**, não ilimitado. Não há
+representação de ilimitado em lugar nenhum do sistema, deliberadamente: um erro de digitação deve
+falhar de forma fechada.
+</Warning>
+
+## Refusal
+
+O FireFlo recusa em vez de adivinhar em mais lugares do que a maioria dos gateways: uma mensagem de
+entrada sem mapeamento, uma rule cujo filter está ausente, uma importação que deixaria sem credencial
+utilizável, um purge sobre um dia sem rollup.
+
+Onde uma página aqui diz que algo é recusado, esse é o comportamento documentado e geralmente existe
+porque a alternativa perderia silenciosamente uma mensagem ou algum dinheiro. Não é uma limitação
+esperando para ser removida.

@@ -1,0 +1,155 @@
+---
+title: "Sender IDs"
+description: "Aprobar los sender IDs que una cuenta puede usar, qué estampa la aprobación en el cable, y por qué un sender ID aprobado aún puede ser rechazado por el operador."
+---
+
+Una fila en `app_header` es un sender ID aprobado, emparejado **sin distinción de mayúsculas**, con alcance a una
+cuenta y un producto. En varios mercados un sender ID comercial es un registro y no una
+cadena que un cliente escoge. El operador ha aprobado `ACMEIN` para una empresa y espera que el tráfico
+que lo lleva sea suyo.
+
+## Aprobado no es lo mismo que entregable
+
+Una aprobación hace dos trabajos, y fallan de forma independiente. Decide si el mensaje **coincide**
+en este gateway, y lleva los TLVs que se **estampan** en el mensaje al salir. Bajo
+DLT, el identificador de entidad que exige el operador.
+
+<Warning>
+**Nada aprobado significa nada estampado, así que un carril DLT rechaza todo.** Sin fila que coincida
+no hay estampado, el `submit_sm` llega al proveedor sin llevar entidad ni id de plantilla, y el
+proveedor lo rechaza. Con un estado SMPP en el bloque 192–196, que siempre trata de TLVs.
+
+`tlvCount=0` en las líneas de traza lo confirma. Esta es la causa más común de un carril que rechaza cada
+mensaje mientras la propia configuración de la cuenta parece correcta, porque en este gateway *es* correcta:
+el rechazo es del operador.
+</Warning>
+
+El **informe de cobertura de TLV** del panel existe precisamente para esto. Por fila aprobada, nombra qué
+tags obligatorios nada suministrará, y por qué:
+
+| Razón | Qué significa |
+| :--- | :--- |
+| `nothingSupplies` | Ni la fila ni ningún login del alcance lleva el tag. |
+| `someLogins` | Algunos logins lo llevan y otros no, por lo que falla intermitentemente. |
+| `notStamped` | La fila lo lleva, pero el `whitelist.tlvs.mode` de ese listener es `off`. |
+| `notChecked` | La fila lo lleva, pero esta lista no se comprueba, así que nada se empareja ni se estampa. |
+| `unparseable` | Un token sin tag. `PEID=…` no tiene guion bajo, así que no estampa nada. |
+| `emptyValue` | El tag se nombra sin valor, y un valor vacío no estampa nada. |
+| `vendorDrops` | Algo lo suministra, y el proveedor al que se enruta no lo registra. |
+
+<Note>
+Es un **informe, nunca una barrera**. Un login no está atado a un listener y las reglas de ruta eligen el
+proveedor, así que nada aquí puede estar seguro de que un mensaje dado llegue a un listener dado. Rechazar un guardado por ello
+bloquearía configuraciones que funcionan. Y cada frase que produce dice que un cliente que envíe el
+propio tag hace la pregunta irrelevante.
+</Note>
+
+`vendorDrops` merece leerse dos veces: un tag que el proveedor no ha registrado se descarta en la
+salida, *después* de que el registro de llamada ya lo haya anotado como presente. El registro muestra que se envió y
+el cable no lo lleva. Consulta [TLVs en una conexión](/platform/connections/tlvs).
+
+## Alcance: cuenta, producto y opcionalmente un login
+
+Una fila es por `(cuenta, producto)`, con un producto vacío que significa cada producto. Una lista específica de
+producto se combina **sobre** la lista de cualquier-producto de la cuenta. Las dos se unen, no se elige entre ellas.
+
+`system_id` afina más. **NULL significa cada login de la cuenta**, que es lo que significaba cada fila
+antes de que existiera la columna, así que un despliegue sin tocar coincide exactamente como lo hacía y no se
+necesitó ningún backfill. Dos logins de la misma cuenta pueden mantener el mismo sender ID.
+
+<Warning>
+**Un login sin filas propias y sin filas a nivel de cuenta no puede enviar nada una vez activado el enforcement.**
+Vincular una aprobación a un login no se limita a añadir especificidad. Elimina esa fila de cada
+otro login de la cuenta.
+
+La página de cuenta avisa cuando las aprobaciones de una cuenta están todas vinculadas a login y algún login queda
+sin ninguna. El tráfico cuyo login es desconocido obtiene las filas de alcance-cuenta y nada más, lo cual es fail-closed
+a propósito: un llamador que no pasó un login no debe recibir aprobaciones dadas a alguien específico.
+</Warning>
+
+## Quién propone y quién aprueba
+
+<Steps>
+<Step title="El cliente pide">
+Desde el portal. Todo lo que un cliente escribe llega como `PENDING`, con su propia nota adjunta. Bajo
+DLT, su referencia de registro. El gateway sirve una fila solo cuando está `enabled` **y**
+`APPROVED`, así que una solicitud se almacena, es visible para ambas partes, y es inerte.
+</Step>
+<Step title="Un operador decide">
+Aprobar o rechazar, en la página de la cuenta o en la lista entre cuentas. Un rechazo mantiene la fila y
+lleva una razón que se muestra al cliente. Por eso no hay rechazo en bloque, solo aprobación en bloque.
+</Step>
+<Step title="Entra en servicio en el siguiente sondeo">
+Sin reconectar. Ver abajo.
+</Step>
+</Steps>
+
+`status` y `enabled` son columnas separadas que hacen trabajos separados. Aprobar escribe `status` y registra
+al revisor. Desmarcar escribe `enabled = false` y deja `status` en paz: **retirar algo no es
+des-aprobarlo**, y una fila retirada vuelta al servicio no debería necesitar aprobarse de nuevo.
+
+<Warning>
+**Editar un registro aprobado lo suspende.** Cambiar el sender ID, la nota de solicitud o el
+login vuelve a poner la fila en `PENDING` y borra la revisión anterior, así que el registro queda fuera de
+servicio hasta que alguien lo aprueba de nuevo.
+
+Ese es el objetivo y no un efecto secundario. Un cliente no debe poder cambiar lo aprobado
+y seguir enviando bajo la aprobación. Y tiene un filo cortante: un typo detiene su tráfico. Los formularios
+piden confirmación antes del guardado.
+</Warning>
+
+## Los TLVs que un cliente puede proponer pero no establecer
+
+Ambas tablas de registro llevan dos columnas TLV.
+
+| Columna | Leída por el gateway |
+| :--- | :--- |
+| `tlvs` | Sí. Esto es lo que se estampa en el cable. |
+| `requested_tlvs` | **No.** El portal la escribe; el loader selecciona `tlvs`. |
+
+Bajo `replace` la estampa sobrescribe lo que el cliente afirmara, y **esa sobrescritura es la
+aprobación**. Un cliente que pudiera escribir la columna servida podría afirmar el registro de otro
+mientras envía la redacción aprobada, y el registro de llamada informaría entonces el valor que él eligió como
+aprobado. Ese comportamiento está fijado por un test, así que no derivará.
+
+La recompensa es para el cliente: una propuesta no cambia nada de lo que se sirve, así que a diferencia de una edición del
+sender ID **no** suspende la fila. Un registro aprobado sigue funcionando mientras un operador
+considera la propuesta. Aceptar mueve el valor y estampa al operador como su dueño;
+descartar borra la solicitud y deja `tlvs` exactamente como estaba. Ninguna toca `status`.
+
+## Lo que el panel se niega a guardar
+
+| Regla | Por qué |
+| :--- | :--- |
+| No vacío | No hay nada que aprobar. |
+| Máximo 64 caracteres | El campo no tenía ningún tope, y un sender ID de varios megabytes llegaría a la cola de revisión y sería leído por el loader de whitelist en cada sondeo de configuración. |
+| Sin espacio en ningún extremo | Se compara exactamente, y un espacio final es invisible en todas partes donde se muestra. |
+| Solo ASCII imprimible | La comparación no distingue mayúsculas, y plegar el caso de otros alfabetos depende de la locale del servidor. La misma fila coincidiría en un despliegue y no en otro. |
+
+<Note>
+64 es generoso más que correcto. SMPP limita `source_addr` a 21 octetos, así que nada más allá puede
+entregarse sobre un bind. Pero rechazar en 21 aquí también rechazaría ediciones a filas que ya existen,
+y "no puedes entregar esto" es una decisión distinta de "no puedes guardar esto".
+</Note>
+
+## Aprobar no requiere reconectar
+
+El whitelist se relee en el sondeo de configuración y cada snapshot lleva una generación. **Una
+sesión SMPP conectada durante semanas recoge un sender ID recién aprobado sin reconectar**. Lo cual importa,
+porque el cliente cuyo tráfico se está rechazando suele estar al teléfono mientras alguien lo aprueba.
+
+```bash
+fireflo reload
+```
+
+lo aplica ahora en lugar de en el próximo sondeo. Requiere el token admin. Consulta
+[El CLI de fireflo](/reference/cli/fireflo).
+
+<CardGroup cols={2}>
+<Card title="Plantillas de contenido" href="/platform/customers/templates">
+La otra mitad de la misma aprobación, y la gramática de placeholders.
+</Card>
+<Card title="Desplegar el whitelisting" href="/platform/customers/whitelisting-rollout">
+Informe antes de aplicar, y los diagnósticos en `/ops/health`.
+</Card>
+</CardGroup>

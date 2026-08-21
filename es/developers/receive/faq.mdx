@@ -1,0 +1,93 @@
+---
+title: "FAQ de recepción"
+description: "Orden, duplicados, acuses ausentes y los estados que parecen fallos pero no lo son."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un acuse nunca llegó. ¿Por dónde empiezo?">
+En este orden, porque cada uno descarta más que el siguiente:
+
+1. **¿Lo pidió?** `dlr: "yes"` *y* `dlr_url`. Cualquiera por sí solo no hace nada.
+2. **¿Es alcanzable su endpoint desde el host de la pasarela**, no desde su portátil?
+3. **¿Devuelve 200–399?** Un `401` detrás de un proxy autenticador es el fallo silencioso más
+   común, y un `302` a una página de login *cuenta como éxito* y se traga el acuse.
+4. **¿Se le pide al vendor que produzca acuses siquiera?** Si su proveedor tiene `request.dlrs`
+   desactivado para ese vendor, nada reporta jamás un resultado y cada mensaje se estabiliza como
+   `EXPIRED`.
+</Accordion>
+
+<Accordion title="¿Puedo recibir el mismo acuse dos veces?">
+Sí. La entrega es al-menos-una-vez con 10 reintentos. Si su endpoint es lento, agota el timeout o
+devuelve un `5xx` tras hacer el trabajo, se le llamará de nuevo.
+
+**Haga su manejador idempotente sobre `id` más `level`.** No sobre `id` solo: un mensaje puede
+producir legítimamente un acuse de nivel 1 y luego uno de nivel 2, y deduplicar por `id`
+descartaría el resultado.
+</Accordion>
+
+<Accordion title="¿Están ordenados los acuses?">
+No. Un acuse de nivel 1 y uno de nivel 2 del mismo mensaje pueden llegar fuera de orden bajo
+reintento, y los acuses de mensajes distintos no tienen orden entre sí.
+
+Guarde el estado que recibe y deje que un nivel 2 gane sobre un nivel 1 independientemente del
+orden de llegada.
+</Accordion>
+
+<Accordion title="¿Qué significa ACCEPTD? Suena final.">
+No lo es. `ACCEPTD` y `BUFFRED` son **nivel 1**: progreso, con otro acuse que sigue.
+
+Este ha mordido a integraciones reales: `level` solía leer siempre `2`, así que un `ACCEPTD` de un
+vendor se etiquetaba como resultado y los receptores cerraban sus registros con él. Si su
+integración es anterior a esa corrección, ramifique sobre `level`. O simplemente pida
+`dlr_level: 2`, el valor por defecto, que envía solo resultados.
+</Accordion>
+
+<Accordion title="¿Por qué recibí EXPIRED en lugar de un fallo?">
+El mensaje alcanzó su fecha límite de validez sin que se reportara resultado. Normalmente un
+terminal que estuvo apagado o sin cobertura durante todo el período.
+
+Pero **si cada mensaje en una ruta se estabiliza como `EXPIRED`, no son los terminales**: significa
+que nada está reportando resultados en absoluto, y su tasa de entrega no tiene significado, más
+que cero.
+</Accordion>
+
+<Accordion title="¿Por qué tres acuses por un mensaje?">
+Envió tres `submit_sm`. Un mensaje largo se parte en segmentos y, por defecto, cada uno obtiene su
+propio acuse citando el id que se le dio.
+
+Su proveedor puede colapsar esto a uno. **Todos los acuses reportan el mismo resultado** de
+cualquiera de las dos formas, porque los segmentos se agregan antes de construir cualquier acuse.
+</Accordion>
+
+<Accordion title="Un mensaje largo dice FAILED pero el destinatario recibió la mayoría">
+La resolución espera al último segmento y reporta el resultado del **peor**, no el primero ni la
+mayoría. Un mensaje que el destinatario no pudo leer entero no es una entrega.
+
+Es deliberado y hace que las tasas de entrega de FireFlo parezcan más bajas que las de pasarelas
+que reportan el primer segmento. Merece la pena saberlo antes de comparar dos proveedores por esa
+cifra.
+</Accordion>
+
+<Accordion title="¿Por qué no hay código de error en un acuse fallido?">
+Porque no hay ninguno que dar. Jasmin envía un campo `err`; el resolver de FireFlo solo recibe el
+estado de entrega y nunca un código de error, así que emitir uno significaría inventarlo.
+
+`stat` distingue `UNDELIV`, `REJECTD` y `EXPIRED`, que es la información que realmente existe.
+</Accordion>
+
+<Accordion title="¿Se registra un acuse aunque no se me envíe?">
+Sí. **Suprimir un acuse es una decisión sobre qué decirle, nunca sobre qué registrar.** Los
+resultados caen en el call record y los acuses de progreso a su lado, y su proveedor puede ver
+ambos en la página de detalle del mensaje junto con lo que usted pidió.
+
+Así que "nunca recibí un acuse" siempre tiene respuesta, incluso cuando no se reenvió ningún
+acuse.
+</Accordion>
+
+<Accordion title="¿Puedo ver acuses sin ejecutar un endpoint?">
+Sí. El portal del cliente muestra sus mensajes con su estado final y le permite exportarlos. Un
+endpoint es cómo reacciona en tiempo real; el portal es cómo comprueba después.
+</Accordion>
+
+</AccordionGroup>

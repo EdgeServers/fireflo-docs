@@ -1,0 +1,170 @@
+---
+title: "Écrire des règles"
+description: "La grammaire de règle en quatre parties, les trois erreurs d'opérateur qui parsent proprement et ne correspondent à rien, et comment une règle cible un groupe de fournisseurs plutôt qu'un seul."
+---
+
+## Trois façons d'écrire une règle qui ne peut jamais être vraie
+
+Chacune de celles-ci se charge sans se plaindre, ne correspond à rien, et coûte un après-midi.
+
+<Warning>
+**`==` est un opérateur numérique.** `vendor1:from:==:MyBrand` n'échoue pas silencieusement à
+correspondre : il échoue à *parser*, ce qui fait échouer tout le rechargement et laisse la table
+précédente en service. Utilisez `equals` pour du texte.
+
+```
+vendor1:from:equals:MyBrand      correct
+vendor1:from:==:MyBrand          échec de parsing
+```
+</Warning>
+
+<Warning>
+**`matches` est une expression régulière et elle est ancrée**, parce que la passerelle appelle
+`Pattern.matches` plutôt que `find`. `^61.*` correspond à toute une destination ; un simple `61` ne
+correspond qu'à la chaîne de deux caractères `61`.
+
+**`startsWith` compare du texte littéral.** Une expression régulière qu'on lui passe demande si une
+destination commence littéralement par les caractères `^(?:\+61` — rien n'y correspond, donc la règle
+est stockée, chargée, affichée, et ne se déclenche jamais. Le panneau de contrôle avertit à ce sujet ;
+un fichier édité à la main non.
+</Warning>
+
+<Warning>
+**Un champ non défini ne correspond à aucun opérateur positif.** `product:equals:premium` ne correspond
+pas à un message ne portant aucun produit, et `product:startsWith:prem` non plus. Seul `isNull` le
+fait.
+
+L'inverse piège dans l'autre sens : `product:!equals:premium` **se déclenche bien** pour un message
+sans produit, parce que la négation inverse la correspondance échouée.
+</Warning>
+
+## La grammaire
+
+```
+Target:Attribute:Operator:Value
+```
+
+Les règles sont évaluées de haut en bas au sein d'une table, et la première correspondance l'emporte.
+`Target` est une instance de worker (`vendor1`, `smppserver.smpp`), un **groupe**, ou une autre table
+sur laquelle enchaîner (`MESSAGE`).
+
+<Tabs>
+  <Tab title="Panneau de contrôle">
+    **Routing** liste chaque table avec ses règles dans l'ordre. L'éditeur valide l'opérateur par
+    rapport au champ avant l'enregistrement, refuse un opérateur numérique sur un champ texte, et
+    avertit à propos d'une expression régulière écrite dans un opérateur littéral.
+  </Tab>
+  <Tab title="routingTable.conf">
+```ini
+[MESSAGE]
+vendor2:to:startsWith:614          # mobile AU
+vendor2:from:equals:MyBrand        # un seul ID d'expéditeur
+vendor3:systemId:equals:acme-smpp  # un seul client bindé
+vendor1::default:                  # l'attrape-tout, EN DERNIER
+```
+  </Tab>
+</Tabs>
+
+<Warning>
+**L'attrape-tout se met à la fin.** Au-dessus des autres règles, il rend toutes les règles qui le
+suivent inaccessibles, et rien ne vous avertit dans le fichier — elles parsent bien, elles ne
+s'exécutent tout simplement jamais. Le panneau le signale ; la passerelle l'enregistre comme
+`unreachable-rules` sur `/ops/health` et continue.
+</Warning>
+
+## Opérateurs
+
+Tout opérateur peut être nié avec un `!` en tête.
+
+| Type | Opérateurs |
+| :--- | :--- |
+| Toujours vrai | `default` — attribut et valeur laissés vides |
+| Texte | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
+| Booléen | `isTrue`, `isFalse` |
+| Numérique | `==`, `>`, `>=`, `<`, `<=` |
+
+Les quatre comparaisons texte sont lexicographiques, pas numériques : `greaterThan` sur un numéro de
+téléphone compare des chaînes.
+
+## Qui l'a envoyé
+
+| Attribut | Source |
+| :--- | :--- |
+| `owner_id` | Le `accountId` du credential, retombant sur son `systemId`. Sur l'API HTTP, un paramètre `account` explicite le surcharge. |
+| `systemId` | Le `systemId` du credential — le client bindé spécifique, quand plusieurs partagent un compte. |
+| `product` | Le `system_type` sur le bind SMPP du client, retombant sur le `product` du credential. Les appelants HTTP n'ont pas de bind, ils utilisent donc toujours la valeur du credential. |
+
+`product` est la façon dont un client sélectionne le routage par session : le même credential se
+bindant avec `system_type=premium` et `system_type=bulk` produit deux sessions qui routent
+différemment. Voir [Concepts](/platform/concepts).
+
+Types de message pour les règles `type` : `0` texte, `10` binaire, `11` UCS-2, `14` flash, `17` push,
+`18` accusé de livraison.
+
+## Conditions sur la cible, pas sur le message
+
+Préfixer un champ avec `target.` lit un champ du worker de destination à la place, ce qui permet à une
+règle de contourner un fournisseur qui prend du retard :
+
+```
+vendor2:target.queueSize:>i:5000
+```
+
+Il y en a exactement quatre — `queueSize`, `sentPendingRate`, `sentDeliveredRate`, `sentFailRate` —
+appariés sans tenir compte de la casse, et un champ non reconnu est refusé au parsing avec les quatre
+listés.
+
+<Note>
+`marginPercentage` et `marginStatus` sont des champs de **message**, donc retirez le préfixe `target.`
+et ils se résolvent. Attention à ce qu'ils contiennent : les deux sont définis sur la réponse de
+soumission, après que le message est parti, donc une condition de routage sur l'un ou l'autre lit
+`NOT_CALCULATED` à chaque première tentative.
+</Note>
+
+## Copier et continuer
+
+Un `+` sur la cible copie le message vers cette cible et **continue à parcourir**, au lieu de router et
+d'arrêter. Dans la base de données, c'est la colonne `copied`.
+
+## Groupes de fournisseurs
+
+Une règle peut cibler un groupe au lieu d'un seul fournisseur. Le groupe choisit un membre, **en
+sautant tout membre suspendu ou n'acceptant pas** — ce saut est le failover qu'une règle à cible unique
+ne peut pas faire.
+
+```ini
+[group:asia->policy(weighted)]
+vendor1 = 70
+vendor2 = 30
+
+[group:primary-then-backup->policy(failover)]
+vendor1
+vendor2
+```
+
+| Politique | Choisit |
+| :--- | :--- |
+| `round-robin` *(défaut)* | Le membre suivant à tour de rôle |
+| `weighted` | En proportion des poids, de façon déterministe — 70/30 est exactement 70/30 sur cent messages, entrelacés plutôt que par blocs |
+| `failover` | Toujours le premier membre qui est en service, dans l'ordre déclaré |
+
+<Warning>
+**Les blocs de groupe doivent venir avant le premier en-tête `[table]`.** À l'intérieur d'un bloc de
+table, une ligne de membre ne correspond à rien et est jetée silencieusement, si bien que le groupe se
+retrouve avec moins de membres qu'il ne semble avoir, ou aucun.
+
+Un poids n'est lu que par `weighted`. En définir un sur les deux autres ne change rien, et la
+passerelle le dit en WARN plutôt que de vous laisser croire qu'un partage se produit.
+</Warning>
+
+<Note>
+**Un message, un débit, une destination.** Un groupe sélectionne toujours exactement un membre, et
+`+copied` sur une règle de groupe copie encore vers un seul membre — un fanout serait N envois pour un
+seul débit.
+
+Si tous les membres sont hors service, la règle n'envoie rien, journalise `cause=group-all-dead` en
+nommant tous ceux qu'elle a essayés, et le parcours **continue vers la règle suivante**, ce qui
+maintient accessible une règle de repli écrite en dessous d'une règle de groupe.
+</Note>
+
+Référence complète de la grammaire : [routingTable.conf](/reference/files/routing-table).

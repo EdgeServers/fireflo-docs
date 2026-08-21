@@ -1,0 +1,115 @@
+---
+title: "Premières vérifications"
+description: "Les quatre questions qui séparent un problème de routage des trois choses qui ne sont pas du routage, posées dans l'ordre qui écarte le plus vite le plus de causes."
+---
+
+La plupart des incidents FireFlo se présentent de la même façon : **les messages ont été acceptés et
+rien n'est arrivé**. Ce symptôme a au moins six causes distinctes, et une seule d'entre elles est le
+routage.
+
+Descendez cette page dans l'ordre. Chaque étape écarte plus qu'elle ne coûte.
+
+## 1. Demandez à la base de données, pas au log
+
+Trois des quatre causes probables ne sont pas du tout du routage, et la base de données dit laquelle
+en une requête.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+| `reason` | Signification | Où aller |
+| :--- | :--- | :--- |
+| `maxAttempts` | **La seule valeur qui signifie routage.** | [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered) |
+| `headerNotApproved` | L'ID d'expéditeur n'a pas été approuvé | [Refus](/platform/troubleshooting/refusals) |
+| `templateNotMatched` | Le corps ne correspondait à aucun template approuvé | [Refus](/platform/troubleshooting/refusals) |
+| `missingMandatoryTlv` | Un tag requis s'est résolu en rien | [TLV en pratique](/platform/connections/tlvs) |
+| `insufficientCredit` | Le solde prépayé ne le couvrait pas | [Crédit prépayé](/platform/billing/prepaid-credit) |
+| `filtered` | Un filtre l'a refusé | [Refus](/platform/troubleshooting/refusals) |
+
+<Warning>
+**Aucune édition de la table de routage ne changera une ligne qui n'est pas `maxAttempts`.** Ces
+messages ont été refusés *avant* que le routage ne soit atteint. C'est l'après-midi gaspillé le plus
+courant en exploitation FireFlo.
+</Warning>
+
+## 2. Un fournisseur est-il seulement bindé ?
+
+Un attrape-tout parfait pointant sur un fournisseur qui n'est pas connecté ne livre rien, et
+ressemble à un bug de routage sous tous les angles.
+
+```bash
+fireflo verify
+```
+
+Il répond en mots — *« N vendor(s) configured, none bound — nothing can be sent yet. »*
+
+## 3. Le client en a-t-il jamais été informé ?
+
+**Non.** Cela vaut la peine d'être intériorisé, car cela façonne chaque conversation avec un client.
+
+La réponse de soumission est envoyée **avant que le routage ne s'exécute**. Un échec de routage ne
+peut donc jamais faire surface comme une erreur sur le `submit_sm` du client ou son appel HTTP — il ne
+peut apparaître que plus tard, en tant qu'accusé de livraison et ligne `cdr_rejected`.
+
+<Tip>
+« Mon envoi a renvoyé succès » et « mon message a été livré » sont deux affirmations sans aucun lien
+sur toute passerelle SMPP, FireFlo compris. Un `200` signifie *accepté pour routage*.
+</Tip>
+
+## 4. Le log est-il silencieux parce que c'est corrigé, ou parce qu'il l'a déjà dit ?
+
+`routing.rule.broken` est journalisé **une fois par règle, pas une fois par message** —
+délibérément, car sans garde, ce serait une ligne par message par tentative sur exactement le trafic
+qui va déjà mal.
+
+La conséquence est un piège : **un log silencieux n'est pas la preuve que le problème est parti.** Le
+compteur ne se remet à zéro que lorsqu'une nouvelle table de routage est publiée.
+
+Donc après avoir corrigé une règle, guettez que la ligne **réapparaisse**, pas qu'elle reste absente.
+La forme fiable de la même question est le nombre :
+
+```bash
+fireflo health | grep routing_rules_broken
+```
+
+## Que capturer avant de changer quoi que ce soit
+
+Si vous allez demander de l'aide, ou si vous vous attendez à expliquer ceci plus tard, prenez ces
+quatre éléments maintenant — ils sont tous peu coûteux et trois d'entre eux sont détruits par un
+redémarrage :
+
+<Steps>
+  <Step title="La ventilation des refus">
+    La requête `cdr_rejected` ci-dessus, avec ses compteurs.
+  </Step>
+  <Step title="/ops/health, complet">
+    `last_error`, `last_submit_error`, `routing_failed_queue` et `routing_retry_queue` en un seul
+    instantané.
+  </Step>
+  <Step title="Les lignes WARN et ERROR">
+    Pas tout le log — `routing.rule.broken`, `message.dropped`, `listener.bind.failed`,
+    `message.submit.response`.
+  </Step>
+  <Step title="Un numéro de série d'un message qui a échoué">
+    Tout ce qui est en aval est plus facile quand on peut tracer un vrai message plutôt qu'une classe
+    de messages.
+  </Step>
+</Steps>
+
+<Warning>
+**Rédactez avant de partager.** Identifiants, system IDs, adresses IP, numéros de téléphone et contenu
+de message apparaissent tous dans ces sorties. `fireflo` rédacte ce qu'il peut, mais une ligne de log
+copiée à la main est sous votre responsabilité.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Rien n'est livré" icon="magnifying-glass" href="/platform/troubleshooting/nothing-is-delivered">
+    Quand c'est vraiment le routage.
+  </Card>
+  <Card title="Refus" icon="ban" href="/platform/troubleshooting/refusals">
+    Chaque raison `cdr_rejected`, et ce qui la corrige.
+  </Card>
+</CardGroup>

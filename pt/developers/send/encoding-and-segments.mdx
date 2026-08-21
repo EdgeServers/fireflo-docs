@@ -1,0 +1,112 @@
+---
+title: "Codificação e segmentos"
+description: "Por que a mesma mensagem custa uma em uma conta e três em outra. Os tamanhos exatos de segmento e o caractere que silenciosamente dobra a sua conta."
+---
+
+**Você é cobrado por segmento, não por mensagem.** Uma mensagem longa são vários segmentos, e a
+codificação que ela usa decide quantos.
+
+## Os números
+
+Tirados das constantes do próprio gateway, não da especificação em geral:
+
+| Codificação | `coding` | Uma mensagem | Cada segmento de uma mensagem longa |
+| :--- | ---: | ---: | ---: |
+| **GSM-7** | `0` | 160 caracteres | 153 caracteres |
+| **UCS-2** | `8` | 70 caracteres | 67 caracteres |
+
+<Tip>
+O cabeçalho de concatenação custa a diferença: 7 caracteres em GSM-7, 3 em UCS-2, em cada segmento.
+Por isso 160 vira 153, em vez de continuar 160.
+
+Internamente, esses são limites em bytes: 140 bytes em uma mensagem única, 134 bytes por segmento.
+GSM-7 empacota sete bits por caractere; UCS-2 usa dois bytes cada.
+</Tip>
+
+Uma mensagem pode ter no máximo **255 segmentos**.
+
+## O caractere que dobra a sua conta
+
+**Um caractere fora do GSM-7 força a mensagem inteira para UCS-2**, e a capacidade cai de 160 para
+70. Uma mensagem de 150 caracteres que custava um segmento passa a custar três.
+
+Os culpados habituais, todos invisíveis quando você olha o texto:
+
+| Parece | Na verdade é |
+| :--- | :--- |
+| `'` | Um apóstrofo tipográfico `’` inserido por um editor de texto |
+| `-` | Um en dash `–` |
+| `...` | Um caractere de reticências `…` |
+| um espaço | Um espaço não separável |
+| `é`, `ü` | OK em GSM-7. Estes **não** são o problema |
+
+<Warning>
+**Aspas inteligentes são a causa mais comum de uma triplicação inexplicada de custo.** Texto colado
+de um documento, de um CMS ou de um cliente de chat rotineiramente carrega `’` no lugar de `'`, e
+nada no caminho de envio sinaliza. A mensagem sai correta, só que três vezes mais cara.
+
+Normalize a pontuação antes de enviar se seu conteúdo vem de qualquer lugar em que um humano digitou.
+</Warning>
+
+## Confira o preço antes de enviar
+
+`/secure/rate` retorna a contagem de segmentos sem enviar nada:
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+`submit_sm_count` é a contagem de segmentos. Não custa nada, não envia nada e não conta em nenhum
+rate limit, então é razoável chamar em conteúdo gerado por usuários antes de comprometer um envio.
+
+## Definindo a codificação você mesmo
+
+`coding` mapeia para o SMPP `data_coding` e é **passado à operadora sem alteração**, então ele
+escolhe como o corpo é codificado, não meramente como é contado.
+
+| `coding` | Alfabeto |
+| ---: | :--- |
+| `0` | Padrão do SMSC |
+| `1` | ASCII |
+| `2` | Octet, não especificado |
+| `3` | Latin-1 |
+| `4` | Octet |
+| `6` | Cirílico |
+| `7` | Hebraico |
+| `8` | UCS-2 |
+
+Qualquer outro valor em 0–14 é aceito e decodificado como UTF-8. **15 ou acima é `400`.**
+
+## O que um cliente vê quando dá errado
+
+Uma mensagem dividida em segmentos chega como uma única mensagem em um aparelho moderno, porque o
+cabeçalho de concatenação diz como remontá-la. Dois modos de falha valem conhecer:
+
+- **Segmentos chegando fora de ordem ou incompletos** aparecem como mensagens separadas, muitas
+  vezes com fragmentos visíveis do cabeçalho. Isso é um problema da operadora, não de codificação.
+- **Uma mensagem longa parcialmente entregue é reportada como FAILED**, não parcialmente entregue.
+  A resolução espera pelo último segmento e reporta o pior desfecho. É a resposta honesta, e ela
+  empurra as taxas de entrega para baixo em relação a gateways que reportam o primeiro segmento.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Concatenação" icon="link" href="/platform/connections/concatenation">
+    Como segmentos são remontados, e o que isso custa.
+  </Card>
+  <Card title="Tarifar uma mensagem" icon="calculator" href="/reference/api/rate">
+    Todos os campos de `/secure/rate`.
+  </Card>
+</CardGroup>

@@ -1,0 +1,111 @@
+---
+title: "Enviar mensajes"
+description: "submit_sm sobre un bind establecido: los campos que importan, cómo se corresponde registered_delivery con los niveles de acuse, y qué le ocurre a una etiqueta que no declaró."
+---
+
+Una vez enlazado, envía `submit_sm`. La respuesta trae un id de mensaje y, como sobre REST, **esa
+respuesta significa aceptado, no entregado**.
+
+## Los campos que deciden un resultado
+
+| Campo | Notas |
+| :--- | :--- |
+| `source_addr` | Su sender ID. La aprobación aplica aquí exactamente igual que sobre `from` en REST. |
+| `destination_addr` | Formato internacional. |
+| `data_coding` | `0` GSM-7, `8` UCS-2. Decide su número de segmentos y por tanto su coste. |
+| `registered_delivery` | Qué acuses quiere. Véase abajo. |
+| `esm_class` | Modo de mensaje e indicación UDH. Bits incorrectos aquí son un `ESME_RINVESMCLASS` común. |
+| TLVs opcionales | Solo se extraen si el listener declara la etiqueta. |
+
+## `registered_delivery` se corresponde con los niveles de acuse
+
+FireFlo respeta el octeto en lugar de tratarlo como un booleano:
+
+| Bits | Significado |
+| :--- | :--- |
+| 1–0 | ninguno / todos / solo fallos / solo éxitos |
+| bit 4 (`0x10`) | Añade la notificación intermedia |
+
+**`0x11` es la ortografía SMPP de `dlr_level: 3`**: progreso y resultado. `0x01` le da solo
+resultados, que es lo que quieren la mayoría de las integraciones.
+
+<Warning>
+Una notificación intermedia **no** es el resultado. `ACCEPTD` y `BUFFRED` llegan como nivel 1 con
+otro acuse por seguir, así que pedir `0x11` y cerrar su registro en el primer acuse reporta el
+estado equivocado permanentemente.
+</Warning>
+
+## Mensajes largos
+
+Dos maneras, y cuestan lo mismo:
+
+- **Partirlos usted mismo**, fijando la UDH y los bits de concatenación en `esm_class`. Envía N
+  `submit_sm` y obtiene N ids.
+- **Enviar un cuerpo largo** y dejar que la pasarela lo parta.
+
+Los tamaños de segmento son los mismos que en todas partes: **160 GSM-7** o **70 UCS-2** para un
+mensaje único, **153** o **67** por segmento una vez partido. Un mensaje puede tener como máximo
+255 segmentos.
+
+<Tip>
+Si los parte usted mismo, las partes deben llegar a la pasarela juntas en el tiempo. Se retienen
+para reensamblado y un conjunto que nunca se completa acaba descartándose. No intercale un
+goteo lento de segmentos de un mensaje a lo largo de minutos.
+</Tip>
+
+## TLVs
+
+Un parámetro opcional se extrae **solo si el listener declara la etiqueta** en
+`registered.tlvs.submit`. **Las etiquetas no declaradas se descartan, no se pasan a través**.
+Silenciosamente, en el ingress, antes de que se ejecute cualquier otra cosa.
+
+Así que si una etiqueta que envía nunca llega al operador, la primera pregunta es si su
+proveedor la ha declarado, no si usted la envió correctamente.
+
+De dónde acaba viniendo un valor, en orden de precedencia: su `submit_sm` gana sobre los
+valores por defecto de su credencial, que ganan sobre los del vendor. La excepción es un stamp
+de whitelist en modo `replace`, que está diseñado para ganar. Esa sobrescritura *es* la
+aprobación.
+
+## Aprobación de contenido en un mensaje largo
+
+<Warning>
+**Un mensaje concatenado se compara con las plantillas aprobadas solo tras el reensamblado**,
+porque en el momento del envío el cuerpo sigue siendo un fragmento.
+
+La consecuencia: cada segmento se reconoce, y *entonces* el mensaje puede descartarse y
+reembolsarse. No hay ningún error en ningún `submit_sm_resp` que pueda capturar. El acuse es la
+única señal.
+
+Es la forma normal para plantillas DLT en idiomas regionales, donde UCS-2 mete 67 caracteres en
+un segmento.
+</Warning>
+
+## Throughput
+
+Dos techos, y son cosas distintas:
+
+- **Tamaño de ventana** (`conf.maxPending.default`, 1000 por defecto): cuántos `submit_sm` puede
+  tener sin reconocer. Esperar cada respuesta antes de enviar el siguiente hace que el tiempo de
+  ida y vuelta sea su límite, sin importar nada más.
+- **El TPS de su cuenta**: superarlo se limita, no se descarta silenciosamente.
+
+## La depuración es un interruptor de su proveedor, no suyo
+
+El logging a nivel de PDU y de bytes está desactivado por defecto, deliberadamente: **las PDU de
+bind contienen contraseñas y las PDU `submit_sm` contienen números de teléfono y cuerpos de
+mensaje**.
+
+`log.pdus` existe pero es opt-in y temporal, y la salida es sensible. Si lo necesita, pídalo. Y
+espere que se vuelva a desactivar.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Códigos de estado" icon="hashtag" href="/reference/smpp/status-codes">
+    Qué significa cada `command_status` y si merece la pena reintentar.
+  </Card>
+  <Card title="Acuses y MO" icon="arrow-right-arrow-left" href="/developers/smpp/receipts-and-mo">
+    `deliver_sm` en sus dos roles.
+  </Card>
+</CardGroup>

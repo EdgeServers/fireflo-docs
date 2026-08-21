@@ -1,0 +1,90 @@
+---
+title: "Tarificación, CDRs y crédito"
+description: "Moneda y escala de dinero, dónde se escriben los registros de llamada, cuánto tiempo se espera un resultado y los interruptores de prepago y pospago."
+---
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.rates.currency` | `""` | Registrada en mensajes tarificados. FireFlo nunca convierte. |
+| `smsg.money.scale` | `4` | Lugares decimales con los que se publica un **total**. 0–4. |
+| `smsg.cdr.sink` | `auto` | `auto`, `postgres`, `file` o `none`. |
+| `smsg.cdr.directory` | `data/cdr` | Ubicación del sink de archivo. |
+| `smsg.cdr.deadline.hours` | `48` | Espera antes de registrar un resultado como `EXPIRED`. |
+| `smsg.cdr.body` | `off` | `off`, `excerpt` (160 caracteres) o `full`. Si el contenido del mensaje se registra en absoluto. |
+| `smsg.cdr.interim.retention.days` | `30` | Cuánto tiempo `cdr_interim` guarda acuses de progreso. |
+| `smsg.balance.enabled` | `false` | Aplica crédito prepago. Solo PostgreSQL. |
+| `smsg.balance.block.min.messages` | `20` | Cuántos mensajes debe cubrir una reserva de crédito. |
+| `smsg.balance.ledger.blocks` | `true` | Si la contabilidad `RESERVE`/`RELEASE` se escribe a `balance_ledger`. |
+| `smsg.balance.postpaid.enabled` | `false` | Aplica límites de crédito en cuentas marcadas `POSTPAID`. |
+| `smsg.billing.zone` | `UTC` | La zona horaria en la que empieza un **día de facturación**. Solo base de datos. Ver abajo. |
+
+## `smsg.money.scale` aplica a totales, no a tarifas
+
+Por encima de 4 se rechaza, porque los importes se guardan como diezmilésimas.
+
+Las **tarifas** por mensaje y las exportaciones CSV siempre mantienen cuatro lugares independientemente de este ajuste. `0.0450`
+mostrado como `0.05` es un 11% de desviación en cada mensaje. Bien para un saldo, ruinoso para una tarifa.
+
+## `smsg.cdr.deadline.hours` está limitado por la ventana de correlación
+
+Limitado por `smsg.dlr.correlation.days`, que son 70 horas en su predeterminado. Pasada la ventana de correlación un
+acuse ya no puede coincidir con su envío, así que esperar más solo retrasa la misma respuesta. Un
+deadline por encima del tope se sujeta y se registra. Consulta [Almacén de acuses de recibo](/reference/config/webhooks).
+
+## `smsg.balance.block.min.messages` es el suelo vinculante
+
+El crédito se reserva en **bloques** y se gasta desde un contador en memoria, así que no hay escritura a base de datos en
+la ruta del mensaje. Esta clave dice cuántos mensajes debe valer un bloque.
+
+Reemplazó a un suelo denominado en moneda como el vinculante, porque `smsg.balance.block.min` es un
+importe y un importe no puede decir cuántos mensajes compra. A cualquier precio realista el viejo predeterminado
+compraba uno o dos, lo que devolvía una cuenta ociosa a la base de datos en su segundo mensaje y la rechazaba
+mientras una recarga estaba en curso.
+
+<Note>
+Una cuenta enviando activamente por tanto retiene hasta `20 × price` en `reserved` que nada más puede
+gastar. Nada se pierde. `balance + reserved` se conserva. Y un apagado limpio lo devuelve. Un
+`kill -9` lo deja varado hasta que se ejecute [`fireflo credit release`](/reference/cli/fireflo).
+</Note>
+
+## `smsg.billing.zone` se lee solo de la base de datos
+
+La única clave aquí leída de `app_config` en lugar de `smsg.properties` o del entorno, y
+deliberadamente. El rollup nocturno rebana `usage_daily` según ella y el panel de control rebana la cola en vivo
+de `cdr_submit` según ella; si los dos discrepan, un trozo de un día se cuenta dos veces o nada. Una
+variable de entorno en el host de la pasarela es invisible al panel, así que no podría ser la fuente
+compartida.
+
+```sql
+INSERT INTO app_config (key, value) VALUES ('smsg.billing.zone', 'Asia/Kolkata')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+```
+
+`FIREFLO_BILLING_ZONE` aún se honra como fallback para despliegues que lo establecieron antes de que la clave
+existiera.
+
+## Qué contiene un registro de llamada
+
+Los CDRs llevan direcciones de destino y origen, porque la tarificación y resolución de disputas los necesitan, y
+nunca llevan credenciales.
+
+<Warning>
+**Contienen contenido del mensaje solo cuando lo activas.** `smsg.cdr.body` se distribuye como `off`. Activarlo
+significa que los cuerpos de mensajes se retienen durante la ventana de retención y son legibles por cualquiera con acceso al panel
+o acceso a la base de datos. Aplica la misma política que aplicas al log de acceso.
+</Warning>
+
+## Unidades de facturación de lote
+
+| Propiedad | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `smsg.restapi.billing.units` | `segment` | `message` o `segment`. Si un mensaje multipart se cobra una vez o por parte. |
+
+<Warning>
+Establecido a `message`, un cliente enviando mensajes de tres segmentos paga por uno y tú pagas a tu operador por
+tres. `segment` es el predeterminado por esa razón.
+</Warning>
+
+Consulta [Cómo funciona el precio](/platform/billing/how-pricing-works) para el modelo, y
+[Crédito prepago](/platform/billing/prepaid-credit) y [Pospago](/platform/billing/postpaid) para los
+dos modos de aplicación.

@@ -1,0 +1,74 @@
+---
+title: "fireflo-panel-install"
+description: "Les cinq verbes du panneau de contrôle, et pourquoi le mot de passe opérateur a le sien."
+---
+
+Installe et met à jour le **panneau de contrôle**, qui sert à la fois les écrans opérateurs et le
+portail client.
+
+<Note>
+Le panneau édite la configuration et lit les call records. Il n'est **pas sur la voie des
+messages** : un panneau down vous coûte la capacité de faire des changements, pas celle
+d'envoyer.
+
+**Installez-le après la passerelle.** La passerelle possède le schéma de base ; le panneau ne
+fait que lire et écrire des lignes.
+</Note>
+
+## Les cinq verbes
+
+| Verbe | Rôle | Ne touche jamais |
+| :--- | :--- | :--- |
+| `check` | Ce hôte est-il prêt. Ne change rien. | Tout |
+| `install` | Node, utilisateur de service, répertoires, source, `npm ci`, build, environnement, unit systemd, puis vérification qu'il répond | — |
+| `update` | Tire un nouveau build par-dessus une installation existante | **Le fichier d'environnement** |
+| `service` | Génère l'unit sur une installation existante, puis démarre | Le fichier d'environnement |
+| `passwd` | Rote le mot de passe opérateur et redémarre | Tout le reste |
+
+`install` demande d'abord ce dont il a besoin et ne change rien tant que vous n'êtes pas d'accord.
+
+## Pourquoi `passwd` existe comme verbe
+
+**Il n'y a pas de table utilisateurs.** `OPERATOR_USERNAME` et `OPERATOR_PASSWORD` dans
+`panel.env` sont le compte opérateur entier. `passwd` est donc la manière supportée de le
+changer. Il réécrit le fichier d'environnement et redémarre l'unit en une étape, plutôt que de
+vous laisser éditer un fichier que l'installeur promet par ailleurs de ne jamais remplacer.
+
+## Layout
+
+| Option | Défaut | Notes |
+| :--- | :--- | :--- |
+| `--app-dir PATH` | `/opt/fireflo-panel` | Remplacé par un update |
+| `--conf-dir PATH` | `/etc/fireflo-panel` | **Jamais remplacé** |
+| `--data-dir PATH` | `<app-dir>/tmp` | Exports CSV préparés et tout ce que le panneau écrit d'autre. Préservé par un update, jamais remplacé |
+| `--tenant NAME` | — | Installe dans `/srv/fireflo/NAME/panel` comme unit `fireflo-NAME-panel` |
+| `--vhost PATH` | — | Layout virtualhost : `PATH/app`, `PATH/conf`, `PATH/data` |
+
+**`--tenant` est le sens du vocabulaire partagé** : le même mot nomme la même instance à
+l'installeur de la passerelle. Un nom par client, deux produits.
+
+Avec `--tenant NAME --vhost PATH`, la racine passe à `PATH/panel`, avec la passerelle sous
+`PATH/gateway`. Les trois flags de répertoire l'emportent toujours sur l'un ou l'autre.
+
+<Note>
+`--vhost` **seul** conserve son ancien sens plat, donc les panneaux déjà installés sous
+`/home/<name>` sont atteints exactement comme avant. Cette compatibilité est délibérée. Une mise à
+niveau ne doit pas déplacer une installation en cours.
+</Note>
+
+## Ce qu'il dérive, et la seule chose qu'il ne dérive pas
+
+Étant donné le répertoire de configuration de la passerelle, l'installeur dérive les jetons
+opérationnels et la connexion en lecture seule à la base plutôt que de vous demander de les
+recopier.
+
+<Warning>
+**`--config-url` n'est jamais dérivé.** La connexion en lecture/écriture aux tables de
+configuration est celle qui peut changer ce qui est facturé aux clients, elle est donc toujours
+donnée explicitement. Sans elle, le panneau rapporte chaque domaine de configuration comme non
+éditable, plutôt que d'échouer au premier enregistrement.
+</Warning>
+
+Voir [Installer le panneau de contrôle](/platform/install/control-panel) pour le pas-à-pas et
+[Environnement du panneau de contrôle](/reference/config/control-panel) pour chaque variable qu'il
+écrit.

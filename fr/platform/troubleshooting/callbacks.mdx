@@ -1,0 +1,121 @@
+---
+title: "Callbacks qui n'arrivent pas"
+description: "Accusés de livraison et transferts MO qui n'atterrissent jamais : la plage de succès, le budget de tentatives, et l'erreur de placeholder qui envoie une requête ne transportant rien."
+---
+
+Les deux directions — accusés de livraison sortants vers un `dlr_url`, et messages MO sortants vers un
+`forward.mo.url` — partagent un même mécanisme de livraison, et donc partagent ces règles.
+
+## Les deux règles qui décident de tout
+
+| Règle | Valeur |
+| :--- | :--- |
+| **Succès** | HTTP **`200`–`399`**. Tout le reste est un échec. |
+| **Tentatives** | `smsg.webhook.retries`, défaut **10**, espacées de `smsg.webhook.retry.interval.ms`, défaut **120000** |
+| **Timeout** | `smsg.webhook.timeout.ms`, défaut **5000** — connexion *et* requête |
+
+<Warning>
+**Au budget par défaut, un endpoint injoignable occupe un thread virtuel pendant vingt minutes.** Dix
+tentatives, deux minutes d'écart. Un client dont l'endpoint est en panne pendant une heure ne perd pas
+seulement des accusés — il retient des threads pendant toute l'heure, et chaque autre client dans le
+même état aussi.
+
+Si vous avez beaucoup de clients avec des endpoints peu fiables, abaissez le nombre de tentatives
+avant de relever le plafond de threads.
+</Warning>
+
+## Un accusé n'arrive jamais
+
+<Steps>
+  <Step title="Un dlr_url a-t-il été fourni du tout ?">
+    Via HTTP, il doit être présent et URL-encodé, et `dlr` doit valoir `yes`. Définir l'un sans
+    l'autre ne fait rien.
+  </Step>
+  <Step title="L'endpoint est-il joignable depuis l'hôte de la passerelle ?">
+    Pas depuis votre portable — depuis l'hôte ou le conteneur sur lequel tourne la passerelle. La
+    politique de sortie, le split DNS et les sous-réseaux privés mordent tous ici.
+  </Step>
+  <Step title="Renvoie-t-il 200–399 ?">
+    Un `401` derrière un proxy authentifiant est l'échec silencieux le plus fréquent. Idem pour un
+    `302` vers une page de login, qui *compte bien* comme un succès et avale l'accusé.
+  </Step>
+  <Step title="La passerelle a-t-elle journalisé l'échec ?">
+    Les échecs de transfert et les tentatives sont journalisés. Dix tentatives silencieuses
+    signifient que l'endpoint a répondu.
+  </Step>
+</Steps>
+
+## Le piège des placeholders
+
+Au format `kannel`, le callback est un **`GET` nu avec placeholders substitués — rien n'est ajouté**.
+
+| Placeholder | Valeur |
+| :--- | :--- |
+| `%s` | ID de message de la passerelle |
+| `%d` | `1` livré, `2` échec, `4` buffered, `8` soumis au SMSC |
+
+```json
+{ "dlr_url": "https://example.com/dlr?msgid=%s&status=%d" }
+```
+
+<Warning>
+**Une URL sans placeholders reçoit une requête ne transportant rien du tout** — pas de corps, pas de
+query, pas d'identifiant. L'endpoint est appelé à l'heure prévue, renvoie `200`, et le client en
+conclut que les accusés « fonctionnent mais sont vides ».
+
+C'est la plus courante des erreurs d'intégration des accusés, et rien dans le système ne la signale :
+un callback vide est indiscernable d'un callback correctement configuré qui n'a rien à transporter.
+</Warning>
+
+## Les transferts MO n'arrivent jamais
+
+Les callbacks MO sont en **`POST`**, et les mêmes règles `200`–`399` et tentatives s'appliquent.
+
+- `forward.mo.url` est défini sur le worker client SMPP qui **reçoit** le MO — pas sur le listener, et
+  pas globalement.
+- `forward.mo.format` vaut `JSON` ou `FORM`.
+- L'URL peut porter des placeholders, URL-encodés avant remplacement :
+
+| Placeholder | Valeur |
+| :--- | :--- |
+| `%p` | Adresse d'origine (`from`) |
+| `%P` | Adresse de destination (`to`) |
+| `%a` | Texte du message |
+| `%t` | Horodatage |
+| `%i` | Identifiant de passerelle entrante |
+| `%I` | Message centre |
+| `%o` | Valeur de data coding |
+
+```properties
+outSms.instance.testRoute.forward.mo.url = https://example.com/mo?from=%p&to=%P&text=%a
+```
+
+<Tip>
+Le détail complet des MO entrants nécessite `print.mos = true` **temporairement**. Traitez cette
+sortie comme sensible : elle contient le contenu du message et les deux adresses.
+</Tip>
+
+## Des accusés qui arrivent mais disent la mauvaise chose
+
+Pas un problème de livraison, et à écarter avant d'aller regarder le réseau :
+
+- **`request.dlrs` est désactivé sur le fournisseur.** Chaque message finit alors en `EXPIRED` à
+  l'échéance, parce que rien ne signale de résultat. Le taux de livraison devient *insignifiant* plutôt
+  que nul, ce qui est pire, car un zéro ressemble à un problème et un nombre insignifiant ressemble à
+  une donnée.
+- **Un accusé de niveau 1 n'est pas le résultat.** `ACCEPTD` et `BUFFRED` arrivent tous deux en niveau
+  1 et un autre accusé suit. Un client qui traite le premier accusé comme final signalera à jamais la
+  mauvaise chose.
+- **Trois segments, trois accusés.** `conf.dlr.multipart` vaut `all` par défaut, donc un client reçoit
+  un accusé par `submit_sm` qu'il a envoyé. `first` ou `last` réduit cela à un seul.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Accusés de livraison" icon="receipt" href="/developers/receive/delivery-receipts">
+    La charge utile, les niveaux et comment corréler.
+  </Card>
+  <Card title="Qualité des accusés" icon="chart-simple" href="/platform/control-panel/receipt-quality">
+    Taux rapporté par rapport au taux de livraison.
+  </Card>
+</CardGroup>

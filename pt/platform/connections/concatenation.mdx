@@ -1,0 +1,109 @@
+---
+title: "Mensagens concatenadas"
+description: "Duas contagens de segmentos diferentes, ambas as formas de enviar uma, quantos ids e recibos um cliente recebe, e o que o desfecho significa."
+---
+
+Uma mensagem longa demais para um SMS se torna várias. Esta página é o contrato inteiro.
+
+## Existem duas contagens de segmentos, e confundi-las causa a maioria das perguntas
+
+| | Conta | Onde você vê |
+| :--- | :--- | :--- |
+| **Inbound** | O `submit_sm` que o cliente enviou | Um `message_id` cada; `cdr_submit.reassembled_parts` |
+| **Outbound** | Os PDUs enviados à operadora | `cdr_submit.part_no` / `part_count` |
+
+Uma mensagem pode chegar como três e sair como três **sem que esses dois 3s estejam relacionados**:
+o FireFlo remonta o que o cliente enviou e depois divide o corpo inteiro novamente para a operadora
+usando a codificação daquela operadora.
+
+## Como um cliente envia uma
+
+Duas maneiras, ambas aceitas e tratadas identicamente.
+
+<Tabs>
+  <Tab title="UDH">
+    Configure o bit UDHI — `esm_class` bit 6, `0x40` — e prefixe cada `short_message` com um
+    header de concatenação: 8-bit `050003 RR TT SS` ou 16-bit `060804 RRRR TT SS`.
+  </Tab>
+  <Tab title="SAR TLVs">
+    Envie `sar_msg_ref_num` (`0x020C`), `sar_total_segments` (`0x020E`) e `sar_segment_seqnum`
+    (`0x020F`).
+
+    **Os três precisam estar presentes.** SMPP 3.4 §5.3.2.32–34 os define como um conjunto, e um
+    PDU carregando só alguns não é segmento de coisa nenhuma.
+  </Tab>
+</Tabs>
+
+<Warning>
+**Um único `submit_sm` não pode carregar mais de um segmento.** `short_message` é limitado ao
+tamanho de um segmento, e um corpo mais longo é recusado com `ESME_RINVMSGLEN` em vez de truncado.
+
+Envie vários PDUs, ou use a API HTTP — que aceita um corpo de qualquer tamanho e o divide para você.
+
+`message_payload` tem o mesmo limite, e configurar tanto ele quanto `short_message` é recusado de
+saída com `ESME_ROPTPARNOTALLWD`.
+</Warning>
+
+## Quantos ids o cliente recebe
+
+**Um `message_id` por `submit_sm`.** Uma mensagem de três segmentos dá três, com segundos de diferença.
+
+**Todos eles resolvem.** `query_sm`, o painel de controle e o portal do cliente cada um aceita
+qualquer id que o gateway tenha emitido e retorna aquela mensagem. Apenas o primeiro é o id sob o
+qual a mensagem é *arquivada*, portanto o painel informa sobre qual parte você perguntou quando eles
+diferem.
+
+## Quantos recibos
+
+Definido por `conf.dlr.multipart` no listener:
+
+| Valor | Recibos | `sub:` / `dlvrd:` |
+| :--- | :--- | :--- |
+| `all` *(padrão)* | Um por id submetido | `001` / `001` em cada |
+| `first` | Um, citando o primeiro id | Os totais reais, ex. `003` |
+| `last` | Um, citando o último id | Os totais reais |
+
+Todo recibo reporta **o mesmo desfecho**, porque os segmentos de saída são agregados antes de
+qualquer recibo ser construído. `all` é o que este gateway sempre fez, portanto um upgrade não muda
+nada; os outros dois existem para agregadores que esperam uma mensagem entrando e um recibo saindo.
+
+## O desfecho é o pior segmento, não o primeiro
+
+<Warning>
+Se qualquer segmento falha, a mensagem é **FAILED**. A resolução aguarda o último segmento e reporta
+o pior.
+
+Essa é a resposta honesta — o destinatário não recebeu uma mensagem legível — e **desloca cifras de
+delivery-rate para baixo** em relação a gateways que reportam o primeiro segmento. Vale saber antes
+de comparar este mês com o passado.
+</Warning>
+
+## O que custa
+
+`smsg.restapi.billing.units` decide se uma mensagem multipart é cobrada uma vez ou por segmento.
+
+<Warning>
+Configurado como `message`, um cliente enviando tráfego de três segmentos paga por uma e você paga
+sua operadora por três. `segment` é o padrão por essa razão.
+
+Uma mensagem permanece em um segmento com **160 caracteres** de texto GSM plano, ou **70** se contém
+qualquer caractere fora desse conjunto — um emoji, ou uma aspa curva colada de um processador de
+texto, corta o limite da mensagem inteira pela metade.
+</Warning>
+
+## Limites
+
+| | |
+| :--- | :--- |
+| Máximo de segmentos | 255 — o limite do UDH |
+| Timeout de remontagem | `reassembling.timeoutMillis`, 30 s por padrão |
+| Números de referência | `ccat.8bit` escolhe 8-bit ou 16-bit |
+
+Um conjunto incompleto no timeout é logado como `message.parts.incomplete`. **Whitelisting de
+conteúdo ainda se aplica** no caminho de timeout, portanto o que sai é verificado.
+
+<Warning>
+A remontagem é **por JVM**. Em várias instâncias compartilhando clientes, segmentos chegando em
+instâncias diferentes nunca se remontam. Veja [Clustering](/platform/install/clustering) para o
+que isso custa.
+</Warning>

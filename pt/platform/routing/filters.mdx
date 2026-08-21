@@ -1,0 +1,127 @@
+---
+title: "Filtros"
+description: "Condições nomeadas e reutilizáveis compartilhadas entre roteamento e rating — e por que um filtro ausente ou desabilitado remove as regras que o referenciam em vez de alargá-las."
+---
+
+## Desabilitar um filtro faz suas regras casarem menos, não mais
+
+<Warning>
+**Um filtro ausente ou desabilitado pula toda regra que o referencia**, em vez de carregar a regra
+com menos condições.
+
+Esse é o oposto da resposta intuitiva, e é deliberado. Uma regra é uma conjunção, então *remover*
+uma condição faz ela casar com **mais** tráfego: tire um filtro `au_mobile` de uma regra e ela
+começa a mandar o mundo inteiro para aquele fornecedor, com sucesso, sem nada no log sugerindo um
+problema. Pular a regra falha na única direção segura — as mensagens caem para a próxima regra em
+vez de para o fornecedor errado.
+</Warning>
+
+Então o efeito observável de desligar um filtro é que suas regras param de casar com nada, e seu
+tráfego cai na regra que segue. Um fornecedor diferente, ou um preço diferente.
+
+```
+Skipping … filter '…' is missing or disabled
+```
+
+## O que um filtro é para o gateway
+
+**Uma expansão em tempo de load, não uma indireção em runtime.** Um filtro se expande exatamente nas
+condições que carrega, e essas são anexadas às condições de toda regra que o referencia. O teste real
+de uma regra é:
+
+```
+suas próprias condições AND as condições de cada filtro referenciado
+```
+
+Filtros estreitam uma regra. Nunca substituem nem afrouxam. Nada é resolvido por mensagem, então
+matching custa o mesmo como se as condições tivessem sido escritas inline.
+
+<Note>
+Filtros vivem no banco (`app_filter`, `app_filter_condition`) e são compartilhados com rating, que é o
+ponto: nomeie um predicado uma vez, precifique e roteie pela mesma definição. A gramática de arquivo
+não tem sintaxe para eles, então `scripts/fireflo import routing` deixa `app_route_rule_filter`
+vazio. Veja [routingTable.conf](/reference/files/routing-table).
+</Note>
+
+## Uma regra filtrada não é um catch-all
+
+<Warning>
+Como as condições de filtro são dobradas nas condições próprias da regra no load, **uma regra
+carregando um filtro é corretamente reportada como não sendo um catch-all** — por mais que pareça um
+fallback.
+
+Este é o caso que vale conhecer: uma regra que *parecia* o catch-all da tabela carregava um filtro,
+casava com quase nada, e nenhuma superfície em lugar algum dizia isso até mensagens já terem sido
+descartadas. A tabela é reportada sob `no-catch-all` em `/ops/health`; veja
+[How routing works](/platform/routing/how-it-works).
+</Warning>
+
+Um catch-all real é uma regra sem condições **e sem filtros**, colocada por último.
+
+## Um filtro vazio conta como desabilitado
+
+Um filtro sem condições salva e carrega, o que permite que um seja construído uma condição por vez. A
+resposta do gateway a isso também não é a intuitiva: um filtro vazio é adicionado ao conjunto de
+*desabilitados*, então toda regra que o referencia é pulada.
+
+Recusar um filtro vazio é o mesmo raciocínio de recusar um ausente — um filtro que não estreita nada
+alargaria toda regra que o carregasse.
+
+## A rede de segurança, e por que ela não é um workaround
+
+<Warning>
+**Se pular deixar a tabela `default` sem regras, o reload de roteamento inteiro é rejeitado e as
+tabelas anteriores são retidas**, logando `no default routing table in new targets!`.
+
+Esse é o resultado seguro — desabilitar um filtro do qual toda regra depende não esvazia seu
+roteamento. Mas também significa que **desabilitar um filtro não é uma forma de retirar uma rota**:
+a mudança parecerá não ter tido efeito algum, porque o gateway ainda está servindo a última
+configuração boa.
+
+Delete ou desabilite a *regra* em vez.
+</Warning>
+
+Pela mesma razão um filtro referenciado não pode ser deletado enquanto regras ainda apontam para ele.
+O painel de controle mostra a contagem de referências entre regras de rating e roteamento antes de
+deixar você mudar uma — o roteamento é a metade onde a consequência é "mensagens param de ser
+enviadas" em vez de "mensagens são precificadas de forma diferente".
+
+## Checando um antes de mudar
+
+<Steps>
+  <Step title="Leia a contagem">
+    **Filters** no painel lista quantas regras de tarifa e quantas regras de roteamento referenciam
+    cada filtro. Desabilitar um filtro usado por quatro regras de roteamento remove quatro regras do
+    snapshot em execução.
+  </Step>
+  <Step title="Olhe o que pega o tráfego em vez">
+    Para cada regra que seria pulada, encontre a próxima regra na mesma tabela com a qual o tráfego
+    casaria. Esse fornecedor é para onde o tráfego vai.
+  </Step>
+  <Step title="Confirme que o reload pegou">
+    Depois de salvar, cheque `routing_warnings` em `/ops/health` e o log por
+    `Error parsing new routing table`. Um reload rejeitado mantém a tabela anterior e parece que
+    nada aconteceu.
+  </Step>
+</Steps>
+
+## Filter workers são uma coisa diferente
+
+Uma regra também pode ter como alvo um **filter worker** — um worker pelo qual a mensagem passa em
+vez de um destino. Ele retorna um veredito, e o router age sobre ele:
+
+| Veredito | O que acontece |
+| :--- | :--- |
+| `DROP` | A mensagem é reembolsada se foi cobrada, fechada como `DROPPED`, e registrada em `cdr_rejected` com `reason=filtered`. |
+| `RETRY` / `REENQUEUE` | A mensagem é estacionada por `outSms.routing.retryBackoffMillis` e roteada de novo. Cada requeue **conta contra `outSms.routing.maxAttempts`**, então um filtro usado para throttling eventualmente descarta em vez de segurar uma mensagem para sempre. |
+
+<Note>
+`RESCHEDULE` nunca foi implementado e cai de volta para re-enqueue, dizendo isso uma vez por
+mensagem.
+
+Uma mensagem descartada é reembolsada e reportada; uma mensagem segurada para sempre não é —
+que é por que contar o requeue é a troca pretendida em vez de um descuido.
+</Note>
+
+Filtros nomeados e filter workers compartilham uma palavra e nada mais: um estreita uma regra em
+tempo de load, o outro inspeciona mensagens em tempo de execução.

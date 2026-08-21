@@ -1,0 +1,115 @@
+---
+title: "Custom TLVs"
+description: "Parâmetros SMPP extras em um envio REST. Um objeto, não uma lista; decimal a menos que você diga hex; e Int8 significando oito bytes."
+---
+
+Alguns destinos precisam de parâmetros que não fazem parte de um envio comum. O mais visível é o DLT
+indiano, que exige um id de entidade registrada e um id de template em cada mensagem.
+
+`custom_tlvs` os carrega.
+
+```json
+{
+  "to": "919876543210",
+  "content": "Your OTP is 4417, valid for 10 minutes.",
+  "custom_tlvs": {
+    "0x1400": "1101234567890123456",
+    "tmid_0x1402:Int8": "1102000000000012345"
+  }
+}
+```
+
+## Quatro regras, e cada uma já pegou alguém
+
+<AccordionGroup>
+
+<Accordion title="É um objeto, não uma lista de pares">
+```json
+"custom_tlvs": { "0x1400": "…" }        // correto
+"custom_tlvs": [{ "tag": "0x1400" }]    // 400
+"custom_tlvs": "0x1400=…"               // 400
+```
+
+O arquivo swagger versionado tipa isso como array. **Está errado**: o parser quer um objeto, e gerar
+um cliente daquele spec produz um payload recusado na primeira chamada.
+</Accordion>
+
+<Accordion title="Um número nu é DECIMAL">
+`1401` é decimal 1401, que é a tag `0x0579`. **Não** é a `0x1401` que quase todo mundo quer dizer.
+
+Este é o perigoso, porque *faz parse*. Nada é recusado: o gateway envia a tag `0x0579`, a operadora
+ignora um parâmetro que não reconhece, e a mensagem é entregue sem o valor que ela deveria carregar.
+Não há erro em lugar nenhum.
+
+Escreva `0x1401` quando você quiser hex. Tags decimais são válidas, e alguns fornecedores publicam
+assim, o que é exatamente por que o gateway não pode adivinhar por você.
+</Accordion>
+
+<Accordion title="A tag é o que vem depois do ÚLTIMO sublinhado">
+`tmid_0x1401` é tag `0x1401`. O nome antes é decoração que o gateway mantém para os próprios logs, e
+ele mesmo pode conter sublinhados: `source_network_id_5120` é tag 5120 decimal.
+
+Um nome sozinho não é o bastante. O gateway casa pelo número.
+</Accordion>
+
+<Accordion title="Int8 significa oito BYTES">
+`:Int8` adicionado a uma chave fixa a codificação no wire. As larguras são octetos, seguindo a
+convenção SMPP:
+
+| Token | Octetos |
+| :--- | ---: |
+| `Int1` | 1 |
+| `Int2` | 2 |
+| `Int4` | 4 |
+| `Int8` | 8 |
+| `OctetString` | *padrão* |
+| `COctetString` | terminado em null |
+
+Lido como *bits*, `Int8` pareceria um campo de um byte, e a recusa resultante fica misteriosa. Um id
+de template DLT em torno de 1,4 × 10¹⁸ não cabe em nada menor que oito bytes.
+</Accordion>
+
+</AccordionGroup>
+
+## O nome do campo mantém o sublinhado
+
+Todo outro campo desta API trata `_` e `-` como o mesmo caractere. **`custom_tlvs` não**:
+`custom-tlvs` é `400 Unknown argument`.
+
+## De onde mais uma tag pode vir
+
+Você não é a única fonte, e a sua nem sempre vence:
+
+<Steps>
+  <Step title="Seu custom_tlvs">
+    Só extraído se o listener declara a tag. Tags não declaradas são **descartadas**, não repassadas.
+  </Step>
+  <Step title="Os padrões da sua credencial">
+    Configurados pelo seu provedor, preenchendo tags que você não enviou. É onde um id de entidade
+    DLT geralmente fica, já que é uma propriedade sua, e não de uma mensagem específica.
+  </Step>
+  <Step title="O stamp da whitelist">
+    Em um template aprovado. No modo `replace`, isso **sobrescreve** o que você enviou. E essa
+    sobrescrição é a aprovação.
+  </Step>
+  <Step title="Os padrões do fornecedor">
+    Preenchendo qualquer coisa ainda vazia no momento do envio.
+  </Step>
+</Steps>
+
+<Warning>
+Se uma tag que você envia nunca chega, a causa mais provável é que o listener não a declare.
+Pergunte ao seu provedor se ela está em `registered.tlvs.submit`. Uma tag não declarada é descartada
+silenciosamente no ingresso, antes de qualquer outra coisa nesta lista rodar.
+</Warning>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Declarações de TLV" icon="tags" href="/reference/smpp/tlvs">
+    A gramática completa e os cinco níveis de declaração.
+  </Card>
+  <Card title="Enviar uma mensagem" icon="paper-plane" href="/reference/api/send">
+    Todos os campos do endpoint.
+  </Card>
+</CardGroup>

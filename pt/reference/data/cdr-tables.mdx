@@ -1,0 +1,158 @@
+---
+title: "Tabelas de call record"
+description: "As cinco tabelas que registram tráfego e dinheiro, como se juntam, e as colunas cujo NULL significa algo diferente de zero."
+---
+
+Cinco tabelas, **todas só-append**. Nada é jamais atualizado. É isso que torna delivery receipts
+concorrentes seguros e permite que uma mensagem re-roteada mantenha as duas tentativas.
+
+| Tabela | Uma linha por | Desde |
+| :--- | :--- | :--- |
+| `cdr_submit` | Segmento submetido | baseline |
+| `cdr_final` | Desfecho | baseline |
+| `cdr_interim` | Receipt de progresso | V1.33.0 |
+| `cdr_rejected` | Recusa | baseline |
+| `usage_daily` | Conta × produto × dia | V1.37.0 |
+
+## Como se juntam
+
+```
+cdr_submit  ─┬─ (gateway_msg_id, part_no) ─→ cdr_final     o desfecho
+             ├─ (gateway_msg_id, part_no) ─→ cdr_interim   receipts de progresso
+             └─ gateway_msg_id            ─→ cdr_rejected  recusas
+```
+
+A view `cdr_pnl` faz **left** join de submit e final, então registros sem desfecho ainda aparecem
+como `PENDING`. Exposição em voo continua visível em vez de ser excluída em silêncio.
+
+<Warning>
+**Todo leitor precisa pegar a linha *mais antiga* de `cdr_final` para uma mensagem.** É por isso que
+receipts de progresso vivem na própria tabela: um `ACCEPTD` escrito em `cdr_final` teria precedência
+sobre o `DELIVRD` que veio depois, em toda listagem, todo gráfico e no P&L.
+</Warning>
+
+## `cdr_submit`
+
+A tabela portadora. **A parte 1 é o único registro por mensagem do que foi cobrado.**
+
+### Identidade e formato
+
+| Coluna | Notas |
+| :--- | :--- |
+| `gateway_msg_id` | O `messageId` retornado ao cliente |
+| `part_no`, `part_count` | Posição e total de segmento |
+| `retry_count` | Tentativas. **Não-zero é o sinal de que uma rota está sofrendo** |
+| `ingress` | Como chegou |
+| `in_gateway`, `vendor` | Qual listener pegou, qual fornecedor carregou |
+| `operator_msg_id` | O handle próprio da carrier. O que um cliente cita em uma consulta |
+| `source_addr`, `dest_addr` | Guardados porque rating e disputas precisam |
+| `mcc`, `mnc` | País e rede |
+| `dcs`, `msg_type` | Data coding, classe de mensagem |
+
+### O dinheiro, os dois lados
+
+| Coluna | Significado |
+| :--- | :--- |
+| `cost_rate`, `cost_units`, `cost`, `cost_currency` | O que o fornecedor cobra de você |
+| `price_rate`, `billed_units`, `price`, `price_currency` | O que você cobra do cliente |
+| `margin`, `margin_pct`, `margin_status` | Guardados para que o P&L some uma coluna |
+| `cost_rule_id`, `price_rule_id` | Qual regra de tarifa casou, para auditoria |
+
+**Todo dinheiro é `bigint` de décimos-milésimos.** Divida por 10 000 para exibir; nunca guarde um
+float.
+
+<Warning>
+**`NULL` money é desconhecido, nunca zero.** Uma tarifa que não pôde ser determinada continua
+distinguível de uma mensagem genuinamente gratuita.
+
+Qualquer query que faça coalesce disso para zero reporta um fornecedor sem preço como **pura
+margem**. `margin_status` existe para tornar esse estado explícito em vez de inferido.
+</Warning>
+
+**O dinheiro vive inteiramente em `part_no = 1`.** Segmentos posteriores são linhas de entrega sem
+dinheiro. Escrever valores em cada segmento multiplicaria os dois lados pela contagem de segmentos.
+Toda query de dinheiro precisa de `WHERE part_no = 1`.
+
+### Duas moedas, e sem conversão
+
+`cost_currency` e `price_currency` são registradas por lado. **FireFlo nunca converte entre elas.**
+Uma implantação comprando em uma moeda e vendendo em outra tem uma coluna de margin que não pode ser
+somada sem fazer a conversão você mesmo.
+
+### As três colunas de TLV
+
+| Coluna | Guarda | Desde |
+| :--- | :--- | :--- |
+| `tlvs_received` | Como chegaram | V1.30.0 |
+| `tlvs` | Como o gateway resolveu | baseline |
+| `tlvs_sent` | O que o fornecedor colocou no fio | V1.30.0 |
+
+`NULL` significa nada registrou a coluna; `{}` significa registrado e não havia nenhum. `tlvs_sent`
+é `NULL` para todo fornecedor não-SMPP.
+
+### `body`, e por que geralmente é NULL
+
+Registrado só se `smsg.cdr.body` é `excerpt` ou `full` (V1.31.0). `NULL` em toda linha caso
+contrário, e em toda linha escrita antes de a coluna existir.
+
+Pesquisado com `ILIKE` sobre um índice trigram (V1.32.0), sempre combinado com uma faixa de data.
+Esse índice precisa de `pg_trgm`; se o usuário de migração não pode criar extensões, a busca ainda
+funciona, mais devagar.
+
+### `registered_delivery`
+
+O octeto SMPP **como o cliente enviou**, cru em vez de decodificado. Ele carrega três pedidos
+independentes e só alguns são atendidos.
+
+<Tip>
+Responde uma pergunta que o registro não conseguia responder antes: **devíamos um receipt a este
+cliente?**
+
+`NULL` em linhas escritas antes de a coluna existir e em uma entrada sem esse conceito. **Isso não é
+zero.** Zero é uma afirmação sobre o cliente, a saber, que ele não pediu nada.
+</Tip>
+
+## `cdr_final` e `cdr_interim`
+
+Desfechos e progresso, separados pela razão acima. Também têm **vidas diferentes**:
+
+| | Retido por | Perder custa |
+| :--- | :--- | :--- |
+| `cdr_final` | `FIREFLO_CDR_KEEP_DAYS`, padrão 90 | Histórico de billing |
+| `cdr_interim` | `smsg.cdr.interim.retention.days`, padrão 30 | **Um relatório, não uma fatura** |
+
+`dlr_state` guarda o valor SMPP cru ao lado do desfecho grosseiro, porque `EXPIRED`, `REJECTD` e
+`UNDELIV` todos billam como falha mas significam coisas diferentes.
+
+## `cdr_rejected`
+
+Uma linha por recusa, com `reason` e, desde V1.27.0, o código de status do fornecedor quando o
+fornecedor foi o que recusou.
+
+**Uma linha recusada não carrega dinheiro.** `price`, `cost` e `margin` são `NULL` porque o crédito
+foi devolvido no momento da recusa, o que permite que queries de receita somem essas colunas sem um
+filtro de desfecho.
+
+## `usage_daily`
+
+Uma linha por conta, por produto, por dia. **Diário em vez de mensal** para que qualquer período seja
+um `SUM` sobre dias, para sempre, sem uma segunda tabela derivada que discorde.
+
+Colunas billable de um dia terminado são finais; colunas de entrega são restatadas rodando o rollup
+de novo, e é por isso que é idempotente.
+
+<Warning>
+O purge **recusa apagar qualquer dia sem uma linha `usage_daily`**, e recusa a execução inteira em
+vez de pular. Apagar um dia não sumarizado destrói o registro de consumo permanentemente.
+</Warning>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Call records" icon="database" href="/platform/billing/cdrs">
+    Para o que cada tabela serve, em prosa.
+  </Card>
+  <Card title="Tabelas de configuração" icon="table" href="/reference/data/config-tables">
+    A outra metade do schema.
+  </Card>
+</CardGroup>

@@ -1,0 +1,71 @@
+---
+title: "FireFlo"
+sidebarTitle: "O que é o FireFlo"
+description: "Um gateway de SMS headless, com um painel de controle para você e um portal para seus clientes."
+---
+
+import { Versions } from '/snippets/versions.mdx';
+
+O FireFlo fica entre as aplicações que querem enviar SMS e as operadoras que efetivamente entregam.
+Ele fala HTTP com suas aplicações e SMPP com seus fornecedores, nas duas direções, e mantém o
+roteamento, a precificação e o registro de cada mensagem na sua própria infraestrutura.
+
+São três coisas que vêm juntas:
+
+<CardGroup cols={3}>
+  <Card title="O gateway" icon="server">
+    Um serviço Java/Quarkus. Aceita binds SMPP e submissões HTTP, roteia, tarifa e registra cada
+    mensagem, e disca para seus fornecedores.
+  </Card>
+  <Card title="O painel de controle" icon="sliders">
+    As telas dos seus operadores. Fornecedores, listeners, roteamento, clientes, tarifas, extratos e
+    saúde em tempo real. Configuração e diagnóstico em um só lugar.
+  </Card>
+  <Card title="O portal do cliente" icon="users">
+    A metade da mesma aplicação para seus clientes: as mensagens deles, o extrato, os registros de
+    sender ID, a rotação de credenciais e um playground da API.
+  </Card>
+</CardGroup>
+
+Versão atual: <Versions />.
+
+## Que parte deste site você quer
+
+<CardGroup cols={3}>
+  <Card title="Plataforma" icon="wrench" href="/platform/concepts">
+    **Você opera o FireFlo.** Instalar, conectar fornecedores, escrever regras de roteamento,
+    integrar clientes, precificar o tráfego e saber quando algo está errado.
+  </Card>
+  <Card title="Desenvolvedores" icon="code" href="/developers">
+    **Você envia mensagens pelo FireFlo de outra pessoa.** Colocar uma mensagem para fora via HTTP ou
+    SMPP, tratar recibos de entrega e ler o que foi cobrado.
+  </Card>
+  <Card title="Referência" icon="book" href="/reference/api/overview">
+    **Você está consultando algo.** Cada campo de requisição, chave de configuração, ajuste de
+    worker, verbo de CLI e código de status, com seu padrão e o que acontece quando está errado.
+  </Card>
+</CardGroup>
+
+## Se você tem dez minutos
+
+<Steps>
+  <Step title="Leia o vocabulário">
+    [Conceitos](/platform/concepts) fixa o punhado de palavras nas quais o resto do site se apoia:
+    **vendor**, **server**, **product**, **account**, **scope**. Duas delas significam o oposto do
+    que uma origem em Kannel ou Jasmin sugere.
+  </Step>
+  <Step title="Coloque no ar">
+    [Quickstart](/platform/quickstart) executa um gateway no Docker com um comando, e
+    [Install](/platform/install/one-command) o coloca em um servidor corretamente.
+  </Step>
+  <Step title="Envie alguma coisa">
+    [Enviar uma mensagem](/developers/send/one-message) é um único `curl`. Tudo depois disso é
+    roteá-la para algum lugar real.
+  </Step>
+</Steps>
+
+<Note>
+  O FireFlo é um software comercial, licenciado por implantação. É criado e mantido pela
+  [Remotiq](https://fireflo.au). Fale conosco sobre licenciamento ou escreva para
+  [support@fireflo.au](mailto:support@fireflo.au) se você já o utiliza.
+</Note>

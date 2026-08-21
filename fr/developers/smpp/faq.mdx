@@ -1,0 +1,105 @@
+---
+title: "FAQ SMPP"
+description: "Fenêtres, throttling, reconnexions, sessions stale et les codes de statut qui se présentent réellement."
+---
+
+<AccordionGroup>
+
+<Accordion title="Je suis bindé, et rien ne sort">
+Vérifiez d'abord le **type de bind**. Une session receiver-only se binde parfaitement et n'envoie
+rien, et il n'y a aucune erreur nulle part pour vous le dire.
+
+S'il s'agit d'un transceiver ou d'un transmitter et que les messages ne bougent toujours pas,
+regardez la fenêtre : un client qui ne reçoit jamais de réponse remplit sa fenêtre et s'arrête, ce
+qui ressemble exactement à être bloqué.
+</Accordion>
+
+<Accordion title="Quel débit puis-je attendre ?">
+Cela dépend de votre taille de fenêtre et de votre round-trip time, pas de la seule passerelle.
+
+**La taille de fenêtre** (`conf.maxPending.default`, 1000 par défaut) est le nombre de `submit_sm`
+qui peuvent être en attente. Si votre client attend chaque réponse avant d'envoyer la suivante,
+votre plafond est `1 / RTT`, soit environ 20 messages par seconde sur un lien de 50 ms, quelle que
+soit la taille de la fenêtre.
+
+Envoyez de manière asynchrone et alignez votre nombre en vol sur la fenêtre.
+</Accordion>
+
+<Accordion title="Je reçois sans arrêt ESME_RTHROTTLED (88)">
+Vous dépassez la limite messages-par-seconde de votre compte. Ralentissez. Celui-ci est réellement
+transitoire et réessayer après une pause est correct.
+
+Ne réagissez pas en ouvrant plus de sessions. La limite est par compte, pas par session, cela vous
+coûte donc des créneaux de connexion et ne change rien.
+</Accordion>
+
+<Accordion title="Mon bind est refusé mais les identifiants sont bons">
+Habituellement une limite, et habituellement de votre fait : **une session stale comptée contre
+votre plafond par utilisateur**.
+
+Si vous vous reconnectez plus vite que le serveur ne lâche votre session précédente, vous vous
+concurrencez vous-même. Débinder proprement à l'arrêt, et laisser `enquire_link` détecter un pair
+mort plutôt que de vous reconnecter agressivement.
+
+Vérifiez aussi si une liste d'IP autorisées s'applique. Tout le reste peut être correct et le bind
+échoue quand même.
+</Accordion>
+
+<Accordion title="Que signifie ESME_RSUBMITFAIL (69) ?">
+"Refusé, sans raison donnée." C'est le refus le moins informatif du protocole.
+
+Il est classé comme retryable, ce qui est un choix réellement discutable. Le même code est utilisé
+par différents SMSCs pour la surcharge transitoire et pour le refus permanent. Si vous le voyez en
+permanence sur une route, traitez-le comme permanent et demandez à votre fournisseur ce que
+l'upstream rejette réellement.
+</Accordion>
+
+<Accordion title="Tout échoue avec un statut entre 192 et 196">
+Ce bloc porte **toujours sur les TLVs** :
+
+| | |
+| ---: | :--- |
+| 192 | Le flux TLV est malformé |
+| 193 | Un TLV que le vendor n'autorise pas |
+| 194 | Un TLV de mauvaise longueur |
+| 195 | Un TLV requis n'a pas été envoyé |
+| 196 | Une valeur de TLV a été rejetée |
+
+Sur une voie DLT, 195 et 196 signifient presque toujours un identifiant d'entité ou de template
+manquant ou incorrect, ce qui signifie habituellement que rien n'a été approuvé, donc rien n'a été
+stamped.
+</Accordion>
+
+<Accordion title="Un tag que j'envoie n'atteint jamais l'opérateur">
+Le listener ne le déclare pas. **Les tags non déclarés sont écartés à l'entrée**, avant tout le
+reste, et rien ne le rapporte.
+
+Demandez à votre fournisseur si le tag est dans `registered.tlvs.submit` pour votre listener.
+</Accordion>
+
+<Accordion title="Devrais-je découper moi-même les longs messages ?">
+Les deux options coûtent la même chose. Découper vous-même vous donne un id par segment et le
+contrôle complet de l'UDH ; envoyer un long corps est plus simple et laisse la passerelle le faire.
+
+Si vous découpez, **envoyez les segments proches dans le temps**. Ils sont retenus pour
+réassemblage et un ensemble incomplet est finalement abandonné.
+</Accordion>
+
+<Accordion title="Puis-je voir les PDUs bruts ?">
+Seul votre fournisseur le peut, et seulement temporairement. Le logging des PDUs est désactivé par
+défaut parce que **les PDUs de bind contiennent des mots de passe** et les PDUs `submit_sm`
+contiennent des numéros de téléphone et des corps de messages.
+
+Il existe aussi une facilité de capture qui enregistre les PDUs récents dans un ring buffer
+précisément pour cela, sans laisser le logging activé en permanence. Demandez-la par son nom.
+</Accordion>
+
+<Accordion title="Puis-je utiliser un même login pour SMPP et l'API REST ?">
+Non. Les identifiants sont typés `HTTP` ou `SMPP` et ne sont pas interchangeables. Demandez-en un
+de chaque.
+
+Le refus est inutilement générique dans les deux sens — un `403 Authentication failure` en REST, et
+un échec d'authentification au bind — donc vérifiez le type avant le mot de passe.
+</Accordion>
+
+</AccordionGroup>

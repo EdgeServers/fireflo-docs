@@ -1,0 +1,94 @@
+---
+title: "Roteamento por menor custo"
+description: "Como uma tabela marcada com ->function(LCR) escolhe o fornecedor mais barato em vez da primeira regra correspondente, e o nome de função digitado errado que roteia por primeira correspondência enquanto parece rotear por preço."
+---
+
+## A tabela que nunca foi de menor custo
+
+<Warning>
+**Um nome de função escrito e não reconhecido cai para `NORMAL`.** `->function(LRC)` é uma transposição que qualquer pessoa pode cometer, e então a tabela roteia por primeira correspondência enquanto seu autor acredita que está roteando por preço. Cada tarifa de fornecedor nela é ignorada e cada mensagem vai para a regra que estiver no topo.
+
+Ela registra `routing.table.unknown-function` e continua funcionando. A queda para `NORMAL` é deliberada: recusar aqui recusaria todo o conjunto de tabelas, e um nome digitado errado não deveria derrubar o roteamento. Verifique o nome caractere por caractere, e verifique o log.
+</Warning>
+
+Existem exatamente duas funções, `NORMAL` e `LCR`. Uma tabela que não declara função é `NORMAL`.
+
+<Note>
+Uma terceira função, `RC`, foi removida na `V1.28.0`. Ela estava no enum, era permitida pela restrição do banco de dados e descrita no painel, e nada em lugar algum se ramificava por ela, então uma tabela configurada como `RC` roteava como `NORMAL` enquanto toda superfície que um operador pudesse consultar dizia o contrário. As linhas existentes são reescritas para `NORMAL`, que é o que elas já estavam fazendo.
+</Note>
+
+## O que muda
+
+```ini
+[cheapest->function(LCR)]
+vendor1::default:
+vendor2::default:
+vendor3:to:matches:^61[0-9]{9}$
+```
+
+Uma tabela `NORMAL` para na primeira regra correspondente, o que faz da ordem do arquivo a prioridade. Uma tabela `LCR` varre **todas** as regras, trata as correspondências como alternativas em vez de como uma cadeia de fallback, e deixa apenas a tarifa em `rates.conf` decidir.
+
+<Warning>
+**A ordem das regras é irrelevante dentro de uma tabela LCR.** Mover uma regra para cima não a torna preferida, e colocar um catch-all no início não sombreia nada abaixo dele. Se você está reordenando regras aqui para mudar o comportamento, está mudando o arquivo errado. As tarifas de custo é que decidem.
+</Warning>
+
+| Em uma tabela `NORMAL` | Em uma tabela `LCR` |
+| :--- | :--- |
+| Vence a primeira correspondência | Cada correspondência é uma candidata |
+| A ordem é a prioridade | A ordem não tem significado |
+| Um catch-all acima de outras as elimina | Nada é sombreado, portanto os avisos `unreachable-rules` e `no-catch-all` não se aplicam |
+| Uma regra pode encadear em outra tabela | Regras apontando para outra tabela são **ignoradas** |
+
+## Como um vencedor é escolhido
+
+<Steps>
+  <Step title="Cada regra na tabela é varrida">
+    Sem saída antecipada. Uma regra cujo alvo seja outra tabela é pulada com um aviso: um custo aninhado não pode ser comparado, e rotear a um preço desconhecido seria pior do que não rotear ali.
+  </Step>
+  <Step title="Fornecedores caídos são descartados">
+    Um alvo que esteja caído, suspenso ou que por outra razão não aceite é pulado, então o próximo mais barato assume o tráfego. Este é o mesmo sinal que um grupo usa; consulte [Fornecedores](/platform/connections/vendors) para os quatro estados.
+  </Step>
+  <Step title="Os sobreviventes são tarifados">
+    Cada candidato restante é tarifado para o produto desta mensagem contra o lado de **custo** de [rates.conf](/reference/files/rates-conf). O mais barato vence.
+  </Step>
+  <Step title="Um candidato sem tarifa é o último recurso">
+    Um fornecedor sem uma tarifa de custo correspondente é guardado à parte e usado somente se nada mais correspondeu, registrando `No candidate in least-cost table … has a rate`.
+  </Step>
+</Steps>
+
+<Note>
+**Uma linha de tarifa ausente degrada em vez de bloquear.** Recusar rotear uma mensagem sem tarifa transformaria uma linha esquecida em `rates.conf` em uma indisponibilidade; preferi-la enviaria tudo pelo fornecedor menos configurado. O último recurso é a única resposta que não é nenhuma das duas.
+
+Ainda assim vale a pena alertar sobre isso, porque um fornecedor que está ganhando tráfego com uma tarifa ausente está ganhando com uma margem desconhecida. Consulte [Como funciona a precificação](/platform/billing/how-pricing-works).
+</Note>
+
+## Duas coisas recusadas de imediato
+
+Ambas são recusadas no carregamento, em bloco, porque nenhuma tem um estado parcial que roteie da forma que qualquer pessoa pretendia. O conjunto de tabelas para de atualizar até que seja corrigido.
+
+<AccordionGroup>
+  <Accordion title="Um grupo de fornecedores dentro de uma tabela LCR">
+    O menor custo escolhe por preço e um grupo escolhe por política. Expandir os membros em candidatos tarifados descartaria silenciosamente a política, e um grupo com pesos não tem significado algum a oferecer para uma comparação de preços.
+
+    Use um ou outro em uma dada tabela: um grupo quando você quer failover e divisão proporcional, uma tabela LCR quando você quer o fornecedor ativo mais barato.
+  </Accordion>
+  <Accordion title="Um nome que é ao mesmo tempo um grupo e uma tabela, ou ao mesmo tempo um grupo e um worker">
+    A resolução é tabela, depois grupo, depois worker, então um dos dois ficaria silenciosamente inalcançável. Renomeie um deles.
+  </Accordion>
+</AccordionGroup>
+
+## Copiar e continuar não tem significado aqui
+
+`+copied` marca uma regra como "adicione este alvo e continue varrendo". Uma tabela LCR já varre a tabela inteira e depois escolhe um candidato mais barato, então não há nada que uma cópia possa contornar. O painel indica isso em vez de deixar a flag parecer significativa.
+
+## Diagnosticando uma escolha
+
+`outSms.routing.trace`, configurado com um número de série ou um id de conta, explica quais regras corresponderam. A seleção em si, qual candidato venceu e a que tarifa, é registrada sob `outSms.routing.debug`, que só é utilizável em um gateway ocioso; consulte [Como funciona o roteamento](/platform/routing/how-it-works).
+
+Se uma tabela LCR envia tudo para um fornecedor, verifique nesta ordem:
+
+- O nome da função está escrito como `LCR`?
+- Os outros candidatos têm alguma tarifa de custo, para **o produto desta mensagem**?
+- Os outros candidatos estão aceitando? Um fornecedor que está vinculado mas não pode transmitir é pulado.
+
+As tarifas são configuradas separadamente; consulte [rates.conf](/reference/files/rates-conf) e [routingTable.conf](/reference/files/routing-table).

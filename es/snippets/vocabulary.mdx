@@ -1,0 +1,15 @@
+export const VendorServerNote = () => (
+  <Note>
+    **Vendor** es una conexión de salida hacia quien transporta su tráfico. **Server** es un listener
+    al que sus clientes se conectan. La configuración los llama `smppclient` y `smppserver`; este sitio
+    y el panel de control nunca lo hacen. Consulte [Conceptos](/platform/concepts).
+  </Note>
+);
+
+export const RefusalNote = () => (
+  <Warning>
+    FireFlo rechaza en lugar de adivinar en más lugares que la mayoría de las pasarelas. Cuando una
+    página indica que algo se rechaza, es deliberado y el rechazo es el comportamiento documentado.
+    No es una limitación pendiente de resolver.
+  </Warning>
+);

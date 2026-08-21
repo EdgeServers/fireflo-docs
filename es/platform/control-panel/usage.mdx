@@ -1,0 +1,71 @@
+---
+title: "Uso"
+description: "Volumen y entrega por cuenta, con la única elección aritmética que evita que una tarde ocupada se lea como un colapso."
+---
+
+Cuánto tráfico salió, si llegó, y quién lo envió. Volumen y entrega encabezan; el dinero es la
+última columna en lugar del titular: la pregunta comercial se responde en
+[Ingresos](/platform/control-panel/revenue).
+
+El selector de rango ofrece **24 horas**, **7 días** o **30 días** y **por defecto son 7 días**,
+que es el único sitio del panel que no tiene 24 horas por defecto. Un día es la unidad en la que se
+hace una pregunta de uso, y un solo día de bloques horarios no puede mostrarle una forma de
+día laborable a fin de semana.
+
+## Las cifras
+
+Cuatro tarjetas (**Sent**, **Delivered**, **Failed**, **Delivery rate**), con la tarjeta de tasa
+señalando cuántos mensajes aún están esperando un acuse.
+
+<Warning>
+**La tasa de entrega es entregado sobre lo que se ha liquidado, no sobre lo enviado.**
+
+Dividir por enviado contaría cada mensaje aún en vuelo como un fallo. La tasa colapsaría cada tarde
+ocupada y se recuperaría sola durante la noche, y nadie podría distinguir un problema de entrega
+real del tráfico ordinario.
+
+Así que una tasa del 98% significa 98% *de los mensajes que tienen un resultado*. Los mensajes que
+aún esperan se cuentan en **Sent**, y en **Pending** en la tabla, y no están en ninguna mitad de la
+tasa.
+</Warning>
+
+## Tráfico
+
+Delivered y failed apilados por día contra volumen a la izquierda, y la tasa de entrega como una
+línea contra un eje fijo 0–100% a la derecha.
+
+Dos elecciones deliberadas que vale la pena conocer:
+
+- **Los mensajes aún esperando un acuse se cuentan en los totales pero no se dibujan.** De lo
+  contrario, hoy siempre se leería como un pico de desconocidos.
+- **Un día sin nada liquidado no tiene tasa en absoluto**, y la línea se rompe en lugar de bajar a
+  cero. Un hueco es "sin evidencia"; un cero sería "todo falló".
+
+## Por cuenta
+
+El remitente más pesado primero: **Account · Sent · Delivered · Failed · Pending · Rate · Billed**.
+
+Cada cuenta enlaza a ese cliente, donde la misma pregunta se responde solo para él.
+
+El tráfico que no nombró ninguna cuenta aparece como un **no account** en gris: no es un error, y no
+es una cuenta con nombre vacío. Es tráfico que llegó sin una, que normalmente significa un login
+sin cuenta adjuntada, y vale la pena perseguirlo porque tarifica y factura de forma distinta.
+
+## Uso frente al extracto
+
+Esta pantalla cuenta mensajes. El [extracto](/platform/billing/statements) de un cliente cuenta
+dinero, y se factura sobre el envío en lugar de la entrega. Así que la cifra de entregado aquí
+sigue moviéndose después de cortar un extracto mientras el importe facturado no lo hace.
+
+No se pretende que coincidan en entrega. Se pretende que coincidan en **sent**.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Ingresos" icon="coins" href="/platform/control-panel/revenue">
+    El mismo tráfico, valorado.
+  </Card>
+  <Card title="Rollups de uso y retención" icon="database" href="/platform/billing/usage-and-retention">
+    El rollup diario en el que se apoya esta pantalla, y lo que la purga borra.
+  </Card>
+</CardGroup>

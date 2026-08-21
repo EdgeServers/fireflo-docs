@@ -1,0 +1,97 @@
+---
+title: "Saldo e cotações"
+description: "Como verificar o que sobrou e quanto uma mensagem vai custar. E por que uma recusa pode começar com o saldo ainda positivo."
+---
+
+Dois endpoints, e nenhum deles envia qualquer coisa.
+
+## O que sobrou
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/balance'
+```
+
+```json
+{
+  "data": {
+    "balance": 4182.6,
+    "sms_count": "ND"
+  }
+}
+```
+
+`balance` é o dinheiro na conta para a qual esse login fatura. `sms_count` é `"ND"` (not
+determined) sempre que a plataforma não consegue converter dinheiro em contagem de mensagens, o que é
+o caso normal assim que você tem mais de um preço.
+
+<Warning>
+**Não faça polling disso antes de cada envio.** É uma leitura de banco de dados, não diz nada sobre
+se *essa* mensagem vai ser aceita e dobra seu volume de requisições. Faça polling em um cronograma
+para alertas, e deixe um `402` ser seu sinal por mensagem.
+</Warning>
+
+## Quanto uma mensagem vai custar
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  --get --data-urlencode 'to=61491570006' \
+  --data-urlencode 'content=Your OTP is 4417, valid for 10 minutes.' \
+  'https://sms.example.com/secure/rate'
+```
+
+```json
+{
+  "data": {
+    "unit_rate": 0.045,
+    "submit_sm_count": 1
+  }
+}
+```
+
+**O custo é `unit_rate × submit_sm_count`.** `submit_sm_count` é a contagem de segmentos, então esse
+é também o jeito de descobrir que uma mensagem que você achava que era uma é na verdade três.
+
+`/secure/rate` **não envia nada, não cobra nada e não conta em nenhum rate limit.** Isso o torna
+seguro para chamar em conteúdo gerado por usuários antes de comprometer um envio. É a única checagem
+prévia que é genuinamente grátis.
+
+<Tip>
+O preço pode diferir por país e rede, e é por isso que `to` é obrigatório em vez de opcional. Uma
+cotação sem destino seria um chute.
+</Tip>
+
+## O comportamento em bloco, que explica uma recusa ocasional
+
+O crédito é **reservado em blocos, não por mensagem**. Cerca de vinte mensagens por vez. É o que
+mantém o caminho de envio fora do banco de dados.
+
+<Warning>
+**Você pode ver um `402` com saldo ainda na conta.** As recargas são assíncronas, então uma mensagem
+que chega enquanto a próxima reserva está sendo feita é recusada. **Repetir tem sucesso**, e esse é
+o único `402` que vale um retry.
+
+Um `402` *persistente* com saldo saudável é outra coisa. Reporte ao seu provedor.
+</Warning>
+
+**O tamanho do bloco não deixa crédito preso.** Uma reserva cai do bloco cheio para o piso, e depois
+para a única mensagem que pediu. Assim, uma conta gasta cada unidade que tem, e uma pequena recarga
+funciona exatamente como você esperaria.
+
+## O produto muda o preço
+
+`product` em qualquer um dos endpoints tarifa contra um produto diferente. De uma lista de
+permissões que seu provedor mantém por login, e **a maioria dos logins não tem nenhum**.
+
+A mesma lista de permissões vale para os dois endpoints, deliberadamente: uma cotação e um envio não
+podem discordar sobre o que você pode nomear.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Extratos e limites" icon="file-invoice" href="/developers/billing/statements-and-limits">
+    Seu histórico de uso e os tetos que se aplicam a você.
+  </Card>
+  <Card title="Tarifar uma mensagem" icon="calculator" href="/reference/api/rate">
+    Todos os campos de `/secure/rate`.
+  </Card>
+</CardGroup>

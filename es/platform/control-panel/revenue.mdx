@@ -1,0 +1,72 @@
+---
+title: "Ingresos"
+description: "Coste, precio y margen por cuenta y producto. Y la regla de conteo que explica por qué el margen parece más fino de lo que la tarifa dice que debería."
+---
+
+**Los ingresos cuentan cada mensaje una vez; el coste cuenta cada intento de vendor.**
+
+Esa frase es toda la pantalla. Un mensaje por el que facturó a una tasa puede haberse enviado a un
+vendor tres veces antes de pegarse, y se le cobró por los tres. La tarifa dice que su margen es un
+tercio; el informe dice que es mucho menos; ambos son correctos, y solo el informe trata de dinero
+que realmente se movió.
+
+Si el margen aquí está persistentemente por debajo de lo que predice la tarifa, la pregunta a hacer
+no es "¿está mal la tarificación?" sino **"¿cuántos intentos está tomando cada mensaje?"**, que es
+una pregunta de reintentos y calidad de vendor, respondida en
+[Calidad de acuses](/platform/control-panel/receipt-quality) y en las páginas propias de los
+vendors.
+
+## Los totales
+
+| Cifra | Significado |
+| :--- | :--- |
+| **Billed** | Lo que se cobró a los clientes |
+| **Vendor cost** | Lo que los vendors le cobraron, cada intento |
+| **Margin** | La diferencia, con su porcentaje, en rojo cuando es negativo |
+| **In flight** | Facturado, resultado desconocido |
+
+<Warning>
+**"In flight" no es dinero perdido y no es un error.** Es tráfico que se ha facturado y aún no
+tiene resultado.
+
+Siempre debe ser pequeño y siempre ser reciente. El barredor de la pasarela cierra los mensajes sin
+reportar como expirados tras 48 horas, así que **cualquier cosa en esta cifra más antigua que 48
+horas significa que el barredor no está ejecutándose**, y eso es un problema de operador, no
+contable.
+</Warning>
+
+## Por cuenta y producto
+
+Una fila por par de cuenta y producto:
+
+**Account · Product · Messages · Billed · Cost · Margin · In flight**
+
+Los márgenes negativos están en rojo, los positivos en verde. Una cuenta o producto faltante
+muestra un guion en lugar de plegarse en un total que lo ocultaría.
+
+En una pantalla estrecha cada fila se convierte en su propia tarjeta y la columna in-flight se
+suprime, conservando messages, billed, cost y margin.
+
+Aquí no hay búsqueda, ni selector de columnas, ni exportación. Este es un resumen para leerse; el
+detalle por mensaje detrás vive en los registros de llamada, que sí exportan.
+
+## Qué tiene que ser verdad para que esto sea correcto
+
+El margen solo puede computarse donde ambos lados del trato se tarificaron en el momento en que se
+envió el mensaje:
+
+- una **tasa del lado de venta** con ámbito a la cuenta, y
+- una **tasa de coste** con ámbito al vendor que lo llevó.
+
+El ámbito de tasa es un campo con dos significados: un id de cuenta es lo que cobra, un nombre de
+vendor es lo que le cobran. Y nada en el esquema los distingue. Sin tasa de coste configurada, el
+coste es cero, y el margen se leerá como el importe facturado completo. Eso no es una plataforma
+sana; es una sin configurar.
+
+<Note>
+Los precios se fijan en el envío y no se mueven después. Cambiar una tarifa hoy no reformula la
+semana pasada, que es lo que hace final un periodo cerrado en el extracto de un cliente, y es
+deliberado. Consulte [cómo funciona la tarificación](/platform/billing/how-pricing-works).
+</Note>
+
+Sin nada facturado en la ventana, la pantalla lee **No billed traffic in this period**.

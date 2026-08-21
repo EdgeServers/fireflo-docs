@@ -1,0 +1,97 @@
+---
+title: "smsg.properties"
+description: "Cómo se declaran las instancias de worker, los tres niveles de propiedades y el único archivo que aún se lee al arranque en modo base de datos."
+---
+
+Definiciones de worker y sus ajustes, más las propiedades `smsg.*` a nivel de pasarela.
+
+## Declarar un worker
+
+Cada worker es un conjunto de propiedades `outSms.instance.<name>.*`. El `type` decide qué es:
+
+```properties
+# Un listener al que los clientes se conectan
+outSms.instance.smpp.type      = smppserver
+outSms.instance.smpp.srv.port  = 27777
+outSms.instance.smpp.enable    = true
+
+# Una conexión saliente a un operador
+outSms.instance.vendor1.type     = smppclient
+outSms.instance.vendor1.host     = smpp.example.net
+outSms.instance.vendor1.port     = 2775
+outSms.instance.vendor1.systemId = ourid
+outSms.instance.vendor1.password = REPLACE_ME
+outSms.instance.vendor1.tps      = 500
+```
+
+<Note>
+`smppclient` y `smppserver` son los valores de configuración. Este sitio y el panel de control los llaman
+**vendor** y **server** en el resto de sitios. Consulta [Conceptos](/platform/concepts).
+</Note>
+
+Cada clave disponible en cada uno está listada en [Ajustes de listener](/reference/smpp/server),
+[Ajustes de proveedor](/reference/smpp/client) y [Ajustes base](/reference/smpp/worker-base).
+
+## Tres niveles
+
+```properties
+# nivel 2: el baseline que cada worker hereda
+outSms.default.mandatory.tlvs.submit = peid_0x1400
+outSms.default.default.tlvs.submit   = tmid_0x1402=1102000000000012345
+
+# nivel 1: solo este worker, gana sobre lo anterior
+outSms.instance.vendor1.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+```
+
+La resolución es instancia → `outSms.default.*` → el predeterminado codificado en la tabla `prms`. Explicación completa
+en [Rutas y niveles de propiedades](/reference/config/paths).
+
+<Note>
+La palabra duplicada en `outSms.default.default.tlvs.submit` es correcta. El primer `default` es el
+nivel de fallback; el segundo es parte del nombre de propiedad `default.tlvs.submit`.
+</Note>
+
+## Propiedades a nivel de pasarela
+
+Todo bajo `smsg.*` también vive aquí. Tarificación, CDR, crédito, whitelisting, límites de cola, webhook
+de salida, los tokens operacionales. Están catalogados por tarea en
+[Claves de configuración](/reference/config/paths).
+
+```properties
+smsg.config.source        = file
+smsg.rates.currency       = AUD
+smsg.cdr.sink             = auto
+smsg.balance.enabled      = true
+smsg.ops.token            = REPLACE_ME
+smsg.ops.admin.token      = REPLACE_ME_DIFFERENTLY
+```
+
+## El único archivo aún leído en modo base de datos
+
+En modo `db` cada watcher de archivo se retira y `credentials.yml`, `routingTable.conf` y
+`rates.conf` no se leen tras el arranque.
+
+<Warning>
+**`smsg.properties` aún se lee al arranque**, porque `smsg.config.source` y el datasource tienen
+que venir de algún sitio antes de que se pueda consultar la base de datos.
+
+Eso significa que el interruptor de fuente y los detalles de conexión permanecen en este archivo incluso en un despliegue
+totalmente dirigido por base de datos. Y un cambio a cualquiera aún necesita un reinicio.
+</Warning>
+
+Una vez ejecutándose en modo `db`, los ajustes de worker vienen de `app_worker_property` y las propiedades de pasarela de
+`app_config`, ambos proyectados sobre los mismos nombres de clave. Si una clave está definida tanto en la tabla de worker como
+en `app_config`, **la tabla de worker gana y el duplicado se registra**.
+
+## Propiedades de enrutamiento y trace de mensaje
+
+```properties
+outSms.routing.maxAttempts = 20
+outSms.routing.trace       = acct-1001
+message.trace.mode         = necessary
+```
+
+<Warning>
+`message.trace.mode` es **solo global**. A pesar de aparecer en tablas por instancia, un
+`outSms.instance.<name>.message.trace.mode` nunca se lee. Establécelo sin prefijo.
+</Warning>

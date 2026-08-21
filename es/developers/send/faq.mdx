@@ -1,0 +1,95 @@
+---
+title: "FAQ de envío"
+description: "Las preguntas que surgen una vez que fluyen los mensajes: coste, codificación, ids, duplicados y programación."
+---
+
+<AccordionGroup>
+
+<Accordion title="¿Por qué un mensaje costó tres?">
+Se le factura por segmento. Un mensaje de más de 160 caracteres GSM-7 —o más de **70** si algo en
+él fuerza UCS-2— se parte, y cada segmento se cobra.
+
+La causa más común de una triplicación inesperada es una única comilla curva `’` pegada desde un
+documento, que fuerza todo el mensaje a UCS-2. Llame a `/secure/rate` para ver
+`submit_sm_count` antes de enviar.
+</Accordion>
+
+<Accordion title="Recibí un 200 y el mensaje nunca llegó">
+`200` significa *aceptado para enrutar*, no entregado. La respuesta del envío se emite antes de
+que se ejecute el enrutamiento.
+
+Pida un acuse de entrega y trátelo como el resultado. Sin él no tiene forma de distinguir
+entregado de descartado, y tampoco la tiene el panel de su proveedor para sus propios mensajes.
+</Accordion>
+
+<Accordion title="¿Puedo enviar el mismo mensaje dos veces por accidente?">
+Sí. **No hay clave de idempotencia** en `/secure/send`. Un reintento tras un timeout envía un
+segundo mensaje y le cobra por él.
+
+Si reintenta automáticamente, reintente solo con `429` y `500`. Un `500` es seguro porque el
+cargo se revierte; un timeout *no* es seguro, porque el mensaje bien pudo haber sido aceptado y
+usted simplemente no vio la respuesta.
+
+Para cualquier cosa financiera o visible al usuario, mantenga su propia clave de deduplicación y
+compruébela antes de enviar.
+</Accordion>
+
+<Accordion title="¿Para qué sirve el messageId?">
+Correlación, y nada más. Aparece en cada acuse de entrega como `id`, en el call record y en la
+búsqueda de su proveedor. Así que es el único valor que merece la pena guardar contra su propio
+registro.
+
+No es un estado. Recuperarlo no es cómo se entera del resultado; el acuse sí.
+</Accordion>
+
+<Accordion title="¿Por qué se rechaza mi validity_period?">
+Es un **entero de minutos**, no una cadena de duración. `60` es correcto, `"1h"` es un `400`.
+
+Una especificación antigua lo tipa como cadena. Si su cliente se generó a partir de una, ahí es de
+donde viene esto.
+</Accordion>
+
+<Accordion title="¿Puedo programar un mensaje único?">
+No en `/secure/send`. La programación vive en `/secure/sendbatch` como
+`batch_config.schedule_at`, y un lote de un mensaje es una forma perfectamente razonable de
+programar un mensaje.
+
+`sdt` en un envío único se pasa al operador sin cambios y **no lo valida ni actúa sobre él la
+pasarela**. No lo use como mecanismo de programación.
+</Accordion>
+
+<Accordion title="Mi lote fue aceptado pero no pasó nada">
+La respuesta de `sendbatch` confirma solo aceptación. No lleva ids por mensaje ni resultados por
+mensaje. Estos llegan a su `errback_url`.
+
+**Las claves desconocidas en `batch_config` se ignoran en lugar de rechazarse**, así que un
+`errback_url` mal escrito pierde cada resultado silenciosamente. Pruébelo enviando
+deliberadamente un mensaje que sepa que fallará.
+</Accordion>
+
+<Accordion title="¿Necesito regularme yo mismo?">
+Para un lote, no. Los lotes se ritman contra la cola del router.
+
+Para envíos ordinarios, sí. Su cuenta tiene un límite de mensajes por segundo y superarlo devuelve
+`429` **sin `Retry-After`**. Aplique backoff exponencial con jitter; un intervalo fijo entre
+varios workers los resincroniza en la siguiente ráfaga.
+</Accordion>
+
+<Accordion title="¿Puedo enviar a varios números en una llamada?">
+Sí, de dos formas. Un lote toma un array `messages`, y el `to` de cualquier mensaje puede ser a
+su vez un array de destinos, que se multiplica.
+
+La expansión tiene un tope de **10 000** mensajes por lote. 100 mensajes con 200 destinatarios
+cada uno son 20 000 y se rechazan.
+</Accordion>
+
+<Accordion title="¿Por qué el valor de mi custom_tlvs nunca llega al operador?">
+Tres causas probables, en orden:
+
+1. **Escribió un decimal desnudo.** `1401` es la etiqueta `0x0579`, no `0x1401`. Se parsea, se
+   envía y el operador la ignora, sin error en ninguna parte.
+2. **El listener no declara la etiqueta.** Las etiquetas no declaradas se descartan en el ingress.
+3. **Algo la sobrescribió.** Un stamp de whitelist en modo `replace` está diseñado para ganar.
+</Accordion>
+
+</AccordionGroup>

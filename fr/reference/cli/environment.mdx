@@ -1,0 +1,47 @@
+---
+title: "Variables d'environnement"
+description: "Ce que chaque verbe CLI lit dans l'environnement, et les flags qui existent uniquement pour rendre une commande destructive délibérée."
+---
+
+## Connexion
+
+| Variable | Utilisée par | Notes |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge` | Les mêmes variables que celles que lit la passerelle, donc sourcer votre fichier d'environnement suffit. |
+| `FIREFLO_OPS_URL` | tout ce qui touche au port opérationnel | L'interface de **management**, 9000 par défaut. |
+| `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify` | Doit correspondre à `smsg.ops.token`. |
+| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, les six verbes de contrôle | Doit correspondre à `smsg.ops.admin.token`. |
+| `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | Un identifiant client. Ce verbe passe par le port de **message**. |
+| `FIREFLO_CONF_DIR` | `verify` | Où chercher la configuration qu'il vérifie. |
+
+## Les quatre flags de permission
+
+Chacun existe parce que la commande qu'il protège est destructive d'une manière qui n'est pas
+évidente d'après son nom. Aucun n'a d'équivalent en ligne de commande, à dessein : un flag que
+vous devez exporter est un flag que vous ne pouvez pas passer par accident depuis l'historique du
+shell.
+
+| Variable | Requise par | Protège contre |
+| :--- | :--- | :--- |
+| `FIREFLO_DB_MIGRATE=true` | `db migrate`, `db repair` | Appliquer un DDL forward-only à la mauvaise base. |
+| `FIREFLO_CONFIG_IMPORT=true` | `import` (pas `--dry-run`) | Remplacer les règles qui décident de ce qui est facturé aux clients. |
+| `FIREFLO_CDR_PURGE=true` | `usage purge` | Supprimer des call records — le seul enregistrement par-message de ce qui a été facturé. |
+| `FIREFLO_DB_RESET=true` | `purge --reset-database` | Vider chaque table. Refuse aussi tant que la passerelle est joignable, et vous demande de saisir le nom de la base. |
+
+<Note>
+`FIREFLO_DB_MIGRATE` et `FIREFLO_CONFIG_IMPORT` sont délibérément séparés. L'un applique des
+changements de schéma ; l'autre remplace tarification et identifiants. Un déploiement qui accepte
+l'auto-migration n'accepte pas nécessairement de voir ses tarifs écrasés.
+</Note>
+
+## Codes de sortie
+
+| Code | Signification |
+| :--- | :--- |
+| `0` | OK |
+| `1` | Échec |
+| `2` | Refusé ou mal utilisé — rien n'a été touché |
+| `4` | `verify` uniquement : le déploiement est sain, les données propres à cette installation ne le sont pas |
+
+Le partage `1` / `2` est ce qui permet à un pipeline de déploiement de distinguer un flag manquant
+d'une migration cassée.

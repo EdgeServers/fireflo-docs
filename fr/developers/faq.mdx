@@ -1,0 +1,96 @@
+---
+title: "FAQ développeurs"
+description: "Démarrer, choisir entre REST et SMPP, et les questions qui précèdent votre premier message."
+---
+
+<AccordionGroup>
+
+<Accordion title="REST ou SMPP — lequel choisir ?">
+**REST**, sauf si vous avez une raison de faire autrement. Un appel HTTPS par message, rien à
+maintenir en vie, et tous les langages le parlent.
+
+**SMPP** justifie sa complexité à volume soutenu élevé, quand un bind persistant évite une poignée
+de main TCP et TLS par message, et quand vous voulez le protocole que les opérateurs eux-mêmes
+utilisent.
+
+Tout ce qui se passe en aval de l'acceptation est identique dans les deux cas : mêmes routage,
+tarification, approbations et accusés.
+</Accordion>
+
+<Accordion title="Un même login peut-il faire les deux ?">
+Non. Les identifiants sont typés `HTTP` ou `SMPP`, et les deux ne sont pas interchangeables.
+Demandez-en un de chaque si vous avez besoin des deux.
+
+C'est la cause d'un `403 Authentication failure` qui survit à toute vérification du mot de passe :
+le login est bon, il est simplement du mauvais type pour la porte à laquelle vous frappez.
+</Accordion>
+
+<Accordion title="Existe-t-il un sandbox ?">
+C'est la décision de votre fournisseur, pas une propriété de la passerelle. Demandez-lui.
+
+Ce qui existe partout est `/secure/rate`, qui tarifie un message sans l'envoyer, ne débite rien et
+ne compte contre aucune limite de débit. Assez pour valider destinations, encodage et prix avant
+d'envoyer quoi que ce soit de réel.
+</Accordion>
+
+<Accordion title="Existe-t-il un SDK officiel ?">
+Non. L'API est assez petite pour qu'un client HTTP et quatre lignes de code suffisent. Voir
+[Quickstart](/developers/quickstart) pour curl, Node, Python et PHP.
+
+<Warning>
+**Vérifiez tout document OpenAPI qui vous a été fourni contre ces pages avant de générer un
+client.** Une spécification plus ancienne circule encore, qui type `custom_tlvs` comme un tableau
+alors qu'il doit être un objet, type `validity_period` comme une chaîne alors qu'il doit être un
+entier, et omet `product`.
+</Warning>
+</Accordion>
+
+<Accordion title="Quelle est mon URL de base ?">
+Celle de votre fournisseur, pas une valeur fixée. Chaque opérateur exploite son propre FireFlo.
+Tous les exemples ici utilisent `https://sms.example.com` comme substitut.
+</Accordion>
+
+<Accordion title="Dois-je gérer la limitation de débit ?">
+Oui, si vous envoyez par rafales. Votre compte a une limite messages-par-seconde. Au-dessus, vous
+recevez `429` avec **aucun en-tête `Retry-After`**.
+
+Faites un backoff exponentiel avec du jitter. Un intervalle de retry fixe partagé entre plusieurs
+workers les resynchronise sur la prochaine rafale, transformant une limite momentanée en limite
+prolongée.
+</Accordion>
+
+<Accordion title="Comment savoir qu'un message a été livré ?">
+Un [accusé de livraison](/developers/receive/delivery-receipts), et rien d'autre. Demandez-en un
+avec `"dlr": "yes"` et un `dlr_url`.
+
+Attendez un accusé de **niveau 2**. `ACCEPTD` et `BUFFRED` arrivent en niveau 1 et un autre suit.
+Un client qui traite le premier accusé comme final rapportera toujours le mauvais résultat.
+</Accordion>
+
+<Accordion title="Pourquoi je reçois trois accusés pour un long message ?">
+Parce que vous avez envoyé trois `submit_sm`. `conf.dlr.multipart` vaut par défaut `all`, donc il y
+a un accusé par segment soumis, chacun citant l'id qui vous a été remis.
+
+Votre fournisseur peut le régler sur `first` ou `last` pour n'en laisser qu'un. **Chaque accusé
+rapporte le même résultat** quel que soit son choix, parce que les segments sont agrégés avant
+qu'un accusé ne soit construit.
+</Accordion>
+
+<Accordion title="Pourquoi un long message partiellement livré est-il rapporté comme échoué ?">
+Parce que le destinataire n'a pas reçu de message lisible. La résolution attend le dernier segment
+et rapporte le **pire** résultat, pas le premier.
+
+C'est la réponse honnête, et elle fait baisser les taux de livraison affichés par rapport aux
+passerelles qui rapportent le premier segment. À savoir avant de comparer les fournisseurs sur un
+taux de livraison.
+</Accordion>
+
+<Accordion title="Puis-je récupérer mes messages hors du système ?">
+Oui. Le portail client affiche vos propres messages avec recherche et export CSV, et votre relevé
+séparément. Voir [le portail](/developers/portal/messages-and-statement).
+
+Vous voyez les TLVs **que vous** avez envoyés sur vos propres messages. Ce qu'un fournisseur a
+ajouté en aval ne vous appartient pas et n'est pas visible.
+</Accordion>
+
+</AccordionGroup>

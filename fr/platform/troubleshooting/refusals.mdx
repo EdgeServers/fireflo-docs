@@ -1,0 +1,122 @@
+---
+title: "Refus"
+description: "Toutes les raisons dans cdr_rejected, ce que chacune signifie vraiment, et la propriété commune qui les distingue du routage."
+---
+
+Un **refus** est un message que FireFlo a décliné avant le routage. Il est enregistré dans
+`cdr_rejected`, et c'est un animal différent d'un message qui a été routé et a échoué.
+
+```bash
+psql "$FIREFLO_DB_URL" -c "SELECT reason, count(*), max(rejected_at) FROM cdr_rejected GROUP BY 1 ORDER BY 2 DESC"
+```
+
+Ou, sans SQL, la liste **Refused** dans le panneau de contrôle, qui contient les mêmes lignes avec la
+requête qui les a produites.
+
+## Les raisons
+
+| `reason` | Ce qui s'est passé | Ce que le client a vu | Correctif |
+| :--- | :--- | :--- | :--- |
+| `headerNotApproved` | L'ID d'expéditeur n'est pas sur la liste approuvée du compte | `0x415` / `403` | Approuvez l'ID d'expéditeur |
+| `templateNotMatched` | Le corps ne correspondait à aucun template approuvé | `0x412` / `403` | Approuvez le libellé, ou corrigez le template |
+| `missingMandatoryTlv` | Un tag requis s'est résolu en rien | `0xC3` / `403` | Fournissez-le quelque part — voir [TLVs](/platform/connections/tlvs) |
+| `insufficientCredit` | Le solde prépayé ne le couvrait pas | `0x402` / `402` | Rechargez |
+
+La colonne SMPP est ce que le `submit_sm_resp` du client transportait ; la colonne HTTP est
+l'équivalent REST. Trois des quatre sont des codes **spécifiques au fournisseur** dans la plage
+`0x4xx` plutôt que des codes SMPP standard. `0xC3` est l'exception, étant `ESME_RMISSINGOPTPARAM` de
+la spécification. Le client SMPP d'un customer n'aura pas de noms pour les valeurs `0x4xx`, donc
+citez-lui le mot-clé de la raison, pas le nombre.
+| `filtered` | Un filtre l'a refusé | varie | Lisez le filtre |
+| `maxAttempts` | **Pas un refus.** Le routage a abandonné | rien à la soumission | [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered) |
+
+## Ce que tous les refus ont en commun
+
+**Rien n'a été facturé, ou la facturation a été inversée.** Un refus ne coûte rien au client, c'est
+pourquoi il est sans risque d'être strict à leur égard — et pourquoi `insufficientCredit` n'est pas
+un paradoxe.
+
+## Celui qui est le plus difficile à expliquer
+
+<Warning>
+**Un refus de contenu multipart se produit *après* que chaque segment a été acquitté.**
+
+En SMPP, le contenu n'est vérifié contre un template qu'une fois les segments réassemblés — au
+moment de la soumission, le corps est encore un fragment, et `"Your OTP is {#var#}, valid"` ne
+correspond à aucune partie d'un message en deux parties.
+
+Donc le client a vu un OK pour chaque segment, puis le message a été jeté, remboursé et enregistré.
+Il n'y a aucune erreur qu'il aurait pu attraper, et l'accusé est le seul signal.
+
+C'est la forme normale pour les templates DLT en langues indiennes, où UCS-2 met 67 caractères dans
+un segment — donc un template qui fonctionne en anglais commence à échouer dès que le libellé est
+traduit.
+</Warning>
+
+## Lire un `templateNotMatched`
+
+Presque toujours une des quatre choses, par ordre décroissant de fréquence réelle :
+
+<AccordionGroup>
+
+<Accordion title="Le libellé diffère vraiment">
+Les espaces sont normalisés avant la comparaison, donc les suites d'espaces et de sauts de ligne ne
+sont pas le problème. Tout le reste — un point supplémentaire, un mot changé, une position de
+variable différente — l'est.
+
+L'aperçu du template dans le panneau montre un exemple de message que le template accepte.
+Comparez-le à ce que le client a réellement envoyé, qui se trouve sur la ligne `cdr_rejected`.
+</Accordion>
+
+<Accordion title="Le template est dégradé">
+Un nom de placeholder non reconnu — `{#VAR#}`, `{#otp#}` — se charge en tant que **variable
+générique** plutôt que d'être supprimé, et la ligne est signalée sous `templates_degraded` sur
+`/ops/health`.
+
+Il correspond toujours, mais bien plus largement que prévu : `{#var#}` accepte n'importe quoi jusqu'à
+la limite de longueur. Si un template approuve des messages qu'il ne devrait pas, regardez ici en
+premier.
+</Accordion>
+
+<Accordion title="La variable est plus longue que la limite">
+`smsg.whitelist.max.variable` borne la quantité de texte qu'un placeholder peut représenter. Un
+template `"Your code is {#var#}"` avec un corps de 900 caractères est refusé même si le libellé
+correspond.
+</Accordion>
+
+<Accordion title="Le compte est en ENFORCE et ne devrait pas l'être">
+Le mode `REPORT` compte ce qui *serait* refusé sans le refuser — `whitelist_would_reject` sur
+`/ops/health`. Faire tourner un nouveau compte en `REPORT` pendant une journée avant d'appliquer
+transforme toute cette classe d'incidents en un nombre que vous lisez à loisir.
+</Accordion>
+
+</AccordionGroup>
+
+## `insufficientCredit` sur un compte avec de l'argent dessus
+
+Pas une contradiction, et la surprise la plus fréquente en exploitation prépayée.
+
+**Le crédit est réservé par blocs, pas par message.** Le bloc est `max(smsg.balance.block.min,
+price × smsg.balance.block.min.messages)` — l'équivalent de vingt messages par défaut.
+
+Une réservation essaie **trois paliers décroissants** : le bloc complet, ce plancher, puis le seul
+message qui a demandé. Donc le plancher n'immobilise jamais d'argent — un compte dépense chaque
+unité qu'il détient.
+
+<Tip>
+**Un refus sur un compte avec de l'argent restant est généralement un rechargement en vol.** Les
+rechargements sont asynchrones, donc un message arrivant en pleine réservation peut être refusé ; la
+nouvelle tentative réussit. Des refus persistants avec un solde sain sont un problème différent —
+vérifiez le grand livre et `reserved`.
+</Tip>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Whitelisting" icon="shield-check" href="/platform/customers/whitelisting-rollout">
+    Approuver les IDs d'expéditeur et les libellés.
+  </Card>
+  <Card title="Crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Blocs, réservations et identité monétaire.
+  </Card>
+</CardGroup>

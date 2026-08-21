@@ -1,0 +1,133 @@
+---
+title: "Capturar una sesión"
+description: "Responder 'qué está enviando realmente este cliente' para una sesión, bajo demanda. Con las dos cosas que el archivo no te dirá."
+---
+
+Responder *qué está enviando realmente este cliente* solía significar establecer `log.pdus` en un **worker
+entero**, que escribe los PDUs decodificados de cada sesión en un log compartido que el temporizador de limpieza mantiene durante
+una quincena.
+
+Una captura hace lo mismo para **una sesión**, bajo demanda, y se lleva el resultado consigo.
+
+```bash
+fireflo capture start smppserver.smpp 3 120
+fireflo capture status smppserver.smpp 3
+fireflo capture txt   smppserver.smpp 3 > session-3.txt
+fireflo capture pcap  smppserver.smpp 3 > session-3.pcap
+fireflo capture stop  smppserver.smpp 3
+```
+
+Las mismas cinco acciones están en la interfaz de gestión, todas detrás de `smsg.ops.admin.token`.
+
+## Qué contiene, y por qué eso es el token admin
+
+**Todo, decodificado: cuerpos de mensajes, números de destino, TLVs.**
+
+Ese es el objetivo. Una captura que dejara fuera el contenido no podría responder la pregunta por la que la gente empieza
+una. También es por lo que estas necesitan el token **admin** en lugar del token de lectura, y por qué el `.txt`
+lo dice en su propia cabecera.
+
+<Warning>
+**Una captura de proveedor dejada corriendo a través de una reconexión contendrá tu propia contraseña en ese operador.**
+
+En un listener, una sesión solo existe después de su bind, así que una captura empezada ahora no contendrá la
+contraseña del cliente a menos que rehaga bind mientras corre. En una conexión de **proveedor** el worker
+se reconecta en su propio horario, y el bind que envía lleva las credenciales *de este gateway*.
+</Warning>
+
+## Qué cuesta
+
+Nada medible, que es la regla a la que se construye la funcionalidad.
+
+El tap es **una lectura de campo volátil por PDU** en sesiones que no se están capturando. En la
+sesión capturada hace un `offer` acotado en una cola de traspaso y regresa; un hilo separado hace
+todo el formateo y codificación, así que nada caro corre en el hilo de I/O de Netty.
+
+Medido en un listener loopback a ~32 000 TPS, aproximadamente treinta veces una sesión real ocupada, una captura
+bajo carga se mantuvo dentro del ruido de ejecución a ejecución de la línea base no capturada, con `dropped` a cero.
+
+<Tip>
+Si la cola de traspaso alguna vez se llena, **descarta y cuenta** en lugar de bloquear. `dropped` aparece
+en el estado, la cabecera del `.txt` y el panel. Porque una captura con pérdida que lo dice es un
+diagnóstico, mientras que una que silenciosamente omite PDUs te hace concluir que un cliente nunca envió algo que
+sí envió.
+</Tip>
+
+## Límites, y nada tocando disco
+
+| Límite | Por defecto | Máximo |
+| :--- | ---: | ---: |
+| Duración | 60s | 300s |
+| PDUs | 20 000 | 200 000 |
+| Bytes | 8 MB | 32 MB |
+| Capturas concurrentes | 3 | 3 |
+| Conservada tras detener | 15 minutos | — |
+
+Cualquiera que sea el límite alcanzado primero detiene la captura y **dice cuál**. `stopped_because` lleva una
+frase como `reached the 8388608 byte limit`. Un archivo truncado sin explicación es un hecho equivocado
+sobre el cliente.
+
+Las capturas viven **solo en memoria**. El servicio corre bajo `ProtectSystem=strict`, así que un archivo tendría
+que estar en el directorio de datos como contenido de cliente en texto plano; un buffer acotado que expira hace que la
+historia de retención sea *"quince minutos, aplicados"* en lugar de *"hasta que alguien recuerde"*. Una cuarta
+captura concurrente se rechaza con `409`.
+
+## El framing del pcap es sintético
+
+El `.pcap` abre en Wireshark y su disector SMPP lo lee. Pero **las cabeceras IPv4 y TCP alrededor
+de cada PDU están fabricadas**.
+
+Lo que se captura son PDUs decodificados, recodificados, no los bytes que estaban en el cable. Direcciones y puertos
+son los reales de la sesión; los números de secuencia, ventanas y flags están construidos para hacer que el stream
+se reensamble.
+
+<Warning>
+**No leas el `.pcap` como evidencia sobre comportamiento TCP.** Léelo como evidencia sobre SMPP.
+
+Y una consecuencia de tap sobre PDUs decodificados: **un PDU que falla al decodificar nunca se captura.** Si un
+cliente envía un submit malformado, el decodificador lo rechaza antes del tap y la captura no muestra nada
+donde estaba el tráfico. El log del gateway lleva el error del decodificador en ese caso.
+</Warning>
+
+## En un puerto no estándar, dile a Wireshark que es SMPP
+
+Wireshark registra el disector SMPP en TCP **2775**. Una sesión en cualquier otro puerto (un proveedor en
+2779, un segundo listener en 27778) se diseca como TCP plano, y el filtro SMPP entonces coincide con
+**nada**.
+
+Eso se parece exactamente a un archivo corrupto, así que descártalo primero:
+
+```bash
+tshark -r capture.pcap -d tcp.port==2779,smpp -Y smpp
+```
+
+En la GUI: **Analyze → Decode As…**, añadiendo el puerto con SMPP como protocolo. El puerto en el archivo
+es el real de la sesión, así que `tcpdump -r capture.pcap -n | head -1` te dice qué número usar.
+
+<Tip>
+**Una forma rápida de distinguir un problema de puerto de uno real:** `tcpdump -r capture.pcap -n | wc -l` cuenta
+los paquetes, y el conteo de filas `-Y smpp` debería coincidir exactamente. Igual significa que cada PDU se diseccionó; cero
+significa que el disector nunca se aplicó.
+
+Verificado contra TShark 3.6.2 en una captura de proveedor de 48 PDUs: 48 entrando, 48 diseccionados, `submit_sm` emparejado con
+`submit_sm_resp` por número de secuencia, cuerpos y destinos legibles, sin paquetes malformados.
+</Tip>
+
+## Sesiones de proveedor
+
+Las capturas funcionan igual en una conexión de proveedor, por eso cada sesión reporta un `session_id` en
+ambos tipos.
+
+Ese id **no** significa que un bind de proveedor pueda desconectarse. Disconnect aún responde `409` para un worker
+de proveedor, porque la guardia es el tipo de worker, no la presencia de un id.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Tokens y acceso" icon="key" href="/platform/operations/tokens-and-access">
+    Por qué esto necesita el token admin y health no.
+  </Card>
+  <Card title="Control de workers" icon="sliders" href="/platform/operations/worker-control">
+    Deshabilitar, suspender y retener.
+  </Card>
+</CardGroup>

@@ -1,0 +1,113 @@
+---
+title: "FAQ de billing"
+description: "As perguntas que os operadores fazem uma vez que o dinheiro está circulando: discrepâncias, crédito preso, tráfego sem preço e períodos que não fecham."
+---
+
+<AccordionGroup>
+
+<Accordion title="Uma conta está recusando mensagens e tem dinheiro nela">
+Quase sempre um **refill em trânsito**, não crédito preso.
+
+Crédito é reservado em blocos, e refills são assíncronos por design. Portanto uma mensagem que chega
+enquanto a próxima reserva está sendo tomada pode ser recusada com dinheiro ainda na conta. Uma
+retentativa funciona.
+
+**O piso do bloco não deixa nada preso.** Uma reserva tenta o bloco cheio, depois o piso denominado
+em mensagens, depois apenas a única mensagem que pediu, portanto uma conta gasta cada unidade que
+possui. Uma que foi fundeada para três mensagens envia três.
+
+Se isso acontece em uma conta **bem fundeada**, a causa é diferente e histórica: o piso costumava
+ser um valor em moeda, que podia dimensionar um bloco em exatamente uma mensagem para um destino
+caro. É para isso que `smsg.balance.block.min.messages` existe.
+</Accordion>
+
+<Accordion title="Um top-up não chegou">
+A conta quase certamente não tem uma linha `account_balance`. Um `RECHARGE` para tal conta credita
+nada, permanece **pending** e se aplica no momento em que a linha aparece — com um WARN nomeando a
+conta.
+
+**Criar uma credencial não cria uma linha de saldo.** Use *Open for credit* na página da conta.
+</Accordion>
+
+<Accordion title="A reconciliação diz que uma conta está fora exatamente pelo seu consumo">
+Você está usando a identidade errada. `credited − consumed = balance + reserved` está **errado** e
+falha assim em toda conta.
+
+Consumo nunca toca as colunas de balance. `reserved` é um contador de lifetime-consumed, não um
+hold. O par correto é:
+
+```
+Σ(RECHARGE + TRANSFER) = balance + reserved
+reserved − consumed    = reserved but not yet spent  (≥ 0)
+```
+</Accordion>
+
+<Accordion title="Crédito ficou preso em reserved após um crash">
+Um `kill -9` o deixa preso. `balance + reserved` ainda é conservado — **o dinheiro está estacionado,
+não perdido** — e `POST /ops/credit/release` o devolve. Um shutdown limpo faz isso automaticamente.
+</Accordion>
+
+<Accordion title="Tráfego está sendo enviado e nada está sendo cobrado por ele">
+Uma conta que ninguém precificou **não é recusada** — ela envia sem preço e sem cobrança, com uma
+linha em `debug`.
+
+Configure o scope `[*]`. Ele precifica qualquer conta sem regra própria, incluindo contas criadas
+depois, e é a única coisa de maior valor a configurar no dia um. Sem isso, essa falha é silenciosa
+e cumulativa.
+</Accordion>
+
+<Accordion title="A margem de um vendor aparece como desconhecida em vez de um número">
+Funcionando conforme esperado. **Uma regra que não casa com nada deixa o valor desconhecido, nunca
+zero.** E o default `[*]` aplica-se *apenas ao price, nunca ao cost*.
+
+Se ele fizesse default no lado de cost também, toda margem seria computada como zero em vez de
+desconhecida, e nada avisaria você de que um vendor não tinha rates.
+</Accordion>
+
+<Accordion title="Uma conta postpaid parou de enviar e está abaixo do limite">
+Seu período provavelmente não foi fechado. A linha `BILL` mais recente é o início da janela não
+faturada. **Fechar é o que devolve espaço.**
+
+Nada está quebrado; a fatura não foi emitida.
+</Accordion>
+
+<Accordion title="Um reembolso caiu depois de eu ter fechado o período. Devo reabri-lo?">
+Não. Um período fechado nunca é reescrito. O painel re-executa o resumo, compara-o com o valor
+armazenado e mostra a diferença como uma **credit note contra o próximo período**.
+
+Reformular silenciosamente significaria que a fatura que o cliente pagou no mês passado pararia de
+casar com o que o painel mostra este mês, sem nada registrando que ela mudou ou por quê.
+</Accordion>
+
+<Accordion title="O purge se recusou a rodar">
+Ele encontrou um dia sem linha `usage_daily`. Essa é uma recusa da execução inteira, por design.
+Deletar um dia sem summary destrói o registro de consumo permanentemente.
+
+Execute `fireflo usage rollup --catch-up` e depois faça o purge. Os dois são comandos separados
+deliberadamente: um purge que silenciosamente fizesse o rollup primeiro significaria que um bug de
+rollup seria descoberto pelo comando que apaga a evidência.
+</Accordion>
+
+<Accordion title="Totais diários estão errados por algumas horas de tráfego">
+`FIREFLO_BILLING_ZONE`. Um dia de billing é um dia **local**, e em UTC as últimas cinco horas e meia
+de uma noite de um cliente indiano caem na linha do dia seguinte.
+
+Configure antes do primeiro rollup. Mudar depois significa deletar e recomputar todo dia já resumido.
+</Accordion>
+
+<Accordion title="Uma mensagem que eu sei que foi enviada não aparece em lista nenhuma">
+Normalmente o writer e o reader estão apontados para bancos de dados diferentes. Verifique
+`smsg.cdr.sink` e o `FIREFLO_DB_URL` do gateway contra o `METRICS_DATABASE_URL` do painel antes de
+olhar em qualquer outro lugar.
+</Accordion>
+
+<Accordion title="A receita parece alta demais após uma rajada de recusas de vendor">
+Não deveria, e se está, cheque a query. Uma mensagem recusada carrega **nenhum dinheiro** — `price`,
+`cost` e `margin` são null, porque o crédito foi devolvido no momento da recusa.
+
+Toda query de receita embutida soma essas colunas *sem* um filtro de desfecho, precisamente para
+que uma mensagem reembolsada não superestime a receita. Uma query escrita à mão que trate `NULL`
+como zero quebra isso.
+</Accordion>
+
+</AccordionGroup>

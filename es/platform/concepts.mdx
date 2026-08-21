@@ -1,0 +1,139 @@
+---
+title: "Conceptos"
+description: "La docena de palabras en las que se apoya este sitio. Dos de ellas significan lo contrario de lo que sugiere una experiencia previa con Kannel o Jasmin."
+---
+
+Lea esto primero. Todas las demás páginas asumen estas palabras, y dos de ellas son una desviación
+deliberada del vocabulario del propio archivo de configuración.
+
+## Vendor y server
+
+<CardGroup cols={2}>
+  <Card title="Vendor" icon="antenna">
+    Una conexión **hacia afuera** con quien transporta su tráfico. FireFlo la marca. La configuración
+    lo llama `smppclient`.
+  </Card>
+  <Card title="Server" icon="server">
+    Un **listener** al que sus clientes se conectan. FireFlo acepta. La configuración lo llama
+    `smppserver`.
+  </Card>
+</CardGroup>
+
+Los valores de configuración se quedan como `smppclient` y `smppserver`, y siempre lo harán: es lo que
+la pasarela lee. **Nunca llegan a la interfaz**, y no se usan en la prosa de este sitio fuera de los
+bloques de código y los nombres de clave.
+
+<Warning>
+Aquí es donde una experiencia previa con Kannel o Jasmin induce a error. "Cliente" y "servidor"
+describen en qué extremo de un socket está FireFlo, lo cual es un hecho de implementación. **Vendor** y
+**server** describen quién está en el otro extremo y quién paga a quién. Eso es lo que realmente se
+razona cuando un mensaje no sale.
+
+La capa de datos estuvo de acuerdo todo el tiempo: `cdr_submit.vendor` y el payload del acuse de
+entrega siempre han dicho *vendor*.
+</Warning>
+
+Ambos son **trabajadores** y comparten [un conjunto de ajustes base](/reference/smpp/worker-base).
+
+## Cuenta, login, producto
+
+| Palabra | Es | No es |
+| :--- | :--- | :--- |
+| **Cuenta** | La clave de facturación. Saldo, límite de crédito, extracto y tarifa cuelgan de ella. | Una persona, ni un login |
+| **Login** (credencial) | Una forma de autenticarse: un `system_id` de SMPP o un usuario REST. Una cuenta puede tener varios. | Lo que se factura |
+| **Producto** | Una tarifa con nombre bajo la que se cobra un mensaje, resuelta por mensaje. | Un feature flag |
+
+<Note>
+**Una cuenta, muchos logins.** Por eso el techo de tasa está asociado a la cuenta y no a la
+credencial. Un límite por login permitiría a un cliente subirse el suyo creando otro login.
+</Note>
+
+Un producto se resuelve, en orden: el `system_type` en un bind SMPP, y luego el campo `product` de la
+credencial. Los llamantes HTTP no tienen bind, por lo que el valor de la credencial es la única
+fuente.
+
+<Warning>
+**Un producto no establecido es un estado admitido que puede enviar mensajes gratis.** A un mensaje
+sin producto solo se le muestran las reglas de tarifa que a su vez no tienen producto, por lo que en
+un despliegue cuyas reglas todas llevan uno, no coincide con nada y no se le cobra nada. Consulte
+[Límites](/reference/config/limits) para los dos interruptores que lo cierran.
+</Warning>
+
+## Tabla de enrutamiento, regla, cadena, grupo
+
+Una **tabla de enrutamiento** es una lista con nombre de **reglas**, evaluada de arriba abajo; gana
+la primera coincidencia.
+
+El objetivo de una regla puede ser un trabajador, otra **tabla** (que es una *cadena*, y es como
+`[default]` envía mensajes de texto a `[MESSAGE]`) o un **grupo**.
+
+Un **grupo** es un conjunto de vendors con una política: `round-robin`, `weighted` o `failover`. Salta
+los miembros que estén suspendidos o que no acepten, que es la conmutación por error que una regla
+de destino único no puede hacer.
+
+Una **tabla LCR** se marca `->function(LCR)` e invierte la regla habitual: cada regla coincidente es
+un candidato, y gana el vendor más barato. El orden de las reglas ahí es irrelevante.
+
+## Filtro
+
+Un conjunto de condiciones con nombre, reutilizable, compartido por el enrutamiento y la tarificación
+para no escribir dos veces el mismo predicado.
+
+<Warning>
+**Un filtro faltante o desactivado salta toda regla que lo referencia.** No carga la regla con menos
+condiciones: eliminar una condición hace que una regla coincida *más*, por lo que fallar así
+enrutaría o tarificaría en silencio cosas equivocadas.
+</Warning>
+
+## Ámbito y tarifa
+
+Un **ámbito** es el lado izquierdo de una regla de tasa, y de qué lado del trato está depende
+enteramente de lo que nombre:
+
+| Lo que nombra el ámbito | Es |
+| :--- | :--- |
+| Un vendor | **Coste** — lo que paga |
+| Una cuenta | **Precio** — lo que cobra |
+| `[*]` | El valor por defecto de venta para cualquier cuenta sin reglas propias |
+
+Nada en el esquema los distingue. La pasarela los diferencia por cuál lookup pregunta, que es por lo
+que el panel los agrupa como **Lo que pagamos** y **Lo que cobramos** en lugar de una sola lista.
+
+Una **tarifa** es el conjunto de reglas de precio para una cuenta.
+
+## Mensaje, segmento, parte
+
+Un **mensaje** es lo que un cliente envía. Si es más largo que un SMS, sale como varios **segmentos**,
+y `smsg.restapi.billing.units` decide si eso se cobra una vez o por segmento.
+
+<Note>
+Sea cual sea la unidad de facturación, un mensaje deja **exactamente una** fila con `part_no = 1` en
+`cdr_submit`. Los reintentos no añaden filas. Ese invariante es lo que hace que contar mensajes y
+sumar dinero sea la misma pregunta.
+</Note>
+
+## Prepago y postpago
+
+| Modo | La cuenta tiene | Se rechaza cuando |
+| :--- | :--- | :--- |
+| **Prepago** | Un saldo, debitado a medida que envía | El saldo se agota |
+| **Postpago** | Un límite de crédito, facturado a mes vencido | El uso no facturado alcanza el límite |
+
+Ambos rechazan **de forma idéntica**: `0x402` sobre SMPP, `402` con `insufficientCredit` sobre HTTP,
+por lo que la integración de un cliente no necesita saber en cuál de los dos está.
+
+<Warning>
+En una cuenta postpago, `credit_limit = 0` significa **sin crédito**, no ilimitado. No hay
+representación de ilimitado en ninguna parte del sistema, deliberadamente: un tipo debe fallar
+cerrado.
+</Warning>
+
+## Rechazo
+
+FireFlo rechaza en lugar de adivinar en más sitios que la mayoría de las pasarelas: un mensaje
+entrante sin mapear, una regla cuyo filtro falta, una importación que dejaría sin credencial usable,
+una purga sobre un día sin rollup.
+
+Cuando una página aquí dice que algo se rechaza, ese es el comportamiento documentado y normalmente
+existe porque la alternativa perdía en silencio un mensaje o algo de dinero. No es una limitación
+esperando a ser levantada.

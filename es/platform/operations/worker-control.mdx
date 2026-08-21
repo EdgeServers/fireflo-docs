@@ -1,0 +1,101 @@
+---
+title: "Controlar un worker"
+description: "Tres pares de verbos que se aplican inmediatamente, qué hace cada uno al tráfico en vuelo, y el que eventualmente rechazará nuevos mensajes."
+---
+
+La configuración almacenada por sí sola es **demasiado lenta para ser un control**. El gateway nota un cambio de base de datos en
+su siguiente sondeo, hasta treinta segundos después. Y alternar algo apagado y de vuelta a encendido dentro de esa ventana
+suma cero diferencia, así que el gateway nunca se entera.
+
+Estos verbos se aplican inmediatamente.
+
+```bash
+./scripts/fireflo disable vendor1
+./scripts/fireflo suspend vendor1
+```
+
+## Los tres pares
+
+| Verbo | Qué hace |
+| :--- | :--- |
+| `enable` / `disable` | Arranca o para el worker sin más. **Un worker deshabilitado abandona `/ops/health` por completo.** |
+| `suspend` / `resume` | Deja de aceptar y **drena la cola de vuelta al router**, así que el tráfico se re-enruta a otro proveedor. La sesión se queda conectada. |
+| `hold` / `release` | Sigue aceptando y **deja de enviar**, así que la cola crece durante el tiempo que se mantenga. |
+
+## Elegir entre ellos
+
+<AccordionGroup>
+
+<Accordion title="Suspend: un proveedor se está portando mal y tienes otro">
+El valor por defecto correcto para un problema de proveedor. El tráfico encolado vuelve al router y encuentra una
+alternativa, y la sesión se queda conectada así que puedes probarla sin un bind nuevo.
+
+Nada se pierde y nada espera.
+</Accordion>
+
+<Accordion title="Hold: quieres que el tráfico se conserve, no que se re-enrute">
+Para una ventana planeada donde el proveedor volverá pronto y prefieres encolar antes que pagar una ruta
+más cara.
+
+<Warning>
+**Vigila `queue_depth`, y `queue_capacity`.** Un worker en hold bajo un límite de capacidad eventualmente
+hará que el gateway **rechace tráfico nuevo** en lugar de crecer.
+
+Ese rechazo llega a los clientes como `ESME_RMSGQFUL` o un `503`. Retener no es gratis; convierte un
+problema de proveedor en un problema de ingreso si lo dejas el tiempo suficiente.
+</Warning>
+</Accordion>
+
+<Accordion title="Disable: sácalo de servicio por completo">
+El worker abandona `/ops/health` completamente, lo que merece la pena saber antes de ir buscándolo en un
+dashboard y concluir que algo ha crasheado.
+
+Úsalo cuando quieras que el worker se vaya en lugar de pausarse.
+</Accordion>
+
+</AccordionGroup>
+
+## Estos son estado de runtime, no configuración
+
+<Warning>
+**Un worker deshabilitado o suspendido vuelve al reiniciar** a menos que la configuración almacenada diga lo contrario.
+
+Estos verbos existen para actuar *ahora*; no editan la configuración. Si quieres que el cambio sobreviva
+a un reinicio, hazlo también en el panel. Y si lo quieres *solo* hasta el reinicio, eso es exactamente
+lo que te dan estos.
+</Warning>
+
+## Probar un proveedor antes de confiar en él
+
+```bash
+fireflo test-bind vendor1
+```
+
+Marca una vez y reporta el resultado, sin esperar al ciclo de reconexión.
+
+<Tip>
+**Se rechaza mientras el proveedor ya está conectado**, deliberadamente. Un segundo bind sobre el mismo
+`systemId` puede costarte la sesión en vivo, y muchos operadores permiten solo uno.
+
+Úsalo antes de que el tráfico dependa del proveedor, o después de suspenderlo. Suspender conserva la sesión,
+así que suspender y luego probar *no* es la secuencia que funciona. Deshabilita, luego prueba.
+</Tip>
+
+## Descartar el bind de un cliente
+
+Una sesión de listener puede desconectarse por id. Una sesión de **proveedor** no. Responde `409`,
+porque la guardia es el tipo de worker en lugar de la presencia de un id de sesión.
+
+Deshabilitar un login también descarta sus binds en vivo, que es la diferencia entre "no pueden reconectar"
+y "se han ido ya".
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Salud en vivo" icon="heart-pulse" href="/platform/operations/live-health">
+    Leer `queue_depth`, `bound_transmittable` y `last_error`.
+  </Card>
+  <Card title="Recargar configuración" icon="arrows-rotate" href="/platform/operations/reload">
+    La otra forma de cambiar lo que el gateway está haciendo.
+  </Card>
+</CardGroup>

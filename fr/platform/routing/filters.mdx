@@ -1,0 +1,91 @@
+---
+title: "Filtres"
+description: "Conditions nommées et réutilisables, partagées entre le routage et la tarification. Comprenez pourquoi un filtre manquant ou désactivé supprime les règles qui le référencent au lieu de les élargir."
+---
+
+## Désactiver un filtre fait correspondre ses règles à moins de trafic, pas à plus
+
+<Warning>
+**Un filtre manquant ou désactivé fait ignorer toutes les règles qui le référencent**, plutôt que de charger la règle avec moins de conditions.
+
+C'est l'inverse de la réponse intuitive, et c'est délibéré. Une règle est une conjonction : donc *supprimer* une condition la fait correspondre à **plus** de trafic. Retirez un filtre `au_mobile` d'une règle et elle se met à envoyer le monde entier vers ce fournisseur, avec succès, et rien dans les journaux ne suggère un problème. Ignorer la règle échoue dans la seule direction sûre : les messages retombent sur la règle suivante plutôt que sur le mauvais fournisseur.
+</Warning>
+
+L'effet observable de la désactivation d'un filtre est donc que ses règles cessent de correspondre à quoi que ce soit, et que leur trafic atterrit sur la règle qui suit. Un autre fournisseur, ou un autre prix.
+
+```
+Skipping … filter '…' is missing or disabled
+```
+
+## Ce qu'est un filtre pour la passerelle
+
+**Une expansion au chargement, pas une indirection à l'exécution.** Un filtre s'étend exactement aux conditions qu'il contient, et celles-ci sont ajoutées aux conditions de chaque règle qui le référence. Le test réel d'une règle est :
+
+```
+ses propres conditions AND les conditions de chaque filtre référencé
+```
+
+Les filtres restreignent une règle. Ils ne la remplacent ni ne l'assouplissent jamais. Rien n'est résolu par message, donc la mise en correspondance coûte le même prix que si les conditions avaient été écrites en ligne.
+
+<Note>
+Les filtres vivent dans la base de données (`app_filter`, `app_filter_condition`) et sont partagés avec la tarification, ce qui est précisément l'intérêt : nommer un prédicat une seule fois, tarifier et router sur la même définition. La grammaire des fichiers n'a pas de syntaxe pour eux, donc `scripts/fireflo import routing` laisse `app_route_rule_filter` vide. Voir [routingTable.conf](/reference/files/routing-table).
+</Note>
+
+## Une règle filtrée n'est pas un catch-all
+
+<Warning>
+Parce que les conditions du filtre sont fusionnées dans les propres conditions de la règle au chargement, **une règle portant un filtre est correctement signalée comme n'étant pas un catch-all**, aussi ressemblante à une règle de repli soit-elle.
+
+C'est le cas qui vaut la peine d'être connu : une règle qui *ressemblait* au catch-all de la table portait un filtre, ne correspondait presque à rien, et aucune surface nulle part ne le disait avant que des messages n'aient déjà été supprimés. La table est signalée sous `no-catch-all` sur `/ops/health`. Voir [Comment fonctionne le routage](/platform/routing/how-it-works).
+</Warning>
+
+Un vrai catch-all est une règle sans conditions **et sans filtres**, placée en dernier.
+
+## Un filtre vide compte comme désactivé
+
+Un filtre sans conditions s'enregistre et se charge, ce qui permet d'en construire un condition par condition. La réponse de la passerelle à ce cas n'est pas non plus l'intuitive : un filtre vide est ajouté à l'ensemble des filtres *désactivés*, donc toute règle qui le référence est ignorée.
+
+Refuser un filtre vide relève du même raisonnement que refuser un filtre manquant : un filtre qui ne restreint rien élargirait toute règle qui le porterait.
+
+## Le filet de sécurité, et pourquoi ce n'est pas un contournement
+
+<Warning>
+**Si l'ignorance laisse la table `default` sans règles, tout le rechargement du routage est rejeté et les tables précédentes sont conservées**, en consignant `no default routing table in new targets!`.
+
+C'est le résultat sûr : désactiver un filtre dont dépendent toutes les règles ne vide pas votre routage. Mais cela signifie aussi que **désactiver un filtre n'est pas un moyen de retirer une route** : le changement paraîtra n'avoir eu aucun effet, parce que la passerelle sert toujours la dernière configuration valide.
+
+Supprimez ou désactivez la *règle* à la place.
+</Warning>
+
+Pour la même raison, un filtre référencé ne peut pas être supprimé tant que des règles pointent encore vers lui. Le panneau de contrôle affiche le nombre de références sur les règles de tarification et de routage avant de vous laisser en changer un. Le routage est la moitié où la conséquence est « les messages cessent d'être envoyés » plutôt que « les messages sont tarifés différemment ».
+
+## Le vérifier avant de le modifier
+
+<Steps>
+  <Step title="Lire le compteur">
+    **Filtres** dans le panneau indique combien de règles de tarification et combien de règles de routage référencent chaque filtre. Désactiver un filtre utilisé par quatre règles de routage supprime quatre règles du snapshot en cours d'exécution.
+  </Step>
+  <Step title="Regarder ce qui capte le trafic à la place">
+    Pour chaque règle qui serait ignorée, trouvez la règle suivante dans la même table à laquelle le trafic correspondrait. C'est vers ce fournisseur que va le trafic.
+  </Step>
+  <Step title="Confirmer que le rechargement a pris">
+    Après l'enregistrement, vérifiez `routing_warnings` sur `/ops/health` et le journal pour `Error parsing new routing table`. Un rechargement rejeté conserve la table précédente et donne l'impression que rien ne s'est passé.
+  </Step>
+</Steps>
+
+## Les workers de filtrage sont une autre chose
+
+Une règle peut aussi cibler un **worker de filtrage** : un worker par lequel le message passe plutôt qu'une destination. Il renvoie un verdict, et le routeur agit en conséquence :
+
+| Verdict | Ce qui se passe |
+| :--- | :--- |
+| `DROP` | Le message est remboursé s'il a été facturé, fermé comme `DROPPED`, et enregistré dans `cdr_rejected` avec `reason=filtered`. |
+| `RETRY` / `REENQUEUE` | Le message est mis en attente pendant `outSms.routing.retryBackoffMillis` et routé à nouveau. Chaque remise en file **compte dans `outSms.routing.maxAttempts`**, donc un filtre utilisé pour la limitation finit par supprimer plutôt que de retenir un message indéfiniment. |
+
+<Note>
+`RESCHEDULE` n'a jamais été implémenté et retombe sur la remise en file, en le signalant une fois par message.
+
+Un message supprimé est remboursé et signalé ; un message retenu indéfiniment n'est ni l'un ni l'autre. C'est pourquoi compter la remise en file est le compromis voulu plutôt qu'un oubli.
+</Note>
+
+Les filtres nommés et les workers de filtrage partagent un mot et rien d'autre : l'un restreint une règle au chargement, l'autre inspecte les messages à l'exécution.

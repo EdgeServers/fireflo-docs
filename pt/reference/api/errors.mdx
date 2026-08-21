@@ -1,0 +1,135 @@
+---
+title: "Erros da API"
+description: "Todo status que a API REST retorna, o que provoca cada um e a ordem em que as checagens rodam. Isso decide qual erro você realmente vê."
+---
+
+Toda falha é um objeto JSON com um único `message`. O status HTTP é a parte legível por máquina; a
+string é para uma pessoa lendo um log.
+
+```json
+{"message":"Authentication failure"}
+```
+
+## A ordem em que as checagens rodam
+
+Isso decide qual erro você vê quando uma requisição está errada em mais de um jeito, e é a razão de
+um payload malformado poder voltar como um problema de autenticação.
+
+<Steps>
+  <Step title="Autenticação">
+    Antes de o corpo ser parseado.
+  </Step>
+  <Step title="Autorização">
+    Lista de IPs permitidos, depois tipo de login.
+  </Step>
+  <Step title="Negociação de conteúdo">
+    O cabeçalho `Accept`.
+  </Step>
+  <Step title="Parsing">
+    JSON bem formado, depois nomes de campos, depois valores.
+  </Step>
+  <Step title="Regras de negócio">
+    Sender ID, template, crédito, rate limit.
+  </Step>
+</Steps>
+
+Executado contra um 0.7.3 ao vivo, um corpo impossível de fazer parse sem credenciais retorna o
+erro de **autenticação**, não o de parse:
+
+```http
+POST /secure/send   (no Authorization header, body: not json)
+HTTP/1.1 401 Unauthorized
+{"message":"Authentication required"}
+```
+
+<Tip>
+**Corrija credenciais antes de depurar um payload.** Um `401` ou `403` não diz nada sobre se o resto
+da sua requisição está certo, porque nada abaixo da autenticação foi executado.
+</Tip>
+
+## Autenticação e autorização
+
+| Status | `message` | Quando |
+| :--- | :--- | :--- |
+| 401 | `Authentication required` | Sem cabeçalho `Authorization`. A resposta traz `WWW-Authenticate: Basic realm="fireflo"`. |
+| 401 | `Invalid token` | O cabeçalho não é Basic, não é Base64 válido, ou não tem dois pontos. |
+| 403 | `Authentication failure` | Login desconhecido, senha errada, **ou um login SMPP**. Esses não podem usar essa API. |
+| 403 | `Authorization failure` | Seu login tem uma lista de IPs permitidos e a requisição não veio de um deles. |
+
+**401 significa "você não se identificou"; 403 significa "você se identificou e não foi aceito".**
+A distinção vale para o seu alerta: um 401 súbito costuma ser um deploy que perdeu uma variável de
+ambiente, enquanto um 403 súbito costuma ser rotação de senha ou um IP que mudou.
+
+<Warning>
+**Um caminho desconhecido em `/secure/` retorna `401`, não `404`.** A autenticação roda antes do
+roteamento, então a API não diz a um chamador não autenticado quais endpoints existem. Não use um
+`404` para sondar disponibilidade de endpoint. Você vai receber `401` seja o que for.
+</Warning>
+
+## Negociação de conteúdo
+
+| Status | `message` | Quando |
+| :--- | :--- | :--- |
+| 415 | `This API supports JSON media type only.` | Um cabeçalho `Accept` que exclui JSON. |
+
+Omitir `Accept` totalmente está OK. Enviar `Accept: text/plain` não, e este é o único erro que uma
+barra de endereços de navegador produz de forma confiável.
+
+## Parsing
+
+| Status | `message` | Quando |
+| :--- | :--- | :--- |
+| 412 | `Got unparseable json data: <body>` | O corpo estava vazio, não era JSON, ou era um array nu em vez de um objeto. |
+| 400 | `Mandatory argument <name> is not found.` | Um campo obrigatório estava ausente ou em branco. |
+| 400 | `Unknown argument: <name>` | Um campo que a API não tem, incluindo `username` e `password`, que pertencem ao cabeçalho. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Nome certo, formato errado. Um `coding` não numérico, um `hex_content` de comprimento ímpar. |
+
+<Warning>
+**`412` para JSON ruim, não `400`.** A maioria das APIs usa `400` para os dois, então um cliente que
+faz branch pelo status vai tratar "seu JSON está quebrado" como uma surpresa em nível de rede. Os
+dois são permanentes. Não repita nenhum.
+</Warning>
+
+## Regras de negócio
+
+| Status | `message` | Quando |
+| :--- | :--- | :--- |
+| 402 | `Insufficient credit` | O saldo pré-pago não cobre. Nada foi enviado e nada foi cobrado. |
+| 403 | `'<id>' is not an approved sender ID for this account.` | O `from` não foi aprovado. |
+| 403 | `The message content does not match any approved template for this account.` | A conta envia só texto aprovado e este corpo não bate com nenhum. |
+| 429 | `Rate limit exceeded` | Acima do limite de mensagens por segundo da conta. |
+| 500 | `Cannot send message` | Aceito e não foi possível enfileirar. **Qualquer cobrança é revertida.** |
+
+<Warning>
+**Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com
+jitter. Um retry em intervalo fixo em muitos workers os ressincroniza no próximo pico.
+</Warning>
+
+## Qual desses você deve repetir?
+
+| | Repetir | Por quê |
+| :--- | :--- | :--- |
+| 401, 403, 412, 400 | **Não** | Permanente. A mesma requisição vai falhar identicamente para sempre. |
+| 402 | **Não** | Repetir não adiciona crédito. Alerte. |
+| 415 | **Não** | Corrija o cabeçalho. |
+| 429 | **Sim**, com backoff | Transitório por definição. |
+| 500 | **Sim**, uma ou duas vezes | A cobrança foi revertida, então um retry não é cobrança dobrada. |
+| 502, 503, 504 | **Sim** | Não vem do gateway. É um proxy na frente. |
+
+<Tip>
+**Um `500` é seguro para repetir precisamente porque a cobrança é revertida.** É uma propriedade
+deliberada do ingresso, não um acidente: o crédito é reservado antes de enfileirar e devolvido
+quando o enfileiramento falha, então um retry custa uma mensagem, não duas. Veja
+[Como funciona o faturamento](/platform/billing/prepaid-credit).
+</Tip>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Visão geral da API REST" icon="book" href="/reference/api/overview">
+    O envelope, a autenticação e a regra de nomes de campo.
+  </Card>
+  <Card title="Enviar uma mensagem" icon="paper-plane" href="/reference/api/send">
+    Cada campo, com seu padrão e sua recusa.
+  </Card>
+</CardGroup>

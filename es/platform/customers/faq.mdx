@@ -1,0 +1,184 @@
+---
+title: "FAQ de clientes"
+description: "Cuentas, productos, aprobaciones y aplicación: las preguntas que llegan como ticket de soporte en lugar de como error de configuración."
+---
+
+<AccordionGroup>
+
+<Accordion title="Un cliente envía felizmente y no se le cobra nada">
+Compruebe si su login lleva un **producto**, y si sus reglas de tasa lo hacen.
+
+A un mensaje sin producto solo se le muestran las reglas de tasa que a su vez no tienen producto.
+En un despliegue cuyas reglas todas llevan uno, no coincide con nada, se deja sin tarifar, y un
+mensaje sin tarifar nunca se cobra: la tarificación se ejecuta antes del débito, así que se salta.
+El mensaje se entrega y se factura a nadie.
+
+Hay una línea en `debug` y nada más. La página **Pricing** del panel cuenta las últimas 24 horas
+de tráfico que no llevó precio y nombra las cuentas y productos de donde vino.
+</Accordion>
+
+<Accordion title="Su credencial nombra el producto correcto y sigue sin tarificar">
+`system_type` en un bind SMPP **anula** el producto de la credencial, y es texto libre no validado
+en ningún otro sitio. Un cliente haciendo bind con `prem` en lugar de `premium` aterriza en
+exactamente el estado sin tarifar de arriba.
+
+Por eso `conf.product.required` comprueba **pertenencia al catálogo** en lugar de no vacío: `prem`
+pasa cualquier test de "¿está establecido?" perfectamente. HTTP no tiene bind y por tanto no
+override.
+</Accordion>
+
+<Accordion title="conf.product.required está activado y un bind mal escrito sigue pasando">
+El catálogo es `app_product`, una tabla de base de datos. Una pasarela en **configuración por
+archivo** no tiene esa tabla, y una base de datos inalcanzable se comporta igual, así que solo se
+hace cumplir la mitad de no vacío: un nombre de producto no reconocible se acepta.
+
+Un WARN nombrando el ajuste y el valor se registra **una vez por bind** diciendo exactamente eso.
+La tolerancia es deliberada: rechazar cada bind porque una consulta falló sería un corte mucho
+peor que el que esto previene.
+</Accordion>
+
+<Accordion title="El whitelisting está activado y no se comprueba nada">
+Lea `active` en `/ops/health`. **`active: false` mientras `smsg.whitelist.enabled` es true significa
+que la carga nunca ha tenido éxito**, no que no haya nada configurado: nada se está comprobando en
+ninguna cuenta, y eso es lo primero a arreglar.
+
+Si `active` es true, recorra los cuatro interruptores en orden: la funcionalidad, el listener
+(`conf.whitelist.enabled`), el producto (`app_product.whitelist_enabled`), luego la política de la
+cuenta. Un mensaje se comprueba solo si los cuatro lo dicen.
+</Accordion>
+
+<Accordion title="Un listener no está aplicando y nunca lo apagué">
+`conf.whitelist.enabled` viene por defecto **on**, así que un listener que no comprueba o bien se
+ha excluido explícitamente, o el interruptor maestro está apagado, o el ajuste no es uno que pueda
+tener ámbito a un solo listener, en cuyo caso conserva su forma desnuda, lee un global que nadie
+establece y devuelve su valor por defecto codificado sea cual sea su configuración.
+</Accordion>
+
+<Accordion title="Puse una cuenta en ENFORCE y rechaza todo">
+Una lista vacía en `ENFORCE` rechaza todo, y eso es correcto: una whitelist sin nada en ella no
+permite nada. Se reporta como `enforcing_with_nothing_approved` en `/ops/health`.
+
+La causa habitual es que las aprobaciones existen pero no cuentan. Una aprobación archivada bajo
+un producto con `whitelist_enabled = false` no protege nada: ese producto se resuelve a `OFF`
+antes de cualquier merge. Y el tráfico sin producto se sirve solo del ámbito de **cuenta**, así
+que ninguna aprobación con ámbito de producto puede llegar a un login cuya credencial no nombra
+producto.
+</Accordion>
+
+<Accordion title="El sender ID está aprobado y el operador sigue rechazando cada mensaje">
+Approved decide si el mensaje se empareja aquí. No decide si el operador lo tomará.
+
+Nada aprobado significa nada sellado, así que un lane DLT recibe un `submit_sm` sin id de entidad o
+plantilla y lo rechaza, con un estado en el bloque 192–196, que siempre trata de TLVs. `tlvCount=0`
+en las líneas de traza lo confirma.
+
+El informe de cobertura de TLV del panel dice, por fila aprobada, qué tags obligatorios no
+suministrará nada y qué vendors los descartarían.
+</Accordion>
+
+<Accordion title="El sello está configurado y el cable no lo lleva">
+Tres cosas a comprobar, en este orden:
+
+- **El token.** `PEID=…` no tiene guion bajo, así que no lleva tag y no sella nada. El formato es
+  `<name>_<tag>=<value>`.
+- **El modo de sellado.** `whitelist.tlvs.mode` viene por defecto a `off` en un listener, así que
+  una coincidencia no sella nada en absoluto. `assign` rellena el tag cuando el cliente no envió
+  uno; `replace` sobrescribe lo que sí envió, y esa sobrescritura *es* la aprobación.
+- **El vendor.** Un tag que falta de `registered.tlvs.submit` de ese vendor se descarta a la salida,
+  *después* de que el registro de llamada lo haya anotado como presente. El registro dice sent; el
+  cable no lo lleva.
+</Accordion>
+
+<Accordion title="¿Necesito que el cliente se reconecte tras aprobar algo?">
+No. La whitelist se relee en el sondeo de configuración y cada snapshot lleva una generación, así
+que una sesión bound durante semanas recoge un sender ID recién aprobado sin reconectar.
+
+`fireflo reload` lo aplica ahora en lugar de en el próximo sondeo. Lo cual importa, porque el
+cliente cuyo tráfico se está rechazando suele estar al teléfono mientras alguien lo aprueba.
+</Accordion>
+
+<Accordion title="Un login en la cuenta funciona y otro no">
+Compruebe si las aprobaciones están atadas al login. `system_id` en un registro le da ámbito a una
+sola credencial; **NULL significa cada login de la cuenta**, que es lo que significaba cada fila
+antes de que existiera la columna.
+
+Atar una fila a un login la retira de todos los demás logins de esa cuenta. Un login sin filas
+propias y sin filas a nivel de cuenta no puede enviar nada bajo `ENFORCE`. La página de la cuenta
+avisa cuando las aprobaciones están todas atadas a login y algún login se queda sin ninguna.
+
+Un mensaje cuyo login es desconocido obtiene las filas a nivel de cuenta y nada más: fail-closed
+a propósito, para que un llamante que no pasó un login no reciba aprobaciones dadas a alguien
+específico.
+</Accordion>
+
+<Accordion title="Una plantilla guarda limpiamente y no coincide con nada">
+`{code}` no tiene `#`, así que es texto ordinario: la plantilla aprueba una cadena exacta con
+llaves y rechaza cada mensaje real.
+
+`{#VAR#}` y `{# var #}` tampoco son el token. La pasarela los carga, los coincide como `{#var#}`,
+y los lista bajo `templates_degraded` en `/ops/health`; el panel se niega a guardarlos de entrada.
+Escriba el token en minúsculas sin espacios dentro.
+
+La previsualización del panel es la comprobación: muestra un mensaje de ejemplo que la plantilla
+acepta, construido por el mismo escáner que usa el matcher.
+</Accordion>
+
+<Accordion title="¿Puedo subir la longitud de variable solo para un cliente?">
+No. `smsg.whitelist.max.variable` es global, porque las plantillas se compilan una vez en carga en
+un índice por cuenta: no hay ningún sitio por cliente para ponerlo.
+
+Subirlo ensancha **cada** plantilla aprobada del despliegue a la vez, que es la mayor
+falsa-aceptación en el diseño. Se registra a INFO y se reporta como `max_variable` en
+`/ops/health`, y ese valor reportado es también la respuesta cuando el ajuste se ha cambiado pero
+el sondeo de configuración aún no ha aterrizado.
+</Accordion>
+
+<Accordion title="Un cliente editó su plantilla y su tráfico se detuvo">
+Editar un registro aprobado lo devuelve a `PENDING` y limpia la revisión anterior, así que queda
+fuera de servicio hasta que alguien lo apruebe de nuevo.
+
+Ese es el punto: un cliente no debe cambiar el texto aprobado y seguir enviando bajo la
+aprobación. Y tiene un canto afilado en una cuenta fail-closed. Proponer TLVs es la única
+excepción: `requested_tlvs` no lo lee nada en la ruta del mensaje, así que una fila aprobada sigue
+funcionando mientras un operador considera la propuesta.
+</Accordion>
+
+<Accordion title="Un cliente propuso TLVs. ¿Por qué no puede simplemente ponerlos?">
+Bajo `replace` el sello sobrescribe lo que el cliente afirmara, y **esa sobrescritura es la
+aprobación**. Un cliente capaz de escribir la columna servida podría afirmar el registro de
+otro mientras envía texto aprobado, y el registro de llamada entonces reportaría el valor que él
+eligió como aprobado.
+
+Así que el portal escribe `requested_tlvs`, la pasarela lee `tlvs`, y un operador o mueve la
+propuesta al otro lado o la limpia. Aceptar pone el valor en el cable en el próximo sondeo de
+configuración.
+</Accordion>
+
+<Accordion title="¿A qué cuenta se factura cuando accountId está en blanco en una credencial?">
+Difiere por protocolo. SMPP recurre al `systemId`; HTTP recurre a la clave de lookup, que es el
+`apiKey` cuando hay uno.
+
+Así que un login HTTP con una clave API y sin `accountId` factura a la propia clave: el secreto
+aterriza en `cdr_submit.account_id`, en las cifras de ingresos del panel y en cada exportación
+CSV. Establezca `accountId` explícitamente y ninguno de los fallbacks importa.
+</Accordion>
+
+<Accordion title="Añadí crédito y el saldo no se movió">
+Compruebe si la cuenta tiene una fila `account_balance`. Una cuenta sin fila **no está en cero**:
+no tiene saldo, que es un estado distinto.
+
+Un `RECHARGE` escrito para una cuenta sin fila no acredita nada. Se queda pendiente, registra un
+WARN nombrando la cuenta, y se aplica en el momento en que aparece la fila. Crear un login no
+crea un saldo; *Open for credit* en la página de la cuenta sí.
+</Accordion>
+
+<Accordion title="Deslisté una cuenta y su tráfico siguió fluyendo">
+La pasarela nunca lee el catálogo de cuentas. `enabled` en `app_account` decide si este panel lista
+la cuenta y nada más: sus logins siguen conectándose, su tráfico sigue enviándose y sus reglas de
+tasa siguen tarificando.
+
+Es lo contrario de lo que significa `enabled` en un vendor o un producto. Para detener el tráfico,
+desactive los **logins**; para detener el gasto, use el saldo.
+</Accordion>
+
+</AccordionGroup>

@@ -1,0 +1,95 @@
+---
+title: "Sender IDs"
+description: "Qué va en `from`, por qué puede requerir aprobación, y el valor por defecto que pilla a toda integración nueva."
+---
+
+`from` es lo que el destinatario ve como remitente.
+
+```json
+{
+  "to": "61491570006",
+  "from": "SUNOTP",
+  "content": "Your OTP is 4417, valid for 10 minutes."
+}
+```
+
+## El valor por defecto es la trampa
+
+**Omitir `from` usa su nombre de login.** Es cómodo en pruebas y casi nunca correcto en
+producción, porque su nombre de login normalmente no es un sender ID aprobado. Así que el mismo
+código que funcionaba en staging devuelve `403` en cuanto se impone la aprobación.
+
+<Tip>
+Fije `from` explícitamente desde el primer mensaje, incluso mientras la aprobación esté
+desactivada. No cuesta nada y elimina una clase entera de sorpresas en la puesta en producción.
+</Tip>
+
+## Dos tipos de sender ID
+
+| Tipo | Ejemplo | ¿Puede responder el destinatario? |
+| :--- | :--- | :--- |
+| **Alfanumérico** | `SUNOTP` | No |
+| **Numérico** | `61491570006` | Sí |
+
+El alfanumérico suele estar limitado a 11 caracteres, y el soporte varía por país. Algunos
+destinos lo rechazan por completo, otros lo sobrescriben, y otros exigen registro previo. Su
+proveedor sabe cuál aplica a su tráfico.
+
+## Cuando se impone la aprobación
+
+En una cuenta con whitelisting de sender ID activado, un `from` no aprobado se rechaza:
+
+```json
+{"message":"'SUNOTP' is not an approved sender ID for this account."}
+```
+
+`403` sobre HTTP, `0x415` sobre SMPP. No se envió nada y no se cobró nada.
+
+**Esto no se arregla en código.** Necesita una aprobación de quien opere su pasarela,
+habitualmente solicitada a través del portal del cliente.
+
+## Solicitar uno
+
+<Steps>
+  <Step title="Pida la cadena exacta">
+    `SUNOTP` y `SunOTP` son sender IDs distintos. Pida las mayúsculas y minúsculas que realmente
+    va a enviar.
+  </Step>
+  <Step title="Indique para qué destinos es">
+    Los destinos regulados —India el más visible— requieren registro con el operador además de
+    con su pasarela, y eso lleva más tiempo.
+  </Step>
+  <Step title="Espere a APPROVED">
+    Un sender ID pendiente no es utilizable. Se comporta exactamente como si no existiera.
+  </Step>
+</Steps>
+
+<Warning>
+**Un sender ID aprobado también puede llevar TLVs**, que se estampan sobre su mensaje cuando
+coincide. En una ruta DLT ese stamp *es* el id de entidad registrada. Así que un remitente no
+aprobado no solo se rechaza por no estar aprobado, sino que además habría llegado al operador sin
+los parámetros que necesitaba.
+</Warning>
+
+## La aprobación de sender ID y la de contenido son independientes
+
+Dos comprobaciones distintas, dos rechazos distintos:
+
+| Comprobación | Rechazo |
+| :--- | :--- |
+| ¿Está aprobado este `from`? | `not an approved sender ID` |
+| ¿Coincide esta redacción con una plantilla aprobada? | `does not match any approved template` |
+
+Una cuenta puede imponer una, ambas o ninguna. Pasar una no dice nada de la otra. Véase
+[Rechazos](/platform/troubleshooting/refusals) para leer la segunda.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs y plantillas" icon="shield-check" href="/platform/customers/sender-ids">
+    El lado del operador: aprobar, rechazar y qué hace un stamp.
+  </Card>
+  <Card title="Errores" icon="triangle-exclamation" href="/developers/errors">
+    Qué hacer con un 403 que no desaparece.
+  </Card>
+</CardGroup>

@@ -1,0 +1,63 @@
+---
+title: "Envio de SMS com o FireFlo"
+description: "Duas formas de entrada, um mesmo conjunto de regras por trás delas e o punhado de coisas que se comportam diferente de outros gateways."
+---
+
+Você pode chegar ao FireFlo por duas vias, e a escolha depende principalmente do volume e do que seu
+stack já fala.
+
+<CardGroup cols={2}>
+  <Card title="REST" icon="code" href="/developers/quickstart">
+    JSON sobre HTTPS. Uma chamada, uma mensagem. Comece por aqui, a menos que você tenha um motivo
+    para não fazê-lo.
+  </Card>
+  <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
+    Um bind persistente. Maior throughput, e o que as próprias operadoras falam.
+  </Card>
+</CardGroup>
+
+**Tudo depois da aceitação é idêntico.** Mesmo roteamento, mesma tarifação, mesmas aprovações, mesmos
+recibos. A escolha afeta como você entrega uma mensagem, não o que acontece com ela.
+
+## Três coisas que surpreendem as pessoas
+
+Vale conhecer antes da sua primeira integração, em vez de durante o seu primeiro incidente.
+
+<AccordionGroup>
+
+<Accordion title="Uma resposta de sucesso não significa entregue">
+A resposta de submissão é enviada **antes do roteamento rodar**. Então `200`, ou `ESME_ROK`,
+significa *aceito para roteamento*, e nada mais.
+
+Uma mensagem pode ser aceita e depois recusada, descartada ou falhar no roteamento, e a única forma
+de saber é por um [recibo de entrega](/developers/receive/delivery-receipts). Se sua integração
+tratar aceitação como entrega, ela vai errar exatamente nos casos que importam.
+</Accordion>
+
+<Accordion title="Seu sender ID e seu texto podem ambos precisar de aprovação">
+Em uma conta com whitelisting obrigatório, um `from` não aprovado é recusado, e também é um corpo de
+mensagem que não corresponde a nenhum template aprovado.
+
+Isso é normal para destinos regulados. O DLT indiano é o exemplo mais visível. Se seus envios
+funcionam em testes e falham em produção, é a primeira coisa a checar.
+</Accordion>
+
+<Accordion title="Sublinhados e hifens são o mesmo campo, exceto uma vez">
+`dlr_url` e `dlr-url` são um único campo, e enviar **os dois** dá `400` em vez de valer o último.
+
+A única exceção é `custom_tlvs`, que mantém o sublinhado. `custom-tlvs` é um argumento desconhecido.
+</Accordion>
+
+</AccordionGroup>
+
+## Para onde ir em seguida
+
+| Você quer | Leia |
+| :--- | :--- |
+| Enviar sua primeira mensagem | [Quickstart](/developers/quickstart) |
+| Conhecer todos os campos | [`/secure/send`](/reference/api/send) |
+| Enviar para várias pessoas de uma vez | [Batches](/developers/send/batches) |
+| Saber por que uma mensagem longa custa três | [Codificação e segmentos](/developers/send/encoding-and-segments) |
+| Receber recibos de entrega | [Recibos de entrega](/developers/receive/delivery-receipts) |
+| Tratar um erro corretamente | [Erros](/developers/errors) |
+| Migrar do Jasmin | [Migrando do Jasmin](/developers/migrating/from-jasmin) |

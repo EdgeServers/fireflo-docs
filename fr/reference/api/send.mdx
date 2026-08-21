@@ -1,0 +1,112 @@
+---
+title: "POST /secure/send"
+description: "Chaque champ d'un envoi unique, avec sa valeur par défaut et le refus qu'il produit."
+---
+
+Met un message unique en file vers une destination et renvoie l'id que vous verrez sur son accusé.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"61491570006","content":"Your OTP is 4417, valid for 10 minutes."}' \
+  'https://sms.example.com/secure/send'
+```
+
+```json
+{
+  "data": {
+    "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46"
+  }
+}
+```
+
+<Warning>
+Un `200` signifie **accepté pour routage**, pas livré. La réponse de soumission est envoyée avant
+l'exécution du routage, donc l'issue ne peut vous parvenir que sous forme d'un
+[accusé de livraison](/developers/receive/delivery-receipts).
+</Warning>
+
+## Champs
+
+| Champ | Type | Requis | Défaut | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | **oui** | — | Format international. **Entre guillemets** — un numéro sans guillemets perd ses zéros initiaux. |
+| `content` | string | l'un ou l'autre | — | Le texte du message. Donnez celui-ci ou `hex_content`, jamais les deux. |
+| `from` | string | non | votre nom de login | Doit être approuvé pour votre compte, sinon `403`. |
+| `coding` | integer | non | `0` | SMPP `data_coding`. `8` pour tout ce qui sort du GSM-7 — divise la taille de segment par deux. |
+| `priority` | integer | non | `0` | `0`–`3`. La passerelle a deux niveaux, donc 0–1 sont normaux et 2–3 sont hauts. |
+
+### Avancés
+
+| Champ | Type | Défaut | Notes |
+| :--- | :--- | :--- | :--- |
+| `dlr` | string | `no` | `yes` pour recevoir un accusé. **Nécessite `dlr_url`.** |
+| `dlr_url` | string | — | Où l'accusé est POSTé. Obligatoire dès que `dlr` vaut `yes`. |
+| `dlr_level` | integer | `2` | `1` progression uniquement, `2` l'issue, `3` les deux. **Le niveau 1 seul n'envoie pas l'issue.** |
+| `hex_content` | string | — | Corps sous forme d'octets hexadécimaux, décodés avec le charset de votre `coding`. **Une longueur impaire est un `400`.** |
+| `validity_period` | integer | — | Minutes pendant lesquelles l'opérateur doit continuer à essayer. **Un nombre entier, pas une chaîne de durée.** |
+| `sdt` | string | — | Heure de livraison planifiée, passée à l'opérateur inchangée et **non validée ici**. |
+| `product` | string | le produit de votre login | Tarifie ce message sur un produit différent. Uniquement les produits que votre opérateur a autorisés pour ce login — **la plupart des logins n'en ont aucun**. |
+| `custom_tlvs` | object | — | Paramètres SMPP supplémentaires sous forme d'**objet** JSON — `{"0x1401": "…"}`. Pas une liste de paires, pas une chaîne entre guillemets. |
+
+## Valeurs de `coding`
+
+| Valeur | Alphabet |
+| ---: | :--- |
+| `0` | Défaut SMSC |
+| `1` | ASCII |
+| `2` | Octet, non spécifié |
+| `3` | Latin-1 |
+| `4` | Octet |
+| `6` | Cyrillique |
+| `7` | Hébreu |
+| `8` | UCS-2 |
+
+Tout le reste dans 0–14 est accepté et décodé en UTF-8. **15 et au-dessus est un `400`.** La
+valeur est passée à l'opérateur inchangée, elle choisit donc la manière dont le corps est encodé,
+pas seulement la manière dont il est compté.
+
+## Erreurs propres à cet endpoint
+
+| Statut | `message` | Quand |
+| :--- | :--- | :--- |
+| 400 | `Mandatory argument to is not found.` | `to` absent ou vide. La même forme nomme `content`, `dlr_url` et le reste. |
+| 400 | `Unknown argument: <name>` | Un champ que l'API n'a pas — **y compris `username` et `password`**, qui appartiennent à l'en-tête. |
+| 400 | `Argument <name> has an invalid value: <value>.` | Bon nom, mauvaise forme — un `coding` non numérique. |
+| 402 | `Insufficient credit` | Le solde prépayé ne couvrira pas. **Rien envoyé, rien débité.** |
+| 403 | `'<id>' is not an approved sender ID for this account.` | Le `from` n'a pas été approuvé. |
+| 403 | `The message content does not match any approved template for this account.` | Votre compte n'envoie que des libellés approuvés. |
+| 412 | `Got unparseable json data: <body>` | Corps vide, non JSON, ou un tableau nu plutôt qu'un objet. |
+| 500 | `Cannot send message` | Accepté et n'a pas pu être mis en file. **Tout débit est inversé.** |
+
+Les erreurs partagées — `401`, `403 Authentication failure`, `415`, `429` — sont sur
+[Erreurs de l'API](/reference/api/errors).
+
+## Trois champs souvent mal renseignés
+
+<Warning>
+Si vous travaillez depuis une spécification plus ancienne, vérifiez ces trois avant tout. Chacun
+échoue au premier appel :
+
+1. **`custom_tlvs` est un objet**, pas un tableau de paires.
+2. **`validity_period` est un entier** de minutes, pas une chaîne.
+3. **`product` existe**, et est absent de certaines specs plus anciennes.
+</Warning>
+
+## Noms de champs
+
+`_` et `-` sont le même caractère pour cette API. `dlr_url` et `dlr-url` sont un seul champ, et
+envoyer **les deux est un `400`** plutôt que last-one-wins.
+
+**`custom_tlvs` est l'exception** et garde son underscore ; `custom-tlvs` est un argument inconnu.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Envoyer un message" icon="paper-plane" href="/developers/send/one-message">
+    Les mêmes champs, avec le raisonnement.
+  </Card>
+  <Card title="TLVs personnalisés" icon="tags" href="/developers/send/custom-tlvs">
+    La grammaire, et le tag décimal qui échoue silencieusement.
+  </Card>
+</CardGroup>

@@ -1,0 +1,94 @@
+---
+title: "rates.conf"
+description: "La gramática de tarifas, qué significa un ámbito en cada lado de la operación y el ámbito reservado que tarifica cuentas que aún no has creado."
+---
+
+La misma gramática que [`routingTable.conf`](/reference/files/routing-table), con el importe por unidad
+donde el enrutamiento pone el objetivo.
+
+```
+Amount:Attribute:Operator:Value
+```
+
+Las reglas se agrupan bajo una cabecera `[scope]` y se evalúan de arriba a abajo **dentro de ella**. La primera coincidencia
+gana, así que las reglas específicas van arriba del catch-all.
+
+## Un ámbito es un lado de la operación
+
+| Ámbito | Significa |
+| :--- | :--- |
+| El nombre de una instancia **vendor** | Lo que ese proveedor te cobra. **coste** |
+| Un id de **account** | Lo que cobras a ese cliente. **precio** |
+| `[*]` | Tarifica **cualquier cuenta sin reglas propias**, incluyendo cuentas creadas después |
+
+<Warning>
+`[*]` es **solo lado de venta**. Un proveedor nunca lo hereda, así que un coste sin regla permanece desconocido en lugar
+de convertirse silenciosamente en el precio de venta. Que reportaría un margen de cero en tráfico por el que de hecho
+estás pagando.
+</Warning>
+
+Nada en el esquema distingue un ámbito de proveedor de un ámbito de cuenta; la pasarela los distingue
+por cuál búsqueda pregunta. `fireflo import --dry-run` clasifica cada ámbito y **nombra los que no puede
+clasificar como ninguno**. Que es cómo un ámbito que cargará y coincidirá silenciosamente con nada se atrapa.
+
+## Importes
+
+Decimal, con como mucho **4** lugares decimales. Parseado exactamente, nunca por punto flotante, así que `0.0450` significa
+`0.0450`.
+
+<Note>
+`smsg.money.scale` controla con cuántos lugares se publica un **total**. Las tarifas por mensaje siempre
+mantienen cuatro, porque `0.0450` mostrado como `0.05` es 11% de desviación en cada mensaje. Consulta
+[Tarificación](/reference/config/rating).
+</Note>
+
+## Condiciones
+
+Los atributos son los del motor de enrutamiento: `to`, `from`, `body`, `product`, `systemId`, `owner_id`, `type`
+y el resto. `matches` es una expresión regular y está **anclada**. `^61.*` coincide con un número completo,
+un simple `61` no.
+
+Combina condiciones con `~~`, que debe aparecer en las **tres** posiciones:
+
+```
+0.0800:product~~to:equals~~matches:premium~~^61[0-9]{9}$
+```
+
+## El catch-all
+
+```ini
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+```
+
+<Warning>
+**Sin un `default`, un mensaje que no coincide con nada se registra como una tarifa UNKNOWN, no como gratis.**
+Ese es el resultado honesto, y significa que el mensaje se entrega y factura a nadie hasta que te
+percatas. `smsg.rating.unrated.refuse` lo convierte en un rechazo en su lugar.
+</Warning>
+
+## Forma trabajada
+
+```ini
+# Lo que vendor1 nos cobra
+[vendor1]
+0.0310:to:matches:^61[0-9]{9}$
+0.0400::default:
+
+# Lo que acct-1001 nos paga
+[acct-1001]
+0.0800:product:equals:premium
+0.0450::default:
+
+# Cada cuenta sin reglas propias
+[*]
+0.0500::default:
+```
+
+Coste y precio viven en el mismo archivo y son la misma gramática, que es por lo que el panel de control los agrupa
+como **What we pay** y **What we charge** en lugar de mezclarlos en una lista.
+
+En modo base de datos este archivo no se lee tras el arranque; los mismos datos viven en `app_rate_rule` y sus
+tablas de condición. Consulta [Base de datos](/reference/config/database) y
+[Cómo funciona el precio](/platform/billing/how-pricing-works).

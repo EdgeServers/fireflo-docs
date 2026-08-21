@@ -1,0 +1,109 @@
+---
+title: "O banco de dados"
+description: "O que o PostgreSQL te dá, aplicando o schema, e por que db migrate sozinho deixa um gateway que não inicia."
+---
+
+O PostgreSQL é **opcional**. Deixe `FIREFLO_DB_URL` sem definir e o FireFlo roda com arquivos, com
+call records escritos em `data/cdr/`.
+
+## O que ele te dá
+
+| Recurso | Precisa de banco |
+| :--- | :--- |
+| Rating, least-cost routing, call records | Não |
+| O **CDR expiry sweep** | **Sim** — ele consulta por registros sem outcome |
+| **Crédito pré-pago** | **Sim** — o crédito só pode entrar pelo banco |
+| Whitelisting | **Sim** |
+| Painel de controle editando qualquer coisa | **Sim** — em modo de arquivo não há o que editar |
+
+A metade somente-leitura do painel funciona sem ele; só não tem nada para alterar.
+
+## Criando
+
+```bash
+sudo -u postgres createuser fireflo --pwprompt
+sudo -u postgres createdb fireflo --owner fireflo
+```
+
+## Aplicando o schema
+
+`FIREFLO_DB_MIGRATE=true` migra no startup, o que é conveniente para uma primeira execução e errado
+para uma atualização — vincula uma mudança de schema a um start de processo e não dá nenhuma forma de
+você ver antes o que seria aplicado.
+
+```bash
+scripts/fireflo db test        # alcançável, autenticado, migrado, permitido, respondendo
+scripts/fireflo db info        # o que está aplicado, o que está pendente
+scripts/fireflo db validate    # as migrations aplicadas ainda casam com os arquivos
+scripts/fireflo db migrate     # aplica o que está pendente
+```
+
+`info` e `validate` **não** precisam da flag que habilita escrita. Ler a versão do schema não muda
+nada, e precisar de uma flag antes de você poder olhar seria uma armadilha no meio de um incidente.
+
+<Warning>
+**Migrations são unidirecionais.** Não há scripts de undo, então reverter uma mudança de schema
+significa restaurar um backup. Faça um antes de migrar um banco com o qual você se importa.
+</Warning>
+
+## `db migrate` sozinho não é suficiente
+
+Este é o que pega as pessoas, e a falha é ruidosa em vez de suave.
+
+`db migrate` cria as tabelas e deixa **todas elas vazias**. Sem tabela de roteamento o gateway não
+inicia:
+
+```
+no default routing table in new targets!
+```
+
+Isso nomeia uma estrutura interna em vez da linha faltando, então parece um bug. Não é — significa que
+o banco está vazio.
+
+[`fireflo bootstrap`](/platform/install/first-configuration) escreve o mínimo que fará o gateway
+iniciar.
+
+## O baseline consolidado
+
+O schema é um arquivo, `V1.19.0__baseline.sql`, **gerado em vez de mesclado à mão**: os originais
+foram aplicados a um banco descartável, dumped com `pg_dump --schema-only`, e o dump verificado
+aplicando-o a um segundo banco e comparando os dois. Mudanças posteriores continuam a partir de
+`V1.20.0`.
+
+Ele é numerado na **maior** versão que substitui, não na menor, deliberadamente. Um deployment que
+parou no meio trataria um baseline com número menor como já aplicado e migraria para um no-op,
+perdendo silenciosamente o que veio depois. Em `1.19.0` ele tenta aplicar e falha na primeira tabela
+que já existe — recuperável, enquanto a versão silenciosa corrompe por omissão.
+
+### Atualizando um deployment que aplicou os originais
+
+O histórico do Flyway ainda nomeia todos eles, então `db validate` falha até o registro ser
+realinhado: um checksum alterado, o resto não mais resolvível. Um comando corrige, e reescreve o
+**histórico** em vez do schema:
+
+```bash
+FIREFLO_DB_MIGRATE=true scripts/fireflo db repair
+```
+
+<Warning>
+**Termine de aplicar qualquer migration pendente antes de rodar `repair`.** Repair em um banco
+parcialmente migrado faz parecer que ele está completo quando não está.
+</Warning>
+
+## Atualizando, em ordem
+
+<Steps>
+  <Step title="Pare o gateway" />
+  <Step title="Olhe, depois aplique">
+```bash
+scripts/fireflo db info
+scripts/fireflo db migrate
+```
+  </Step>
+  <Step title="Inicie a nova versão" />
+</Steps>
+
+O comando roda contra o layout `lib/` do artefato JVM, então um deployment nativo migra a partir da
+imagem JVM ou qualquer host com um JDK.
+
+Chaves e tabelas estão em [Database configuration](/reference/config/database).

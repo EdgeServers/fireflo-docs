@@ -1,0 +1,182 @@
+---
+title: "FAQ de clientes"
+description: "Accounts, products, aprovações e enforcement — as perguntas que chegam como um ticket de suporte em vez de um erro de configuração."
+---
+
+<AccordionGroup>
+
+<Accordion title="Um cliente está enviando alegremente e nada está sendo cobrado">
+Verifique se o login dele carrega um **product**, e se suas rate rules carregam.
+
+Uma mensagem sem product vê apenas as rate rules que também não têm product. Em uma implantação
+cujas regras todas carregam um, ela não casa com nada, é deixada sem rate, e uma mensagem sem rate
+nunca é cobrada — pricing roda antes do débito, então é pulado. A mensagem é entregue e cobrada
+para ninguém.
+
+Há uma linha em `debug` e nada mais. A página **Pricing** do painel conta as últimas 24 horas de
+tráfego que não carregou preço e nomeia as accounts e products de onde veio.
+</Accordion>
+
+<Accordion title="A credencial dele nomeia o product certo e ainda está sem rate">
+`system_type` em um bind SMPP **sobrescreve** o product da credencial, e é texto livre validado em
+nenhum outro lugar. Um cliente bindando `prem` para `premium` cai exatamente no estado sem rate
+acima.
+
+É por isso que `conf.product.required` verifica **pertencimento ao catálogo** em vez de
+não-vazio — `prem` passa em qualquer teste de "está setado?" perfeitamente. HTTP não tem bind e
+portanto não tem override.
+</Accordion>
+
+<Accordion title="conf.product.required está ligado e um bind com typo ainda passa">
+O catálogo é `app_product`, uma tabela de banco. Um gateway em **configuração via arquivo** não
+tem tal tabela, e um banco inalcançável se comporta da mesma forma, portanto apenas a metade
+não-vazia é aplicada: um nome de product irreconhecível é aceito.
+
+Um WARN nomeando a configuração e o valor é logado **uma vez por bind** dizendo exatamente isso. A
+tolerância é deliberada — recusar todo bind porque uma query falhou seria um outage muito pior do
+que o que isto previne.
+</Accordion>
+
+<Accordion title="Whitelisting está ligado e nada está sendo verificado">
+Leia `active` em `/ops/health`. **`active: false` enquanto `smsg.whitelist.enabled` é true significa
+que o load nunca teve sucesso**, não que nada está configurado — nada está sendo verificado em
+nenhuma account, e essa é a primeira coisa a corrigir.
+
+Se `active` é true, percorra os quatro switches em ordem: a feature, o listener
+(`conf.whitelist.enabled`), o product (`app_product.whitelist_enabled`), então a política da account.
+Uma mensagem é verificada apenas se os quatro disserem sim.
+</Accordion>
+
+<Accordion title="Um listener não está aplicando e eu nunca desliguei">
+`conf.whitelist.enabled` default **ligado**, portanto um listener que não está verificando ou foi
+optado por fora explicitamente, ou o switch mestre está desligado, ou a configuração não é uma
+que pode ter scope de um único listener — nesse caso mantém sua forma pura, lê um global que
+ninguém configura, e retorna seu default codificado não importa como você configure.
+</Accordion>
+
+<Accordion title="Alternei uma account para ENFORCE e ela recusa tudo">
+Uma lista vazia em `ENFORCE` recusa tudo, e isso está correto: um whitelist sem nada permite
+nada. É reportado como `enforcing_with_nothing_approved` em `/ops/health`.
+
+A causa usual é que as aprovações existem mas não contam. Uma aprovação arquivada sob um product
+com `whitelist_enabled = false` não protege nada — aquele product resolve para `OFF` antes de
+qualquer merge. E tráfego sem product é servido pelo scope da **account** sozinho, portanto
+nenhuma aprovação com scope de product pode alcançar um login cuja credencial não nomeia product.
+</Accordion>
+
+<Accordion title="O sender ID está aprovado e a operadora ainda recusa toda mensagem">
+Aprovado decide se a mensagem é matched aqui. Não decide se a operadora vai aceitá-la.
+
+Nada aprovado significa nada carimbado, portanto uma lane DLT recebe um `submit_sm` sem entity ou
+template id e a recusa — com um status no bloco 192–196, que é sempre sobre TLVs.
+`tlvCount=0` nas linhas de trace confirma.
+
+O relatório de cobertura de TLV do painel diz, por linha aprovada, quais tags mandatórias nada
+fornecerá e quais vendors as descartariam.
+</Accordion>
+
+<Accordion title="O carimbo está configurado e a wire não o carrega">
+Três coisas para verificar, nesta ordem:
+
+- **O token.** `PEID=…` não tem sublinhado, portanto não carrega tag e não carimba nada. O formato
+  é `<name>_<tag>=<value>`.
+- **O modo de stamping.** `whitelist.tlvs.mode` default para `off` em um listener, portanto um
+  match carimba nada. `assign` preenche a tag quando o cliente não enviou uma; `replace`
+  sobrescreve o que enviou, e essa sobrescrita *é* a aprovação.
+- **O vendor.** Uma tag ausente do `registered.tlvs.submit` daquele vendor é descartada no caminho
+  de saída, *depois* de o call record ter notado como presente. O registro diz enviado; a wire
+  não a carrega.
+</Accordion>
+
+<Accordion title="Preciso do cliente reconectar após aprovar algo?">
+Não. O whitelist é re-lido no poll de configuração e cada snapshot carrega uma geração, portanto
+uma sessão bindada por semanas pega um sender ID recém-aprovado sem reconectar.
+
+`fireflo reload` aplica agora em vez de no próximo poll — o que importa, porque o cliente cujo
+tráfego está sendo recusado geralmente está ao telefone enquanto alguém aprova.
+</Accordion>
+
+<Accordion title="Um login na account funciona e outro não">
+Verifique se as aprovações estão vinculadas ao login. `system_id` em uma registration a escopo em
+uma única credencial; **NULL significa toda login na account**, que é o que toda linha significava
+antes de a coluna existir.
+
+Vincular uma linha a um login a remove de toda outra login naquela account. Um login sem linhas
+próprias e sem linhas account-wide não pode enviar nada sob `ENFORCE`. A página da account avisa
+quando as aprovações são todas vinculadas a login e alguma login fica sem nenhuma.
+
+Uma mensagem cujo login é desconhecido recebe as linhas account-wide e nada mais — fail-closed de
+propósito, para que um caller que não passou um login não receba aprovações dadas a alguém
+específico.
+</Accordion>
+
+<Accordion title="Um template salva limpo e não casa com nada">
+`{code}` não tem `#`, portanto é texto comum — o template aprova uma string exata contendo chaves
+e recusa toda mensagem real.
+
+`{#VAR#}` e `{# var #}` também não são o token. O gateway os carrega, os casa como `{#var#}`, e
+os lista sob `templates_degraded` em `/ops/health`; o painel se recusa a salvá-los. Escreva o
+token em minúsculas sem espaços dentro.
+
+O preview do painel é a verificação: mostra uma mensagem de exemplo que o template aceita,
+construída pelo mesmo scanner que o matcher usa.
+</Accordion>
+
+<Accordion title="Posso aumentar o comprimento de variável apenas para um cliente?">
+Não. `smsg.whitelist.max.variable` é global, porque templates são compilados uma vez no load em
+um índice por account — não há um lugar per-customer para colocar.
+
+Aumentá-lo alarga **todo** template aprovado na implantação de uma vez, que é o maior
+false-accept no design. É logado em INFO e reportado como `max_variable` em `/ops/health`, e esse
+valor reportado é também a resposta quando a configuração foi alterada mas o poll de configuração
+ainda não caiu.
+</Accordion>
+
+<Accordion title="Um cliente editou seu template e seu tráfego parou">
+Editar uma registration aprovada a coloca de volta em `PENDING` e limpa a revisão anterior,
+portanto está fora de serviço até que alguém aprove novamente.
+
+Esse é o ponto — um cliente não deve mudar o texto aprovado e continuar enviando sob a aprovação —
+e tem uma aresta afiada em uma account fail-closed. Propor TLVs é a única exceção:
+`requested_tlvs` é lido por nada no caminho de mensagem, portanto uma linha aprovada continua
+funcionando enquanto um operador considera a proposta.
+</Accordion>
+
+<Accordion title="Um cliente propôs TLVs. Por que ele não pode simplesmente configurá-los?">
+Sob `replace` o carimbo sobrescreve o que o cliente afirmou, e **essa sobrescrita é a aprovação**.
+Um cliente capaz de escrever a coluna servida poderia afirmar a registration de outra pessoa
+enquanto envia texto aprovado, e o call record então reportaria o valor que ele escolheu como
+aprovado.
+
+Portanto o portal escreve `requested_tlvs`, o gateway lê `tlvs`, e um operador ou move a proposta
+através ou a limpa. Aceitar coloca o valor na wire no próximo poll de configuração.
+</Accordion>
+
+<Accordion title="Qual account é faturada quando accountId está em branco em uma credencial?">
+Difere por protocolo. SMPP cai para o `systemId`; HTTP cai para a lookup key, que é o `apiKey`
+quando configurado.
+
+Portanto um login HTTP com uma API key e sem `accountId` fatura para a própria key — o segredo cai
+em `cdr_submit.account_id`, nas cifras de receita do painel e em todo export CSV. Configure
+`accountId` explicitamente e nenhum fallback importa.
+</Accordion>
+
+<Accordion title="Adicionei crédito e o balance não se moveu">
+Verifique se a account tem uma linha `account_balance`. Uma account sem linha **não está em
+zero** — ela não tem balance, que é um estado diferente.
+
+Um `RECHARGE` escrito para uma account sem linha credita nada. Fica pendente, loga um WARN
+nomeando a account, e se aplica no momento em que a linha aparece. Criar um login não cria um
+balance; *Open for credit* na página da account cria.
+</Accordion>
+
+<Accordion title="Desalistei uma account e seu tráfego continuou fluindo">
+O gateway nunca lê o catálogo de accounts. `enabled` em `app_account` decide se este painel lista
+a account e nada mais — seus logins continuam se conectando, seu tráfego continua enviando e suas
+rate rules continuam precificando.
+
+É o oposto do que `enabled` significa em um vendor ou product. Para parar tráfego, desabilite os
+**logins**; para parar spend, use o balance.
+</Accordion>
+
+</AccordionGroup>
