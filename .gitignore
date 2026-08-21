@@ -2,3 +2,6 @@ node_modules/
 .mintlify/
 .DS_Store
 *.log
+
+# local benchmarking scratch — carries live credentials, must never be committed
+sms_benchmark.sh
