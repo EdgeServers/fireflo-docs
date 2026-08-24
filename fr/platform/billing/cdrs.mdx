@@ -108,6 +108,24 @@ tag.
 `NULL` signifie que rien n'a enregistré la colonne ; `{}` signifie enregistré et il n'y en avait
 aucun. `tlvs_sent` est `NULL` pour tout vendor non-SMPP.
 
+## Lire une tempête de nouvelles tentatives
+
+Chaque tentative auprès d'un vendor laisse désormais sa propre ligne `cdr_submit` — pas seulement
+celle qui a finalement réussi ou échoué de manière terminale. `vendor_attempt` les numérote,
+`submit_status` porte ce que le vendor a réellement répondu à chacune, et `NULL` à cet endroit
+signifie "non enregistré", pas "accepté". Voir
+[Tables d'enregistrement d'appels](/reference/data/cdr-tables) pour la forme exacte.
+
+<Tip>
+La page par message du panneau de contrôle lit ces lignes, plus `cdr_interim` et `cdr_final`, comme
+un unique **échange SMPP** ordonné — `submit_sm` sortant, `submit_sm_resp` en retour avec son statut,
+`deliver_sm` pour chaque accusé — au lieu d'une simple table de tentatives. Un message qui a été
+réessayé, ou qui porte plusieurs segments, se lit comme la séquence qu'il a réellement été plutôt
+que comme une ligne par partie.
+
+`deliver_sm_resp` n'est jamais affiché, parce que rien dans le pipeline ne l'enregistre.
+</Tip>
+
 ## Le corps du message
 
 Enregistré **seulement si vous l'activez**.

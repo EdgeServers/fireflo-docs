@@ -110,6 +110,30 @@ en absoluto?**
 cero**. Cero es una afirmación sobre el cliente, a saber que no pidió nada.
 </Tip>
 
+### `submit_status` y `vendor_attempt`
+
+Desde V1.40.0. **Ahora se escribe una fila `cdr_submit` por cada intento contra un vendor**, no solo el
+que finalmente tuvo éxito o falló de forma terminal — un nack reintentable también escribe una.
+
+| Columna | Contiene |
+| :--- | :--- |
+| `submit_status` | El estado `submit_sm_resp` del vendor para *este* intento — `0` (`ESME_ROK`) en la fila que tuvo éxito, el código real en una que fue reintentada |
+| `vendor_attempt` | Cuenta base 1 de `submit_sm` enviados a este vendor para esta parte del mensaje, a través tanto de reintentos dentro del worker como re-enrutamientos de vuelta por el router |
+
+<Warning>
+**`NULL` es "no registrado", nunca una afirmación de éxito.** Las filas escritas antes de V1.40.0, y
+cada fila de un vendor no-SMPP, llevan `NULL` aquí — léalo igual que `tlvs_sent`, no como `0`.
+</Warning>
+
+Antes de esta columna, una tormenta de reintentos solo era visible como un conteo de submits inflado
+en el vendor, sin registro de lo que realmente dijo en los intentos que fallaron — vea
+[Colas y reintentos](/platform/routing/queues-and-retries) para el presupuesto de reintentos que
+estas filas ahora hacen legible.
+
+`(gateway_msg_id, part_no, retry_count, vendor_attempt)` es la clave natural desde V1.40.0, ampliada
+desde `(gateway_msg_id, part_no, retry_count)` — `retry_count` por sí solo no cambia entre reintentos
+dentro del worker contra un mismo vendor, así que sin `vendor_attempt` esas filas colisionarían.
+
 ## `cdr_final` y `cdr_interim`
 
 Resultados y progreso, divididos por la razón anterior. También tienen **tiempos de vida diferentes**:

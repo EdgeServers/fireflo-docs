@@ -113,6 +113,33 @@ un accusé à ce client du tout.**
 **Ce n'est pas zéro** — zéro est une affirmation sur le client, à savoir qu'il n'a rien demandé.
 </Tip>
 
+### `submit_status` et `vendor_attempt`
+
+Depuis V1.40.0. **Une ligne `cdr_submit` est désormais écrite pour chaque tentative auprès d'un
+fournisseur**, pas seulement celle qui a finalement réussi ou échoué de manière terminale — un nack
+réessayable en écrit une aussi.
+
+| Colonne | Contient |
+| :--- | :--- |
+| `submit_status` | Le statut `submit_sm_resp` du fournisseur pour *cette* tentative — `0` (`ESME_ROK`) sur la ligne qui a réussi, le vrai code sur celle qui a été réessayée |
+| `vendor_attempt` | Compte basé sur 1 des `submit_sm` envoyés à ce fournisseur pour cette partie de message, à travers les nouvelles tentatives dans le worker et les re-routages via le router |
+
+<Warning>
+**`NULL` signifie "non enregistré", jamais une affirmation de succès.** Les lignes écrites avant
+V1.40.0, et chaque ligne d'un fournisseur non-SMPP, portent `NULL` ici — lisez-le de la même façon
+que `tlvs_sent`, pas comme `0`.
+</Warning>
+
+Avant cette colonne, une tempête de nouvelles tentatives n'était visible que comme un compte de
+soumissions gonflé chez le fournisseur, sans trace de ce qu'il avait réellement répondu sur les
+tentatives qui ont échoué — voir [Files et nouvelles tentatives](/platform/routing/queues-and-retries)
+pour le budget de nouvelles tentatives que ces lignes rendent maintenant lisible.
+
+`(gateway_msg_id, part_no, retry_count, vendor_attempt)` est la clé naturelle depuis V1.40.0, élargie
+depuis `(gateway_msg_id, part_no, retry_count)` — `retry_count` seul ne change pas à travers les
+nouvelles tentatives dans le worker chez un même fournisseur, donc sans `vendor_attempt` ces lignes
+entreraient en collision.
+
 ## `cdr_final` et `cdr_interim`
 
 Résultats et progression, séparés pour la raison ci-dessus. Ils ont aussi des **durées de vie
