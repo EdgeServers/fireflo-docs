@@ -1,23 +1,23 @@
 ---
 title: "Instalar a mano"
-description: "Ubuntu 24.04 desde cero: los dos runtimes que Ubuntu no incluye, la disposición, y lo que una actualización puede y no puede reemplazar."
+description: "Ubuntu 24.04 desde cero: los dos runtimes que Ubuntu no incluye, la distribución de directorios y qué puede o no reemplazar una actualización."
 ---
 
 Lo que [`fireflo-install`](/platform/install/one-command) automatiza. Lee esto si estás empaquetando
-FireFlo tú mismo, o si un paso del instalador falló y necesitas saber qué estaba haciendo.
+FireFlo por tu cuenta, o si un paso del instalador falló y necesitas saber qué estaba haciendo.
 
 ## Requisitos previos
 
-- **Java 25.** El build apunta a release 25 y **no correrá en 21**.
-- **PostgreSQL 14 o más nuevo.** Opcional para el gateway solo en modo archivo; requerido para el panel de
-  control, crédito prepago, whitelisting, y registros de llamada en una tabla.
-- **RabbitMQ**, solo si los mensajes enviados deben sobrevivir a un reinicio del gateway. Sin él la cola está en
-  memoria y un reinicio pierde todo lo que no haya llegado a un proveedor.
-- Un usuario de servicio sin shell de login.
+- **Java 25.** La compilación apunta al release 25 y **no funciona en 21**.
+- **PostgreSQL 14 o superior.** Opcional solo para el gateway en modo archivo; obligatorio para el
+  panel de control, el crédito prepago, el whitelisting y los registros de llamadas en tabla.
+- **RabbitMQ**, únicamente si los mensajes enviados deben sobrevivir a un reinicio del gateway. Sin él
+  la cola está en memoria y un reinicio descarta todo lo que no había llegado a un proveedor.
+- Un usuario de servicio sin shell de inicio de sesión.
 
 ## La parte incómoda de esta plataforma
 
-Dos de los tres runtimes **no** son lo que trae Ubuntu:
+Dos de los tres runtimes **no** son los que Ubuntu incluye:
 
 | Necesitas | Ubuntu 24.04 trae | Haz |
 | :--- | :--- | :--- |
@@ -45,11 +45,11 @@ java -version        # debe imprimir 25
 ```
   </Step>
   <Step title="Node 22 desde NodeSource">
-Next.js 16 no corre en el Node 18 de Ubuntu. Esto es para el panel de control.
+Next.js 16 no funciona con el Node 18 de Ubuntu — esto es para el panel de control.
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
-node --version       # debe imprimir v22 o más nuevo
+node --version       # debe imprimir v22 o posterior
 ```
   </Step>
   <Step title="Usuario de servicio y directorios">
@@ -64,36 +64,36 @@ sudo chmod 750 /etc/fireflo
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo
 ```
-Mantén la contraseña fuera del historial del shell. Escríbela directamente en el archivo de entorno.
+Mantén la contraseña fuera del historial del shell — escríbela directamente en el archivo de entorno.
   </Step>
 </Steps>
 
-## Disposición
+## Distribución de directorios
 
-La configuración se mantiene **fuera del** directorio del artefacto, así que una actualización puede reemplazar el artefacto
-por completo sin tocar nada que hayas editado.
+La configuración se mantiene **fuera** del directorio del artefacto, para que una actualización pueda
+reemplazar el artefacto por completo sin tocar nada de lo que hayas editado.
 
 ```text
-/opt/fireflo/            propiedad de fireflo, REEMPLAZADO al actualizar
+/opt/fireflo/            propiedad de fireflo, REEMPLAZADO en la actualización
   quarkus-run.jar
   lib/  app/  quarkus/
-  bin/fireflo            el CLI del operador, se mantiene fuera de lo que reemplaza una actualización
+  bin/fireflo            el CLI del operador, fuera de lo que reemplaza una actualización
 
-/etc/fireflo/            propiedad de fireflo, NUNCA reemplazado al actualizar
-  fireflo.env            entorno, incluyendo la contraseña de la base de datos. chmod 600
+/etc/fireflo/            propiedad de fireflo, NUNCA se reemplaza en la actualización
+  fireflo.env            entorno, incluida la contraseña de la base de datos. chmod 600
   smsg.properties        workers y ajustes         \
   credentials.yml        logins                     |  solo modo archivo
   routingTable.conf      enrutamiento               |
   rates.conf             tarifas                   /
 
-/var/lib/fireflo/        el almacén de recibos, y CDRs cuando no hay base de datos
+/var/lib/fireflo/        el almacén de recibos, y los CDR cuando no hay base de datos
 /var/log/fireflo/        logs
 ```
 
 <Warning>
-**El artefacto es un directorio, no un archivo.** `quarkus-run.jar` no correrá sin los directorios `lib/`, `app/`
-y `quarkus/` a su lado. Copiar solo el jar produce un proceso que arranca y luego
-no encuentra sus clases.
+**El artefacto es un directorio, no un archivo.** `quarkus-run.jar` no se ejecuta sin los directorios
+`lib/`, `app/` y `quarkus/` junto a él. Copiar solo el jar produce un proceso que arranca y luego
+falla al no encontrar sus clases.
 </Warning>
 
 ## El archivo de entorno
@@ -111,17 +111,17 @@ export FIREFLO_OPS_PORT=9000
 ```
 
 <Warning>
-Establece `FIREFLO_CONF_DIR` a una **ruta absoluta**. Un valor relativo, incluyendo el `conf` por defecto,
-se resuelve contra el directorio de trabajo del proceso, así que una unit con `WorkingDirectory=/opt/fireflo` lee
-`/opt/fireflo/conf/`, que no es donde editaste nada.
+Establece `FIREFLO_CONF_DIR` como una **ruta absoluta**. Un valor relativo — incluido el `conf` por
+defecto — se resuelve contra el directorio de trabajo del proceso, así que una unidad con
+`WorkingDirectory=/opt/fireflo` lee `/opt/fireflo/conf/`, que no es donde editaste nada.
 </Warning>
 
 ## Puertos
 
-| Puerto | Lleva | Exponer a |
+| Puerto | Transporta | Exponer a |
 | :--- | :--- | :--- |
 | 8080 | La API REST | Clientes |
-| 27777 | Binds SMPP | Clientes |
+| 27777 | Enlaces SMPP | Clientes |
 | 9000 | `/ops/*` y `/q/metrics` | **Loopback, o solo tu propia red** |
 | 3000 | El panel de control | Detrás de TLS |
 
@@ -130,24 +130,26 @@ se resuelve contra el directorio de trabajo del proceso, así que una unit con `
 Dos ajustes importan más que el resto:
 
 ```ini
-# una sesión SMPP conectada es la conexión de un cliente, así que detén deliberadamente en lugar de abruptamente
+# una sesión SMPP enlazada es la conexión de un cliente, así que detén deliberadamente en lugar de bruscamente
 KillSignal=SIGTERM
 TimeoutStopSec=30
 
-# un descriptor de archivo por sesión de cliente conectada, más las conexiones de proveedor
+# un descriptor de archivo por sesión de cliente enlazada, más las conexiones a proveedores
 LimitNOFILE=65535
 ```
 
 <Warning>
-`SIGTERM` en lugar de `SIGKILL` no es una cortesía. Un apagado limpio devuelve el **crédito prepago reservado**
-no gastado; un `kill -9` lo deja varado hasta que se ejecute [`fireflo credit release`](/reference/cli/fireflo).
+`SIGTERM` en lugar de `SIGKILL` no es una amabilidad. Un apagado limpio devuelve el **crédito prepago
+reservado** no gastado; un `kill -9` lo deja atrapado hasta que se ejecute
+[`fireflo credit release`](/reference/cli/fireflo).
 </Warning>
 
-## Retención de logs, que ahora te pertenece
+## Retención de logs, de la que ahora te haces cargo
 
-Nada en el gateway elimina `httpapi.log`. Quarkus lo rota diariamente y mantiene cada archivo para siempre.
-`fireflo-install` escribe una regla `tmpfiles.d` precisamente para esto. **Instalar a mano significa escribir una
-tú mismo, o aceptar un crecimiento sin límites.** Consulta [Logging](/reference/config/logging).
+Nada dentro del gateway elimina `httpapi.log`. Quarkus lo rota diariamente y conserva cada archivo
+para siempre. `fireflo-install` escribe una regla de `tmpfiles.d` exactamente para esto; **instalar a
+mano implica escribir una tú, o aceptar un crecimiento sin límites.** Consulta
+[Logging](/reference/config/logging).
 
 ## Verificar
 
@@ -155,10 +157,11 @@ tú mismo, o aceptar un crecimiento sin límites.** Consulta [Logging](/referenc
 scripts/fireflo verify
 ```
 
-Y comprueba que los dos tokens son realmente separados. Leer con el token admin debe **404**:
+Y comprueba que los dos tokens realmente son independientes — leer con el token de admin debe
+devolver **404**:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H "Authorization: Bearer $FIREFLO_OPS_ADMIN_TOKEN" \
-  http://localhost:9000/ops/health      # esperar 404
+  http://localhost:9000/ops/health      # se espera 404
 ```

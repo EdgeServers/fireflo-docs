@@ -1,6 +1,6 @@
 ---
 title: "fireflo-install"
-description: "Os cinco verbos, as opções que valem conhecer e o que cada verbo se recusa a tocar."
+description: "Os cinco verbos, as opções que vale conhecer, e o que cada verbo se recusa a tocar."
 ---
 
 Instala e atualiza o **gateway**. O painel de controle tem seu próprio instalador —
@@ -10,71 +10,80 @@ Instala e atualiza o **gateway**. O painel de controle tem seu próprio instalad
 
 | Verbo | Faz | Nunca toca |
 | :--- | :--- | :--- |
-| `check` | Esse host está pronto. Não muda nada. | Tudo |
-| `install` | Primeira instalação: pacotes, usuário de serviço, diretórios, artefato, configuração, banco de dados, unit do systemd, firewall, smoke test | Um diretório de conf existente. Ele recusa em vez disso |
-| `update` | Substitui **apenas o artefato** | O diretório de conf |
-| `service` | Gera o script de inicialização e a unit numa instalação existente, e inicia | O diretório de conf |
-| `rollback` | Restaura o artefato anterior | O diretório de conf |
+| `check` | Verifica se este host está pronto. Não altera nada. | Tudo |
+| `install` | Primeira instalação: pacotes, usuário de serviço, diretórios, artefato, configuração, banco de dados, unidade systemd, firewall, smoke test | Um diretório de configuração existente — ele recusa em vez disso |
+| `update` | Substitui **apenas o artefato** | O diretório de configuração |
+| `service` | Gera o script de inicialização e a unidade em uma instalação existente, e a inicia | O diretório de configuração |
+| `rollback` | Restaura o artefato anterior | O diretório de configuração |
 
 <Warning>
-**`install` recusa quando um diretório de configuração já existe**, em vez de criar um segundo par
-de tokens operacionais em cima do primeiro. Se você tem configuração mas não tem serviço, o verbo
+**`install` recusa quando um diretório de configuração já existe**, em vez de emitir um segundo par
+de tokens operacionais por cima do primeiro. Se você tem configuração mas nenhum serviço, o verbo
 que você quer é `service`, não `install`.
 </Warning>
 
-## Opções que valem conhecer
+## Opções que vale conhecer
 
 ### Layout e identidade
 
 | Opção | Propósito |
 | :--- | :--- |
-| `--tenant NAME` | Dá nome a esta instância. Em `update`, `service` e `rollback` é uma **busca**: a instalação com esse nome é encontrada e seus próprios caminhos, unit, conta e portas são usados, então um upgrade não pode ser mirado na instância errada por esquecimento de uma flag. |
-| `--vhost PATH` | Coloca a instância em um virtualhost por cliente. `--tenant websmsc --vhost /home/websmsc` dá `/home/websmsc/gateway`, com o painel ao lado em `/home/websmsc/panel`. |
+| `--tenant NAME` | Nomeia esta instância. Em `update`, `service` e `rollback` é uma **busca** — a instalação com aquele nome é encontrada e seus próprios caminhos, unidade, conta e portas são usados, de forma que uma atualização não possa ser direcionada à instância errada por esquecer uma flag. |
+| `--vhost PATH` | Coloca a instância em um virtualhost por cliente — `--tenant websmsc --vhost /home/websmsc` produz `/home/websmsc/gateway`, com o painel ao lado em `/home/websmsc/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Caminhos individuais. |
-| `--user` / `--group` / `--service-name` | A conta de serviço e o nome da unit. |
+| `--user` / `--group` / `--service-name` | A conta de serviço e o nome da unidade. **Sob `--vhost`, `--user` deve ser a conta dona do virtualhost** — o instalador nunca faz chown de um diretório que já existe, portanto qualquer outra conta não consegue atravessá-lo. |
 
-As duas units geradas montam um **tmpfs sobre `/home`** e vinculam de volta apenas o único
-virtualhost, então um gateway não pode ver o diretório home de nenhum outro cliente.
+Ambas as unidades geradas montam um **tmpfs sobre `/home`** e fazem bind apenas do único
+virtualhost, de forma que um gateway não consegue enxergar o diretório home de nenhum outro cliente.
+Isso é um namespace, não uma permissão: o próprio modo do diretório ainda decide quem pode entrar
+nele, e é por isso que `--user` importa acima.
+
+<Note>
+Cada flag aceita um valor **separado por espaço**. `--vhost=/home/acme` é rejeitado como opção
+desconhecida em vez de ser interpretado.
+</Note>
 
 ### Configuração e banco de dados
 
 | Opção | Propósito |
 | :--- | :--- |
-| `--config-source file\|db` | Qual fonte a instância inicia usando. |
+| `--config-source file\|db` | Em qual fonte a instância inicia. |
 | `--db-*` | Detalhes da conexão de banco. |
-| `--bootstrap` / `--import` | Popula um banco novo, ou traz uma configuração de arquivo existente. |
+| `--bootstrap` / `--import` | Popular um banco novo, ou trazer uma configuração em arquivo existente. |
 | `--country` / `--country-code` / `--product` / `--rate` / `--decimals` / `--currency` | A primeira tarifa. |
 
 ### Comportamento
 
 | Opção | Propósito |
 | :--- | :--- |
-| `--whitelist` / `--no-whitelist` | Se a checagem de sender ID e conteúdo já começa ligada. |
-| `--balance` / `--no-balance` | Se o crédito pré-pago é obrigatório. |
-| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Portas. Um intervalo deixa o instalador escolher a próxima porta livre de listener. |
+| `--whitelist` / `--no-whitelist` | Se a verificação de sender-ID e conteúdo começa ativada. |
+| `--balance` / `--no-balance` | Se o crédito pré-pago é aplicado. |
+| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Portas. Uma faixa permite que o instalador escolha a próxima porta de listener livre. |
 | `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ para o caminho REST. |
-| `--log-backups` / `--log-retain-days` | Retenção de log, incluindo a regra `tmpfiles.d` que expira `httpapi.log`. |
+| `--log-backups` / `--log-retain-days` | Retenção de logs, incluindo a regra `tmpfiles.d` que limpa o `httpapi.log`. |
 
 ### Executando
 
 | Opção | Propósito |
 | :--- | :--- |
 | `--yes` | Não perguntar. |
-| `--dry-run` | Mostrar o que aconteceria. |
-| `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Pular um estágio. |
-| `--sudo` / `--no-sudo` | Elevação de privilégio. |
+| `--dry-run` | Mostra o que aconteceria. |
+| `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Pular uma etapa. |
+| `--sudo` / `--no-sudo` | Escalonamento de privilégios. |
 
 <Note>
-**`--dry-run` mostra menos do que você poderia esperar.** Ele não pode reportar o que um gerenciador
-de pacotes puxaria, nem o que uma migração encontraria em um banco em que não se conectou. Leia como
-"as decisões que este script tomaria", não "tudo que mudaria neste host".
+**`--dry-run` mostra menos do que você poderia esperar.** Ele não consegue reportar o que um
+gerenciador de pacotes puxaria, nem o que uma migração encontraria em um banco ao qual ainda não se
+conectou. Leia-o como "as decisões que este script tomaria", não como "tudo o que mudaria neste
+host".
 </Note>
 
 ## O que ele não instala
 
-O **painel de controle**. Isso é `fireflo-panel-install`, e num host novo você roda os dois.
+O **painel de controle**. Isso é o `fireflo-panel-install`, e em um host novo você roda os dois.
 
-`--log-retain-days` escreve uma regra `tmpfiles.d` que apaga logs rotacionados, sem tocar nos quatro
-ativos. **Instalar à mão significa arranjar isso você mesmo.** Veja [Logging](/reference/config/logging).
+`--log-retain-days` escreve uma regra `tmpfiles.d` que apaga logs rotacionados, sem nunca tocar nos
+quatro em uso. **Instalar manualmente significa arranjar isso você mesmo** — veja
+[Logging](/reference/config/logging).
 
 Veja [Instalar em um comando](/platform/install/one-command) para o passo a passo.

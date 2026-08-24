@@ -1,22 +1,27 @@
 ---
-title: "Installation à la main"
+title: "Installation manuelle"
 description: "Ubuntu 24.04 depuis zéro : les deux runtimes qu'Ubuntu ne fournit pas, la disposition, et ce qu'une mise à niveau peut ou ne peut pas remplacer."
 ---
 
-Ce que [`fireflo-install`](/platform/install/one-command) automatise. Lisez ceci si vous packagez FireFlo vous-même, ou si une étape d'installation a échoué et que vous devez savoir ce qu'elle faisait.
+Ce que [`fireflo-install`](/platform/install/one-command) automatise. Lisez ceci si vous empaquetez
+FireFlo vous-même, ou si une étape de l'installateur a échoué et que vous avez besoin de savoir ce
+qu'elle faisait.
 
 ## Prérequis
 
-- **Java 25.** La build cible la release 25 et **ne tournera pas sur 21**.
-- **PostgreSQL 14 ou plus récent.** Optionnel pour le gateway seul en mode fichier ; requis pour le control panel, le crédit prépayé, le whitelisting et les enregistrements d'appels en table.
-- **RabbitMQ**, seulement si les messages soumis doivent survivre à un redémarrage du gateway. Sans lui la file est en mémoire et un redémarrage supprime tout ce qui n'a pas atteint un vendeur.
+- **Java 25.** La compilation cible la version 25 et **ne fonctionnera pas sur 21**.
+- **PostgreSQL 14 ou plus récent.** Optionnel pour la passerelle seule en mode fichier ; requis pour
+  le panneau de contrôle, le crédit prépayé, la liste blanche et les enregistrements d'appels dans
+  une table.
+- **RabbitMQ**, uniquement si les messages soumis doivent survivre à un redémarrage de la passerelle.
+  Sans lui, la file est en mémoire et un redémarrage perd tout ce qui n'a pas atteint un fournisseur.
 - Un utilisateur de service sans shell de connexion.
 
-## La partie inconfortable de cette plateforme
+## La partie délicate de cette plateforme
 
-Deux des trois runtimes ne sont **pas** ce qu'Ubuntu fournit :
+Deux des trois runtimes ne sont **pas** ceux fournis par Ubuntu :
 
-| Besoin | Ubuntu 24.04 fournit | Faire |
+| Besoin | Ubuntu 24.04 fournit | À faire |
 | :--- | :--- | :--- |
 | Java 25 | `openjdk-21` | Ajouter Adoptium |
 | Node 22 | `nodejs` 18 | Ajouter NodeSource |
@@ -42,7 +47,7 @@ java -version        # doit afficher 25
 ```
   </Step>
   <Step title="Node 22 depuis NodeSource">
-Next.js 16 ne tourne pas sur le Node 18 d'Ubuntu. C'est pour le control panel.
+Next.js 16 ne tourne pas sur le Node 18 d'Ubuntu — c'est pour le panneau de contrôle.
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
@@ -61,38 +66,42 @@ sudo chmod 750 /etc/fireflo
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo
 ```
-Gardez le mot de passe hors de l'historique du shell. Écrivez-le directement dans le fichier d'environnement.
+Gardez le mot de passe hors de l'historique du shell — écrivez-le directement dans le fichier
+d'environnement.
   </Step>
 </Steps>
 
 ## Disposition
 
-La configuration est gardée **hors** du répertoire des artefacts, pour qu'une mise à niveau puisse remplacer l'artefact en gros sans toucher à ce que vous avez édité.
+La configuration est conservée **en dehors** du répertoire d'artefact, afin qu'une mise à niveau
+puisse remplacer l'artefact en bloc sans toucher à ce que vous avez édité.
 
 ```text
-/opt/fireflo/            possédé par fireflo, REMPLACÉ à la mise à niveau
+/opt/fireflo/            appartient à fireflo, REMPLACÉ à la mise à niveau
   quarkus-run.jar
   lib/  app/  quarkus/
   bin/fireflo            la CLI opérateur, gardée hors de ce qu'une mise à niveau remplace
 
-/etc/fireflo/            possédé par fireflo, JAMAIS remplacé à la mise à niveau
-  fireflo.env            environnement, y compris le mot de passe de la base. chmod 600
-  smsg.properties        workers et paramètres      \
-  credentials.yml        logins                     |  mode fichier uniquement
+/etc/fireflo/            appartient à fireflo, JAMAIS remplacé à la mise à niveau
+  fireflo.env            environnement, y compris le mot de passe de la BD. chmod 600
+  smsg.properties        workers et paramètres     \
+  credentials.yml        identifiants               |  mode fichier seulement
   routingTable.conf      routage                    |
   rates.conf             tarifs                    /
 
-/var/lib/fireflo/        le stockage des accusés, et les CDR quand il n'y a pas de base
-/var/log/fireflo/        logs
+/var/lib/fireflo/        le stockage des accusés, et les CDR quand il n'y a pas de BD
+/var/log/fireflo/        journaux
 ```
 
 <Warning>
-**L'artefact est un répertoire, pas un fichier.** `quarkus-run.jar` ne tournera pas sans les répertoires `lib/`, `app/` et `quarkus/` à côté. Copier le jar seul produit un processus qui démarre puis échoue à trouver ses classes.
+**L'artefact est un répertoire, pas un fichier.** `quarkus-run.jar` ne s'exécutera pas sans les
+répertoires `lib/`, `app/` et `quarkus/` à ses côtés. Copier le jar seul produit un processus qui
+démarre puis échoue à trouver ses classes.
 </Warning>
 
 ## Le fichier d'environnement
 
-`chmod 600`. Il contient le mot de passe de la base et les deux tokens opérationnels.
+`chmod 600`. Il contient le mot de passe de la base de données et les deux jetons opérationnels.
 
 ```bash
 export FIREFLO_CONF_DIR=/etc/fireflo
@@ -105,38 +114,46 @@ export FIREFLO_OPS_PORT=9000
 ```
 
 <Warning>
-Définissez `FIREFLO_CONF_DIR` sur un **chemin absolu**. Une valeur relative, y compris le défaut `conf`, se résout par rapport au répertoire de travail du processus. Donc une unit avec `WorkingDirectory=/opt/fireflo` lit `/opt/fireflo/conf/`, qui n'est pas où vous avez édité quoi que ce soit.
+Définissez `FIREFLO_CONF_DIR` sur un **chemin absolu**. Une valeur relative — y compris la valeur par
+défaut `conf` — se résout par rapport au répertoire de travail du processus, de sorte qu'une unité
+avec `WorkingDirectory=/opt/fireflo` lit `/opt/fireflo/conf/`, ce qui n'est pas là où vous avez
+édité quoi que ce soit.
 </Warning>
 
 ## Ports
 
-| Port | Porte | Exposer à |
+| Port | Transporte | Exposer à |
 | :--- | :--- | :--- |
 | 8080 | L'API REST | Clients |
-| 27777 | Binds SMPP | Clients |
+| 27777 | Liens SMPP | Clients |
 | 9000 | `/ops/*` et `/q/metrics` | **Loopback, ou votre propre réseau uniquement** |
-| 3000 | Le control panel | Derrière TLS |
+| 3000 | Le panneau de contrôle | Derrière TLS |
 
 ## systemd
 
-Deux paramètres comptent plus que le reste :
+Deux réglages comptent plus que les autres :
 
 ```ini
-# une session SMPP bindée est la connexion d'un client, donc arrêter délibérément plutôt qu'abruptement
+# une session SMPP liée est la connexion d'un client, donc arrêter délibérément plutôt que brutalement
 KillSignal=SIGTERM
 TimeoutStopSec=30
 
-# un descripteur de fichier par session client bindée, plus les connexions vendeurs
+# un descripteur de fichier par session client liée, plus les connexions fournisseurs
 LimitNOFILE=65535
 ```
 
 <Warning>
-`SIGTERM` plutôt que `SIGKILL` n'est pas une politesse. Un arrêt propre restitue le **crédit prépayé réservé** non dépensé ; un `kill -9` le bloque jusqu'à ce que [`fireflo credit release`](/reference/cli/fireflo) tourne.
+`SIGTERM` plutôt que `SIGKILL` n'est pas un raffinement. Un arrêt propre restitue le **crédit
+prépayé réservé** non dépensé ; un `kill -9` le laisse bloqué jusqu'à ce que
+[`fireflo credit release`](/reference/cli/fireflo) s'exécute.
 </Warning>
 
-## Rétention des logs, que vous possédez maintenant
+## Rétention des journaux, dont vous êtes désormais responsable
 
-Rien dans le gateway ne supprime `httpapi.log`. Quarkus le tourne quotidiennement et garde chaque fichier pour toujours. `fireflo-install` écrit une règle `tmpfiles.d` exactement pour cela ; **installer à la main signifie en écrire une vous-même, ou accepter une croissance non bornée.** Voir [Logging](/reference/config/logging).
+Rien dans la passerelle ne supprime `httpapi.log`. Quarkus le fait tourner quotidiennement et garde
+chaque fichier indéfiniment. `fireflo-install` écrit une règle `tmpfiles.d` précisément pour cela ;
+**installer à la main signifie en écrire une soi-même, ou accepter une croissance illimitée.** Voir
+[Journalisation](/reference/config/logging).
 
 ## Vérifier
 
@@ -144,7 +161,8 @@ Rien dans le gateway ne supprime `httpapi.log`. Quarkus le tourne quotidiennemen
 scripts/fireflo verify
 ```
 
-Et vérifiez que les deux tokens sont vraiment séparés. Lire avec le token admin doit renvoyer **404** :
+Et vérifiez que les deux jetons sont bien séparés — une lecture avec le jeton admin doit renvoyer
+un **404** :
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' \

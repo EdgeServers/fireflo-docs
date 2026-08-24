@@ -1,69 +1,90 @@
 ---
 title: "fireflo-panel-install"
-description: "Os cinco verbos do painel de controle, e por que a senha do operador tem um verbo próprio."
+description: "Os cinco verbos para o painel de controle, e por que a senha do operador tem um verbo próprio."
 ---
 
 Instala e atualiza o **painel de controle**, que serve tanto as telas do operador quanto o portal do
 cliente.
 
 <Note>
-O painel edita configuração e lê call records. Ele **não está no caminho das mensagens**: um painel
-fora do ar custa a você a capacidade de fazer mudanças, não a de enviar.
+O painel edita configuração e lê registros de chamadas. Ele **não está no caminho da mensagem**: um
+painel fora do ar custa a você a capacidade de fazer alterações, não a capacidade de enviar.
 
-**Instale-o depois do gateway.** O gateway é dono do schema do banco; o painel apenas lê e grava
-linhas nele.
+**Instale-o depois do gateway.** O gateway é dono do schema do banco de dados; o painel apenas lê e
+escreve linhas nele.
 </Note>
 
 ## Os cinco verbos
 
 | Verbo | Faz | Nunca toca |
 | :--- | :--- | :--- |
-| `check` | Esse host está pronto. Não muda nada. | Tudo |
-| `install` | Node, usuário de serviço, diretórios, código, `npm ci`, build, ambiente, unit do systemd, e depois uma checagem de que ele responde | — |
+| `check` | Verifica se este host está pronto. Não altera nada. | Tudo |
+| `install` | Node, usuário de serviço, diretórios, código-fonte, `npm ci`, build, ambiente, unidade systemd, depois uma verificação de que ele responde | — |
 | `update` | Puxa um novo build sobre uma instalação existente | **O arquivo de ambiente** |
-| `service` | Gera a unit numa instalação existente, e inicia | O arquivo de ambiente |
-| `passwd` | Rota a senha do operador e reinicia | Tudo o mais |
+| `service` | Gera a unidade em uma instalação existente, e a inicia | O arquivo de ambiente |
+| `passwd` | Troca a senha do operador e reinicia | Todo o resto |
 
-`install` pergunta o que precisa primeiro e não muda nada até você concordar.
+O `install` pergunta antes o que precisa e não altera nada até você concordar.
 
 ## Por que `passwd` existe como verbo
 
-**Não existe tabela de usuários.** `OPERATOR_USERNAME` e `OPERATOR_PASSWORD` em `panel.env` são a
-conta de operador inteira. `passwd` é, portanto, o jeito suportado de trocá-la: reescreve o arquivo
-de ambiente e reinicia a unit em uma etapa, em vez de te deixar editar um arquivo que o instalador
-promete nunca substituir.
+**Não há tabela de usuários.** `OPERATOR_USERNAME` e `OPERATOR_PASSWORD` no `panel.env` são a conta
+de operador inteira. O `passwd` é portanto a forma suportada de alterá-la — ele reescreve o arquivo
+de ambiente e reinicia a unidade em uma única etapa, em vez de deixar você editar um arquivo que o
+instalador, por outro lado, promete nunca substituir.
 
 ## Layout
 
-| Opção | Padrão | Observações |
+| Opção | Padrão | Notas |
 | :--- | :--- | :--- |
 | `--app-dir PATH` | `/opt/fireflo-panel` | Substituído por um update |
 | `--conf-dir PATH` | `/etc/fireflo-panel` | **Nunca substituído** |
-| `--data-dir PATH` | `<app-dir>/tmp` | Exportações CSV preparadas e qualquer outra coisa que o painel escreve. Preservado por um update; nunca substituído |
-| `--tenant NAME` | — | Instala em `/srv/fireflo/NAME/panel` como unit `fireflo-NAME-panel` |
-| `--vhost PATH` | — | Layout de virtualhost: `PATH/app`, `PATH/conf`, `PATH/data` |
+| `--data-dir PATH` | `<app-dir>/tmp` | Exportações CSV preparadas e qualquer outra coisa que o painel escreva. Preservado por um update; nunca substituído |
+| `--tenant NAME` | — | Instala em `/srv/fireflo/NAME/panel` como unidade `fireflo-NAME-panel` |
+| `--vhost PATH` **com** `--tenant` | — | `PATH/panel`, com o gateway em `PATH/gateway` |
+| `--vhost PATH` **sozinho** | — | Layout plano legado: `PATH/app`, `PATH/conf`, `PATH/data` |
+| `--port N` | `3000` | **Nunca derivado de `--tenant`** — um segundo painel em um mesmo host precisa da sua própria |
+| `--user NAME` | `fireflo` | **Obrigatório sob `--vhost`**: deve ser a conta dona do virtualhost, caso contrário nada rodando como o serviço consegue atravessá-lo |
 
-**`--tenant` é o ponto do vocabulário compartilhado**: a mesma palavra nomeia a mesma instância
-para o instalador do gateway. Um nome por cliente, dois produtos.
-
-Com `--tenant NAME --vhost PATH` a raiz vai para `PATH/panel`, com o gateway em `PATH/gateway`. As
-três flags de diretório ainda vencem qualquer uma delas.
-
-<Note>
-`--vhost` **sozinho** mantém seu significado antigo e plano, então painéis já instalados em
-`/home/<name>` são acessados exatamente como antes. Essa compatibilidade é deliberada: um upgrade
-não pode relocar uma instalação em execução.
-</Note>
-
-## O que ele deriva, e a única coisa que não deriva
-
-Dado o diretório de conf do gateway, o instalador deriva os tokens operacionais e a conexão de
-banco somente-leitura, em vez de pedir para você copiar.
+**`--tenant` é o ponto do vocabulário compartilhado**: a mesma palavra nomeia a mesma instância para
+o instalador do gateway. Um nome por cliente, dois produtos. As três flags de diretório ainda
+prevalecem sobre qualquer esquema.
 
 <Warning>
-**`--config-url` nunca é derivada.** A conexão de leitura-escrita para as tabelas de configuração é
-a que pode mudar o que os clientes são cobrados, então é sempre informada explicitamente. Sem ela,
-o painel reporta cada domínio de configuração como não editável, em vez de falhar no primeiro save.
+`--vhost` **sozinho** preserva um significado plano mais antigo, para que painéis já instalados sob
+`/home/<name>` sejam alcançados exatamente como antes — uma atualização não deve realocar uma
+instalação em execução. Para um tenant **novo**, isso quase nunca é o que você quer: coloca o painel
+em `PATH/{app,conf,data}` enquanto o gateway fica em `PATH/gateway`, e o `update --tenant NAME`
+depois não encontra mais o painel. Passe as duas flags juntas.
+</Warning>
+
+<Note>
+Flags aceitam valores **separados por espaço**. `--vhost=/home/acme` é rejeitado como opção
+desconhecida.
+</Note>
+
+## O que ele deriva, e a única coisa que ele não deriva
+
+Dado o diretório de configuração do gateway (`--gateway-conf-dir`), o instalador deriva três coisas
+em vez de pedir para você copiá-las: ambos os tokens operacionais, a conexão de banco somente leitura
+e a URL de ops.
+
+A URL de ops é construída a partir do `FIREFLO_OPS_PORT` registrado desse gateway, então uma
+instância em `--ops-port` não-padrão não precisa de uma segunda flag aqui. Antes se assumia que era
+9000, e o sintoma de errar é *"Could not reach the gateway: fetch failed"* em toda página que mostra
+estado em tempo real — o que se parece com o gateway estar fora do ar em vez de o painel estar
+olhando para a porta errada.
+
+<Warning>
+**`--config-url` nunca é derivada.** A conexão de leitura e escrita para as tabelas de configuração
+é a que pode alterar o que é cobrado dos clientes, portanto ela é sempre informada em vez de
+inferida. Sem ela, o painel reporta cada domínio de configuração como não editável, em vez de falhar
+no primeiro salvamento.
+
+Passada como flag, ela coloca a senha do banco no histórico do shell e na saída do `ps`. Omita-a e o
+instalador pergunta — e esse prompt aceita a palavra literal **`same`**, significando "reutilize a
+conexão recém-derivada do gateway", o que é correto sempre que uma única role for dona do banco do
+tenant.
 </Warning>
 
 Veja [Instalando o painel de controle](/platform/install/control-panel) para o passo a passo e
