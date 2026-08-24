@@ -103,6 +103,22 @@ throttled WARN naming the vendor and the tag.
 `NULL` means nothing recorded the column; `{}` means recorded and there were none. `tlvs_sent` is
 `NULL` for every non-SMPP vendor.
 
+## Reading a retry storm
+
+Every attempt at a vendor now leaves its own `cdr_submit` row — not only the one that finally
+succeeded or terminally failed. `vendor_attempt` numbers them, `submit_status` carries what the vendor
+actually said on each one, and `NULL` there means "not recorded", not "accepted". See
+[Call record tables](/reference/data/cdr-tables) for the exact shape.
+
+<Tip>
+The control panel's per-message page reads these rows, plus `cdr_interim` and `cdr_final`, as one
+ordered **SMPP exchange** — `submit_sm` out, `submit_sm_resp` back with its status, `deliver_sm` for
+each receipt — instead of a bare table of attempts. A message that was retried, or that carries several
+segments, reads as the sequence it actually was rather than as one row per part.
+
+`deliver_sm_resp` is never shown, because nothing in the pipeline records it.
+</Tip>
+
 ## The message body
 
 Recorded **only if you switch it on**.

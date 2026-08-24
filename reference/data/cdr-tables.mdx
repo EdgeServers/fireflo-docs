@@ -110,6 +110,30 @@ all.**
 not zero** — zero is a claim about the customer, namely that they asked for nothing.
 </Tip>
 
+### `submit_status` and `vendor_attempt`
+
+Since V1.40.0. **A `cdr_submit` row is now written for every attempt against a vendor**, not only the
+one that finally succeeded or terminally failed — a retryable nack writes one too.
+
+| Column | Holds |
+| :--- | :--- |
+| `submit_status` | The vendor's `submit_sm_resp` status for *this* attempt — `0` (`ESME_ROK`) on the row that succeeded, the real code on one that was retried |
+| `vendor_attempt` | 1-based count of `submit_sm` sent to this vendor for this message part, across both in-worker retries and re-routes back through the router |
+
+<Warning>
+**`NULL` is "not recorded", never a claim of success.** Rows written before V1.40.0, and every row from
+a non-SMPP vendor, carry `NULL` here — read it the same way as `tlvs_sent`, not as `0`.
+</Warning>
+
+Before this column, a retry storm was visible only as an inflated submit count at the vendor, with no
+record of what it actually said on the attempts that failed — see
+[Queues and retries](/platform/routing/queues-and-retries) for the retry budget these rows now make
+legible.
+
+`(gateway_msg_id, part_no, retry_count, vendor_attempt)` is the natural key as of V1.40.0, widened from
+`(gateway_msg_id, part_no, retry_count)` — `retry_count` alone does not change across in-worker retries
+at one vendor, so without `vendor_attempt` those rows would collide.
+
 ## `cdr_final` and `cdr_interim`
 
 Outcomes and progress, split for the reason above. They also have **different lifetimes**:
