@@ -1,33 +1,32 @@
 ---
-title: "Install by hand"
-description: "Ubuntu 24.04 do zero: os dois runtimes que o Ubuntu não distribui, o layout, e o que uma atualização pode e não pode substituir."
+title: "Instalar manualmente"
+description: "Ubuntu 24.04 do zero: os dois runtimes que o Ubuntu não fornece, o layout e o que uma atualização pode e não pode substituir."
 ---
 
-O que o [`fireflo-install`](/platform/install/one-command) automatiza. Leia isto se você estiver
-empacotando o FireFlo por conta própria, ou se uma etapa do installer falhou e você precisar saber o
-que ela estava fazendo.
+O que o [`fireflo-install`](/platform/install/one-command) automatiza. Leia isto se você mesmo estiver
+empacotando o FireFlo, ou se uma etapa do instalador falhou e você precisa saber o que ela fazia.
 
 ## Pré-requisitos
 
-- **Java 25.** O build tem como target release 25 e **não roda no 21**.
-- **PostgreSQL 14 ou mais novo.** Opcional para o gateway sozinho em modo de arquivo; obrigatório para
-  o painel de controle, crédito pré-pago, whitelisting e call records em tabela.
-- **RabbitMQ**, apenas se mensagens submetidas precisarem sobreviver a um restart do gateway. Sem ele,
-  a fila fica em memória e um restart descarta o que ainda não tiver chegado a um fornecedor.
+- **Java 25.** O build tem como alvo o release 25 e **não roda no 21**.
+- **PostgreSQL 14 ou mais recente.** Opcional para o gateway sozinho em modo de arquivo; necessário
+  para o painel de controle, crédito pré-pago, whitelist e registros de chamadas em uma tabela.
+- **RabbitMQ**, apenas se as mensagens submetidas precisarem sobreviver a um reinício do gateway. Sem
+  ele, a fila fica em memória e um reinício descarta o que ainda não chegou a um fornecedor.
 - Um usuário de serviço sem shell de login.
 
-## A parte inconveniente desta plataforma
+## A parte estranha desta plataforma
 
-Dois dos três runtimes **não** são o que o Ubuntu distribui:
+Dois dos três runtimes **não** são o que o Ubuntu fornece:
 
-| Necessário | Ubuntu 24.04 entrega | Faça |
+| Necessário | Ubuntu 24.04 fornece | Faça |
 | :--- | :--- | :--- |
-| Java 25 | `openjdk-21` | Adicione Adoptium |
-| Node 22 | `nodejs` 18 | Adicione NodeSource |
+| Java 25 | `openjdk-21` | Adicione o Adoptium |
+| Node 22 | `nodejs` 18 | Adicione o NodeSource |
 | PostgreSQL 14+ | PostgreSQL 16 | `apt install postgresql` |
 
 <Steps>
-  <Step title="Pacotes base">
+  <Step title="Pacotes básicos">
 ```bash
 sudo apt update
 sudo apt install -y wget curl gpg apt-transport-https ca-certificates ufw nginx postgresql
@@ -46,11 +45,11 @@ java -version        # deve imprimir 25
 ```
   </Step>
   <Step title="Node 22 do NodeSource">
-Next.js 16 não roda no Node 18 do Ubuntu — isto é para o painel de controle.
+O Next.js 16 não roda no Node 18 do Ubuntu — isto é para o painel de controle.
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
-node --version       # deve imprimir v22 ou mais novo
+node --version       # deve imprimir v22 ou mais recente
 ```
   </Step>
   <Step title="Usuário de serviço e diretórios">
@@ -65,41 +64,41 @@ sudo chmod 750 /etc/fireflo
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo
 ```
-Mantenha a senha fora do histórico do shell — escreva-a direto no arquivo de ambiente.
+Mantenha a senha fora do histórico do shell — escreva-a diretamente no arquivo de ambiente.
   </Step>
 </Steps>
 
 ## Layout
 
-A configuração é mantida **fora do** diretório do artefato, para que uma atualização possa substituir
-o artefato por inteiro sem tocar em nada que você editou.
+A configuração fica **fora** do diretório do artefato, para que uma atualização possa substituir o
+artefato inteiro sem tocar em nada que você editou.
 
 ```text
-/opt/fireflo/            de propriedade de fireflo, SUBSTITUÍDO na atualização
+/opt/fireflo/            de propriedade do fireflo, SUBSTITUÍDO na atualização
   quarkus-run.jar
   lib/  app/  quarkus/
-  bin/fireflo            a CLI do operador, mantida fora do que uma atualização substitui
+  bin/fireflo            a CLI do operador, mantida fora do que a atualização substitui
 
-/etc/fireflo/            de propriedade de fireflo, NUNCA substituído na atualização
+/etc/fireflo/            de propriedade do fireflo, NUNCA substituído na atualização
   fireflo.env            ambiente, incluindo a senha do banco. chmod 600
   smsg.properties        workers e configurações   \
-  credentials.yml        logins                     |  apenas em modo de arquivo
+  credentials.yml        logins                     |  apenas modo de arquivo
   routingTable.conf      roteamento                 |
   rates.conf             tarifas                   /
 
-/var/lib/fireflo/        o armazenamento de recibos, e CDRs quando não há banco de dados
+/var/lib/fireflo/        o armazenamento de recibos, e CDRs quando não há banco
 /var/log/fireflo/        logs
 ```
 
 <Warning>
-**O artefato é um diretório, não um arquivo.** `quarkus-run.jar` não roda sem os diretórios `lib/`,
-`app/` e `quarkus/` ao lado dele. Copiar apenas o jar produz um processo que inicia e depois não
-consegue encontrar suas classes.
+**O artefato é um diretório, não um arquivo.** O `quarkus-run.jar` não roda sem os diretórios `lib/`,
+`app/` e `quarkus/` ao seu lado. Copiar apenas o jar produz um processo que inicia e depois falha ao
+não encontrar suas classes.
 </Warning>
 
 ## O arquivo de ambiente
 
-`chmod 600`. Ele contém a senha do banco e ambos os tokens operacionais.
+`chmod 600`. Ele contém a senha do banco de dados e ambos os tokens operacionais.
 
 ```bash
 export FIREFLO_CONF_DIR=/etc/fireflo
@@ -112,14 +111,14 @@ export FIREFLO_OPS_PORT=9000
 ```
 
 <Warning>
-Defina `FIREFLO_CONF_DIR` para um **caminho absoluto**. Um valor relativo — incluindo o padrão `conf`
-— resolve contra o diretório de trabalho do processo, então uma unit com
+Defina `FIREFLO_CONF_DIR` como um **caminho absoluto**. Um valor relativo — incluindo o padrão `conf` —
+é resolvido em relação ao diretório de trabalho do processo, portanto uma unidade com
 `WorkingDirectory=/opt/fireflo` lê `/opt/fireflo/conf/`, que não é onde você editou nada.
 </Warning>
 
 ## Portas
 
-| Porta | Carrega | Exponha para |
+| Porta | Transporta | Expor para |
 | :--- | :--- | :--- |
 | 8080 | A API REST | Clientes |
 | 27777 | Binds SMPP | Clientes |
@@ -131,25 +130,25 @@ Defina `FIREFLO_CONF_DIR` para um **caminho absoluto**. Um valor relativo — in
 Duas configurações importam mais do que o resto:
 
 ```ini
-# uma sessão SMPP conectada é a conexão de um cliente, então pare deliberadamente em vez de bruscamente
+# uma sessão SMPP vinculada é a conexão de um cliente, então pare deliberadamente em vez de abruptamente
 KillSignal=SIGTERM
 TimeoutStopSec=30
 
-# um file descriptor por sessão de cliente conectada, mais as conexões de fornecedor
+# um descritor de arquivo por sessão de cliente vinculada, mais as conexões dos fornecedores
 LimitNOFILE=65535
 ```
 
 <Warning>
-`SIGTERM` em vez de `SIGKILL` não é uma gentileza. Um shutdown limpo devolve **crédito pré-pago
-reservado** não gasto; um `kill -9` o deixa preso até que [`fireflo credit
-release`](/reference/cli/fireflo) seja executado.
+`SIGTERM` em vez de `SIGKILL` não é uma cortesia. Um desligamento limpo devolve **crédito pré-pago
+reservado** não gasto; um `kill -9` o deixa preso até que
+[`fireflo credit release`](/reference/cli/fireflo) seja executado.
 </Warning>
 
 ## Retenção de logs, que agora é sua responsabilidade
 
-Nada no gateway remove `httpapi.log`. O Quarkus faz rotate diário e mantém todo arquivo para sempre.
-`fireflo-install` escreve uma regra `tmpfiles.d` exatamente para isso; **instalar à mão significa
-escrever uma você mesmo, ou aceitar crescimento sem limite.** Veja
+Nada no gateway remove `httpapi.log`. O Quarkus faz sua rotação diariamente e mantém todos os arquivos
+para sempre. O `fireflo-install` escreve uma regra `tmpfiles.d` exatamente para isto; **instalar
+manualmente significa escrever uma você mesmo, ou aceitar crescimento ilimitado.** Veja
 [Logging](/reference/config/logging).
 
 ## Verificar
@@ -158,10 +157,10 @@ escrever uma você mesmo, ou aceitar crescimento sem limite.** Veja
 scripts/fireflo verify
 ```
 
-E cheque se os dois tokens são realmente separados — ler com o token admin deve dar **404**:
+E confira que os dois tokens realmente são separados — a leitura com o token admin deve retornar **404**:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H "Authorization: Bearer $FIREFLO_OPS_ADMIN_TOKEN" \
-  http://localhost:9000/ops/health      # espere 404
+  http://localhost:9000/ops/health      # esperar 404
 ```

@@ -1,83 +1,90 @@
 ---
 title: "fireflo-install"
-description: "Les cinq verbes, les options à connaître, et ce que chaque verbe refuse de toucher."
+description: "Les cinq verbes, les options qui valent la peine d'être connues, et ce que chaque verbe refuse de toucher."
 ---
 
-Installe et met à jour la **passerelle**. Le panneau de contrôle a son propre installeur :
+Installe et met à niveau la **passerelle**. Le panneau de contrôle a son propre installateur —
 [`fireflo-panel-install`](/reference/cli/fireflo-panel-install).
 
 ## Les cinq verbes
 
-| Verbe | Rôle | Ne touche jamais |
+| Verbe | Fait | Ne touche jamais |
 | :--- | :--- | :--- |
-| `check` | Ce hôte est-il prêt. Ne change rien. | Tout |
-| `install` | Première installation : paquets, utilisateur de service, répertoires, artefact, configuration, base, unit systemd, firewall, test de fumée | Un répertoire de configuration existant — il refuse à la place |
-| `update` | Remplace **uniquement l'artefact** | Le répertoire de configuration |
-| `service` | Génère le script de démarrage et l'unit sur une installation existante, puis démarre | Le répertoire de configuration |
-| `rollback` | Restaure l'artefact précédent | Le répertoire de configuration |
+| `check` | Cet hôte est-il prêt. Ne change rien. | Tout |
+| `install` | Première installation : paquets, utilisateur de service, répertoires, artefact, configuration, base de données, unité systemd, pare-feu, test de fumée | Un répertoire de conf existant — il refuse à la place |
+| `update` | Remplace **uniquement l'artefact** | Le répertoire de conf |
+| `service` | Génère le script de démarrage et l'unité sur une installation existante, et la démarre | Le répertoire de conf |
+| `rollback` | Restaure l'artefact précédent | Le répertoire de conf |
 
 <Warning>
-**`install` refuse quand un répertoire de configuration existe déjà**, plutôt que d'imprimer une
-seconde paire de jetons opérationnels par-dessus la première. Si vous avez de la configuration
-mais pas de service, le verbe que vous voulez est `service`, pas `install`.
+**`install` refuse lorsqu'un répertoire de configuration existe déjà**, plutôt que de frapper une
+seconde paire de jetons opérationnels par-dessus la première. Si vous avez la configuration mais
+pas le service, le verbe que vous voulez est `service`, pas `install`.
 </Warning>
 
-## Options à connaître
+## Options qui valent la peine d'être connues
 
-### Layout et identité
+### Disposition et identité
 
-| Option | Rôle |
+| Option | Objet |
 | :--- | :--- |
-| `--tenant NAME` | Nomme cette instance. Sur `update`, `service` et `rollback` c'est un **lookup**. L'installation portant ce nom est trouvée et ses propres chemins, unit, compte et ports sont utilisés, une mise à jour ne peut donc pas être dirigée sur la mauvaise instance en oubliant un flag. |
-| `--vhost PATH` | Place l'instance dans un virtualhost par-client — `--tenant websmsc --vhost /home/websmsc` donne `/home/websmsc/gateway`, avec le panneau à côté sous `/home/websmsc/panel`. |
+| `--tenant NOM` | Nomme cette instance. Sur `update`, `service` et `rollback`, c'est une **recherche** — l'installation portant ce nom est trouvée et ses propres chemins, unité, compte et ports sont utilisés, de sorte qu'une mise à niveau ne peut pas être visée sur la mauvaise instance en oubliant un drapeau. |
+| `--vhost CHEMIN` | Place l'instance dans un hôte virtuel par client — `--tenant websmsc --vhost /home/websmsc` donne `/home/websmsc/gateway`, avec le panneau à côté à `/home/websmsc/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Chemins individuels. |
-| `--user` / `--group` / `--service-name` | Le compte de service et le nom d'unit. |
+| `--user` / `--group` / `--service-name` | Le compte de service et le nom de l'unité. **Sous `--vhost`, `--user` doit être le compte qui possède l'hôte virtuel** — l'installateur ne fait jamais de chown sur un répertoire qui existe déjà, donc aucun autre compte ne peut le traverser. |
 
-Les deux units générés montent un **tmpfs sur `/home`** et ne re-bindent que l'unique virtualhost,
-de sorte qu'une passerelle ne peut pas voir le home d'un autre client.
+Les deux unités générées montent un **tmpfs sur `/home`** et ne réintroduisent que l'unique hôte
+virtuel, de sorte qu'une passerelle ne peut voir aucun autre répertoire personnel client. C'est un
+espace de noms, pas une permission : le mode propre du répertoire décide encore qui peut y entrer,
+c'est pourquoi `--user` compte ci-dessus.
 
-### Configuration et base
+<Note>
+Chaque drapeau prend une valeur **séparée par un espace**. `--vhost=/home/acme` est rejeté comme
+option inconnue plutôt qu'analysé.
+</Note>
 
-| Option | Rôle |
+### Configuration et base de données
+
+| Option | Objet |
 | :--- | :--- |
-| `--config-source file\|db` | La source dans laquelle l'instance démarre. |
-| `--db-*` | Détails de connexion à la base. |
-| `--bootstrap` / `--import` | Peupler une base vierge, ou importer une configuration fichier existante. |
+| `--config-source file\|db` | Depuis quelle source l'instance démarre. |
+| `--db-*` | Détails de connexion à la base de données. |
+| `--bootstrap` / `--import` | Peupler une base de données neuve, ou importer une configuration en fichier existante. |
 | `--country` / `--country-code` / `--product` / `--rate` / `--decimals` / `--currency` | Le premier tarif. |
 
 ### Comportement
 
-| Option | Rôle |
+| Option | Objet |
 | :--- | :--- |
-| `--whitelist` / `--no-whitelist` | Si la vérification de sender ID et de contenu démarre active. |
+| `--whitelist` / `--no-whitelist` | Si la vérification de l'ID d'expéditeur et du contenu démarre activée. |
 | `--balance` / `--no-balance` | Si le crédit prépayé est imposé. |
-| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. Une plage laisse l'installeur choisir le prochain port de listener libre. |
-| `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ pour la voie REST. |
-| `--log-backups` / `--log-retain-days` | Rétention des logs, y compris la règle `tmpfiles.d` qui moissonne `httpapi.log`. |
+| `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. Une plage laisse l'installateur choisir le prochain port d'écoute libre. |
+| `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ pour le chemin REST. |
+| `--log-backups` / `--log-retain-days` | Rétention des journaux, y compris la règle `tmpfiles.d` qui moissonne `httpapi.log`. |
 
-### Exécution
+### L'exécuter
 
-| Option | Rôle |
+| Option | Objet |
 | :--- | :--- |
-| `--yes` | Ne pas demander. |
+| `--yes` | Ne pas demander de confirmation. |
 | `--dry-run` | Montrer ce qui se passerait. |
 | `--no-packages` / `--no-systemd` / `--firewall` / `--no-firewall` | Sauter une étape. |
-| `--sudo` / `--no-sudo` | Escalade de privilèges. |
+| `--sudo` / `--no-sudo` | Élévation de privilèges. |
 
 <Note>
-**`--dry-run` montre moins qu'on ne pourrait s'y attendre.** Il ne peut pas rapporter ce qu'un
-gestionnaire de paquets tirerait, ni ce qu'une migration trouverait dans une base à laquelle il ne
-s'est pas connecté. Lisez-le comme "les décisions que ce script prendrait", pas "tout ce qui
-changerait sur ce hôte".
+**`--dry-run` montre moins que vous pourriez l'attendre.** Il ne peut pas signaler ce qu'un
+gestionnaire de paquets tirerait, ni ce qu'une migration trouverait dans une base à laquelle il
+ne s'est pas connecté. Lisez-le comme « les décisions que ce script prendrait », pas comme
+« tout ce qui changerait sur cet hôte ».
 </Note>
 
 ## Ce qu'il n'installe pas
 
-Le **panneau de contrôle**. C'est `fireflo-panel-install`, et sur un hôte vierge vous exécutez les
+Le **panneau de contrôle**. C'est `fireflo-panel-install`, et sur un hôte neuf vous exécutez les
 deux.
 
-`--log-retain-days` écrit une règle `tmpfiles.d` qui supprime les logs roulés, sans jamais toucher
-aux quatre fichiers en cours. **Une installation à la main signifie s'en occuper soi-même.** Voir
-[Logging](/reference/config/logging).
+`--log-retain-days` écrit une règle `tmpfiles.d` qui supprime les journaux tournés, sans jamais
+toucher aux quatre journaux en direct. **Installer à la main signifie organiser cela vous-même** —
+voir [Journalisation](/reference/config/logging).
 
-Voir [Install en une commande](/platform/install/one-command) pour le pas-à-pas.
+Voir [Installer en une seule commande](/platform/install/one-command) pour la marche à suivre.

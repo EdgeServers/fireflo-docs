@@ -1,74 +1,94 @@
 ---
 title: "fireflo-panel-install"
-description: "Les cinq verbes du panneau de contrôle, et pourquoi le mot de passe opérateur a le sien."
+description: "Les cinq verbes pour le panneau de contrôle, et pourquoi le mot de passe de l'opérateur a le sien."
 ---
 
-Installe et met à jour le **panneau de contrôle**, qui sert à la fois les écrans opérateurs et le
+Installe et met à niveau le **panneau de contrôle**, qui sert à la fois les écrans opérateur et le
 portail client.
 
 <Note>
-Le panneau édite la configuration et lit les call records. Il n'est **pas sur la voie des
-messages** : un panneau down vous coûte la capacité de faire des changements, pas celle
-d'envoyer.
+Le panneau modifie la configuration et lit les enregistrements d'appels. Il **n'est pas sur le
+chemin des messages** : un panneau en panne vous coûte la capacité de faire des changements, pas
+la capacité d'envoyer.
 
-**Installez-le après la passerelle.** La passerelle possède le schéma de base ; le panneau ne
-fait que lire et écrire des lignes.
+**Installez-le après la passerelle.** La passerelle possède le schéma de base de données ; le
+panneau ne fait qu'y lire et écrire des lignes.
 </Note>
 
 ## Les cinq verbes
 
-| Verbe | Rôle | Ne touche jamais |
+| Verbe | Fait | Ne touche jamais |
 | :--- | :--- | :--- |
-| `check` | Ce hôte est-il prêt. Ne change rien. | Tout |
-| `install` | Node, utilisateur de service, répertoires, source, `npm ci`, build, environnement, unit systemd, puis vérification qu'il répond | — |
-| `update` | Tire un nouveau build par-dessus une installation existante | **Le fichier d'environnement** |
-| `service` | Génère l'unit sur une installation existante, puis démarre | Le fichier d'environnement |
-| `passwd` | Rote le mot de passe opérateur et redémarre | Tout le reste |
+| `check` | Cet hôte est-il prêt. Ne change rien. | Tout |
+| `install` | Node, utilisateur de service, répertoires, sources, `npm ci`, build, environnement, unité systemd, puis un contrôle qu'il répond | — |
+| `update` | Tire un nouveau build sur une installation existante | **Le fichier d'environnement** |
+| `service` | Génère l'unité sur une installation existante, et la démarre | Le fichier d'environnement |
+| `passwd` | Renouvelle le mot de passe opérateur et redémarre | Tout le reste |
 
 `install` demande d'abord ce dont il a besoin et ne change rien tant que vous n'êtes pas d'accord.
 
-## Pourquoi `passwd` existe comme verbe
+## Pourquoi `passwd` existe en tant que verbe
 
-**Il n'y a pas de table utilisateurs.** `OPERATOR_USERNAME` et `OPERATOR_PASSWORD` dans
-`panel.env` sont le compte opérateur entier. `passwd` est donc la manière supportée de le
-changer. Il réécrit le fichier d'environnement et redémarre l'unit en une étape, plutôt que de
-vous laisser éditer un fichier que l'installeur promet par ailleurs de ne jamais remplacer.
+**Il n'y a pas de table utilisateur.** `OPERATOR_USERNAME` et `OPERATOR_PASSWORD` dans `panel.env`
+constituent l'intégralité du compte opérateur. `passwd` est donc la manière prise en charge de le
+changer — cela réécrit le fichier d'environnement et redémarre l'unité en une seule étape, plutôt
+que de vous laisser éditer un fichier que l'installateur promet par ailleurs de ne jamais remplacer.
 
-## Layout
+## Disposition
 
-| Option | Défaut | Notes |
+| Option | Par défaut | Notes |
 | :--- | :--- | :--- |
-| `--app-dir PATH` | `/opt/fireflo-panel` | Remplacé par un update |
-| `--conf-dir PATH` | `/etc/fireflo-panel` | **Jamais remplacé** |
-| `--data-dir PATH` | `<app-dir>/tmp` | Exports CSV préparés et tout ce que le panneau écrit d'autre. Préservé par un update, jamais remplacé |
-| `--tenant NAME` | — | Installe dans `/srv/fireflo/NAME/panel` comme unit `fireflo-NAME-panel` |
-| `--vhost PATH` | — | Layout virtualhost : `PATH/app`, `PATH/conf`, `PATH/data` |
+| `--app-dir CHEMIN` | `/opt/fireflo-panel` | Remplacé par une mise à jour |
+| `--conf-dir CHEMIN` | `/etc/fireflo-panel` | **Jamais remplacé** |
+| `--data-dir CHEMIN` | `<app-dir>/tmp` | Exports CSV préparés et tout ce que le panneau écrit d'autre. Préservé par une mise à jour ; jamais remplacé |
+| `--tenant NOM` | — | S'installe dans `/srv/fireflo/NOM/panel` en tant qu'unité `fireflo-NOM-panel` |
+| `--vhost CHEMIN` **avec** `--tenant` | — | `CHEMIN/panel`, avec la passerelle à `CHEMIN/gateway` |
+| `--vhost CHEMIN` **seul** | — | Disposition à plat héritée : `CHEMIN/app`, `CHEMIN/conf`, `CHEMIN/data` |
+| `--port N` | `3000` | **Jamais dérivé de `--tenant`** — un deuxième panneau sur un même hôte a besoin du sien |
+| `--user NOM` | `fireflo` | **Requis sous `--vhost`** : ce doit être le compte qui possède l'hôte virtuel, sinon rien tournant en tant que le service ne peut le traverser |
 
-**`--tenant` est le sens du vocabulaire partagé** : le même mot nomme la même instance à
-l'installeur de la passerelle. Un nom par client, deux produits.
+**`--tenant` est le point clé du vocabulaire partagé** : le même mot nomme la même instance à
+l'installateur de la passerelle. Un nom par client, deux produits. Les trois drapeaux de répertoire
+l'emportent toujours sur l'un ou l'autre schéma.
 
-Avec `--tenant NAME --vhost PATH`, la racine passe à `PATH/panel`, avec la passerelle sous
-`PATH/gateway`. Les trois flags de répertoire l'emportent toujours sur l'un ou l'autre.
+<Warning>
+`--vhost` **seul** conserve un sens à plat plus ancien, pour que les panneaux déjà installés sous
+`/home/<nom>` soient atteints exactement comme avant — une mise à niveau ne doit pas relocaliser
+une installation en cours d'exécution. Pour un **nouveau** tenant, ce n'est presque jamais ce que
+vous voulez : cela place le panneau dans `CHEMIN/{app,conf,data}` tandis que la passerelle se
+trouve à `CHEMIN/gateway`, et `update --tenant NOM` ne trouve alors plus le panneau. Passez les
+deux drapeaux ensemble.
+</Warning>
 
 <Note>
-`--vhost` **seul** conserve son ancien sens plat, donc les panneaux déjà installés sous
-`/home/<name>` sont atteints exactement comme avant. Cette compatibilité est délibérée. Une mise à
-niveau ne doit pas déplacer une installation en cours.
+Les drapeaux prennent des valeurs **séparées par un espace**. `--vhost=/home/acme` est rejeté comme
+option inconnue.
 </Note>
 
 ## Ce qu'il dérive, et la seule chose qu'il ne dérive pas
 
-Étant donné le répertoire de configuration de la passerelle, l'installeur dérive les jetons
-opérationnels et la connexion en lecture seule à la base plutôt que de vous demander de les
-recopier.
+Étant donné le répertoire de conf de la passerelle (`--gateway-conf-dir`), l'installateur dérive
+trois choses plutôt que de vous demander de les copier : les deux jetons opérationnels, la
+connexion en lecture seule à la base de données, et l'URL ops.
+
+L'URL ops est construite à partir du `FIREFLO_OPS_PORT` enregistré de cette passerelle, de sorte
+qu'une instance sur un `--ops-port` non par défaut ne nécessite aucun deuxième drapeau ici. On
+supposait auparavant qu'il valait 9000, et le symptôme d'une erreur est *« Could not reach the
+gateway: fetch failed »* sur chaque page affichant l'état en direct — ce qui se lit comme la
+passerelle étant en panne plutôt que comme le panneau regardant le mauvais port.
 
 <Warning>
-**`--config-url` n'est jamais dérivé.** La connexion en lecture/écriture aux tables de
-configuration est celle qui peut changer ce qui est facturé aux clients, elle est donc toujours
-donnée explicitement. Sans elle, le panneau rapporte chaque domaine de configuration comme non
-éditable, plutôt que d'échouer au premier enregistrement.
+**`--config-url` n'est jamais dérivé.** La connexion en lecture-écriture aux tables de
+configuration est celle qui peut modifier ce qui est facturé aux clients, elle est donc toujours
+énoncée plutôt qu'inférée. Sans elle, le panneau signale chaque domaine de configuration comme
+non modifiable, plutôt que d'échouer au premier enregistrement.
+
+Passé en drapeau, il met le mot de passe de la base de données dans l'historique du shell et dans
+la sortie de `ps`. Omettez-le et l'installateur demande à la place — et cette invite accepte le
+mot littéral **`same`**, signifiant « réutiliser la connexion tout juste dérivée de la
+passerelle », ce qui est correct chaque fois qu'un seul rôle possède la base de données du tenant.
 </Warning>
 
-Voir [Installer le panneau de contrôle](/platform/install/control-panel) pour le pas-à-pas et
+Voir [Installer le panneau de contrôle](/platform/install/control-panel) pour la marche à suivre et
 [Environnement du panneau de contrôle](/reference/config/control-panel) pour chaque variable qu'il
 écrit.

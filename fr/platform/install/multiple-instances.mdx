@@ -1,9 +1,12 @@
 ---
-title: "Plusieurs instances sur un hôte"
-description: "Un mot nomme l'instance d'un client aux deux installateurs, et l'isolation qu'un virtualhost apporte."
+title: "Plusieurs instances sur un même hôte"
+description: "Un seul mot nomme l'instance d'un client aux deux installateurs, et l'isolement qu'un hôte virtuel apporte."
 ---
 
-Des déploiements séparés sur un hôte. Un par client, ou un par environnement. **Pas un cluster** : ce sont des gateways indépendants avec leurs propres bases et leur propre trafic. Pour la raison pour laquelle plusieurs instances contre *une seule* base ne fonctionnent pas, voir [Cluster](/platform/install/clustering).
+Des déploiements séparés sur un seul hôte — un par client, ou un par environnement. **Ce n'est pas
+un cluster** : ce sont des passerelles indépendantes avec leurs propres bases de données et leur
+propre trafic. Pour comprendre pourquoi plusieurs instances contre *une seule* base de données ne
+fonctionnent pas, voir [Clustering](/platform/install/clustering).
 
 ## Un nom, deux produits
 
@@ -12,27 +15,32 @@ sudo ./scripts/fireflo-install       install --tenant websmsc
 sudo ./scripts/fireflo-panel-install install --tenant websmsc
 ```
 
-`--tenant` est toute l'idée : **le même mot nomme la même instance aux deux installateurs**. Un nom par client, deux produits.
+`--tenant` est toute l'idée : **le même mot nomme la même instance aux deux installateurs**. Un nom
+par client, deux produits.
 
-| | Chemin | Unit |
+| | Chemin | Unité |
 | :--- | :--- | :--- |
-| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
-| Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+| Passerelle | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
+| Panneau | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
 
-## À la mise à jour c'est une recherche, pas une disposition
+## À la mise à jour, c'est une recherche, pas une disposition
 
-C'est la partie qui empêche l'erreur coûteuse.
+C'est la partie qui évite l'erreur coûteuse.
 
 ```bash
 sudo ./scripts/fireflo-install update --tenant websmsc
 ```
 
-Sur `update`, `service` et `rollback`, `--tenant` **trouve** l'installation avec ce nom et utilise ses propres chemins, unit, compte et ports.
+Sur `update`, `service` et `rollback`, `--tenant` **trouve** l'installation portant ce nom et
+utilise ses propres chemins, unité, compte et ports.
 
 <Warning>
-Sans cela, une mise à niveau visée en oubliant un drapeau arrêterait une unit qui pourrait ne pas exister, remplacerait un répertoire appartenant à une autre instance, et activerait un second service contre la même base.
+Sans cela, une mise à niveau visée en oubliant un drapeau arrêterait une unité qui pourrait ne pas
+exister, remplacerait un répertoire appartenant à une autre instance, et activerait un second
+service contre la même base de données.
 
-Une unit dont `WorkingDirectory=` nomme une installation différente est **refusée, avant que quoi que ce soit ne soit arrêté**.
+Une unité dont le `WorkingDirectory=` nomme une installation différente est **refusée, avant que
+quoi que ce soit ne soit arrêté**.
 </Warning>
 
 ## Ports
@@ -41,36 +49,69 @@ Une unit dont `WorkingDirectory=` nomme une installation différente est **refus
 --smpp-port-range 27777-27800
 ```
 
-Donnez une plage et l'installateur prend le prochain port listener libre, pour que l'instance deux n'entre pas en collision avec l'instance un. `--http-port` et `--ops-port` sont aussi définis par instance.
+Donnez une plage et l'installateur prend le prochain port d'écoute libre, de sorte que l'instance
+deux ne rentre pas en collision avec l'instance un. `--http-port` et `--ops-port` sont également
+définis par instance.
 
-Les deux installateurs relisent les ports depuis le fichier d'environnement à `update`, donc une instance sur des ports non par défaut cesse d'échouer son propre verify à la fin de chaque mise à niveau.
+Les deux installateurs relisent les ports depuis le fichier d'environnement sur `update`, de sorte
+qu'une instance sur des ports non par défaut cesse d'échouer sa propre vérification à la fin de
+chaque mise à niveau.
 
-## Un virtualhost
+## Un hôte virtuel
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc
+sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
 ```
 
-Place l'instance sous une home par client : `/home/websmsc/gateway`, avec le panel à `/home/websmsc/panel`.
+Place l'instance sous un dossier personnel par client : `/home/websmsc/gateway`, avec le panneau à
+`/home/websmsc/panel`.
 
-**Ce que cela apporte :** les deux units générées montent un **tmpfs sur `/home`** et n'y re-lient que ce virtualhost, donc un gateway ne peut pas voir le répertoire home d'un autre client.
+**Ce que cela apporte :** les deux unités générées montent un **tmpfs sur `/home`** et ne
+réintroduisent que ce seul hôte virtuel, de sorte qu'une passerelle ne peut voir aucun autre
+répertoire personnel client.
 
 <Warning>
-Sous `--vhost`, le `CDR_EXPORT_DIR` du panel doit aussi se trouver dans une racine `BindPaths=`. **Cet échec est silencieux.** Les exports sont préparés puis ne peuvent pas être lus.
+**`--user` est requis ici, et c'est l'étape la plus facile à oublier.** Un répertoire personnel est
+en `0750` et appartient à son propre compte, et l'installateur **ne fera pas de chown sur un
+répertoire qui existe déjà** — cette protection est délibérée, afin qu'une installation ne puisse
+jamais réécrire la propriété de tout ce qui se trouve déjà dans le dossier personnel de quelqu'un.
+
+Ainsi, un service tournant sous n'importe quel autre compte ne peut tout simplement pas traverser
+l'hôte virtuel. `ProtectHome=tmpfs` et `BindPaths=` rendent le répertoire *visible* à l'intérieur
+de l'espace de noms de l'unité ; **aucun des deux ne modifie un bit de permission.**
+
+Le symptôme ne nomme pas la cause : le panneau meurt à `npm ci` avec `can't cd to
+/home/<nom>/panel/app`, et la passerelle enregistre une unité qui ne peut ensuite pas lire sa
+propre configuration. Passez le compte propriétaire aux **deux** installateurs.
 </Warning>
 
-<Note>
-`--vhost` **seul**, sans `--tenant`, garde son ancienne signification plate, donc les panels déjà installés sous `/home/<nom>` sont atteints exactement comme avant. Cette compatibilité est délibérée : une mise à niveau ne doit pas relocaliser une installation en cours.
-</Note>
+<Warning>
+Sous `--vhost`, `CDR_EXPORT_DIR` du panneau doit également se trouver à l'intérieur d'une racine
+`BindPaths=`. **Cet échec est silencieux** — les exports sont préparés puis ne peuvent pas être lus.
+</Warning>
 
-Les trois drapeaux de répertoire (`--app-dir`, `--conf-dir`, `--data-dir`) l'emportent toujours sur l'un ou l'autre schéma là où ils sont donnés.
+<Warning>
+**`--vhost` seul, sans `--tenant`, signifie quelque chose de différent — ne l'utilisez pas pour un
+nouveau tenant.** Cela conserve une ancienne disposition à plat, `CHEMIN/{app,conf,data}`, au lieu
+de `CHEMIN/panel`.
+
+Cette compatibilité existe pour que les panneaux installés sous `/home/<nom>` avant `--tenant`
+soient atteints exactement comme avant, et qu'une mise à niveau ne relocalise jamais une
+installation en cours d'exécution. Sur un *nouveau* tenant, cela place silencieusement la passerelle
+et le panneau dans des dispositions différentes — la passerelle sous `/srv/fireflo/<nom>/gateway`
+et le panneau libre dans `/home/<nom>` — après quoi `update --tenant <nom>` ne trouve plus le
+panneau. Passez les deux drapeaux ensemble.
+</Warning>
+
+Les trois drapeaux de répertoire — `--app-dir`, `--conf-dir`, `--data-dir` — l'emportent toujours
+sur l'un ou l'autre schéma partout où ils sont donnés.
 
 ## Ce dont chaque instance a besoin en propre
 
 | | Partagé ? |
 | :--- | :--- |
-| Base de données | **Non**, une par instance |
-| Listener, ports HTTP et ops | **Non** |
-| Tokens opérationnels | **Non**, générés par installation |
-| Compte de service | Optionnel, `--user` |
+| Base de données | **Non** — une par instance |
+| Ports d'écoute, HTTP et ops | **Non** |
+| Jetons opérationnels | **Non** — générés par installation |
+| Compte de service | **Non** sous `--vhost` — il doit posséder l'hôte virtuel. Optionnel autrement, `--user` |
 | Hôte, paquets, Java, Node | Oui |

@@ -1,11 +1,12 @@
 ---
-title: "Varias instancias en un host"
-description: "Una palabra nombra la instancia de un cliente a ambos instaladores, y el aislamiento que compra un virtualhost."
+title: "Varias instancias en un mismo host"
+description: "Una palabra nombra la instancia de un cliente para ambos instaladores, y el aislamiento que brinda un virtualhost."
 ---
 
-Despliegues separados en un host: uno por cliente, o uno por entorno. **No un clúster**: son
-gateways independientes con sus propias bases de datos y su propio tráfico. Para saber por qué varias instancias
-contra *una* base de datos no funciona, consulta [Clustering](/platform/install/clustering).
+Despliegues separados en un mismo host — uno por cliente, o uno por entorno. **No es un clúster**:
+son gateways independientes con sus propias bases de datos y su propio tráfico. Para saber por qué
+varias instancias contra *una* misma base de datos no funciona, consulta
+[Clustering](/platform/install/clustering).
 
 ## Un nombre, dos productos
 
@@ -14,15 +15,15 @@ sudo ./scripts/fireflo-install       install --tenant websmsc
 sudo ./scripts/fireflo-panel-install install --tenant websmsc
 ```
 
-`--tenant` es toda la idea: **la misma palabra nombra la misma instancia a ambos instaladores**. Un nombre
-por cliente, dos productos.
+`--tenant` es toda la idea: **la misma palabra nombra la misma instancia para ambos instaladores**.
+Un nombre por cliente, dos productos.
 
-| | Ruta | Unit |
+| | Ruta | Unidad |
 | :--- | :--- | :--- |
 | Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
 | Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
 
-## En update es una búsqueda, no una disposición
+## En una actualización es una búsqueda, no un diseño
 
 Esta es la parte que evita el error caro.
 
@@ -30,14 +31,16 @@ Esta es la parte que evita el error caro.
 sudo ./scripts/fireflo-install update --tenant websmsc
 ```
 
-En `update`, `service` y `rollback`, `--tenant` **encuentra** la instalación con ese nombre y usa sus propias
-rutas, unit, cuenta y puertos.
+En `update`, `service` y `rollback`, `--tenant` **encuentra** la instalación con ese nombre y usa sus
+propias rutas, unidad, cuenta y puertos.
 
 <Warning>
-Sin eso, una actualización apuntada por olvidar un flag detendría una unit que puede no existir, reemplazaría un
-directorio que pertenece a otra instancia, y habilitaría un segundo servicio contra la misma base de datos.
+Sin eso, una actualización dirigida olvidando un flag pararía una unidad que puede no existir,
+reemplazaría un directorio que pertenece a otra instancia y habilitaría un segundo servicio contra la
+misma base de datos.
 
-Una unit cuyo `WorkingDirectory=` nombra una instalación diferente se **rechaza, antes de detener nada**.
+Una unidad cuyo `WorkingDirectory=` nombre una instalación diferente es **rechazada antes de detener
+nada**.
 </Warning>
 
 ## Puertos
@@ -46,44 +49,64 @@ Una unit cuyo `WorkingDirectory=` nombra una instalación diferente se **rechaza
 --smpp-port-range 27777-27800
 ```
 
-Da una banda y el instalador toma el siguiente puerto de listener libre, para que la instancia dos no colisione con
-la instancia uno. `--http-port` y `--ops-port` también se establecen por instancia.
+Da un rango y el instalador toma el siguiente puerto de listener libre, para que la instancia dos no
+choque con la uno. `--http-port` y `--ops-port` también se fijan por instancia.
 
-Ambos instaladores releen los puertos del archivo de entorno en `update`, así que una instancia en
-puertos no por defecto deja de fallar su propio verify al final de cada actualización.
+Ambos instaladores leen los puertos del archivo de entorno en `update`, para que una instancia en
+puertos no predeterminados deje de fallar su propio verify al final de cada actualización.
 
 ## Un virtualhost
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc
+sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
 ```
 
-Pone la instancia bajo un home por cliente: `/home/websmsc/gateway`, con el panel en
+Coloca la instancia bajo un directorio personal por cliente: `/home/websmsc/gateway`, con el panel en
 `/home/websmsc/panel`.
 
-**Qué compra:** ambas units generadas montan un **tmpfs sobre `/home`** y solo vinculan de vuelta ese único
-virtualhost, así que un gateway no puede ver el directorio home de ningún otro cliente.
+**Qué se gana:** ambas unidades generadas montan un **tmpfs sobre `/home`** y reintroducen únicamente
+ese virtualhost, de modo que un gateway no puede ver el directorio personal de ningún otro cliente.
 
 <Warning>
-Bajo `--vhost`, el `CDR_EXPORT_DIR` del panel también debe estar dentro de una raíz `BindPaths=`. **Ese fallo
-es silencioso.** Las exportaciones se preparan y luego no pueden leerse.
+**Aquí `--user` es obligatorio, y es el paso que más fácilmente se omite.** Un directorio personal es
+`0750` y pertenece a su propia cuenta, y el instalador **no cambia el propietario de un directorio
+que ya existe** — esa protección es deliberada, para que una instalación nunca reescriba la propiedad
+de todo lo que ya haya en el directorio personal de alguien.
+
+Así que un servicio que se ejecute con cualquier otra cuenta simplemente no puede recorrer el
+virtualhost. `ProtectHome=tmpfs` y `BindPaths=` hacen que el directorio sea *visible* dentro del
+namespace de la unidad; **ninguno cambia un bit de permisos.**
+
+El síntoma no nombra la causa: el panel muere en `npm ci` con `can't cd to /home/<name>/panel/app`, y
+el gateway registra una unidad que luego no puede leer su propia configuración. Pasa la cuenta
+propietaria a **ambos** instaladores.
 </Warning>
 
-<Note>
-`--vhost` **solo**, sin `--tenant`, mantiene su significado plano anterior, así que los paneles ya instalados
-bajo `/home/<name>` se alcanzan exactamente como antes. Esa compatibilidad es deliberada: una actualización no debe
-reubicar una instalación en marcha.
-</Note>
+<Warning>
+Bajo `--vhost`, `CDR_EXPORT_DIR` del panel también debe estar dentro de una raíz de `BindPaths=`.
+**Ese fallo es silencioso** — las exportaciones se preparan y luego no se pueden leer.
+</Warning>
 
-Los tres flags de directorio (`--app-dir`, `--conf-dir`, `--data-dir`) siguen ganando sobre cualquier esquema
-dondequiera que se den.
+<Warning>
+**`--vhost` solo, sin `--tenant`, significa otra cosa — no lo uses para un nuevo tenant.** Mantiene
+un diseño plano más antiguo, `PATH/{app,conf,data}`, en lugar de `PATH/panel`.
 
-## Lo que cada instancia necesita por su cuenta
+Esa compatibilidad existe para que los paneles instalados bajo `/home/<name>` antes de `--tenant` se
+alcancen exactamente como antes, y una actualización nunca reubique una instalación en ejecución. En
+un tenant *nuevo* deja en silencio el gateway y el panel en diseños diferentes — el gateway en
+`/srv/fireflo/<name>/gateway` y el panel suelto en `/home/<name>` — tras lo cual
+`update --tenant <name>` ya no encuentra el panel. Pasa ambos flags juntos.
+</Warning>
+
+Los tres flags de directorio — `--app-dir`, `--conf-dir`, `--data-dir` — siguen prevaleciendo sobre
+cualquier esquema dondequiera que se especifiquen.
+
+## Qué necesita cada instancia por su cuenta
 
 | | ¿Compartido? |
 | :--- | :--- |
-| Base de datos | **No**. Una por instancia |
+| Base de datos | **No** — una por instancia |
 | Puertos de listener, HTTP y ops | **No** |
-| Tokens operacionales | **No**. Generados por instalación |
-| Cuenta de servicio | Opcional, `--user` |
+| Tokens operacionales | **No** — generados por instalación |
+| Cuenta de servicio | **No** bajo `--vhost` — debe ser propietaria del virtualhost. Opcional en caso contrario, `--user` |
 | Host, paquetes, Java, Node | Sí |

@@ -1,23 +1,23 @@
 ---
 title: "Adicionando mais um tenant"
-description: "A receita inteira, em ordem, para um segundo cliente em um host que já roda um: nome, portas, banco de dados, ambos os installers, TLS e a primeira mensagem."
+description: "A receita completa, em ordem, para um segundo cliente em um host que já roda um: nome, portas, banco de dados, ambos os instaladores, TLS e a primeira mensagem."
 ---
 
-[Várias instâncias](/platform/install/multiple-instances) explica o mecanismo: uma palavra `--tenant`
-nomeando a mesma instância para os dois installers, e o que `--vhost` te dá. Esta página é a mesma
-informação reunida em um único passo a passo, para o momento em que você realmente tem um segundo
+[Várias instâncias](/platform/install/multiple-instances) explica o mecanismo — uma palavra `--tenant`
+nomeando a mesma instância para ambos os instaladores, e o que `--vhost` traz. Esta página é a mesma
+informação organizada em uma única execução, para o momento em que você realmente tem um segundo
 cliente para adicionar.
 
-**Nada aqui é compartilhado com os tenants já no host**, exceto os próprios pacotes, Java, Node e
-PostgreSQL — veja [O que cada instância precisa ter só para
-si](/platform/install/multiple-instances#o-que-cada-instância-precisa-ter-só-para-si). Um novo tenant
-recebe seu próprio banco, suas próprias portas, seus próprios tokens operacionais e sua própria
+**Nada aqui é compartilhado com os tenants já existentes no host** exceto os próprios pacotes, Java,
+Node e PostgreSQL — veja [O que cada instância precisa ter só para
+si](/platform/install/multiple-instances#what-each-instance-needs-of-its-own). Um novo tenant recebe
+seu próprio banco de dados, suas próprias portas, seus próprios tokens operacionais e a sua própria
 escolha de conta de serviço.
 
 <Steps>
   <Step title="Escolha o nome e o layout">
-    Uma palavra, usada **identicamente** em ambos os installers — é o que permite ao `update` achar a
-    instância certa depois, sem você redigitar paths.
+    Uma palavra, usada **identicamente** em ambos os instaladores — é o que permite ao `update`
+    encontrar a instância correta depois, sem você redigitar caminhos.
 
     ```bash
     TENANT=acme
@@ -25,32 +25,52 @@ escolha de conta de serviço.
 
     Dois layouts, escolha um:
 
-    | | Comando | Path |
+    | | Comando | Caminho |
     | :--- | :--- | :--- |
-    | Flat (padrão) | `--tenant $TENANT` | `/srv/fireflo/$TENANT/{gateway,panel}` |
-    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT` | `/home/$TENANT/{gateway,panel}` |
+    | Plano (padrão) | `--tenant $TENANT` | `/srv/fireflo/$TENANT/{gateway,panel}` |
+    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT --user $TENANT` | `/home/$TENANT/{gateway,panel}` |
 
-    Vá de `--vhost` quando a própria conta SSH ou SFTP do tenant já mora sob `/home` — é o que isola o
-    gateway dos arquivos daquela conta, não apenas um path diferente. Veja [Um
-    virtualhost](/platform/install/multiple-instances#um-virtualhost).
+    Recorra a `--vhost` quando a conta SSH ou SFTP do próprio tenant já mora sob `/home` — é o que
+    isola o gateway dos arquivos daquela conta, não apenas um caminho diferente. Veja [Um
+    virtualhost](/platform/install/multiple-instances#a-virtualhost).
+
+    <Warning>
+    **Sob `--vhost`, `--user` não é opcional.** Um diretório home é `0750` e pertence à sua própria
+    conta, e o instalador **deliberadamente não fará chown de um diretório que já existe** — portanto
+    um serviço rodando com qualquer outra conta não consegue atravessá-lo.
+
+    A falha é tardia e se apresenta como outra coisa: o painel morre no `npm ci` com
+    `can't cd to /home/<name>/panel/app`, e o gateway inicia e depois não consegue alcançar a sua
+    própria configuração. `ProtectHome=tmpfs` e `BindPaths=` tornam o diretório *visível* dentro do
+    namespace da unidade; nenhum dos dois muda um bit de permissão.
+
+    Passe a conta dona do virtualhost em **ambos** os instaladores.
+    </Warning>
+
+    <Warning>
+    **`--vhost` sem `--tenant` significa outra coisa.** Sozinha, ela preserva um layout plano legado
+    — `PATH/{app,conf,data}` — em vez de `PATH/panel`. Essa forma existe para que painéis instalados
+    antes de `--tenant` continuem funcionando, e para um tenant novo ela silenciosamente coloca o
+    gateway e o painel em layouts diferentes. Sempre passe as duas flags juntas.
+    </Warning>
   </Step>
 
-  <Step title="Reserve as portas">
-    Cada tenant já existente no host segura uma porta SMPP, uma porta HTTP e uma porta ops. Escolha
-    uma faixa com a qual o novo não possa colidir:
+  <Step title="Reserve portas">
+    Cada tenant existente no host já ocupa uma porta SMPP, uma porta HTTP e uma porta ops. Escolha
+    uma faixa em que o novo não possa colidir:
 
     ```bash
     --smpp-port-range 27801-27824 --http-port 8081 --ops-port 9001
     ```
 
     <Warning>
-    `--ops-port` **nunca** é aberto no firewall, independentemente do que você passe — ele faz bind
-    apenas em loopback. `--http-port` é o que o ESME ou o cliente REST de um cliente efetivamente
-    alcança, então é o que deve ser conferido contra `ufw status` antes de escolher.
+    `--ops-port` **nunca** é aberta no firewall, independentemente do que você passar — ela faz bind
+    apenas em loopback. `--http-port` é a que o ESME ou cliente REST do cliente realmente alcança,
+    então é a que você deve conferir contra `ufw status` antes de escolher.
     </Warning>
   </Step>
 
-  <Step title="Seu próprio banco">
+  <Step title="Seu próprio banco de dados">
     Um tenant, um banco — nunca um schema compartilhado com as linhas de outro tenant.
 
     ```bash
@@ -58,9 +78,9 @@ escolha de conta de serviço.
     sudo -u postgres createdb fireflo_$TENANT --owner fireflo_$TENANT
     ```
 
-    Uma role separada por tenant não é obrigatória — uma role `fireflo` pode ser dona de vários bancos
-    — mas significa que uma credencial vazada de um tenant não consegue ler a de outro. Veja [O
-    banco](/platform/install/database).
+    Uma role separada por tenant não é obrigatória — uma role `fireflo` pode ser dona de vários
+    bancos — mas isso significa que uma credencial vazada de um tenant não pode ler as de outro.
+    Veja [O banco de dados](/platform/install/database).
   </Step>
 
   <Step title="Instale o gateway">
@@ -72,54 +92,79 @@ escolha de conta de serviço.
       --country Australia --country-code 61 --product standard --rate 0.0450 --currency AUD
     ```
 
-    Ele pergunta primeiro e te mostra cada decisão antes de escrever qualquer coisa — adicione `--yes`
-    somente quando você confia na resposta que ele imprimiria. `--bootstrap` escreve o mínimo que um
+    Sob o layout de virtualhost, acrescente `--vhost /home/$TENANT --user $TENANT` — ambos, conforme
+    os avisos do passo 1.
+
+    Ele pergunta antes e mostra cada decisão antes de escrever qualquer coisa — acrescente `--yes`
+    apenas quando você confiar na resposta que ele imprimiria. `--bootstrap` escreve o mínimo que um
     banco novo precisa: uma tabela de roteamento `default`, uma tabela `MESSAGE` vazia, um listener
-    SMPP, um login. A senha gerada é impressa **uma vez**; capture-a.
+    SMPP, um login. A senha gerada é impressa **uma única vez**; capture-a.
+
+    <Note>
+    Flags aceitam valores **separados por espaço**. `--vhost=/home/$TENANT` é rejeitado como opção
+    desconhecida em vez de ser interpretado, em ambos os instaladores.
+    </Note>
+
+    <Warning>
+    **`--bootstrap` apenas em um banco genuinamente vazio.** Ele recusa no momento em que encontra
+    uma tabela de roteamento, um worker ou um login — então reinstalar um gateway cujo banco já
+    existe precisa apenas de `--config-source db`. Passar as flags de forma invertida é como uma
+    instalação acaba ou recusando no meio do caminho ou iniciando sem ter para onde rotear.
+    </Warning>
 
     Lista completa de flags em [`fireflo-install`](/reference/cli/fireflo-install).
   </Step>
 
   <Step title="Verifique antes de adicionar qualquer coisa">
     ```bash
-    cd /srv/fireflo/$TENANT/gateway   # ou o path do --vhost
+    cd /srv/fireflo/$TENANT/gateway   # ou o caminho de --vhost
     scripts/fireflo verify
     ```
 
     <Note>
-    **Exit code 4** aqui é esperado e correto: o deployment está sólido, ele apenas não tem para onde
-    rotear ainda. Vira 0 assim que um vendor e uma regra existem, na sequência do próximo passo —
-    veja [Primeira configuração](/platform/install/first-configuration).
+    **Código de saída 4** aqui é esperado e correto: a implantação está sólida, ela simplesmente
+    ainda não tem para onde rotear. Torna-se 0 assim que um fornecedor e uma regra existirem, no
+    próximo passo — veja [Primeira configuração](/platform/install/first-configuration).
     </Note>
   </Step>
 
-  <Step title="Instale o panel">
+  <Step title="Instale o painel">
     ```bash
     sudo ./scripts/fireflo-panel-install install --tenant $TENANT --port 3001 \
-      --config-url postgresql://fireflo_$TENANT:...@localhost/fireflo_$TENANT \
+      --gateway-conf-dir /srv/fireflo/$TENANT/gateway/conf \
       --public-url https://acme-panel.example.com \
       --operator acme-admin
     ```
 
+    Sob o layout de virtualhost, acrescente `--vhost /home/$TENANT --user $TENANT` e aponte
+    `--gateway-conf-dir` para `/home/$TENANT/gateway/conf`. **Instale o painel depois do gateway** —
+    ele lê esse diretório.
+
     <Warning>
-    **`--port` nunca é derivado de `--tenant`.** Ele continua sendo `3000` a menos que seja passado
-    explicitamente, então um segundo panel no mesmo host precisa do seu próprio, ou o installer se
-    recusa em vez de sobrescrever a unit do primeiro tenant.
+    **`--port` nunca é derivado de `--tenant`.** Permanece em `3000` a menos que seja informada
+    explicitamente, então um segundo painel no mesmo host precisa da sua própria, senão o instalador
+    recusa em vez de sobrescrever a unidade do primeiro tenant.
     </Warning>
 
-    Dado `--tenant`, o installer do panel lê os tokens operacionais deste tenant e a conexão de banco
-    somente-leitura do `fireflo.env` *deste tenant*, em vez do de um vizinho — a mesma palavra é o que
-    evita que um comando copiado e colado ligue o panel de um cliente ao gateway de outro.
+    Três coisas que ele descobre por si próprio a partir de `--gateway-conf-dir`: ambos os tokens
+    operacionais, a `METRICS_DATABASE_URL` somente leitura e a URL de ops — que ele constrói a partir
+    do `FIREFLO_OPS_PORT` registrado desse gateway, então uma `--ops-port` não-padrão não requer uma
+    segunda flag aqui.
 
     <Warning>
-    `--config-url` nunca é derivado, de propósito — é a conexão que pode mudar o que um cliente é
-    cobrado. Sem ela, o panel sobe em modo somente-leitura para este tenant.
+    `--config-url` nunca é derivada, propositalmente — é a conexão que pode alterar o que é cobrado
+    de um cliente. Sem ela, o painel sobe em modo somente leitura para este tenant.
+
+    Ela foi deliberadamente omitida do comando acima: passada como flag, a senha do banco parou no
+    seu histórico de shell e na saída do `ps`. Omita-a e o instalador pergunta — e esse prompt
+    aceita a palavra literal **`same`**, significando "reutilize a conexão recém-derivada do
+    gateway", que é a resposta certa sempre que uma única role for dona do banco do tenant.
     </Warning>
   </Step>
 
   <Step title="TLS na frente, uma origem por tenant">
-    O panel fala HTTP puro em `--port` (padrão 3000, e ele deve ser **único por tenant** em um host
-    compartilhado — passe um explicitamente para cada tenant depois do primeiro). Coloque nginx ou
+    O painel fala HTTP simples em `--port` (padrão 3000, e deve ser **único por tenant** em um host
+    compartilhado — passe uma explicitamente para cada tenant depois do primeiro). Coloque nginx ou
     equivalente na frente, terminando TLS em um hostname próprio deste tenant:
 
     ```nginx
@@ -127,7 +172,7 @@ escolha de conta de serviço.
         listen 443 ssl;
         server_name acme-panel.example.com;
         location / {
-            proxy_pass http://127.0.0.1:3001;   # this tenant's --port
+            proxy_pass http://127.0.0.1:3001;   # a --port deste tenant
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
@@ -135,46 +180,46 @@ escolha de conta de serviço.
     ```
 
     O `--public-url` acima deve casar exatamente com `server_name` — é escrito como `AUTH_URL`, e sem
-    ele um sign-out redireciona para `localhost` independentemente do que o proxy encaminhar. Veja
-    [TLS na frente](/platform/install/control-panel#tls-na-frente).
+    ele um sign-out redireciona para `localhost` independentemente do que o proxy encaminhe. Veja
+    [TLS na frente](/platform/install/control-panel#tls-in-front).
   </Step>
 
   <Step title="Finalize a configuração">
-    O `bootstrap` deliberadamente deixa de fora um vendor e uma tarifa — ninguém mais pode adivinhar
-    as credenciais de um vendor, e um preço inventado cobra silenciosamente onde um ausente aparece
-    sem preço. Adicione ambos, depois uma regra de routing nomeando o vendor, depois o primeiro login
-    de cliente deste tenant — nessa ordem, e por quê, em [Primeira
-    configuração](/platform/install/first-configuration).
+    O `bootstrap` deliberadamente deixa de fora um fornecedor e uma tarifa — ninguém mais pode
+    adivinhar as credenciais de um fornecedor, e um preço inventado cobra silenciosamente enquanto
+    um ausente aparece sem preço. Adicione ambos, depois uma regra de roteamento nomeando o
+    fornecedor, e então o primeiro login de cliente deste tenant — nessa ordem, e por que, em
+    [Primeira configuração](/platform/install/first-configuration).
   </Step>
 
-  <Step title="Envie uma, como um cliente faria">
+  <Step title="Envie uma, como faria um cliente">
     ```bash
     FIREFLO_SEND_LOGIN=... FIREFLO_SEND_PASSWORD=... \
       scripts/fireflo send AcmeBrand 61400000000 "first message"
     ```
 
-    Um `200` significa aceito, cobrado e enfileirado — observe o call record no panel deste tenant
-    para o resultado da entrega.
+    Um `200` significa aceito, cobrado e enfileirado — observe o registro de chamada no painel deste
+    tenant para o desfecho da entrega.
   </Step>
 </Steps>
 
-## O que é genuinamente novo versus compartilhado
+## O que é realmente novo versus compartilhado
 
 | | Este tenant | O host |
 | :--- | :--- | :--- |
 | Banco de dados | Novo, schema próprio | — |
-| Portas (SMPP, HTTP, ops, panel) | Novas, sem sobreposição | — |
+| Portas (SMPP, HTTP, ops, painel) | Novas, sem sobreposição | — |
 | Tokens operacionais | Gerados novos por esta instalação | — |
-| Conta de serviço | Opcional por tenant via `--user` | Pode ser compartilhada |
+| Conta de serviço | **Obrigatória** sob `--vhost` (`--user`); opcional caso contrário | Compartilhável apenas fora de um virtualhost |
 | Pacotes, Java, Node, servidor PostgreSQL | — | Já instalados |
 
-## Relacionado
+## Relacionados
 
 <CardGroup cols={2}>
-  <Card title="Várias instâncias em um host" icon="server" href="/platform/install/multiple-instances">
-    O mecanismo que `--tenant` e `--vhost` implementam, e a garantia de que update é um lookup.
+  <Card title="Várias instâncias em um mesmo host" icon="server" href="/platform/install/multiple-instances">
+    O mecanismo que `--tenant` e `--vhost` implementam, e a garantia de que update-é-uma-busca.
   </Card>
   <Card title="Primeira configuração, em ordem" icon="list-check" href="/platform/install/first-configuration">
-    O que o `bootstrap` escreve, e a ordem que torna o resto significativo.
+    O que o `bootstrap` escreve, e a ordem que dá sentido ao resto.
   </Card>
 </CardGroup>
