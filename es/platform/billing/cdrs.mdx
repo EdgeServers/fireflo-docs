@@ -106,6 +106,23 @@ DEBUG. Un descarte ahora es también un WARN limitado que nombra al vendor y al 
 `NULL` significa que nada registró la columna; `{}` significa registrado y no había ninguno.
 `tlvs_sent` es `NULL` para todo vendor no SMPP.
 
+## Leer una tormenta de reintentos
+
+Cada intento contra un vendor deja ahora su propia fila `cdr_submit` — no solo el que finalmente
+tuvo éxito o falló de forma terminal. `vendor_attempt` los numera, `submit_status` lleva lo que el
+vendor realmente dijo en cada uno, y `NULL` allí significa "no registrado", no "aceptado". Vea
+[Tablas de registros de llamada](/reference/data/cdr-tables) para la forma exacta.
+
+<Tip>
+La página por mensaje del panel de control lee estas filas, más `cdr_interim` y `cdr_final`, como un
+único **intercambio SMPP** ordenado — `submit_sm` saliendo, `submit_sm_resp` de vuelta con su estado,
+`deliver_sm` por cada acuse — en lugar de una tabla plana de intentos. Un mensaje que fue reintentado,
+o que lleva varios segmentos, se lee como la secuencia que realmente fue en lugar de como una fila por
+parte.
+
+`deliver_sm_resp` nunca se muestra, porque nada en la tubería lo registra.
+</Tip>
+
 ## El cuerpo del mensaje
 
 Se registra **solo si lo activa**.

@@ -105,6 +105,23 @@ descarte agora também é um WARN limitado nomeando o vendor e a tag.
 `NULL` significa que nada registrou a coluna; `{}` significa que foi registrado e não havia nenhum.
 `tlvs_sent` é `NULL` para todo vendor não-SMPP.
 
+## Lendo uma tempestade de retentativas
+
+Toda tentativa em um vendor agora deixa sua própria linha `cdr_submit` — não somente aquela que
+finalmente teve sucesso ou falhou terminalmente. `vendor_attempt` as numera, `submit_status` carrega o
+que o vendor efetivamente disse em cada uma, e `NULL` ali significa "não registrado", não "aceito".
+Veja [Tabelas de call record](/reference/data/cdr-tables) para o formato exato.
+
+<Tip>
+A página por mensagem do painel de controle lê essas linhas, mais `cdr_interim` e `cdr_final`, como
+uma **troca SMPP** ordenada — `submit_sm` saindo, `submit_sm_resp` voltando com seu status,
+`deliver_sm` para cada recibo — em vez de uma tabela crua de tentativas. Uma mensagem que foi
+retentada, ou que carrega vários segmentos, se lê como a sequência que ela realmente foi, e não como
+uma linha por parte.
+
+`deliver_sm_resp` nunca é mostrado, porque nada no pipeline o registra.
+</Tip>
+
 ## O corpo da mensagem
 
 Registrado **somente se você ativar**.

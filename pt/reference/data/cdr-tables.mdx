@@ -112,6 +112,32 @@ cliente?**
 zero.** Zero é uma afirmação sobre o cliente, a saber, que ele não pediu nada.
 </Tip>
 
+### `submit_status` e `vendor_attempt`
+
+Desde V1.40.0. **Uma linha `cdr_submit` agora é escrita para toda tentativa contra um fornecedor**,
+não somente aquela que finalmente teve sucesso ou falhou terminalmente — um nack retentável escreve
+uma também.
+
+| Coluna | Guarda |
+| :--- | :--- |
+| `submit_status` | O status de `submit_sm_resp` do fornecedor para *esta* tentativa — `0` (`ESME_ROK`) na linha que teve sucesso, o código real em uma que foi retentada |
+| `vendor_attempt` | Contagem 1-baseada de `submit_sm` enviados a este fornecedor para esta parte da mensagem, tanto em retentativas dentro do worker quanto em re-roteamentos de volta pelo router |
+
+<Warning>
+**`NULL` é "não registrado", nunca uma afirmação de sucesso.** Linhas escritas antes de V1.40.0, e
+toda linha de um fornecedor não-SMPP, carregam `NULL` aqui — leia-o do mesmo jeito que `tlvs_sent`,
+não como `0`.
+</Warning>
+
+Antes desta coluna, uma tempestade de retentativas era visível somente como uma contagem de submits
+inflada no fornecedor, sem registro do que ele efetivamente disse nas tentativas que falharam — veja
+[Filas e retentativas](/platform/routing/queues-and-retries) para o orçamento de retentativas que
+essas linhas agora tornam legível.
+
+`(gateway_msg_id, part_no, retry_count, vendor_attempt)` é a chave natural a partir de V1.40.0,
+alargada de `(gateway_msg_id, part_no, retry_count)` — `retry_count` sozinho não muda entre
+retentativas dentro do worker em um fornecedor, então sem `vendor_attempt` essas linhas colidiriam.
+
 ## `cdr_final` e `cdr_interim`
 
 Desfechos e progresso, separados pela razão acima. Também têm **vidas diferentes**:
