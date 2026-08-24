@@ -115,3 +115,85 @@ sur l'un ou l'autre schéma partout où ils sont donnés.
 | Jetons opérationnels | **Non** — générés par installation |
 | Compte de service | **Non** sous `--vhost` — il doit posséder l'hôte virtuel. Optionnel autrement, `--user` |
 | Hôte, paquets, Java, Node | Oui |
+
+## Suppression d'un tenant
+
+<Warning>
+**Il n'existe pas de verbe `uninstall`.** Les deux installateurs offrent `check`, `install`,
+`update`, `service` et `rollback` — la suppression est manuelle, ce qui explique pourquoi il vaut
+mieux énumérer les unités que de les deviner.
+</Warning>
+
+Un tenant, c'est **quatre** unités systemd, pas deux. La passerelle en écrit trois :
+
+| Unité | Ce qu'elle fait |
+| :--- | :--- |
+| `fireflo-<name>.service` | La passerelle |
+| `fireflo-<name>-logclean.timer` | Activé, balaie quotidiennement les journaux ayant subi une rotation |
+| `fireflo-<name>-logclean.service` | Ce que ce timer exécute |
+| `fireflo-<name>-panel.service` | Le panneau de contrôle |
+
+**Le timer logclean est celui qui reste oublié derrière.** Supprimez uniquement l'unité principale
+et il reste activé, se déclenchant chaque jour sur un répertoire de journaux qui n'existe plus.
+
+Regardez avant de supprimer — ceci ne change rien :
+
+```bash
+TENANT=acme
+systemctl list-unit-files "fireflo-$TENANT*" --no-pager
+ls -ld /srv/fireflo/$TENANT /home/$TENANT/gateway /home/$TENANT/panel 2>/dev/null
+```
+
+Ensuite les unités, toutes les quatre :
+
+```bash
+sudo systemctl disable --now fireflo-$TENANT.service fireflo-$TENANT-logclean.timer \
+                             fireflo-$TENANT-panel.service 2>/dev/null
+sudo rm -f /etc/systemd/system/fireflo-$TENANT.service \
+           /etc/systemd/system/fireflo-$TENANT-logclean.{timer,service} \
+           /etc/systemd/system/fireflo-$TENANT-panel.service
+sudo systemctl daemon-reload && sudo systemctl reset-failed
+```
+
+Ensuite les répertoires — selon la disposition qu'a utilisée ce tenant :
+
+```bash
+sudo rm -rf /srv/fireflo/$TENANT                          # disposition à plat
+sudo rm -rf /home/$TENANT/gateway /home/$TENANT/panel     # disposition hôte virtuel
+```
+
+<Note>
+**`Loaded: not-found` aux côtés de `Active: failed` est normal ici**, ce n'est pas une anomalie.
+C'est la mémoire d'exécution de systemd d'une unité dont le fichier a disparu ; `reset-failed` la
+nettoie. De même, un code de sortie `status=143` dans le journal, c'est `128 + SIGTERM` — un arrêt
+propre, pas un plantage.
+</Note>
+
+### Ce que cela laisse délibérément intact
+
+**La base de données.** Le routage d'un tenant, ses fournisseurs, ses ports d'écoute, ses
+identifiants, ses enregistrements d'appels et ses soldes y résident, pas dans le répertoire
+d'installation — c'est ce qui rend une réinstallation sûre, et ce qui fait de la suppression de la
+base de données une décision distincte :
+
+```bash
+sudo -u postgres dropdb fireflo_$TENANT     # non réversible
+```
+
+**Le compte de service**, qui peut être partagé avec d'autres services ou être un véritable
+identifiant client. Supprimez-le à la main seulement une fois certain que rien d'autre ne l'utilise.
+
+**Les règles de pare-feu**, si l'installation a utilisé `--firewall`. Vérifiez
+`sudo ufw status numbered` pour la plage SMPP et le port HTTP de ce tenant.
+
+### Réinstaller plutôt que supprimer
+
+Relocaliser une instance n'est pas un `mv`. `fireflo.env` enregistre ses propres chemins absolus,
+et seuls certains sont réécrits par des verbes ultérieurs — `FIREFLO_CONF_DIR`, `FIREFLO_DATA_DIR`
+et `QUARKUS_LOG_FILE_PATH` sont écrits par `install` uniquement. Une installation déplacée continue
+d'écrire ses enregistrements d'appels et ses journaux à l'ancien emplacement, tandis que le
+`ReadWritePaths=` de la nouvelle unité ne couvre que le nouveau.
+
+Supprimez et réinstallez à la place. La base de données survit, donc la nouvelle installation
+omet `--bootstrap` — celle-ci refuse de s'exécuter sur une base de données qui possède déjà une
+table de routage, un worker ou un identifiant.

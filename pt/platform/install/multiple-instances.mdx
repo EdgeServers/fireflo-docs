@@ -111,3 +111,83 @@ esquema em que forem fornecidas.
 | Tokens operacionais | **Não** — gerados por instalação |
 | Conta de serviço | **Não** sob `--vhost` — ela deve ser a dona do virtualhost. Opcional caso contrário, `--user` |
 | Host, pacotes, Java, Node | Sim |
+
+## Removendo um tenant
+
+<Warning>
+**Não existe um verbo `uninstall`.** Ambos os instaladores oferecem `check`, `install`, `update`,
+`service` e `rollback` — a remoção é manual, e é por isso que vale a pena enumerar as unidades em
+vez de tentar adivinhá-las.
+</Warning>
+
+Um tenant são **quatro** unidades systemd, não duas. O gateway grava três:
+
+| Unidade | O que faz |
+| :--- | :--- |
+| `fireflo-<name>.service` | O gateway |
+| `fireflo-<name>-logclean.timer` | Habilitado, varre logs rotacionados diariamente |
+| `fireflo-<name>-logclean.service` | O que esse timer executa |
+| `fireflo-<name>-panel.service` | O painel de controle |
+
+**O timer de logclean é o que costuma ficar para trás.** Se você remover apenas a unidade principal,
+ele permanece habilitado, disparando todo dia contra um diretório de logs que não existe mais.
+
+Olhe antes de remover — isto não muda nada:
+
+```bash
+TENANT=acme
+systemctl list-unit-files "fireflo-$TENANT*" --no-pager
+ls -ld /srv/fireflo/$TENANT /home/$TENANT/gateway /home/$TENANT/panel 2>/dev/null
+```
+
+Depois as unidades, todas as quatro:
+
+```bash
+sudo systemctl disable --now fireflo-$TENANT.service fireflo-$TENANT-logclean.timer \
+                             fireflo-$TENANT-panel.service 2>/dev/null
+sudo rm -f /etc/systemd/system/fireflo-$TENANT.service \
+           /etc/systemd/system/fireflo-$TENANT-logclean.{timer,service} \
+           /etc/systemd/system/fireflo-$TENANT-panel.service
+sudo systemctl daemon-reload && sudo systemctl reset-failed
+```
+
+Depois os diretórios — qualquer que seja o layout que esse tenant tenha usado:
+
+```bash
+sudo rm -rf /srv/fireflo/$TENANT                          # layout plano
+sudo rm -rf /home/$TENANT/gateway /home/$TENANT/panel     # layout virtualhost
+```
+
+<Note>
+**`Loaded: not-found` junto com `Active: failed` é normal aqui**, não é uma falha. É a memória de
+tempo de execução do systemd de uma unidade cujo arquivo foi removido; `reset-failed` limpa isso.
+Do mesmo modo, uma saída `status=143` no journal é `128 + SIGTERM` — uma parada limpa, não um crash.
+</Note>
+
+### O que isto deliberadamente deixa intocado
+
+**O banco de dados.** O roteamento de um tenant, seus vendors, listeners, logins, registros de
+chamadas e saldos vivem lá, não no diretório de instalação — e é isso que torna uma reinstalação
+segura, e o que faz de descartar o banco uma decisão à parte:
+
+```bash
+sudo -u postgres dropdb fireflo_$TENANT     # não é reversível
+```
+
+**A conta de serviço**, que pode ser compartilhada com outros serviços ou ser um login real de
+cliente. Remova-a manualmente somente depois de ter certeza de que nada mais a utiliza.
+
+**Regras de firewall**, caso a instalação tenha usado `--firewall`. Verifique
+`sudo ufw status numbered` procurando pela faixa SMPP e pela porta HTTP deste tenant.
+
+### Reinstalar em vez de remover
+
+Realocar uma instância não é um `mv`. O `fireflo.env` registra seus próprios caminhos absolutos, e
+apenas alguns são reescritos por verbos posteriores — `FIREFLO_CONF_DIR`, `FIREFLO_DATA_DIR` e
+`QUARKUS_LOG_FILE_PATH` são gravados somente pelo `install`. Uma instalação movida continua
+gravando seus registros de chamadas e logs no local antigo, enquanto o `ReadWritePaths=` da nova
+unidade cobre apenas o novo.
+
+Remova e reinstale em vez disso. O banco de dados sobrevive, então a instalação nova omite
+`--bootstrap` — ele se recusa a rodar sobre um banco que já tem uma tabela de roteamento, um worker
+ou um login.
