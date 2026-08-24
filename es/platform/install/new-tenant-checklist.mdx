@@ -1,0 +1,179 @@
+---
+title: "Añadir otro tenant"
+description: "La receta completa, en orden, para un segundo cliente en un host que ya ejecuta uno: nombre, puertos, base de datos, ambos instaladores, TLS y el primer mensaje."
+---
+
+[Varias instancias](/platform/install/multiple-instances) explica el mecanismo: una palabra `--tenant`
+que nombra la misma instancia a ambos instaladores, y lo que compra `--vhost`. Esta página es la misma
+información reunida en una sola ejecución, para el momento en que realmente tienes un segundo cliente que añadir.
+
+**Nada de lo aquí presente se comparte con los tenants ya en el host** salvo los propios paquetes, Java, Node y
+PostgreSQL. Consulta [Lo que cada instancia necesita por su
+cuenta](/platform/install/multiple-instances#lo-que-cada-instancia-necesita-por-su-cuenta). Un nuevo tenant obtiene su
+propia base de datos, sus propios puertos, sus propios tokens operacionales y su propia elección de cuenta de servicio.
+
+<Steps>
+  <Step title="Elige el nombre y la disposición">
+    Una palabra, usada **idénticamente** en ambos instaladores. Es lo que permite que `update` encuentre la
+    instancia correcta más tarde sin que vuelvas a teclear rutas.
+
+    ```bash
+    TENANT=acme
+    ```
+
+    Dos disposiciones, elige una:
+
+    | | Comando | Ruta |
+    | :--- | :--- | :--- |
+    | Plana (por defecto) | `--tenant $TENANT` | `/srv/fireflo/$TENANT/{gateway,panel}` |
+    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT` | `/home/$TENANT/{gateway,panel}` |
+
+    Recurre a `--vhost` cuando la cuenta SSH o SFTP propia del tenant ya viva bajo `/home`. Es lo que
+    aísla el gateway de los archivos de esa cuenta, no solo una ruta distinta. Consulta [Un
+    virtualhost](/platform/install/multiple-instances#un-virtualhost).
+  </Step>
+
+  <Step title="Reserva puertos">
+    Cada tenant existente en el host ya ocupa un puerto SMPP, un puerto HTTP y un puerto ops. Elige una
+    banda con la que el nuevo no pueda colisionar:
+
+    ```bash
+    --smpp-port-range 27801-27824 --http-port 8081 --ops-port 9001
+    ```
+
+    <Warning>
+    `--ops-port` **nunca** se abre en el firewall independientemente de lo que pases: se vincula solo a
+    loopback. `--http-port` es al que realmente llega el ESME o cliente REST de un cliente, así que es el
+    que hay que comprobar contra `ufw status` antes de elegirlo.
+    </Warning>
+  </Step>
+
+  <Step title="Su propia base de datos">
+    Un tenant, una base de datos. Nunca un esquema compartido con las filas de otro tenant.
+
+    ```bash
+    sudo -u postgres createuser fireflo_$TENANT --pwprompt
+    sudo -u postgres createdb fireflo_$TENANT --owner fireflo_$TENANT
+    ```
+
+    Un rol separado por tenant no es obligatorio (un solo rol `fireflo` puede ser dueño de varias bases de datos),
+    pero significa que una credencial filtrada de un tenant no puede leer la de otro. Consulta [La
+    base de datos](/platform/install/database).
+  </Step>
+
+  <Step title="Instala el gateway">
+    ```bash
+    sudo ./scripts/fireflo-install install --tenant $TENANT \
+      --smpp-port-range 27801-27824 --http-port 8081 --ops-port 9001 \
+      --db-name fireflo_$TENANT --db-user fireflo_$TENANT --db-password-file /root/.acme-db-pw \
+      --config-source db --bootstrap \
+      --country Australia --country-code 61 --product standard --rate 0.0450 --currency AUD
+    ```
+
+    Pregunta primero y te muestra cada decisión antes de escribir nada. Añade `--yes` solo cuando
+    confíes en la respuesta que imprimiría. `--bootstrap` escribe lo mínimo que una base de datos recién
+    creada necesita: una tabla de enrutamiento `default`, una tabla `MESSAGE` vacía, un listener SMPP,
+    un login. Su contraseña generada se imprime **una vez**; captúrala.
+
+    Lista completa de flags en [`fireflo-install`](/reference/cli/fireflo-install).
+  </Step>
+
+  <Step title="Verifica antes de añadir nada">
+    ```bash
+    cd /srv/fireflo/$TENANT/gateway   # o la ruta de --vhost
+    scripts/fireflo verify
+    ```
+
+    <Note>
+    **Exit code 4** aquí es esperado y correcto: el despliegue es sano, simplemente aún no tiene nada a
+    lo que enrutar. Se convierte en 0 una vez existen un vendor y una regla, en el seguimiento del siguiente
+    paso. Consulta [Primera configuración](/platform/install/first-configuration).
+    </Note>
+  </Step>
+
+  <Step title="Instala el panel">
+    ```bash
+    sudo ./scripts/fireflo-panel-install install --tenant $TENANT --port 3001 \
+      --config-url postgresql://fireflo_$TENANT:...@localhost/fireflo_$TENANT \
+      --public-url https://acme-panel.example.com \
+      --operator acme-admin
+    ```
+
+    <Warning>
+    **`--port` nunca se deriva de `--tenant`.** Se queda en `3000` a menos que se dé explícitamente, así
+    que un segundo panel en el mismo host necesita el suyo propio o el instalador se niega en lugar de
+    sobrescribir la unit del primer tenant.
+    </Warning>
+
+    Dado `--tenant`, el instalador del panel lee los tokens operacionales de este tenant y la conexión
+    de solo lectura a la base de datos desde el `fireflo.env` de *este tenant* en lugar del de un vecino. La
+    misma palabra es lo que evita que un comando copiado y pegado conecte el panel de un cliente al
+    gateway de otro.
+
+    <Warning>
+    `--config-url` nunca se deriva, a propósito: es la conexión que puede cambiar lo que se factura a un
+    cliente. Sin él, el panel arranca de solo lectura para este tenant.
+    </Warning>
+  </Step>
+
+  <Step title="TLS delante, un origen por tenant">
+    El panel habla HTTP plano en `--port` (por defecto 3000, y debe ser **único por tenant** en un
+    host compartido; pasa uno explícitamente para cada tenant después del primero). Pon nginx o
+    equivalente delante, terminando TLS en un hostname propio de este tenant:
+
+    ```nginx
+    server {
+        listen 443 ssl;
+        server_name acme-panel.example.com;
+        location / {
+            proxy_pass http://127.0.0.1:3001;   # this tenant's --port
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+    `--public-url` de arriba debe coincidir con `server_name` exactamente: se escribe como `AUTH_URL`,
+    y sin él un cierre de sesión redirige a `localhost` independientemente de lo que reenvíe el proxy.
+    Consulta [TLS delante](/platform/install/control-panel#tls-delante).
+  </Step>
+
+  <Step title="Termina la configuración">
+    `bootstrap` deja fuera deliberadamente un vendor y una tarifa: nadie más puede adivinar las
+    credenciales de un vendor, y un precio inventado factura en silencio mientras que uno ausente
+    aparece sin tarificar. Añade ambos, luego una regla de enrutamiento que nombre al vendor, luego el
+    primer login de cliente de este tenant. En ese orden, y por qué, en [Primera
+    configuración](/platform/install/first-configuration).
+  </Step>
+
+  <Step title="Envía uno, como haría un cliente">
+    ```bash
+    FIREFLO_SEND_LOGIN=... FIREFLO_SEND_PASSWORD=... \
+      scripts/fireflo send AcmeBrand 61400000000 "first message"
+    ```
+
+    Un `200` significa aceptado, cobrado y encolado. Observa el call record en el panel de este tenant
+    para el resultado de la entrega.
+  </Step>
+</Steps>
+
+## Qué es genuinamente nuevo frente a compartido
+
+| | Este tenant | El host |
+| :--- | :--- | :--- |
+| Base de datos | Nueva, esquema propio | — |
+| Puertos (SMPP, HTTP, ops, panel) | Nuevos, sin solaparse | — |
+| Tokens operacionales | Generados de cero por esta instalación | — |
+| Cuenta de servicio | Opcional por tenant vía `--user` | Puede compartirse |
+| Paquetes, Java, Node, servidor PostgreSQL | — | Ya instalados |
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Varias instancias en un host" icon="server" href="/platform/install/multiple-instances">
+    El mecanismo que implementan `--tenant` y `--vhost`, y la garantía de que update es una búsqueda.
+  </Card>
+  <Card title="Primera configuración, en orden" icon="list-check" href="/platform/install/first-configuration">
+    Lo que `bootstrap` escribe, y el orden que hace que el resto sea significativo.
+  </Card>
+</CardGroup>
