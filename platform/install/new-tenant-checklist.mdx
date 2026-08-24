@@ -26,11 +26,31 @@ own database, its own ports, its own operational tokens and its own service acco
     | | Command | Path |
     | :--- | :--- | :--- |
     | Flat (default) | `--tenant $TENANT` | `/srv/fireflo/$TENANT/{gateway,panel}` |
-    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT` | `/home/$TENANT/{gateway,panel}` |
+    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT --user $TENANT` | `/home/$TENANT/{gateway,panel}` |
 
     Reach for `--vhost` when the tenant's own SSH or SFTP account already lives under `/home` — it is
     what isolates the gateway from that account's files, not just a different path. See [A
     virtualhost](/platform/install/multiple-instances#a-virtualhost).
+
+    <Warning>
+    **Under `--vhost`, `--user` is not optional.** A home directory is `0750` and owned by its own
+    account, and the installer **deliberately will not chown a directory that already exists** — so a
+    service running as any other account cannot traverse it.
+
+    The failure is late and reads as something else: the panel dies at `npm ci` with
+    `can't cd to /home/<name>/panel/app`, and the gateway starts and then cannot reach its own
+    configuration. `ProtectHome=tmpfs` and `BindPaths=` make the directory *visible* inside the unit's
+    namespace; neither changes a permission bit.
+
+    Pass the account that owns the virtualhost, on **both** installers.
+    </Warning>
+
+    <Warning>
+    **`--vhost` without `--tenant` means something else.** Alone, it keeps a legacy flat layout —
+    `PATH/{app,conf,data}` — rather than `PATH/panel`. That form exists so panels installed before
+    `--tenant` keep working, and for a new tenant it silently puts the gateway and the panel in
+    different layouts. Always give both flags together.
+    </Warning>
   </Step>
 
   <Step title="Reserve ports">
@@ -70,10 +90,25 @@ own database, its own ports, its own operational tokens and its own service acco
       --country Australia --country-code 61 --product standard --rate 0.0450 --currency AUD
     ```
 
+    Under the virtualhost layout, add `--vhost /home/$TENANT --user $TENANT` — both, per the warnings
+    in step 1.
+
     It asks first and shows you every decision before writing anything — add `--yes` only once you
     trust the answer it would print. `--bootstrap` writes the least a fresh database needs: a `default`
     routing table, an empty `MESSAGE` table, one SMPP listener, one login. Its generated password
     prints **once**; capture it.
+
+    <Note>
+    Flags take **space-separated** values. `--vhost=/home/$TENANT` is rejected as an unknown option
+    rather than parsed, on both installers.
+    </Note>
+
+    <Warning>
+    **`--bootstrap` only on a genuinely empty database.** It refuses the moment it finds a routing
+    table, a worker or a login — so reinstalling a gateway whose database already exists needs
+    `--config-source db` on its own. Passing it the wrong way round is how an install ends up either
+    refusing halfway or starting with nothing to route to.
+    </Warning>
 
     Full flag list at [`fireflo-install`](/reference/cli/fireflo-install).
   </Step>
@@ -94,10 +129,14 @@ own database, its own ports, its own operational tokens and its own service acco
   <Step title="Install the panel">
     ```bash
     sudo ./scripts/fireflo-panel-install install --tenant $TENANT --port 3001 \
-      --config-url postgresql://fireflo_$TENANT:...@localhost/fireflo_$TENANT \
+      --gateway-conf-dir /srv/fireflo/$TENANT/gateway/conf \
       --public-url https://acme-panel.example.com \
       --operator acme-admin
     ```
+
+    Under the virtualhost layout, add `--vhost /home/$TENANT --user $TENANT` and point
+    `--gateway-conf-dir` at `/home/$TENANT/gateway/conf`. **Install the panel after the gateway** — it
+    reads that directory.
 
     <Warning>
     **`--port` is never derived from `--tenant`.** It stays `3000` unless given explicitly, so a
@@ -105,13 +144,18 @@ own database, its own ports, its own operational tokens and its own service acco
     first tenant's unit.
     </Warning>
 
-    Given `--tenant`, the panel installer reads this tenant's operational tokens and read-only database
-    connection out of *this tenant's* `fireflo.env` rather than a neighbour's — the same word is what
-    keeps a copy-pasted command from wiring one customer's panel to another's gateway.
+    Three things it works out for itself from `--gateway-conf-dir`: both operational tokens, the
+    read-only `METRICS_DATABASE_URL`, and the ops URL — which it builds from that gateway's recorded
+    `FIREFLO_OPS_PORT`, so a non-default `--ops-port` needs no second flag here.
 
     <Warning>
     `--config-url` is never derived, on purpose — it is the connection that can change what a customer
     is billed. Without it the panel comes up read-only for this tenant.
+
+    It is left off the command above deliberately: passed as a flag, the database password lands in
+    your shell history and in `ps` output. Omit it and the installer prompts instead — and that prompt
+    accepts the literal word **`same`**, meaning "reuse the connection just derived from the gateway",
+    which is the right answer whenever one role owns the tenant's database.
     </Warning>
   </Step>
 
@@ -162,7 +206,7 @@ own database, its own ports, its own operational tokens and its own service acco
 | Database | New, own schema | — |
 | Ports (SMPP, HTTP, ops, panel) | New, non-overlapping | — |
 | Operational tokens | Generated fresh by this install | — |
-| Service account | Optional per tenant via `--user` | Can be shared |
+| Service account | **Required** under `--vhost` (`--user`); optional otherwise | Shareable only outside a virtualhost |
 | Packages, Java, Node, PostgreSQL server | — | Already installed |
 
 ## Related

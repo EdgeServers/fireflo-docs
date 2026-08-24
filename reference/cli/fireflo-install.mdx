@@ -31,10 +31,16 @@ you want is `service`, not `install`.
 | `--tenant NAME` | Names this instance. On `update`, `service` and `rollback` it is a **lookup** — the install with that name is found and its own paths, unit, account and ports are used, so an upgrade cannot be aimed at the wrong instance by forgetting a flag. |
 | `--vhost PATH` | Puts the instance in a per-customer virtualhost — `--tenant websmsc --vhost /home/websmsc` gives `/home/websmsc/gateway`, with the panel alongside at `/home/websmsc/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Individual paths. |
-| `--user` / `--group` / `--service-name` | The service account and unit name. |
+| `--user` / `--group` / `--service-name` | The service account and unit name. **Under `--vhost`, `--user` must be the account that owns the virtualhost** — the installer never chowns a directory that already exists, so any other account cannot traverse it. |
 
 Both generated units mount a **tmpfs over `/home`** and bind only the one virtualhost back in, so a
-gateway cannot see any other customer's home directory.
+gateway cannot see any other customer's home directory. That is a namespace, not a permission: the
+directory's own mode still decides who may enter it, which is why `--user` matters above.
+
+<Note>
+Every flag takes a **space-separated** value. `--vhost=/home/acme` is rejected as an unknown option
+rather than parsed.
+</Note>
 
 ### Configuration and database
 

@@ -55,7 +55,7 @@ non-default ports stops failing its own verify at the end of every upgrade.
 ## A virtualhost
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc
+sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
 ```
 
 Puts the instance under a per-customer home: `/home/websmsc/gateway`, with the panel at
@@ -65,15 +65,35 @@ Puts the instance under a per-customer home: `/home/websmsc/gateway`, with the p
 virtualhost back in, so a gateway cannot see any other customer's home directory.
 
 <Warning>
+**`--user` is required here, and it is the step most easily missed.** A home directory is `0750` and
+owned by its own account, and the installer **will not chown a directory that already exists** — that
+guard is deliberate, so an install can never rewrite the ownership of everything already in someone's
+home.
+
+So a service running as any other account simply cannot traverse the virtualhost. `ProtectHome=tmpfs`
+and `BindPaths=` make the directory *visible* inside the unit's namespace; **neither changes a
+permission bit.**
+
+The symptom does not name the cause: the panel dies at `npm ci` with `can't cd to
+/home/<name>/panel/app`, and the gateway registers a unit that then cannot read its own configuration.
+Pass the owning account to **both** installers.
+</Warning>
+
+<Warning>
 Under `--vhost`, the panel's `CDR_EXPORT_DIR` must also sit inside a `BindPaths=` root. **That failure
 is silent** — exports are prepared and then cannot be read.
 </Warning>
 
-<Note>
-`--vhost` **alone**, without `--tenant`, keeps its older flat meaning, so panels already installed
-under `/home/<name>` are reached exactly as before. That compatibility is deliberate: an upgrade must
-not relocate a running install.
-</Note>
+<Warning>
+**`--vhost` alone, without `--tenant`, means something different — do not use it for a new tenant.**
+It keeps an older flat layout, `PATH/{app,conf,data}`, instead of `PATH/panel`.
+
+That compatibility exists so panels installed under `/home/<name>` before `--tenant` are reached
+exactly as before, and an upgrade never relocates a running install. On a *new* tenant it silently
+puts the gateway and the panel in different layouts — the gateway under `/srv/fireflo/<name>/gateway`
+and the panel loose in `/home/<name>` — after which `update --tenant <name>` no longer finds the
+panel. Give both flags together.
+</Warning>
 
 The three directory flags — `--app-dir`, `--conf-dir`, `--data-dir` — still win over either scheme
 wherever they are given.
@@ -85,5 +105,5 @@ wherever they are given.
 | Database | **No** — one per instance |
 | Listener, HTTP and ops ports | **No** |
 | Operational tokens | **No** — generated per install |
-| Service account | Optional, `--user` |
+| Service account | **No** under `--vhost` — it must own the virtualhost. Optional otherwise, `--user` |
 | Host, packages, Java, Node | Yes |
