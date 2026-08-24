@@ -209,11 +209,19 @@ own database, its own ports, its own operational tokens and its own service acco
 | Service account | **Required** under `--vhost` (`--user`); optional otherwise | Shareable only outside a virtualhost |
 | Packages, Java, Node, PostgreSQL server | — | Already installed |
 
+## Undoing this
+
+There is no `uninstall` verb, and a tenant is four systemd units rather than two — the gateway's
+`-logclean.timer` outlives a careless removal and keeps firing at a deleted log directory. The full
+procedure, and what it deliberately leaves alone, is at [Removing a
+tenant](/platform/install/multiple-instances#removing-a-tenant).
+
 ## Related
 
 <CardGroup cols={2}>
   <Card title="Several instances on one host" icon="server" href="/platform/install/multiple-instances">
-    The mechanism `--tenant` and `--vhost` implement, and the update-is-a-lookup guarantee.
+    The mechanism `--tenant` and `--vhost` implement, the update-is-a-lookup guarantee, and how to
+    remove a tenant again.
   </Card>
   <Card title="First configuration, in order" icon="list-check" href="/platform/install/first-configuration">
     What `bootstrap` writes, and the order that makes the rest of it meaningful.

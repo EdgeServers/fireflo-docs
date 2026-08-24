@@ -20,7 +20,17 @@ Installs and upgrades the **gateway**. The control panel has its own installer â
 **`install` refuses when a configuration directory already exists**, rather than minting a second pair
 of operational tokens over the top of the first. If you have configuration but no service, the verb
 you want is `service`, not `install`.
+
+That refusal keys on `$CONF_DIR/fireflo.env`, so it does **not** fire when you install the same tenant
+at a *different* path. Such a run gets as far as generating a second pair of tokens before the unit
+step refuses on the name collision. Remove the old install first â€” see [Removing a
+tenant](/platform/install/multiple-instances#removing-a-tenant).
 </Warning>
+
+<Note>
+**There is no `uninstall` verb.** Removal is manual, and a tenant is more units than it looks:
+the gateway writes `fireflo-<name>.service` plus a `-logclean.timer` and `-logclean.service` pair.
+</Note>
 
 ## Options worth knowing
 

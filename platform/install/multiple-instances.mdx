@@ -107,3 +107,80 @@ wherever they are given.
 | Operational tokens | **No** — generated per install |
 | Service account | **No** under `--vhost` — it must own the virtualhost. Optional otherwise, `--user` |
 | Host, packages, Java, Node | Yes |
+
+## Removing a tenant
+
+<Warning>
+**There is no `uninstall` verb.** Both installers offer `check`, `install`, `update`, `service` and
+`rollback` — removal is manual, which is why the units are worth enumerating rather than guessing at.
+</Warning>
+
+A tenant is **four** systemd units, not two. The gateway writes three:
+
+| Unit | What it does |
+| :--- | :--- |
+| `fireflo-<name>.service` | The gateway |
+| `fireflo-<name>-logclean.timer` | Enabled, sweeps rotated logs daily |
+| `fireflo-<name>-logclean.service` | What that timer runs |
+| `fireflo-<name>-panel.service` | The control panel |
+
+**The logclean timer is the one that gets left behind.** Remove only the main unit and it stays
+enabled, firing every day against a log directory that no longer exists.
+
+Look before removing — this changes nothing:
+
+```bash
+TENANT=acme
+systemctl list-unit-files "fireflo-$TENANT*" --no-pager
+ls -ld /srv/fireflo/$TENANT /home/$TENANT/gateway /home/$TENANT/panel 2>/dev/null
+```
+
+Then the units, all four:
+
+```bash
+sudo systemctl disable --now fireflo-$TENANT.service fireflo-$TENANT-logclean.timer \
+                             fireflo-$TENANT-panel.service 2>/dev/null
+sudo rm -f /etc/systemd/system/fireflo-$TENANT.service \
+           /etc/systemd/system/fireflo-$TENANT-logclean.{timer,service} \
+           /etc/systemd/system/fireflo-$TENANT-panel.service
+sudo systemctl daemon-reload && sudo systemctl reset-failed
+```
+
+Then the directories — whichever layout this tenant used:
+
+```bash
+sudo rm -rf /srv/fireflo/$TENANT                          # flat layout
+sudo rm -rf /home/$TENANT/gateway /home/$TENANT/panel     # virtualhost layout
+```
+
+<Note>
+**`Loaded: not-found` alongside `Active: failed` is normal here**, not a fault. It is systemd's
+runtime memory of a unit whose file has gone; `reset-failed` clears it. Equally, a `status=143` exit
+in the journal is `128 + SIGTERM` — a clean stop, not a crash.
+</Note>
+
+### What this deliberately leaves alone
+
+**The database.** A tenant's routing, vendors, listeners, logins, call records and balances live
+there, not in the install directory — which is what makes a reinstall safe, and what makes dropping
+the database a separate decision:
+
+```bash
+sudo -u postgres dropdb fireflo_$TENANT     # not reversible
+```
+
+**The service account**, which may be shared with other services or be a real customer login. Remove
+it by hand only once you are sure nothing else uses it.
+
+**Firewall rules**, if the install used `--firewall`. Check `sudo ufw status numbered` for this
+tenant's SMPP range and HTTP port.
+
+### Reinstalling rather than removing
+
+Relocating an instance is not a `mv`. `fireflo.env` records its own absolute paths, and only some are
+rewritten by later verbs — `FIREFLO_CONF_DIR`, `FIREFLO_DATA_DIR` and `QUARKUS_LOG_FILE_PATH` are
+written by `install` alone. A moved install keeps writing its call records and logs to the old
+location while the new unit's `ReadWritePaths=` covers only the new one.
+
+Remove and reinstall instead. The database survives, so the fresh install omits `--bootstrap` — it
+refuses on a database that already has a routing table, a worker or a login.
