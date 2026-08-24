@@ -351,6 +351,7 @@
                   "fr/platform/install/control-panel",
                   "fr/platform/install/upgrading",
                   "fr/platform/install/multiple-instances",
+                  "fr/platform/install/new-tenant-checklist",
                   "fr/platform/install/clustering",
                   "fr/platform/install/faq"
                 ]
@@ -628,6 +629,7 @@
                   "es/platform/install/control-panel",
                   "es/platform/install/upgrading",
                   "es/platform/install/multiple-instances",
+                  "es/platform/install/new-tenant-checklist",
                   "es/platform/install/clustering",
                   "es/platform/install/faq"
                 ]
@@ -905,6 +907,7 @@
                   "pt/platform/install/control-panel",
                   "pt/platform/install/upgrading",
                   "pt/platform/install/multiple-instances",
+                  "pt/platform/install/new-tenant-checklist",
                   "pt/platform/install/clustering",
                   "pt/platform/install/faq"
                 ]
