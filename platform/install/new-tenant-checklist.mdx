@@ -1,0 +1,177 @@
+---
+title: "Adding one more tenant"
+description: "The whole recipe, in order, for a second customer on a host that already runs one: name, ports, database, both installers, TLS, and the first message."
+---
+
+[Several instances](/platform/install/multiple-instances) explains the mechanism — one `--tenant` word
+naming the same instance to both installers, and what `--vhost` buys. This page is the same information
+assembled into one run, for the moment you actually have a second customer to add.
+
+**Nothing here is shared with the tenants already on the host** except the packages, Java, Node and
+PostgreSQL themselves — see [What each instance needs of its
+own](/platform/install/multiple-instances#what-each-instance-needs-of-its-own). A new tenant gets its
+own database, its own ports, its own operational tokens and its own service account choice.
+
+<Steps>
+  <Step title="Pick the name and the layout">
+    One word, used **identically** on both installers — it is what lets `update` find the right
+    instance later without you re-typing paths.
+
+    ```bash
+    TENANT=acme
+    ```
+
+    Two layouts, pick one:
+
+    | | Command | Path |
+    | :--- | :--- | :--- |
+    | Flat (default) | `--tenant $TENANT` | `/srv/fireflo/$TENANT/{gateway,panel}` |
+    | Virtualhost | `--tenant $TENANT --vhost /home/$TENANT` | `/home/$TENANT/{gateway,panel}` |
+
+    Reach for `--vhost` when the tenant's own SSH or SFTP account already lives under `/home` — it is
+    what isolates the gateway from that account's files, not just a different path. See [A
+    virtualhost](/platform/install/multiple-instances#a-virtualhost).
+  </Step>
+
+  <Step title="Reserve ports">
+    Every existing tenant on the host already holds an SMPP port, an HTTP port and an ops port. Pick a
+    band the new one cannot collide with:
+
+    ```bash
+    --smpp-port-range 27801-27824 --http-port 8081 --ops-port 9001
+    ```
+
+    <Warning>
+    `--ops-port` is **never** opened in the firewall regardless of what you pass — it binds loopback
+    only. `--http-port` is what a customer's ESME or REST client actually reaches, so it is the one to
+    check against `ufw status` before choosing it.
+    </Warning>
+  </Step>
+
+  <Step title="Its own database">
+    One tenant, one database — never a schema shared with another tenant's rows.
+
+    ```bash
+    sudo -u postgres createuser fireflo_$TENANT --pwprompt
+    sudo -u postgres createdb fireflo_$TENANT --owner fireflo_$TENANT
+    ```
+
+    A separate role per tenant is not required — one `fireflo` role can own several databases — but it
+    means a leaked credential for one tenant cannot read another's. See [The
+    database](/platform/install/database).
+  </Step>
+
+  <Step title="Install the gateway">
+    ```bash
+    sudo ./scripts/fireflo-install install --tenant $TENANT \
+      --smpp-port-range 27801-27824 --http-port 8081 --ops-port 9001 \
+      --db-name fireflo_$TENANT --db-user fireflo_$TENANT --db-password-file /root/.acme-db-pw \
+      --config-source db --bootstrap \
+      --country Australia --country-code 61 --product standard --rate 0.0450 --currency AUD
+    ```
+
+    It asks first and shows you every decision before writing anything — add `--yes` only once you
+    trust the answer it would print. `--bootstrap` writes the least a fresh database needs: a `default`
+    routing table, an empty `MESSAGE` table, one SMPP listener, one login. Its generated password
+    prints **once**; capture it.
+
+    Full flag list at [`fireflo-install`](/reference/cli/fireflo-install).
+  </Step>
+
+  <Step title="Verify before adding anything">
+    ```bash
+    cd /srv/fireflo/$TENANT/gateway   # or the --vhost path
+    scripts/fireflo verify
+    ```
+
+    <Note>
+    **Exit code 4** here is expected and correct: the deployment is sound, it simply has nothing to
+    route to yet. It becomes 0 once a vendor and a rule exist, in the next step's follow-on — see
+    [First configuration](/platform/install/first-configuration).
+    </Note>
+  </Step>
+
+  <Step title="Install the panel">
+    ```bash
+    sudo ./scripts/fireflo-panel-install install --tenant $TENANT --port 3001 \
+      --config-url postgresql://fireflo_$TENANT:...@localhost/fireflo_$TENANT \
+      --public-url https://acme-panel.example.com \
+      --operator acme-admin
+    ```
+
+    <Warning>
+    **`--port` is never derived from `--tenant`.** It stays `3000` unless given explicitly, so a
+    second panel on the same host needs its own or the installer refuses rather than overwrite the
+    first tenant's unit.
+    </Warning>
+
+    Given `--tenant`, the panel installer reads this tenant's operational tokens and read-only database
+    connection out of *this tenant's* `fireflo.env` rather than a neighbour's — the same word is what
+    keeps a copy-pasted command from wiring one customer's panel to another's gateway.
+
+    <Warning>
+    `--config-url` is never derived, on purpose — it is the connection that can change what a customer
+    is billed. Without it the panel comes up read-only for this tenant.
+    </Warning>
+  </Step>
+
+  <Step title="TLS in front, one origin per tenant">
+    The panel speaks plain HTTP on `--port` (default 3000, and it must be **unique per tenant** on a
+    shared host — pass one explicitly for every tenant after the first). Put nginx or equivalent in
+    front, terminating TLS at a hostname of this tenant's own:
+
+    ```nginx
+    server {
+        listen 443 ssl;
+        server_name acme-panel.example.com;
+        location / {
+            proxy_pass http://127.0.0.1:3001;   # this tenant's --port
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+    `--public-url` above must match `server_name` exactly — it is written as `AUTH_URL`, and without it
+    a sign-out redirects to `localhost` regardless of what the proxy forwards. See [TLS in
+    front](/platform/install/control-panel#tls-in-front).
+  </Step>
+
+  <Step title="Finish the configuration">
+    `bootstrap` deliberately leaves out a vendor and a rate — nobody else can guess a vendor's
+    credentials, and an invented price bills silently where an absent one shows up unpriced. Add both,
+    then a routing rule naming the vendor, then this tenant's first customer login — in that order, and
+    why, at [First configuration](/platform/install/first-configuration).
+  </Step>
+
+  <Step title="Send one, as a customer would">
+    ```bash
+    FIREFLO_SEND_LOGIN=... FIREFLO_SEND_PASSWORD=... \
+      scripts/fireflo send AcmeBrand 61400000000 "first message"
+    ```
+
+    A `200` means accepted, charged and queued — watch the call record in this tenant's panel for the
+    delivery outcome.
+  </Step>
+</Steps>
+
+## What is genuinely new versus shared
+
+| | This tenant | The host |
+| :--- | :--- | :--- |
+| Database | New, own schema | — |
+| Ports (SMPP, HTTP, ops, panel) | New, non-overlapping | — |
+| Operational tokens | Generated fresh by this install | — |
+| Service account | Optional per tenant via `--user` | Can be shared |
+| Packages, Java, Node, PostgreSQL server | — | Already installed |
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Several instances on one host" icon="server" href="/platform/install/multiple-instances">
+    The mechanism `--tenant` and `--vhost` implement, and the update-is-a-lookup guarantee.
+  </Card>
+  <Card title="First configuration, in order" icon="list-check" href="/platform/install/first-configuration">
+    What `bootstrap` writes, and the order that makes the rest of it meaningful.
+  </Card>
+</CardGroup>

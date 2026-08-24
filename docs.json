@@ -73,6 +73,7 @@
                   "platform/install/control-panel",
                   "platform/install/upgrading",
                   "platform/install/multiple-instances",
+                  "platform/install/new-tenant-checklist",
                   "platform/install/clustering",
                   "platform/install/faq"
                 ]
