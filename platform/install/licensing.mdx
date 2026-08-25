@@ -1,0 +1,199 @@
+---
+title: "Licensing"
+description: "Activate a gateway, check its licence is current, and know what a lapsed one actually stops."
+---
+
+FireFlo is commercially licensed. From **0.8.5** every gateway carries a licence and checks it
+itself.
+
+<Note>
+**A lapsed licence does not stop your traffic.** Messages keep being accepted, routed, priced,
+billed and delivered. There is no licence check anywhere on the message path, and there is not going
+to be one — a fault in licensing must never take an SMS carrier off the air.
+</Note>
+
+## What a lapsed licence stops
+
+**Configuration changes being adopted.** The gateway keeps running on the configuration it last
+read, and a routing rule, rate, vendor or credential you change stops taking effect until the
+licence is current again. So a lapse costs you the ability to reconfigure and costs your customers
+nothing.
+
+Two supporting effects, both minor by comparison:
+
+- the operational endpoints answer **402**, except the licence routes and the health endpoint;
+- the control panel shows a banner pointing at **`/cp/verify`**.
+
+The gateway **still starts** when unlicensed and still carries traffic. It never refuses to boot.
+
+## Nothing changes on the day you upgrade
+
+An install that has never held a licence works normally for **14 days** from the moment it first
+starts. That applies to an upgrade as well as to a new install, so an estate can move to 0.8.5
+without anything changing on the day.
+
+The window is measured from a durable record. Restarting does not renew it.
+
+## Activating
+
+<Tabs>
+  <Tab title="Control panel">
+    Open **`/cp/verify`**, paste the licence key, press **Activate**.
+
+    The gateway keeps the key and renews itself from then on. A new licence takes effect on the next
+    configuration poll — **no restart is needed**.
+  </Tab>
+  <Tab title="On the server">
+    The path that works when the control panel is the thing that is broken, on a fresh install, or
+    on a box with no panel deployed at all.
+
+    ```bash
+    fireflo license status
+    fireflo license activate FFLO-XXXXX-XXXXX-XXXXX-XXXXX
+    fireflo license refresh
+    ```
+  </Tab>
+  <Tab title="No internet access">
+    For a gateway on a segmented network. On the server:
+
+    ```bash
+    FIREFLO_LICENSE_KEY=FFLO-… fireflo license offline
+    ```
+
+    Carry what it prints to the offline activation page on the licence server, and bring the signed
+    licence back:
+
+    ```bash
+    fireflo license offline <the-licence-it-gives-you>
+    ```
+
+    The same two halves are on `/cp/verify`, behind **This gateway has no internet access**.
+
+    <Warning>
+    The key goes in the environment rather than on the command line, so it does not land in shell
+    history or in `ps`.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Verifying a licence
+
+### The one command
+
+```bash
+fireflo license status
+```
+
+It names one of six states, and **exits 0 while configuration is being adopted** and 1 otherwise —
+so it can be used as a check in a script or a monitor without parsing the text.
+
+| State | Meaning | What to do |
+|---|---|---|
+| `active` | Current | Nothing |
+| `grace` | Lapsed, still working | `fireflo license refresh` before the date shown |
+| `setup` | Never activated, inside the 14-day window | Activate before it ends |
+| `expired` | Past grace — configuration frozen | `fireflo license refresh` |
+| `wrong_install` | Issued to a different installation | Release it in your account, then activate again |
+| `malformed` | The stored licence could not be read | Activate again with your key |
+
+### From the control panel
+
+`/cp/verify` shows the same state, with the installation id, the address the licence was issued
+against, the date it stays current until, and the date configuration would freeze. **Check again**
+re-reads it without changing anything.
+
+### From a monitor
+
+The gateway's health endpoint carries the same state and **keeps answering when unlicensed** — so
+"the panel says the gateway is unreachable" is never the diagnosis for a licence problem.
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://127.0.0.1:9001/ops/health | jq '.license'
+```
+
+### Proving a freeze is a freeze
+
+If you suspect configuration has stopped being adopted, the honest check is to change something and
+look at what the gateway believes, rather than at what the panel shows:
+
+1. `fireflo license status` — expect `expired`.
+2. Change a routing rule in the panel and save it.
+3. Ask the gateway to explain a message that rule would match. It still names the **old** rule.
+4. Send a real message. It is still submitted, priced and billed exactly as before.
+
+Steps 3 and 4 together are the whole design: configuration is frozen, traffic is not.
+
+## How long you have
+
+| | |
+|---|---|
+| Current | **14 days** from issue |
+| Grace | **7 days** after that, with a warning |
+| Total | **21 days** before configuration freezes |
+
+Both numbers are carried inside the licence, so they can be extended for one customer without a
+release.
+
+This is also the **revocation window**: a suspended licence keeps working until its current one
+lapses, at most 21 days. That is the cost of a gateway that does not have to ask anyone's permission
+to run, and it is why the licence is a fortnight rather than a year.
+
+## When the licence server is contacted
+
+Two moments, and no background poller.
+
+| Moment | What happens |
+|---|---|
+| **Service start** | One attempt. On failure the licence already stored still decides, so a licensed gateway starts licensed with the licence server unreachable. Boot is never blocked |
+| **`/cp` is opened** | If the licence is not current, opening the panel re-attempts and re-activates from the stored key if there is one |
+
+Plus one renewal attempt in the last few days before expiry, so an install nobody restarts and
+nobody looks at does not freeze without warning.
+
+The **state** is worked out continuously from what is already on disk. Only the network is
+event-driven, which is why the licence server being unreachable is survivable.
+
+## Identity: the address, and the installation
+
+A licence is keyed on the server's **IP address**, which the licence server observes from the
+connection. The gateway never sends one.
+
+Each install also has a stable **installation id**. It is what distinguishes "my server moved
+address" from "my licence is on a second box".
+
+| What happened | What the licence server does |
+|---|---|
+| The address changed, same installation | Re-binds itself. Nobody is paged |
+| The address changed, **different** installation | Refuses — this is a copied licence |
+| More than three re-binds in a day | Refuses until we raise it |
+
+<Warning>
+If you rebuild a server, **release the licence** in your account first. The rebuilt install has a
+new identity and would otherwise read as a copy.
+</Warning>
+
+An offline licence is bound to the **installation** rather than to an address, because the request
+reaches the licence server from a browser on a different network.
+
+## Settings
+
+| Setting | Environment variable | Default |
+|---|---|---|
+| `smsg.license.server.url` | `FIREFLO_LICENSE_SERVER_URL` | `https://verify.fireflo.au` |
+| `smsg.license.directory` | `FIREFLO_LICENSE_DIRECTORY` | `${FIREFLO_DATA_DIR}/license` |
+
+The server URL is **ordinary configuration, not a secret**. Pointing it elsewhere gains nothing: a
+substitute server cannot produce anything a gateway accepts, and the gateway simply never renews.
+
+The licence file is `0600` — it holds the licence key, which is a bearer credential. The record is
+also kept in the database, so an install that loses its data directory recovers its licence and its
+identity without anyone re-pasting a key.
+
+## If something is wrong
+
+Run `fireflo license status` first; the table above names the next step for each state. If the state
+is `active` and configuration still is not being adopted, the cause is not licensing — start at
+[First checks](/platform/troubleshooting/first-checks).
+
+Anything else: **support@fireflo.au**, quoting the installation id from `/cp/verify`.
