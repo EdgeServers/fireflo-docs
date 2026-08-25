@@ -1,0 +1,207 @@
+---
+title: "Licenciamento"
+description: "Ative um gateway, verifique se a licença está em dia, e saiba o que uma licença vencida realmente para."
+---
+
+O FireFlo é licenciado comercialmente. A partir da **0.8.5** todo gateway carrega uma licença e a
+verifica por conta própria.
+
+<Note>
+**Uma licença vencida não para o seu tráfego.** As mensagens continuam sendo aceitas, roteadas,
+precificadas, cobradas e entregues. Não há verificação de licença em nenhum ponto do caminho da
+mensagem, e não vai haver — uma falha no licenciamento nunca deve tirar uma operadora de SMS do ar.
+</Note>
+
+## O que uma licença vencida para
+
+**A adoção de mudanças de configuração.** O gateway continua rodando com a configuração que leu por
+último, e uma regra de roteamento, tarifa, fornecedor ou credencial que você mudar deixa de ter
+efeito até a licença estar em dia de novo. Ou seja, um vencimento custa a você a capacidade de
+reconfigurar e não custa nada aos seus clientes.
+
+Dois efeitos de apoio, ambos menores em comparação:
+
+- os endpoints operacionais respondem **402**, exceto as rotas de licença e o endpoint de health;
+- o painel de controle mostra um banner apontando para **`/cp/verify`**.
+
+O gateway **ainda inicia** sem licença e ainda carrega tráfego. Ele nunca se recusa a fazer boot.
+
+## Nada muda no dia em que você atualiza
+
+Uma instalação que nunca teve uma licença funciona normalmente por **14 dias** a partir do momento
+em que inicia pela primeira vez. Isso vale tanto para uma atualização quanto para uma instalação
+nova, então um parque inteiro pode migrar para a 0.8.5 sem que nada mude no dia.
+
+A janela é medida a partir de um registro durável. Reiniciar não a renova.
+
+## Ativando
+
+<Tabs>
+  <Tab title="Painel de controle">
+    Abra **`/cp/verify`**, cole a chave de licença, pressione **Activate**.
+
+    O gateway guarda a chave e se renova sozinho a partir daí. Uma licença nova entra em vigor no
+    próximo poll de configuração — **não é preciso restart**.
+  </Tab>
+  <Tab title="No servidor">
+    O caminho que funciona quando o painel de controle é justamente a coisa que está quebrada, em
+    uma instalação nova, ou em uma máquina sem painel algum instalado.
+
+    ```bash
+    fireflo license status
+    fireflo license activate FFLO-XXXXX-XXXXX-XXXXX-XXXXX
+    fireflo license refresh
+    ```
+  </Tab>
+  <Tab title="Sem acesso à internet">
+    Para um gateway em uma rede segmentada. No servidor:
+
+    ```bash
+    FIREFLO_LICENSE_KEY=FFLO-… fireflo license offline
+    ```
+
+    Leve o que ele imprimir até a página de ativação offline no servidor de licenças, e traga de
+    volta a licença assinada:
+
+    ```bash
+    fireflo license offline <a-licença-que-ele-devolver>
+    ```
+
+    As mesmas duas metades estão em `/cp/verify`, atrás de **This gateway has no internet access**.
+
+    <Warning>
+    A chave vai no ambiente em vez da linha de comando, para não parar no histórico do shell nem no
+    `ps`.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Verificando uma licença
+
+### O comando único
+
+```bash
+fireflo license status
+```
+
+Ele nomeia um de seis estados, e **sai com 0 enquanto a configuração está sendo adotada** e 1 caso
+contrário — então pode ser usado como checagem em um script ou em um monitor sem fazer parsing do
+texto.
+
+| Estado | Significado | O que fazer |
+|---|---|---|
+| `active` | Em dia | Nada |
+| `grace` | Vencida, ainda funcionando | `fireflo license refresh` antes da data mostrada |
+| `setup` | Nunca ativada, dentro da janela de 14 dias | Ative antes que ela termine |
+| `expired` | Passou do período de graça — configuração congelada | `fireflo license refresh` |
+| `wrong_install` | Emitida para outra instalação | Libere-a na sua conta e ative de novo |
+| `malformed` | A licença armazenada não pôde ser lida | Ative de novo com a sua chave |
+
+### Pelo painel de controle
+
+`/cp/verify` mostra o mesmo estado, com o id da instalação, o endereço para o qual a licença foi
+emitida, a data até a qual ela permanece em dia, e a data em que a configuração congelaria.
+**Check again** a relê sem mudar nada.
+
+### Por um monitor
+
+O endpoint de health do gateway carrega o mesmo estado e **continua respondendo sem licença** —
+então "o painel diz que o gateway está inacessível" nunca é o diagnóstico de um problema de licença.
+
+```bash
+curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
+  http://127.0.0.1:9001/ops/health | jq '.data.license'
+```
+
+Todo campo ali é seguro de logar e de alarmar — não carrega chave de licença nem segredo. Os dois
+que vale acompanhar são `verdict` e `days_until_frozen`: a contagem regressiva chega a zero no
+momento em que mudanças de configuração deixam de ser adotadas, e `configuration_adopted` diz se
+ainda estão sendo.
+
+### Provando que um congelamento é um congelamento
+
+Se você suspeita que a configuração parou de ser adotada, a checagem honesta é mudar alguma coisa e
+olhar o que o gateway acredita, em vez do que o painel mostra:
+
+1. `fireflo license status` — espere `expired`.
+2. Mude uma regra de roteamento no painel e salve.
+3. Peça ao gateway para explicar uma mensagem que essa regra casaria. Ele ainda nomeia a regra
+   **antiga**.
+4. Envie uma mensagem real. Ela ainda é submetida, precificada e cobrada exatamente como antes.
+
+Os passos 3 e 4 juntos são o design inteiro: a configuração está congelada, o tráfego não.
+
+## Quanto tempo você tem
+
+| | |
+|---|---|
+| Em dia | **14 dias** a partir da emissão |
+| Graça | **7 dias** depois disso, com um aviso |
+| Total | **21 dias** antes de a configuração congelar |
+
+Os dois números viajam dentro da licença, então podem ser estendidos para um cliente sem uma
+release.
+
+Esta também é a **janela de revogação**: uma licença suspensa continua funcionando até a atual
+vencer, no máximo 21 dias. Esse é o custo de um gateway que não precisa pedir permissão a ninguém
+para rodar, e é por isso que a licença dura uma quinzena em vez de um ano.
+
+## Quando o servidor de licenças é contatado
+
+Dois momentos, e nenhum poller em background.
+
+| Momento | O que acontece |
+|---|---|
+| **Start do serviço** | Uma tentativa. Em caso de falha, a licença já armazenada continua decidindo, então um gateway licenciado inicia licenciado mesmo com o servidor de licenças inacessível. O boot nunca é bloqueado |
+| **`/cp` é aberto** | Se a licença não está em dia, abrir o painel tenta de novo e reativa a partir da chave armazenada, se houver uma |
+
+Mais uma tentativa de renovação nos últimos dias antes da expiração, para que uma instalação que
+ninguém reinicia e ninguém olha não congele sem aviso.
+
+O **estado** é calculado continuamente a partir do que já está em disco. Só a rede é orientada a
+eventos, e é por isso que um servidor de licenças inacessível é sobrevivível.
+
+## Identidade: o endereço, e a instalação
+
+Uma licença é chaveada pelo **endereço IP** do servidor, que o servidor de licenças observa a partir
+da conexão. O gateway nunca envia um.
+
+Cada instalação também tem um **id de instalação** estável. É ele que distingue "meu servidor mudou
+de endereço" de "minha licença está em uma segunda máquina".
+
+| O que aconteceu | O que o servidor de licenças faz |
+|---|---|
+| O endereço mudou, mesma instalação | Se revincula sozinho. Ninguém é acionado |
+| O endereço mudou, instalação **diferente** | Recusa — isto é uma licença copiada |
+| Mais de três revinculações em um dia | Recusa até levantarmos o caso |
+
+<Warning>
+Se você reconstruir um servidor, **libere a licença** na sua conta primeiro. A instalação
+reconstruída tem uma identidade nova e, caso contrário, seria lida como uma cópia.
+</Warning>
+
+Uma licença offline é vinculada à **instalação** em vez de a um endereço, porque a requisição chega
+ao servidor de licenças a partir de um navegador em outra rede.
+
+## Configurações
+
+| Configuração | Variável de ambiente | Padrão |
+|---|---|---|
+| `smsg.license.server.url` | `FIREFLO_LICENSE_SERVER_URL` | `https://verify.fireflo.au` |
+| `smsg.license.directory` | `FIREFLO_LICENSE_DIRECTORY` | `${FIREFLO_DATA_DIR}/license` |
+
+A URL do servidor é **configuração comum, não um segredo**. Apontá-la para outro lugar não ganha
+nada: um servidor substituto não consegue produzir nada que um gateway aceite, e o gateway
+simplesmente nunca renova.
+
+O arquivo de licença é `0600` — ele guarda a chave de licença, que é uma credencial bearer. O
+registro também é mantido no banco, então uma instalação que perde seu diretório de dados recupera
+sua licença e sua identidade sem que ninguém cole uma chave de novo.
+
+## Se algo estiver errado
+
+Rode `fireflo license status` primeiro; a tabela acima nomeia o próximo passo para cada estado. Se o
+estado for `active` e a configuração ainda não estiver sendo adotada, a causa não é licenciamento —
+comece por [First checks](/platform/troubleshooting/first-checks).
+
+Qualquer outra coisa: **support@fireflo.au**, citando o id da instalação de `/cp/verify`.
