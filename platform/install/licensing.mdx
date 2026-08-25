@@ -109,8 +109,12 @@ The gateway's health endpoint carries the same state and **keeps answering when 
 
 ```bash
 curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
-  http://127.0.0.1:9001/ops/health | jq '.license'
+  http://127.0.0.1:9001/ops/health | jq '.data.license'
 ```
+
+Every field there is safe to log and to alarm on — it carries no licence key and no secret. The two
+worth watching are `verdict` and `days_until_frozen`: the countdown reaches zero at the moment
+configuration changes stop being adopted, and `configuration_adopted` says whether they still are.
 
 ### Proving a freeze is a freeze
 
