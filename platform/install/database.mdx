@@ -101,7 +101,7 @@ scripts/fireflo db migrate
   <Step title="Start the new version" />
 </Steps>
 
-The command runs against the JVM artefact's `lib/` layout, so a native deployment migrates from the
-JVM image or any host with a JDK.
+`db migrate` runs on both packagings. A native install migrates itself — the command is inside the
+gateway executable, so no JDK and no second artefact are needed.
 
 Keys and tables are at [Database configuration](/reference/config/database).

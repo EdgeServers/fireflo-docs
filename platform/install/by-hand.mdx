@@ -91,9 +91,13 @@ wholesale without touching anything you edited.
 ```
 
 <Warning>
-**The artefact is a directory, not a file.** `quarkus-run.jar` will not run without the `lib/`, `app/`
-and `quarkus/` directories beside it. Copying the jar alone produces a process that starts and then
-fails to find its classes.
+**If you built the JVM packaging, the artefact is a directory, not a file.** `quarkus-run.jar` will
+not run without the `lib/`, `app/` and `quarkus/` directories beside it. Copying the jar alone
+produces a process that starts and then fails to find its classes.
+
+A **native** build is the opposite: one executable, nothing beside it, and no Java on the host. That
+is what a [release tarball](/platform/install/getting-fireflo) contains, and the installer takes
+either.
 </Warning>
 
 ## The environment file
