@@ -109,7 +109,7 @@ El endpoint de salud del gateway lleva el mismo estado y **sigue respondiendo si
 
 ```bash
 curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
-  http://127.0.0.1:9001/ops/health | jq '.data.license'
+  http://127.0.0.1:9000/ops/health | jq '.data.license'
 ```
 
 Cada campo ahí es seguro de registrar y de alarmar sobre él. No lleva clave de licencia ni secreto alguno. Los dos
