@@ -1,0 +1,132 @@
+---
+title: "Obtener FireFlo"
+description: "Verifica la release que te enviaron, descomprímela, y sabe qué hay dentro antes de instalar."
+---
+
+FireFlo se entrega como un **tarball de release firmado**. Te envían un enlace de descarga; todo lo necesario
+para instalar el gateway está dentro, y el host no necesita herramientas de compilación ni código fuente.
+
+```text
+fireflo-<version>-linux-x86_64.tar.gz
+SHA256SUMS
+SHA256SUMS.asc                          (when the release is signed)
+```
+
+## Compruébalo antes de descomprimirlo
+
+<Steps>
+  <Step title="Confirma que la descarga está íntegra">
+```bash
+sha256sum -c SHA256SUMS
+```
+
+Espera `fireflo-<version>-linux-x86_64.tar.gz: OK`. Cualquier otra cosa significa que el archivo no llegó
+completo — descárgalo de nuevo en lugar de descomprimirlo.
+  </Step>
+  <Step title="Confirma que vino de nosotros">
+```bash
+gpg --verify SHA256SUMS.asc SHA256SUMS
+```
+
+Espera una firma válida de la clave de release de FireFlo. **Hazlo incluso cuando el checksum haya pasado.**
+
+<Warning>
+Un checksum servido desde el mismo lugar que el tarball prueba que la transferencia funcionó y nada más.
+Cualquiera capaz de reemplazar el archivo puede reemplazar el checksum que está al lado. Solo la firma dice quién
+lo construyó.
+
+Si tu release llegó sin un archivo `.asc`, pídenos uno antes de instalar en cualquier cosa que vaya a
+llevar tráfico de clientes.
+</Warning>
+  </Step>
+  <Step title="Descomprime">
+```bash
+tar -xzf fireflo-<version>-linux-x86_64.tar.gz
+cd fireflo-<version>-linux-x86_64
+```
+  </Step>
+</Steps>
+
+## Qué hay dentro
+
+| | |
+| :--- | :--- |
+| `gateway/fireflo-gateway` | El gateway en sí, como un único ejecutable |
+| `scripts/fireflo` | La línea de comandos del operador |
+| `scripts/fireflo-install` | El instalador |
+| `conf.example/` | Configuración de ejemplo, copiada en la primera instalación y nunca sobrescrita después |
+| `MANIFEST` | La versión exacta, el commit y la plataforma desde los que se construyó este tarball |
+| `README.md`, `CHANGELOG.md` | |
+
+**Lee `MANIFEST` primero.** Nombra la versión y la plataforma para las que se compiló el binario, y es
+la forma más rápida de confirmar que te enviaron lo que esperabas.
+
+<Note>
+**No se requiere Java.** El gateway lleva su propio runtime, y los comandos del operador también —
+`fireflo db migrate`, `fireflo license activate` y el resto se ejecutan desde el mismo ejecutable. No
+necesitas un JDK en este host para ejecutar FireFlo, solo para compilarlo desde el código fuente, cosa que no estás haciendo.
+</Note>
+
+<Warning>
+**El binario está compilado para una sola arquitectura.** Un tarball llamado `linux-x86_64` no correrá en un host
+arm64. El instalador rechaza un binario que esta máquina no puede ejecutar en lugar de instalarlo y
+fallar en el primer arranque, pero es más rápido comparar el nombre del archivo con `uname -m` primero.
+</Warning>
+
+## Instalar
+
+El gateway y el control panel son instalaciones separadas y ambas se ejecutan desde este directorio.
+
+<Steps>
+  <Step title="Comprueba el host">
+```bash
+./scripts/fireflo-install check
+```
+
+No cambia nada. Informa si este host tiene lo que necesita — y en una release como esta te
+dirá que Java no es necesario.
+  </Step>
+  <Step title="Instala el gateway">
+```bash
+sudo ./scripts/fireflo-install install --from ./gateway
+```
+
+`--from ./gateway` nombra el ejecutable en este tarball. Todo lo que el instalador pregunta y todo lo que
+rechaza está en [Instalar con un comando](/platform/install/one-command).
+  </Step>
+  <Step title="Instala el control panel">
+Solo si tu release incluyó un directorio `panel/`. Consulta
+[Control panel](/platform/install/control-panel).
+  </Step>
+  <Step title="Activa la licencia">
+```bash
+FIREFLO_LICENSE_KEY=<your-licence-key> scripts/fireflo license activate
+```
+
+La clave va en el entorno y nunca en la línea de comandos, así que no acaba en tu historial
+del shell ni en `ps`. El detalle completo, incluida la activación sin acceso a internet, está en
+[Licenciamiento](/platform/install/licensing).
+  </Step>
+</Steps>
+
+## Actualizar más adelante
+
+Las releases posteriores llegan de la misma forma: verificar, descomprimir, y apuntar `update` al nuevo tarball.
+
+```bash
+sudo ./scripts/fireflo-install update --from ./gateway
+```
+
+`update` nunca toca tu directorio de configuración, y conserva la versión anterior para que un rollback sea
+un solo comando. Consulta [Actualización](/platform/install/upgrading).
+
+## Compilar desde el código fuente en su lugar
+
+Si tienes una licencia de código fuente puedes compilar el gateway tú mismo e instalar lo que compilaste — el
+instalador acepta cualquiera de los dos empaquetados. Ese camino es [A mano](/platform/install/by-hand); esta página es la
+que debes seguir si te enviaron un tarball.
+
+## Algo va mal con la release
+
+Si la firma no se verifica, si `MANIFEST` nombra una versión que no esperabas, o si la
+descarga no pasa las comprobaciones, **detente y contáctanos** en lugar de instalarla: support@fireflo.au.

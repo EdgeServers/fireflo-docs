@@ -624,6 +624,7 @@
               {
                 "group": "Install and run",
                 "pages": [
+                  "es/platform/install/getting-fireflo",
                   "es/platform/install/one-command",
                   "es/platform/install/by-hand",
                   "es/platform/install/database",
@@ -903,6 +904,7 @@
               {
                 "group": "Install and run",
                 "pages": [
+                  "pt/platform/install/getting-fireflo",
                   "pt/platform/install/one-command",
                   "pt/platform/install/by-hand",
                   "pt/platform/install/database",
