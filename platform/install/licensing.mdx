@@ -49,9 +49,19 @@ The window is measured from a durable record. Restarting does not renew it.
 
     ```bash
     fireflo license status
-    fireflo license activate FFLO-XXXXX-XXXXX-XXXXX-XXXXX
+    FIREFLO_LICENSE_KEY=FFLO-XXXXX-XXXXX-XXXXX-XXXXX fireflo license activate
     fireflo license refresh
     ```
+
+    <Warning>
+    **Put the key in the environment, not on the command line.** A licence key typed as an argument
+    is written to your shell history and is visible in `ps` to every other user on the host for as
+    long as the command runs.
+
+    `activate` prefers `FIREFLO_LICENSE_KEY` and falls back to an argument, so the older form still
+    works — it is just the one that leaks. Run `activate` with neither and it tells you the same
+    thing.
+    </Warning>
   </Tab>
   <Tab title="No internet access">
     For a gateway on a segmented network. On the server:

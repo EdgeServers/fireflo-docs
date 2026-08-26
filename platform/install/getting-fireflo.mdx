@@ -1,0 +1,132 @@
+---
+title: "Getting FireFlo"
+description: "Verify the release you were sent, unpack it, and know what is inside before you install."
+---
+
+FireFlo is delivered as a **signed release tarball**. You are sent a download link; everything needed
+to install the gateway is inside it, and the host needs no build tools and no source code.
+
+```text
+fireflo-<version>-linux-x86_64.tar.gz
+SHA256SUMS
+SHA256SUMS.asc                          (when the release is signed)
+```
+
+## Check it before you unpack it
+
+<Steps>
+  <Step title="Confirm the download is intact">
+```bash
+sha256sum -c SHA256SUMS
+```
+
+Expect `fireflo-<version>-linux-x86_64.tar.gz: OK`. Anything else means the file did not arrive
+whole — download it again rather than unpacking it.
+  </Step>
+  <Step title="Confirm it came from us">
+```bash
+gpg --verify SHA256SUMS.asc SHA256SUMS
+```
+
+Expect a good signature from the FireFlo release key. **Do this even when the checksum passed.**
+
+<Warning>
+A checksum served from the same place as the tarball proves the transfer worked and nothing more.
+Anyone able to replace the file can replace the checksum beside it. Only the signature says who
+built it.
+
+If your release came without a `.asc` file, ask us for one before installing on anything that will
+carry customer traffic.
+</Warning>
+  </Step>
+  <Step title="Unpack">
+```bash
+tar -xzf fireflo-<version>-linux-x86_64.tar.gz
+cd fireflo-<version>-linux-x86_64
+```
+  </Step>
+</Steps>
+
+## What is inside
+
+| | |
+| :--- | :--- |
+| `gateway/fireflo-gateway` | The gateway itself, as a single executable |
+| `scripts/fireflo` | The operator command line |
+| `scripts/fireflo-install` | The installer |
+| `conf.example/` | Sample configuration, copied on first install and never overwritten after |
+| `MANIFEST` | The exact version, commit and platform this tarball was built from |
+| `README.md`, `CHANGELOG.md` | |
+
+**Read `MANIFEST` first.** It names the version and the platform the binary was compiled for, and it
+is the fastest way to confirm you were sent what you expected.
+
+<Note>
+**No Java is required.** The gateway carries its own runtime, and so do the operator commands —
+`fireflo db migrate`, `fireflo license activate` and the rest all run from the same executable. You
+do not need a JDK on this host to run FireFlo, only to build it from source, which you are not doing.
+</Note>
+
+<Warning>
+**The binary is compiled for one architecture.** A tarball named `linux-x86_64` will not run on an
+arm64 host. The installer refuses a binary this machine cannot execute rather than installing it and
+failing at first start, but it is quicker to check the filename against `uname -m` first.
+</Warning>
+
+## Install
+
+The gateway and the control panel are separate installs and both are run from this directory.
+
+<Steps>
+  <Step title="Check the host">
+```bash
+./scripts/fireflo-install check
+```
+
+Changes nothing. Reports whether this host has what it needs — and on a release like this one it
+will tell you Java is not required.
+  </Step>
+  <Step title="Install the gateway">
+```bash
+sudo ./scripts/fireflo-install install --from ./gateway
+```
+
+`--from ./gateway` names the executable in this tarball. Everything the installer asks and everything
+it refuses is on [Install in one command](/platform/install/one-command).
+  </Step>
+  <Step title="Install the control panel">
+Only if your release included a `panel/` directory. See
+[Control panel](/platform/install/control-panel).
+  </Step>
+  <Step title="Activate the licence">
+```bash
+FIREFLO_LICENSE_KEY=<your-licence-key> scripts/fireflo license activate
+```
+
+The key goes in the environment and never on the command line, so it does not land in your shell
+history or in `ps`. Full detail, including activation without internet access, is on
+[Licensing](/platform/install/licensing).
+  </Step>
+</Steps>
+
+## Upgrading later
+
+Later releases arrive the same way: verify, unpack, then point `update` at the new tarball.
+
+```bash
+sudo ./scripts/fireflo-install update --from ./gateway
+```
+
+`update` never touches your configuration directory, and keeps the previous version so a rollback is
+one command. See [Upgrading](/platform/install/upgrading).
+
+## Building from source instead
+
+If you hold a source licence you can build the gateway yourself and install what you built — the
+installer takes either packaging. That path is [By hand](/platform/install/by-hand); this page is the
+one to follow if you were sent a tarball.
+
+## Something wrong with the release
+
+If the signature does not verify, if `MANIFEST` names a version you did not expect, or if the
+download will not check out, **stop and contact us** rather than installing it: support@fireflo.au.

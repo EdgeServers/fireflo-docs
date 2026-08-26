@@ -65,6 +65,7 @@
               {
                 "group": "Install and run",
                 "pages": [
+                  "platform/install/getting-fireflo",
                   "platform/install/one-command",
                   "platform/install/by-hand",
                   "platform/install/database",
