@@ -110,7 +110,7 @@ então "o painel diz que o gateway está inacessível" nunca é o diagnóstico d
 
 ```bash
 curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \
-  http://127.0.0.1:9001/ops/health | jq '.data.license'
+  http://127.0.0.1:9000/ops/health | jq '.data.license'
 ```
 
 Todo campo ali é seguro de logar e de alarmar — não carrega chave de licença nem segredo. Os dois
