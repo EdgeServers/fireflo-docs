@@ -20,6 +20,11 @@ La mitad de solo lectura del panel funciona sin ella; simplemente no tiene nada 
 
 ## Crearla
 
+Instala primero el servidor si el host no tiene ninguno —
+[`setup.sh`](/platform/install/prepare-a-host) lo hace y ahí se detiene deliberadamente, porque un
+script que acuña la contraseña de tu base de datos es un script que ha escrito una credencial en disco
+en tu nombre. El rol y la base de datos te corresponde crearlos a ti:
+
 ```bash
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo
@@ -101,7 +106,7 @@ scripts/fireflo db migrate
   <Step title="Arranca la nueva versión" />
 </Steps>
 
-El comando corre contra la disposición `lib/` del artefacto JVM, así que un despliegue nativo migra desde la
-imagen JVM o cualquier host con un JDK.
+`db migrate` corre en ambos empaquetados. Una instalación nativa se migra a sí misma — el comando está
+dentro del ejecutable del gateway, así que no se necesitan ni un JDK ni un segundo artefacto.
 
 Las claves y tablas están en [Configuración de base de datos](/reference/config/database).

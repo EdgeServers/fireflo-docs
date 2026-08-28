@@ -16,11 +16,30 @@ Installe et met à niveau la **passerelle**. Le panneau de contrôle a son propr
 | `service` | Génère le script de démarrage et l'unité sur une installation existante, et la démarre | Le répertoire de conf |
 | `rollback` | Restaure l'artefact précédent | Le répertoire de conf |
 
+<Note>
+**« Paquets » désigne les dépendances propres de l'installateur, pas les services auxquels FireFlo
+parle.** Il installe `curl`, `openssl`, `rsync`, `python3` et le **client** PostgreSQL — jamais un
+serveur PostgreSQL, jamais un broker, et jamais Node. Sur un hôte nu, lancez d'abord
+[`setup.sh`](/platform/install/prepare-a-host).
+</Note>
+
 <Warning>
 **`install` refuse lorsqu'un répertoire de configuration existe déjà**, plutôt que de frapper une
 seconde paire de jetons opérationnels par-dessus la première. Si vous avez la configuration mais
 pas le service, le verbe que vous voulez est `service`, pas `install`.
+
+Ce refus se déclenche sur `$CONF_DIR/fireflo.env`, donc il ne s'active **pas** quand vous installez
+le même tenant à un chemin *différent*. Une telle exécution va jusqu'à générer une seconde paire de
+jetons avant que l'étape de l'unité ne refuse sur la collision de noms. Supprimez d'abord l'ancienne
+installation — voir [Suppression d'un
+tenant](/platform/install/multiple-instances#removing-a-tenant).
 </Warning>
+
+<Note>
+**Il n'y a pas de verbe `uninstall`.** La suppression est manuelle, et un tenant représente plus
+d'unités qu'il n'y paraît : la passerelle écrit `fireflo-<name>.service` plus une paire
+`-logclean.timer` et `-logclean.service`.
+</Note>
 
 ## Options qui valent la peine d'être connues
 

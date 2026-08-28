@@ -6,6 +6,13 @@ description: "Ubuntu 24.04 do zero: os dois runtimes que o Ubuntu não fornece, 
 O que o [`fireflo-install`](/platform/install/one-command) automatiza. Leia isto se você mesmo estiver
 empacotando o FireFlo, ou se uma etapa do instalador falhou e você precisa saber o que ela fazia.
 
+<Note>
+**Os pré-requisitos abaixo estão automatizados em um script.** O
+[`setup.sh`](/platform/install/prepare-a-host) instala PostgreSQL, RabbitMQ e Node no Ubuntu e no
+Debian, e Java atrás de `--with-java`. Esta página é a versão por extenso — leia-a para saber o que
+aquele script faz, ou para fazer isso em uma distribuição que ele recusa.
+</Note>
+
 ## Pré-requisitos
 
 - **Java 25.** O build tem como alvo o release 25 e **não roda no 21**.
@@ -91,9 +98,13 @@ artefato inteiro sem tocar em nada que você editou.
 ```
 
 <Warning>
-**O artefato é um diretório, não um arquivo.** O `quarkus-run.jar` não roda sem os diretórios `lib/`,
-`app/` e `quarkus/` ao seu lado. Copiar apenas o jar produz um processo que inicia e depois falha ao
-não encontrar suas classes.
+**Se você construiu o empacotamento JVM, o artefato é um diretório, não um arquivo.** O
+`quarkus-run.jar` não roda sem os diretórios `lib/`, `app/` e `quarkus/` ao seu lado. Copiar apenas o
+jar produz um processo que inicia e depois falha ao não encontrar suas classes.
+
+Um build **nativo** é o oposto: um executável, nada ao seu lado, e nenhum Java no host. É isso que um
+[tarball de release](/platform/install/getting-fireflo) contém, e o instalador aceita qualquer um dos
+dois.
 </Warning>
 
 ## O arquivo de ambiente

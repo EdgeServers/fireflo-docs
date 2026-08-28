@@ -7,6 +7,13 @@ Ce que [`fireflo-install`](/platform/install/one-command) automatise. Lisez ceci
 FireFlo vous-même, ou si une étape de l'installateur a échoué et que vous avez besoin de savoir ce
 qu'elle faisait.
 
+<Note>
+**Les prérequis ci-dessous sont scriptés.** [`setup.sh`](/platform/install/prepare-a-host) installe
+PostgreSQL, RabbitMQ et Node sur Ubuntu et Debian, et Java derrière `--with-java`. Cette page est la
+version longue — lisez-la pour savoir ce que fait ce script, ou pour le faire sur une distribution
+qu'il refuse.
+</Note>
+
 ## Prérequis
 
 - **Java 25.** La compilation cible la version 25 et **ne fonctionnera pas sur 21**.
@@ -94,9 +101,13 @@ puisse remplacer l'artefact en bloc sans toucher à ce que vous avez édité.
 ```
 
 <Warning>
-**L'artefact est un répertoire, pas un fichier.** `quarkus-run.jar` ne s'exécutera pas sans les
-répertoires `lib/`, `app/` et `quarkus/` à ses côtés. Copier le jar seul produit un processus qui
-démarre puis échoue à trouver ses classes.
+**Si vous avez compilé l'empaquetage JVM, l'artefact est un répertoire, pas un fichier.**
+`quarkus-run.jar` ne s'exécutera pas sans les répertoires `lib/`, `app/` et `quarkus/` à ses côtés.
+Copier le jar seul produit un processus qui démarre puis échoue à trouver ses classes.
+
+Un build **natif** est l'inverse : un seul exécutable, rien à ses côtés, et pas de Java sur l'hôte.
+C'est ce que contient un [tarball de release](/platform/install/getting-fireflo), et l'installateur
+accepte les deux.
 </Warning>
 
 ## Le fichier d'environnement
