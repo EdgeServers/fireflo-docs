@@ -1,0 +1,146 @@
+---
+title: "Preparar un host"
+description: "setup.sh instala PostgreSQL, RabbitMQ y Node en Ubuntu o Debian, y se detiene antes de cualquier cosa para la que tendría que inventar una contraseña."
+---
+
+`fireflo-install` instala el gateway. **No** instala los servicios con los que el gateway habla —
+su paso de paquetes añade el *cliente* de PostgreSQL y ningún servidor, y nunca menciona un broker. Así
+que en un host desde cero hay un paso entre descomprimir el tarball y ejecutar el instalador.
+
+`setup.sh` es ese paso. Vive en el
+[repositorio de releases](https://github.com/EdgeServers/fireflo-releases), no dentro del tarball, así
+que puede leerse antes de descargar nada.
+
+```bash
+sudo ./setup.sh --dry-run     # lee lo que haría
+sudo ./setup.sh
+```
+
+<Note>
+**Léelo antes de ejecutarlo.** Es un único archivo de shell plano sin ninguna descarga de red salvo los
+instaladores de NodeSource y Adoptium que nombra, y estás a punto de ejecutarlo como root. No está
+firmado — tampoco lo están los tarballs de release.
+</Note>
+
+## Qué instala
+
+| | |
+| :--- | :--- |
+| **PostgreSQL** | 14 o superior, de la distribución. Habilitado |
+| **RabbitMQ** | De la distribución. Habilitado |
+| **Node 22** | De NodeSource, para el panel de control. Ubuntu trae 18, sobre el que Next.js no funciona |
+| **Java** | **No** — salvo que pases `--with-java` |
+
+Java está desactivado por defecto porque el gateway distribuido es un **binario nativo y no abre ningún
+JDK**. `fireflo-install` lo dice él mismo y lo omite. Pasa `--with-java` solo si pretendes compilar
+desde el código fuente; añade el repositorio de Adoptium y `temurin-25-jdk`.
+
+| Flag | |
+| :--- | :--- |
+| `--with-java` | Añade Temurin JDK 25 |
+| `--no-node` | Host solo para el gateway, sin panel de control |
+| `--no-postgres`, `--no-rabbitmq` | Omite uno que ya ejecutas en otro lugar |
+| `--dry-run` | Imprime cada comando, no cambia nada |
+| `--yes` | No preguntar |
+
+## Qué no hace deliberadamente
+
+<Warning>
+**No crea ninguna base de datos, ningún rol y ninguna contraseña**, ni usuario o vhost de RabbitMQ.
+
+Instalar un paquete es impersonal y reversible. Acuñar una credencial y escribirla en disco no es
+ninguna de las dos cosas, y no es una decisión que un script de preparación deba tomar por ti. Créalos
+tú mismo — el script imprime los comandos cuando termina.
+</Warning>
+
+```bash
+sudo -u postgres createuser --pwprompt fireflo
+sudo -u postgres createdb --owner=fireflo fireflo
+```
+
+Luego entrégale a `fireflo-install` la contraseña **en un archivo**, nunca como argumento — un argumento
+es una contraseña en tu historial del shell y en la salida de `ps`:
+
+```bash
+sudo ./scripts/fireflo-install install --from ./gateway \
+    --config-source db --bootstrap \
+    --db-name fireflo --db-user fireflo --db-password-file /root/fireflo-db.pw
+```
+
+RabbitMQ se queda con su cuenta `guest` por defecto, que el propio broker restringe a loopback — el
+valor por defecto correcto, y el único que no necesita ningún secreto. Para usarlo:
+
+```text
+--broker-uri amqp://guest:guest@127.0.0.1:5672/%2F
+```
+
+Sin broker la cola está en memoria y un reinicio descarta lo que no haya llegado a un proveedor. Ese es
+el comportamiento por defecto del gateway y un intercambio real, no un descuido — consulta
+[Colas](/platform/operations/queues).
+
+Tampoco instala ningún usuario de servicio, ninguna unidad systemd, ninguna regla de firewall ni
+configuración. Esas son de `fireflo-install`, que las hace con cuidado.
+
+## Dónde se niega
+
+Se niega en lugar de improvisar, en tres lugares, y cada negativa es más barata que lo que evita.
+
+<AccordionGroup>
+  <Accordion title="Una release de distribución no reconocida">
+NodeSource y Adoptium publican **por codename**. Escribir una fuente de apt para una suite que ellos no
+publican no falla en el momento — falla en el siguiente `apt update`, para cada paquete del host, y lo
+encuentra semanas después alguien que nunca ejecutó este script.
+
+Conocidas: Ubuntu `focal`, `jammy`, `noble`, `plucky`; Debian `bullseye`, `bookworm`, `trixie`.
+Cualquier otra cosa es una negativa que nombra qué instalar a mano.
+  </Accordion>
+  <Accordion title="PostgreSQL anterior a 14">
+Debian 11 trae PostgreSQL 13. Instalarlo te daría un servidor contra el que las migraciones fallan *a
+mitad de camino*, lo que deja una base de datos migrada a medias en lugar de una negativa limpia. El
+script nombra PGDG en su lugar.
+
+Un servidor existente por debajo de 14 también es una negativa: actualizar un servidor con datos dentro
+no es algo que un script de preparación deba hacerte.
+  </Accordion>
+  <Accordion title="Ni Ubuntu ni Debian">
+Todo lo que hace es un simple `apt install`. En otra distribución, hazlo a mano — la cabecera del
+script lista exactamente qué.
+  </Accordion>
+</AccordionGroup>
+
+## Ejecutarlo en un contenedor
+
+Un host sin systemd — un build de Docker, un chroot, un contenedor LXC — no puede habilitar un
+servicio. El script lo informa, instala los paquetes de todos modos, y continúa; inícialos tú mismo, o
+habilítalos cuando la imagen arranque.
+
+```bash
+pg_ctlcluster 16 main start
+```
+
+## Después
+
+<Steps>
+  <Step title="Crea la base de datos">
+Como arriba. El script no lo hace.
+  </Step>
+  <Step title="Comprueba el host">
+```bash
+./scripts/fireflo-install check
+```
+
+No cambia nada. Espera `Ready.`
+  </Step>
+  <Step title="Confirma que el gateway puede alcanzar la base de datos">
+```bash
+scripts/fireflo db test
+```
+
+Espera alcanzable, autenticado, privilegios OK, y un recuento de migraciones pendientes. Esta es la
+comprobación que vale la pena ejecutar — `fireflo-install check` en modo archivo nunca abre la base de
+datos en absoluto.
+  </Step>
+  <Step title="Instala">
+[Instalar en un comando](/platform/install/one-command).
+  </Step>
+</Steps>

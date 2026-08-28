@@ -79,6 +79,13 @@ d'échouer au premier démarrage, mais il est plus rapide de comparer le nom de 
 Le gateway et le control panel sont des installations séparées et les deux se lancent depuis ce répertoire.
 
 <Steps>
+  <Step title="Préparez l'hôte, si c'est un hôte nu">
+L'installateur n'installe **pas** PostgreSQL, RabbitMQ ni Node — il ajoute le *client* PostgreSQL et
+aucun serveur. Sur un hôte qui n'a aucun des trois, lancez d'abord
+[`setup.sh`](/platform/install/prepare-a-host) et créez une base de données.
+
+Sautez ceci si ces services tournent déjà, ici ou ailleurs.
+  </Step>
   <Step title="Vérifiez l'hôte">
 ```bash
 ./scripts/fireflo-install check

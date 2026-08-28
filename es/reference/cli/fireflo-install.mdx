@@ -16,11 +16,28 @@ Instala y actualiza el **gateway**. El panel de control tiene su propio instalad
 | `service` | Genera el script de arranque y la unidad sobre una instalación existente, y la inicia | El directorio de configuración |
 | `rollback` | Restaura el artefacto anterior | El directorio de configuración |
 
+<Note>
+**"Paquetes" significa las dependencias propias del instalador, no los servicios con los que FireFlo
+habla.** Instala `curl`, `openssl`, `rsync`, `python3` y el **cliente** de PostgreSQL — nunca un
+servidor PostgreSQL, nunca un broker, y nunca Node. En un host desde cero, ejecuta primero
+[`setup.sh`](/platform/install/prepare-a-host).
+</Note>
+
 <Warning>
 **`install` se niega cuando ya existe un directorio de configuración**, en lugar de crear un segundo
 par de tokens operacionales sobre el primero. Si tienes configuración pero no servicio, el verbo que
 quieres es `service`, no `install`.
+
+Esa negativa se basa en `$CONF_DIR/fireflo.env`, así que **no** se dispara cuando instalas el mismo
+tenant en una ruta *distinta*. Tal ejecución llega hasta generar un segundo par de tokens antes de que
+el paso de la unidad se niegue por la colisión de nombres. Elimina primero la instalación antigua —
+consulta [Eliminar un tenant](/platform/install/multiple-instances#removing-a-tenant).
 </Warning>
+
+<Note>
+**No hay verbo `uninstall`.** La eliminación es manual, y un tenant son más unidades de lo que parece:
+el gateway escribe `fireflo-<name>.service` más un par `-logclean.timer` y `-logclean.service`.
+</Note>
 
 ## Opciones que vale la pena conocer
 

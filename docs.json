@@ -346,6 +346,8 @@
               {
                 "group": "Install and run",
                 "pages": [
+                  "fr/platform/install/getting-fireflo",
+                  "fr/platform/install/prepare-a-host",
                   "fr/platform/install/one-command",
                   "fr/platform/install/by-hand",
                   "fr/platform/install/database",
@@ -626,6 +628,7 @@
                 "group": "Install and run",
                 "pages": [
                   "es/platform/install/getting-fireflo",
+                  "es/platform/install/prepare-a-host",
                   "es/platform/install/one-command",
                   "es/platform/install/by-hand",
                   "es/platform/install/database",
@@ -906,6 +909,7 @@
                 "group": "Install and run",
                 "pages": [
                   "pt/platform/install/getting-fireflo",
+                  "pt/platform/install/prepare-a-host",
                   "pt/platform/install/one-command",
                   "pt/platform/install/by-hand",
                   "pt/platform/install/database",

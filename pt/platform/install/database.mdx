@@ -20,6 +20,11 @@ A metade somente-leitura do painel funciona sem ele; só não tem nada para alte
 
 ## Criando
 
+Instale o servidor primeiro se o host não tiver nenhum —
+o [`setup.sh`](/platform/install/prepare-a-host) faz isso e deliberadamente para por aí, porque um
+script que cunha a senha do seu banco é um script que escreveu uma credencial em disco em seu nome. A
+role e o banco são seus para criar:
+
 ```bash
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo
@@ -103,7 +108,7 @@ scripts/fireflo db migrate
   <Step title="Inicie a nova versão" />
 </Steps>
 
-O comando roda contra o layout `lib/` do artefato JVM, então um deployment nativo migra a partir da
-imagem JVM ou qualquer host com um JDK.
+`db migrate` roda em ambos os empacotamentos. Uma instalação nativa migra a si mesma — o comando está
+dentro do executável do gateway, então nenhum JDK e nenhum segundo artefato são necessários.
 
 Chaves e tabelas estão em [Database configuration](/reference/config/database).
