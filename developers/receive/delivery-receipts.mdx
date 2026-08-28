@@ -78,8 +78,30 @@ entirely. Switch on it only if you asked for `1` or `3`.
 telling apart — expiry is a handset that was off for a day, rejection is usually a refusal you can
 act on.
 
-**There is no `err` field.** Jasmin sends one; FireFlo's resolver is handed only the delivery state
-and never an error code, so emitting one would mean inventing it.
+## `err` says why it failed
+
+Sent alongside `stat` when something reported a failure code, and **omitted when nothing did** — so
+a delivered message usually carries no `err` at all, and its absence means "we were not told" rather
+than "no error".
+
+It is the same value the SMPP `err:` field carries for the same failure, so receipts over a webhook
+and receipts over SMPP agree.
+
+<Warning>
+**Not every `err` is a code you can look up.** Where your provider has mapped a carrier's code onto
+FireFlo's own set, you get the FireFlo code, and the same number means the same cause across
+carriers.
+
+Where they have not, you get `018` — unknown — which is the default and tells you nothing. Your
+provider can enable pass-through per carrier, and then you get **the carrier's own number,
+unchanged** instead. That is far more useful, but carriers number failures privately, so `630` from
+one is unrelated to `630` from another.
+
+Treat a value you do not recognise as opaque: log it, and quote it when you raise a query.
+</Warning>
+
+`err` was added after this payload was first published, so receipts you have on file from earlier
+will not carry it.
 
 ## The `vendor` field is absent unless your provider enables it
 

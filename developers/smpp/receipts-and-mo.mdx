@@ -31,6 +31,30 @@ id:7a2a5b6c-… sub:001 dlvrd:001 submit date:2608190859 done date:2608190859 st
 `REJECTD`, `FAILED`, `BUFFRED`, `SEEN`. `EXPIRED`, `REJECTD` and `UNDELIV` all bill as failures but
 mean different things.
 
+## `err` and why it may be a number you do not recognise
+
+`err` is the failure code. `000` on a delivered message; something else when a carrier reported a
+reason.
+
+Historically **every code FireFlo did not already know became `018`, "unknown"** — so a carrier that
+took the trouble to say exactly what went wrong had that answer replaced with the one value nobody
+can act on. That no longer happens.
+
+What you now receive depends on what your provider has configured for the carrier that carried the
+message:
+
+| | What you get |
+| :--- | :--- |
+| The carrier's code is mapped | FireFlo's own code for that cause. The same number means the same thing whichever carrier the message went through, which is what makes `err` worth parsing |
+| It is not mapped | **The carrier's own number, unchanged** — because it is information, and `018` is not |
+
+<Warning>
+**Do not assume every `err` is in FireFlo's documented set.** Carriers number failures privately, so
+`630` from one is unrelated to `630` from another. Parse the codes you know, treat the rest as
+opaque, and quote the value when you raise a query — your provider can tell you what that carrier
+means by it, and map it so you get a stable code next time.
+</Warning>
+
 <Tip>
 **`ACCEPTD` and `BUFFRED` are not outcomes.** Another receipt follows. If you asked for intermediate
 notifications with `registered_delivery` bit 4, your handler must wait for a final state rather than

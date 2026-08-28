@@ -22,7 +22,8 @@ A `POST` with `Content-Type: application/json`:
   "operator_msg_id": "a1b2c3",
   "account_id": "acct-in-2001",
   "system_id": "sunrise-http",
-  "parts": 1
+  "parts": 1,
+  "err": "16"
 }
 ```
 
@@ -41,18 +42,45 @@ A `POST` with `Content-Type: application/json`:
 | `account_id` | The account billed. |
 | `system_id` | The login that submitted it. |
 | `parts` | Segment count. Omitted when not known. |
+| `err` | Why it failed. **Omitted when nothing reported a code** — which is the normal case for a delivered message. See below. |
 
 **Null fields are omitted rather than sent as nulls**, so a receipt for a message that never reached a
 vendor does not arrive full of empty keys.
 
 Every call carries `User-Agent: FireFlo/<version>`.
 
-<Warning>
-**There is no `err` field.** Jasmin sends one; FireFlo's resolver is handed only the delivery state,
-never an error code, so emitting one would mean inventing it.
+<Note>
+**`err` is new.** Receipts sent before it existed carried no such key, so it is additive: nothing
+else in this body moved, and a receiver that ignores keys it does not recognise needs no change.
+</Note>
 
+## What `err` means, and what it does not
+
+`err` is the same value the SMPP `err:` field carries for the same failure, so a customer taking
+receipts over a webhook and one taking them over SMPP are told the same thing.
+
+**An omitted `err` means nothing reported a code**, not that the code was zero. A delivered message
+usually carries none, and neither does a receipt FireFlo raised itself about a message no carrier
+ever saw.
+
+**The value depends on what your provider has configured**, and there are three possibilities:
+
+- **A code FireFlo recognises**, from its own documented set. This is the useful case: the same
+  number means the same real cause whichever carrier the message went through.
+- **`018`, unknown.** The default for a code your provider has not mapped. It is not a real reason,
+  and it is the reason this field is worth asking them about.
+- **A carrier's own code, passed through unchanged** — only where your provider has enabled that per
+  carrier. Carriers number their failures privately, so `630` from one is unrelated to `630` from
+  another, but it is far more useful than `018` because it can be looked up.
+
+So **do not assume every `err` you receive is in the documented set.** Treat an unrecognised value
+as opaque, log it, and quote it when you raise a query — your provider can tell you what that
+carrier means by it, and map it so you get a stable code next time.
+
+<Warning>
 **`vendor` is absent unless your provider enables it.** It names which supplier carries your traffic,
-which is withheld from customers by construction elsewhere.
+which is withheld from customers by construction elsewhere. `err` is not withheld with it — which
+supplier carried the message is commercially sensitive, but why *your* message failed is yours.
 </Warning>
 
 ## `kannel` — placeholder substitution

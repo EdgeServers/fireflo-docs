@@ -92,6 +92,48 @@ Requiring a tag that is not also in `registered.tlvs.submit` can never be satisf
 about at load.
 </Warning>
 
+## Delivery receipt error codes
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `dlr.errcodes` | `""` | `<carrier code>_<FireFlo code>`, comma separated: `630_16,1000_1`. Note the **underscore**. |
+| `dlr.errcodes.passthrough` | `false` | Whether a code `dlr.errcodes` does not name reaches the customer as the carrier sent it. |
+
+Both are **vendor** properties, not listener ones: `630` from one carrier and `630` from another are
+unrelated numbers in unrelated spaces, so a gateway-wide table would be wrong for every carrier but
+the one it was written for.
+
+They answer different questions. `dlr.errcodes` says *what 630 means*. `dlr.errcodes.passthrough`
+says *whether a code you have never named may reach the customer at all*.
+
+### What happens to a code you have not listed
+
+By default it becomes `018`, unknown. FireFlo's own vocabulary is a 38-value list and anything
+outside it is collapsed — so a telco that reported `err:630` had that replaced with the one value a
+customer cannot act on, and the original was gone before anything recorded it.
+
+Set `dlr.errcodes.passthrough = true` and an unlisted code reaches the customer unchanged. A
+**listed** code is unaffected either way: mapping still applies with passthrough off, and passthrough
+does not change what a mapped code resolves to.
+
+<Warning>
+**Off by default, and this one cannot be otherwise.** Removing the collapse is not a setting that
+lies dormant until configured — the collapse *is* the default path. Turning it on gateway-wide would
+change the `err:` value in receipts customers already parse, and some have logic built on seeing
+`018`. Enable it per carrier once you have checked those customers can cope with a code they do not
+recognise.
+</Warning>
+
+<Note>
+**What the carrier said is always kept**, whatever both settings say. `cdr_final.vendor_err_code`
+holds the raw code verbatim, beside `err_code` which holds FireFlo's reading of it. So a mapping set
+wrongly is corrected by editing the line rather than by having lost the evidence. Rows written before
+0.8.10 have `vendor_err_code` NULL — it was not backfilled, because those rows genuinely do not know.
+</Note>
+
+The value the customer receives is the same over SMPP `err:` and over the REST webhook's `err`
+field, so the two populations are told the same thing about one failure.
+
 ## Inbound messages
 
 | Key | Default | Description |
