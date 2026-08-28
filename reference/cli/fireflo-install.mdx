@@ -16,6 +16,13 @@ Installs and upgrades the **gateway**. The control panel has its own installer â
 | `service` | Generates the startup script and unit on an existing install, and starts it | The conf directory |
 | `rollback` | Restores the previous artefact | The conf directory |
 
+<Note>
+**"Packages" means the installer's own dependencies, not the services FireFlo talks to.** It installs
+`curl`, `openssl`, `rsync`, `python3` and the PostgreSQL **client** â€” never a PostgreSQL server,
+never a broker, and never Node. On a bare host, run
+[`setup.sh`](/platform/install/prepare-a-host) first.
+</Note>
+
 <Warning>
 **`install` refuses when a configuration directory already exists**, rather than minting a second pair
 of operational tokens over the top of the first. If you have configuration but no service, the verb

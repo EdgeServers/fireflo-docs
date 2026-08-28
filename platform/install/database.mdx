@@ -20,6 +20,11 @@ The panel's read-only half works without one; it just has nothing to change.
 
 ## Creating it
 
+Install the server first if the host has none —
+[`setup.sh`](/platform/install/prepare-a-host) does that and deliberately stops there, because a
+script that mints your database password is a script that has written a credential to disk on your
+behalf. The role and the database are yours to create:
+
 ```bash
 sudo -u postgres createuser fireflo --pwprompt
 sudo -u postgres createdb fireflo --owner fireflo

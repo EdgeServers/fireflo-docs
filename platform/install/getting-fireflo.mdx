@@ -78,6 +78,13 @@ failing at first start, but it is quicker to check the filename against `uname -
 The gateway and the control panel are separate installs and both are run from this directory.
 
 <Steps>
+  <Step title="Prepare the host, if it is a bare one">
+The installer does **not** install PostgreSQL, RabbitMQ or Node — it adds the PostgreSQL *client* and
+no server. On a host that has none of them, run
+[`setup.sh`](/platform/install/prepare-a-host) first and create a database.
+
+Skip this if those services already run, here or elsewhere.
+  </Step>
   <Step title="Check the host">
 ```bash
 ./scripts/fireflo-install check

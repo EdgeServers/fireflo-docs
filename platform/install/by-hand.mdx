@@ -6,6 +6,12 @@ description: "Ubuntu 24.04 from scratch: the two runtimes Ubuntu does not ship, 
 What [`fireflo-install`](/platform/install/one-command) automates. Read this if you are packaging
 FireFlo yourself, or if an installer step failed and you need to know what it was doing.
 
+<Note>
+**The prerequisites below are scripted.** [`setup.sh`](/platform/install/prepare-a-host) installs
+PostgreSQL, RabbitMQ and Node on Ubuntu and Debian, and Java behind `--with-java`. This page is the
+long hand — read it to know what that script does, or to do it on a distribution it refuses.
+</Note>
+
 ## Prerequisites
 
 - **Java 25.** The build targets release 25 and **will not run on 21**.
