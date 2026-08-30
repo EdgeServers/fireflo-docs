@@ -1,0 +1,100 @@
+---
+title: "Removendo uma instalação"
+description: "cleanup.sh tira um gateway ou um panel de um host — as units, a aplicação e a configuração — e deixa deliberadamente o banco de dados, o diretório de dados e os serviços do host onde estão."
+---
+
+Nem o `fireflo-install` nem o `fireflo-panel-install` têm um verbo de desinstalação. Aposentar um
+tenant costumava significar parar units, apagar diretórios e lembrar quais — em um host onde a
+resposta depende de como aquela instalação foi disposta.
+
+O `cleanup.sh` é esse passo. Como o `setup.sh`, ele vive no
+[repositório de releases](https://github.com/EdgeServers/fireflo-releases) em vez de dentro do
+tarball, de modo que pode ser lido antes de ser executado.
+
+```bash
+sudo ./cleanup.sh --list                    # what is on this host
+sudo ./cleanup.sh --tenant acme --dry-run   # read what it would do
+sudo ./cleanup.sh --tenant acme
+```
+
+<Note>
+**Leia antes de rodar**, como com o `setup.sh`. É um único arquivo shell simples, e você está prestes
+a rodá-lo como root contra diretórios que ele vai apagar.
+</Note>
+
+## Comece com `--list`
+
+```
+UNIT                       KIND     STATE     APPLICATION DIRECTORY
+fireflo-acme               gateway  active    /srv/fireflo/acme/gateway/app
+                             config /srv/fireflo/acme/gateway/conf
+                             writes /srv/fireflo/acme/gateway/data /srv/fireflo/acme/gateway/logs
+fireflo-acme-panel         panel    active    /srv/fireflo/acme/panel/app
+                             config /srv/fireflo/acme/panel/conf
+```
+
+Cada caminho ali é lido da **unit do systemd**, não derivado do nome do tenant. Essa é toda a razão
+pela qual vale a pena rodar `--list` primeiro: uma instalação que foi realocada mantém seus caminhos
+reais na sua unit e em nenhum outro lugar, então o caminho convencional pode estar errado sem que nada
+anuncie isso.
+
+## O que ele remove, e o que ele mantém
+
+| Removido | Mantido |
+| :--- | :--- |
+| A unit do systemd, e o serviço e o timer `-logclean` ao lado dela | O banco de dados, seu role, e o usuário do broker |
+| O diretório da aplicação | O **diretório de dados** — a menos que `--purge-data` |
+| O diretório de configuração | O **diretório de logs** — a menos que `--purge-logs` |
+| A conta de serviço, com `--remove-user`, e apenas se nenhuma outra unit do FireFlo rodar como ela | PostgreSQL, RabbitMQ, Node e Java |
+
+<Warning>
+**Seus CDRs, saldos e configuração de clientes estão no banco de dados, e isto nunca toca nele.**
+Uma instalação é substituível; os dados que ela escreveu não são. Se o host está realmente sendo
+aposentado, remova o banco de dados você mesmo — o script imprime os comandos quando termina.
+
+O mesmo raciocínio mantém o diretório de dados: em uma instalação com file-sink ele guarda cada CDR
+que o gateway escreveu, e `--purge-data` não é recuperável.
+</Warning>
+
+O `setup.sh` instala PostgreSQL, RabbitMQ e Node **no host inteiro**, não por tenant, então removê-los
+para limpar uma instalação derrubaria junto todos os outros tenants daquele host. Desinstale-os você
+mesmo quando o host estiver sendo aposentado.
+
+## Nomeando qual instalação
+
+| Flag | |
+| :--- | :--- |
+| `--tenant NAME` | A instalação cujas units são `fireflo-NAME` e `fireflo-NAME-panel` |
+| `--service UNIT` | Uma instalação pelo nome exato da sua unit — para uma instalação cujo nome de serviço foi definido com `--service-name` e não decorre de um tenant |
+| `--gateway-only`, `--panel-only` | Deixar a outra metade em paz |
+| `--dry-run` | Imprimir cada comando, não mudar nada |
+| `--yes` | Não perguntar |
+
+Com mais de uma instalação no host e sem `--tenant` nem `--service`, ele **lista o que encontrou e se
+recusa**. Remover todas as instalações de um host compartilhado nunca é o que alguém quis digitar.
+
+<Note>
+Os flags recebem valores **separados por espaço**. `--tenant=acme` é rejeitado como opção
+desconhecida, a mesma regra que os dois installers seguem.
+</Note>
+
+## Libere a licença primeiro
+
+<Warning>
+**Libere a licença na sua conta antes de rodar isto, não depois.**
+
+Uma licença ainda vinculada a uma máquina que não existe mais tem que esperar a janela de tolerância
+passar — até 21 dias — antes que outra máquina possa ativá-la. Liberar primeiro não custa nada: o
+gateway continua exatamente como está até este script pará-lo.
+</Warning>
+
+O `cleanup.sh` deliberadamente não libera a licença por você. Fazer isso gastaria um rebind em um host
+que está indo embora, e o gateway guarda uma chave de licença em vez de uma credencial de conta, então
+ele não consegue autenticar a liberação de qualquer forma. Consulte
+[Licenciamento](/platform/install/licensing).
+
+## Não interativo
+
+Executado sem um terminal e sem `--yes`, ele se recusa e não muda nada — o inverso do `setup.sh`, que
+trata um pipe como consentimento. Para um installer, "nenhum humano presente" razoavelmente significa
+seguir em frente. Para um script que apaga diretórios, significa que ninguém está olhando.

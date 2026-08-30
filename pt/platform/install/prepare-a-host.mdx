@@ -18,8 +18,11 @@ sudo ./setup.sh
 
 <Note>
 **Leia antes de rodar.** É um único arquivo shell simples, sem nenhum acesso à rede além dos instaladores
-do NodeSource e do Adoptium que ele nomeia, e você está prestes a rodá-lo como root. Ele não é assinado —
-os tarballs de release também não são.
+do NodeSource e do Adoptium que ele nomeia, e você está prestes a rodá-lo como root.
+
+O `setup.sh` **não é assinado** — é um script do repositório de releases, e não um artefato de build.
+Os tarballs de release *são* assinados a partir da 0.9.0; verifique um com `gpg --verify SHA256SUMS.asc
+SHA256SUMS` antes de instalar.
 </Note>
 
 ## O que ele instala
