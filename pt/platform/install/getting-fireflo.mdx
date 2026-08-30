@@ -9,7 +9,7 @@ necessário para instalar o gateway está dentro dele, e o host não precisa de 
 ```text
 fireflo-<version>-linux-x86_64.tar.gz
 SHA256SUMS
-SHA256SUMS.asc                          (when the release is signed)
+SHA256SUMS.asc                          (every release from 0.9.0)
 ```
 
 ## Confira antes de descompactar
@@ -28,7 +28,16 @@ inteiro — baixe de novo em vez de descompactar.
 gpg --verify SHA256SUMS.asc SHA256SUMS
 ```
 
-Espere uma assinatura válida da chave de release do FireFlo. **Faça isso mesmo quando o checksum passou.**
+**Confira o fingerprint, não apenas o "Good signature".** Uma assinatura vale apenas o que vale a chave
+contra a qual foi verificada, então o `gpg --verify` precisa nomear:
+
+```text
+3A9B 256F DE50 75CA 5F76  ADAF 42D7 A01A ED0D 03BA
+FireFlo Releases
+```
+
+Qualquer outro fingerprint significa parar e falar conosco antes de instalar. **Faça isso mesmo quando
+o checksum passou.**
 
 <Warning>
 Um checksum servido do mesmo lugar que o tarball prova que a transferência funcionou e nada mais.
