@@ -1,0 +1,98 @@
+---
+title: "Removing an install"
+description: "cleanup.sh takes a gateway or panel off a host — the units, the application and the configuration — and deliberately leaves the database, the data directory and the host services where they are."
+---
+
+Neither `fireflo-install` nor `fireflo-panel-install` has an uninstall verb. Retiring a tenant used to
+mean stopping units, deleting directories and remembering which ones — on a host where the answer
+depends on how that install was laid out.
+
+`cleanup.sh` is that step. Like `setup.sh` it lives in the
+[release repository](https://github.com/EdgeServers/fireflo-releases) rather than inside the tarball,
+so it can be read before it is run.
+
+```bash
+sudo ./cleanup.sh --list                    # what is on this host
+sudo ./cleanup.sh --tenant acme --dry-run   # read what it would do
+sudo ./cleanup.sh --tenant acme
+```
+
+<Note>
+**Read it before you run it**, as with `setup.sh`. It is one plain shell file, and you are about to
+run it as root against directories it will delete.
+</Note>
+
+## Start with `--list`
+
+```
+UNIT                       KIND     STATE     APPLICATION DIRECTORY
+fireflo-acme               gateway  active    /srv/fireflo/acme/gateway/app
+                             config /srv/fireflo/acme/gateway/conf
+                             writes /srv/fireflo/acme/gateway/data /srv/fireflo/acme/gateway/logs
+fireflo-acme-panel         panel    active    /srv/fireflo/acme/panel/app
+                             config /srv/fireflo/acme/panel/conf
+```
+
+Every path there is read out of the **systemd unit**, not derived from the tenant name. That is the
+whole reason `--list` is worth running first: an install that was relocated keeps its real paths in
+its unit and nowhere else, so the conventional path can be wrong in a way nothing announces.
+
+## What it removes, and what it keeps
+
+| Removed | Kept |
+| :--- | :--- |
+| The systemd unit, and the `-logclean` service and timer beside it | The database, its role, and the broker user |
+| The application directory | The **data directory** — unless `--purge-data` |
+| The configuration directory | The **log directory** — unless `--purge-logs` |
+| The service account, with `--remove-user`, and only if no other FireFlo unit runs as it | PostgreSQL, RabbitMQ, Node and Java |
+
+<Warning>
+**Your CDRs, balances and customer configuration are in the database, and this never touches it.**
+An install is replaceable; the data it wrote is not. If the host is genuinely being retired, drop the
+database yourself — the script prints the commands when it finishes.
+
+The same reasoning keeps the data directory: on a file-sink install it holds every CDR the gateway has
+written, and `--purge-data` is not recoverable.
+</Warning>
+
+`setup.sh` installs PostgreSQL, RabbitMQ and Node **host-wide**, not per tenant, so removing them to
+clean up one install would take every other tenant on that host down with it. Uninstall them yourself
+when the host is being retired.
+
+## Naming which install
+
+| Flag | |
+| :--- | :--- |
+| `--tenant NAME` | The install whose units are `fireflo-NAME` and `fireflo-NAME-panel` |
+| `--service UNIT` | One install by its exact unit name — for an install whose service name was set with `--service-name` and does not follow from a tenant |
+| `--gateway-only`, `--panel-only` | Leave the other half alone |
+| `--dry-run` | Print every command, change nothing |
+| `--yes` | Do not prompt |
+
+With more than one install on the host and neither `--tenant` nor `--service` given, it **lists what
+it found and refuses**. Removing every install on a shared host is never what somebody meant to type.
+
+<Note>
+Flags take **space-separated** values. `--tenant=acme` is rejected as an unknown option, the same rule
+the two installers follow.
+</Note>
+
+## Release the licence first
+
+<Warning>
+**Release the licence in your account before running this, not after.**
+
+A licence still bound to a machine that no longer exists has to wait out the tolerance window — up to
+21 days — before another machine can activate it. Releasing first costs nothing: the gateway carries
+on exactly as it is until this script stops it.
+</Warning>
+
+`cleanup.sh` deliberately does not release the licence for you. Doing so would spend a rebind on a
+host that is going away, and the gateway holds a licence key rather than an account credential, so it
+cannot authenticate the release anyway. See [Licensing](/platform/install/licensing).
+
+## Not interactive
+
+Run without a terminal and without `--yes`, it refuses and changes nothing — the reverse of
+`setup.sh`, which treats a pipe as consent. For an installer "no human present" reasonably means get
+on with it. For a script that deletes directories it means nobody is watching.

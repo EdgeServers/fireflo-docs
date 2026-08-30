@@ -74,6 +74,7 @@
                   "platform/install/first-configuration",
                   "platform/install/control-panel",
                   "platform/install/upgrading",
+                  "platform/install/removing",
                   "platform/install/licensing",
                   "platform/install/multiple-instances",
                   "platform/install/new-tenant-checklist",
