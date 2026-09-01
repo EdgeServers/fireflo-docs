@@ -137,6 +137,7 @@
                   "platform/operations/worker-control",
                   "platform/operations/queues",
                   "platform/operations/capture",
+                  "platform/operations/diagnostics",
                   "platform/operations/reload",
                   "platform/operations/tokens-and-access",
                   "platform/operations/generating-traffic",

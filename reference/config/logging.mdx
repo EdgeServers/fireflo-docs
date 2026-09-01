@@ -3,6 +3,13 @@ title: "Logging and log bounds"
 description: "The four log files, which of them is bounded, the one that will fill a disk, and the flags that write secrets."
 ---
 
+<Note>
+**There is now one setting for this.** `smsg.diagnostics` supplies the default for
+`message.trace.mode` and `smsg.cdr.events`, and the control panel sets it at
+**Configuration → Gateway → Diagnostics**. See [Diagnostics](/platform/operations/diagnostics).
+The individual keys below still work and still win when set on their own.
+</Note>
+
 ## The four logs
 
 | Log | Records |

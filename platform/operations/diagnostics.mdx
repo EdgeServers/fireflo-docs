@@ -1,0 +1,90 @@
+---
+title: "Diagnostics"
+description: "One setting for how much the gateway records about individual messages — and the two settings it deliberately does not touch, because they store customer content."
+---
+
+When a customer says their delivery receipts stopped arriving, the answer is usually already known
+to the gateway and simply not written down. `smsg.diagnostics` decides how much of it is.
+
+<Note>
+Set it from the control panel: **Configuration → Gateway → Diagnostics**. No SQL, and it takes
+effect on the next configuration poll — no restart.
+</Note>
+
+## The three levels
+
+| Level | What you get | What it costs |
+| :--- | :--- | :--- |
+| `off` | Errors only. Nothing about individual messages | Nothing — and no way to answer a support question without changing this first |
+| **`problems`** | Lifecycle milestones, plus a durable record of anything that did not go as the customer asked: a receipt withheld, held, or that failed to send, and callbacks that did not succeed | **Near-zero on a healthy gateway.** These rows appear when something goes wrong |
+| `verbose` | Every routing decision, submit response and enqueue, and an event row per receipt | Real log and database volume. For one customer for one afternoon |
+
+**`problems` is the level to run.** It is the one that answers a support question without anybody
+having to switch something on first — which is the whole problem it exists to solve, because the
+moment you need the evidence is always after the thing happened.
+
+## Setting it changes nothing until you set it
+
+`smsg.diagnostics` supplies the **default** for the two settings below. It does not override them.
+
+| It fronts | Which on its own still wins |
+| :--- | :--- |
+| `message.trace.mode` | yes |
+| `smsg.cdr.events` | yes |
+
+So an upgraded gateway with no level set behaves exactly as it did before, and an operator who had
+already tuned `message.trace.mode` keeps what they chose. The panel names any setting that is
+overriding the level, because a level that reads as in force while a key quietly outranks it is the
+one confusing state this arrangement can produce.
+
+## What it deliberately does not touch
+
+<Warning>
+**No level here stores message content.**
+
+`smsg.cdr.body` keeps customer message text. `print.msgs` logs phone numbers, message bodies and
+bind passwords. Both are decisions about **retaining customer data**, taken by operators in
+jurisdictions that answer that question differently — not dials for how much detail you want today.
+
+Raising a diagnostic level to chase a receipt must never begin retaining message content as a side
+effect, so neither is part of `smsg.diagnostics`. Set them on their own, deliberately, and turn them
+off again.
+</Warning>
+
+## What `problems` records
+
+Events land in `cdr_event` and appear on a message's page under **Customer exchange**:
+
+| Event | Means |
+| :--- | :--- |
+| `receipt.sent` | The receipt reached the customer's bind |
+| `receipt.failed` | The `deliver_sm` could not be put on the wire |
+| `receipt.held` | The customer was not reachable. **It replays when that system id next binds** — a bind that never drops never triggers it |
+| `receipt.suppressed` | Their `registered_delivery` did not ask about this outcome. The line carries the stored octet, which is the diagnosis |
+| `callback.attempt` | One attempt at their `dlr-url`, with status and duration — **one row per attempt**, not one per outcome |
+
+Callback addresses are stored with the **query string removed**. A `dlr-url` routinely carries an API
+key, and these rows are widely readable, so the endpoint is kept as scheme, host and path and
+nothing else. No response body is stored at all.
+
+## `registered_delivery`, and the value that surprises people
+
+A suppressed receipt is almost always this:
+
+| Octet | Asks for |
+| :--- | :--- |
+| `0x00` | No receipt |
+| `0x01` | Success **or** failure |
+| `0x02` | **Failure only** — so every successful delivery is withheld |
+
+`0x02` is the one that produces "we get some receipts but not others". The `receipt.suppressed`
+event prints the stored octet so it can be read rather than guessed at.
+
+## Turning it up for one message
+
+```
+smsg.diagnostics = verbose
+```
+
+Then send the message, read the log, and put it back to `problems`. `verbose` logs every routing
+miss, submit response and enqueue — leaving it on is real write volume on a live gateway.
