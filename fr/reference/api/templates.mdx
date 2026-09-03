@@ -43,8 +43,10 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
 
 Disponibles à partir de la **passerelle 0.9.7**.
 
-Le listing porte les mêmes champs que les sender IDs, avec une différence à remarquer : **`value`
-est le libellé** et `label` est le nom que vous lui avez donné.
+Le listing porte les mêmes champs que les sender IDs — y compris les
+[quatre états](/reference/api/senders#the-four-states), dont seul `APPROVED` est utilisable — avec
+une différence à remarquer : **`value` est le libellé** et `label` est le nom que vous lui avez
+donné.
 
 ## En demander un
 

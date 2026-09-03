@@ -58,10 +58,28 @@ y responden `404`.
 | `value` | El sender ID en sí — aquello contra lo que se compara un mensaje |
 | `label` | Un nombre para él. Nunca se compara; se muestra a quien revisa la solicitud |
 | `product` | El producto al que se aplica. Vacío significa todos los productos de la cuenta |
-| `status` | `PENDING`, `APPROVED` o `REJECTED` |
+| `status` | `PENDING`, `APPROVED`, `REJECTED` o `WITHDRAWN` — véase más abajo |
 | `requested_tlvs` | Los stamps **que usted propuso**. Véase [Stamps propuestos](#stamps-propuestos) |
 | `note` | Por qué lo pidió |
 | `updated_at` | Cuándo cambió la fila por última vez |
+
+### Los cuatro estados
+
+| `status` | ¿Utilizable? | Significado |
+| :--- | :--- | :--- |
+| `PENDING` | **no** | Enviado, nadie ha decidido |
+| `APPROVED` | **sí** | Aprobado y en funcionamiento |
+| `REJECTED` | **no** | Rechazado |
+| `WITHDRAWN` | **no** | Estuvo aprobado, y su proveedor lo ha desactivado desde entonces |
+
+<Warning>
+**`APPROVED` es el único desde el que puede enviar.** En particular `WITHDRAWN` no es una forma más
+suave de aprobado — un mensaje desde él se rechaza exactamente igual que uno no registrado.
+
+Se reporta a partir de la **pasarela 0.9.8**. Antes de eso, un registro retirado reportaba
+`APPROVED` aquí mientras su tráfico era rechazado, así que un cliente escrito contra la 0.9.7
+debería tratar un estado desconocido como no utilizable en lugar de asumir tres valores.
+</Warning>
 
 ### `enforcement` es el campo que merece leerse primero
 

@@ -59,10 +59,29 @@ routés et répondent `404`.
 | `value` | Le sender ID lui-même — ce contre quoi un message est mis en correspondance |
 | `label` | Un nom pour lui. Jamais mis en correspondance ; montré à qui examine la demande |
 | `product` | Le produit auquel cela s'applique. Vide signifie chaque produit du compte |
-| `status` | `PENDING`, `APPROVED` ou `REJECTED` |
+| `status` | `PENDING`, `APPROVED`, `REJECTED` ou `WITHDRAWN` — voir ci-dessous |
 | `requested_tlvs` | Les stamps **que vous avez proposés**. Voir [Stamps proposés](#stamps-proposés) |
 | `note` | Pourquoi vous avez demandé |
 | `updated_at` | Quand la ligne a changé pour la dernière fois |
+
+### Les quatre états
+
+| `status` | Utilisable ? | Signification |
+| :--- | :--- | :--- |
+| `PENDING` | **non** | Soumis, personne n'a décidé |
+| `APPROVED` | **oui** | Approuvé et en service |
+| `REJECTED` | **non** | Refusé |
+| `WITHDRAWN` | **non** | Était approuvé, et votre fournisseur l'a depuis désactivé |
+
+<Warning>
+**`APPROVED` est le seul depuis lequel vous pouvez envoyer.** En particulier `WITHDRAWN` n'est pas
+une forme atténuée d'approuvé — un message envoyé depuis lui est refusé exactement comme un message
+non enregistré.
+
+Rapporté à partir de la **passerelle 0.9.8**. Avant cela, un enregistrement retiré rapportait
+`APPROVED` ici alors que son trafic était refusé, donc un client écrit contre la 0.9.7 devrait
+traiter un statut inconnu comme non utilisable plutôt que de supposer trois valeurs.
+</Warning>
 
 ### `enforcement` est le champ à lire en premier
 

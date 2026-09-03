@@ -42,8 +42,9 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
 
 Disponível a partir do **gateway 0.9.7**.
 
-A listagem carrega os mesmos campos de sender IDs, com uma diferença que vale notar: **`value` é o
-texto** e `label` é o nome que você deu a ele.
+A listagem carrega os mesmos campos de sender IDs — incluindo os
+[quatro estados](/reference/api/senders#the-four-states), dos quais só `APPROVED` é utilizável —
+com uma diferença que vale notar: **`value` é o texto** e `label` é o nome que você deu a ele.
 
 ## Pedindo um
 
