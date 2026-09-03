@@ -249,6 +249,8 @@
                   "reference/api/sendbatch",
                   "reference/api/balance",
                   "reference/api/rate",
+                  "reference/api/senders",
+                  "reference/api/templates",
                   "reference/api/ping",
                   "reference/api/dlr-webhook",
                   "reference/api/errors"
@@ -1180,17 +1182,35 @@
       {
         "header": "FireFlo",
         "items": [
-          { "label": "fireflo.au", "href": "https://fireflo.au" },
-          { "label": "Licensing", "href": "https://fireflo.au" },
-          { "label": "Support", "href": "mailto:support@fireflo.au" }
+          {
+            "label": "fireflo.au",
+            "href": "https://fireflo.au"
+          },
+          {
+            "label": "Licensing",
+            "href": "https://fireflo.au"
+          },
+          {
+            "label": "Support",
+            "href": "mailto:support@fireflo.au"
+          }
         ]
       },
       {
         "header": "Documentation",
         "items": [
-          { "label": "What FireFlo is", "href": "https://docs.fireflo.au/" },
-          { "label": "Quickstart", "href": "https://docs.fireflo.au/platform/quickstart" },
-          { "label": "REST API", "href": "https://docs.fireflo.au/reference/api/send" }
+          {
+            "label": "What FireFlo is",
+            "href": "https://docs.fireflo.au/"
+          },
+          {
+            "label": "Quickstart",
+            "href": "https://docs.fireflo.au/platform/quickstart"
+          },
+          {
+            "label": "REST API",
+            "href": "https://docs.fireflo.au/reference/api/send"
+          }
         ]
       }
     ]

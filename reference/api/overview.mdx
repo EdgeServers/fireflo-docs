@@ -3,7 +3,7 @@ title: "REST API overview"
 description: "The base URL, Basic authentication, the response envelope, and the field-name rule that catches most people porting from another gateway."
 ---
 
-Five endpoints, all JSON, all returning the same envelope. Four sit under `/secure/` and take HTTP
+Seven endpoints, all JSON, all returning the same envelope. Six sit under `/secure/` and take HTTP
 Basic authentication; `/ping` takes none.
 
 | Endpoint | Method | What it does |
@@ -12,7 +12,15 @@ Basic authentication; `/ping` takes none.
 | [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Queue many, optionally scheduled |
 | [`/secure/balance`](/reference/api/balance) | GET | What is left on the account |
 | [`/secure/rate`](/reference/api/rate) | GET | What a message would cost, sending nothing |
+| [`/secure/senders`](/reference/api/senders) | GET POST PUT DELETE | The names you may send from, and asking for another |
+| [`/secure/templates`](/reference/api/templates) | GET POST PUT DELETE | The wording you may send, and asking for more |
 | [`/ping`](/reference/api/ping) | GET | Liveness, no credentials |
+
+<Note>
+**The last two ask; they do not grant.** A sender ID or template written through them is stored
+awaiting your provider's approval and is **not usable until they approve it**. They arrived in
+**gateway 0.9.7**; against anything older they answer `404`.
+</Note>
 
 ## The envelope
 

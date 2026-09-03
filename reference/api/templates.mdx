@@ -1,0 +1,151 @@
+---
+title: "/secure/templates"
+description: "Ask for message wording over the API — the placeholder grammar, what is refused at authoring time, and why a name change suspends a live template."
+---
+
+The wording your messages may use, and the way to ask for more without opening the portal.
+
+The sibling of [`/secure/senders`](/reference/api/senders), and everything said there applies: four
+calls, the same envelope, and **what you write is stored awaiting approval and is not usable** until
+your provider decides.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "Your OTP is {#var#}, valid 10 minutes",
+        "label": "OTP",
+        "product": "",
+        "status": "APPROVED",
+        "updated_at": "2026-09-03T10:24:26.534374Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+## The four calls
+
+| | |
+| :--- | :--- |
+| `GET /secure/templates` | Everything on this account, whatever its state |
+| `POST /secure/templates` | Ask for new wording |
+| `PUT /secure/templates/{id}` | Change one you already have |
+| `DELETE /secure/templates/{id}` | Take back a request nobody has decided |
+
+Available from **gateway 0.9.7**.
+
+The listing carries the same fields as sender IDs, with one difference worth noticing: **`value` is
+the wording** and `label` is the name you gave it.
+
+## Asking for one
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/templates' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OTP","body":"Your OTP is {#var#}, valid 10 minutes","note":"regulator template 4471"}'
+```
+
+| Field | | |
+| :--- | :--- | :--- |
+| `name` | **required** | What the wording is called. Shown to whoever reviews it |
+| `body` | **required** | The wording, with a placeholder where the message varies |
+| `note` | optional | Why you are asking — a registration reference belongs here |
+| `tlvs` | optional | Proposed stamps. Stored as proposed, never applied as sent |
+
+## The placeholder grammar
+
+Write the message as the regulator writes it, with a placeholder standing in for the part that
+changes:
+
+```
+Your OTP is {#var#}, valid 10 minutes
+```
+
+| Placeholder | Accepts |
+| :--- | :--- |
+| `{#var#}` | Anything, up to the length limit |
+| `{#num#}` | Digits `0`–`9` |
+| `{#alp#}` | Letters, spaces, apostrophes and hyphens |
+
+Everything **around** a placeholder is matched exactly. Change a word of it and the message no longer
+matches the template.
+
+### What is refused before it is stored
+
+The wording is checked by the same code that will compile it if approved, so anything accepted here
+will load. Four refusals, each with a reason:
+
+<AccordionGroup>
+  <Accordion title="A placeholder that is not one of the three">
+    ```json
+    { "message": "'{#code#}' is not one of {#var#}, {#num#} or {#alp#}, so it is being matched as {#var#} -- anything at all, up to the length limit." }
+    ```
+
+    Refused **here** even though a template already stored this way still loads. Before the row
+    exists there is no cost to being strict, and accepting it would approve a template that matches
+    more than you meant.
+  </Accordion>
+
+  <Accordion title="Nothing but a placeholder">
+    ```json
+    { "message": "A template of nothing but {#var#} accepts every message, which is the same as not having one. Add the wording around the variable." }
+    ```
+  </Accordion>
+
+  <Accordion title="Two placeholders with nothing between them">
+    ```json
+    { "message": "Two variables with nothing between them cannot be told apart, so they would act as one variable of twice the length. Put the wording that separates them between the two {#var#} tokens." }
+    ```
+  </Accordion>
+
+  <Accordion title="Blank wording, or longer than 2000 characters">
+    Longer than any message a template could approve.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+**Wording with no placeholder at all is legitimate** and is the strictest template there is: it
+approves exactly one message and nothing else.
+</Tip>
+
+## Changing one
+
+`PUT` **replaces rather than patches** — a field you do not send is cleared. Send the whole row.
+
+<Warning>
+**A template's name is judged, unlike a sender ID's label.** Changing either the **wording** or the
+**name** on an approved template puts it back to `PENDING` and it stops being accepted until your
+provider approves it again.
+
+The asymmetry is not arbitrary: the name is what your provider read the wording *under*, so a
+changed name means the decision was about something else. A sender ID's label is matched by nothing
+and can be changed freely.
+</Warning>
+
+Send `"confirm_suspend": true` to proceed with an edit that would suspend a live template, and read
+the `status` on the response.
+
+## Errors
+
+The same set as [`/secure/senders`](/reference/api/senders#errors) — `400`, `404`, `409`, `412`,
+`429` and `503`, with the message naming which.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs" icon="id-card" href="/reference/api/senders">
+    The same four calls for the names you send from.
+  </Card>
+  <Card title="Sender IDs and templates" icon="align-left" href="/developers/portal/registrations">
+    The same thing through the portal.
+  </Card>
+</CardGroup>

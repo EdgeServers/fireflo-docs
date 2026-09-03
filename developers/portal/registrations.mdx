@@ -123,3 +123,27 @@ not take effect until accepted anyway.
 
 If you need altered wording live before the old wording can go, request the new one as a separate
 template and let your provider withdraw the old one afterwards.
+
+## Doing this from your own code
+
+Everything on these two screens is also on the REST API, so a customer with many registrations does
+not have to work through the portal one at a time:
+
+<CardGroup cols={2}>
+  <Card title="/secure/senders" icon="id-card" href="/reference/api/senders">
+    List, request, change and withdraw sender IDs.
+  </Card>
+  <Card title="/secure/templates" icon="align-left" href="/reference/api/templates">
+    The same four calls for wording.
+  </Card>
+</CardGroup>
+
+Same credentials you send with, and the same rules — what you write is a **request**, and the API
+says which state each registration is in and whether registrations are being enforced on your
+account at all.
+
+<Note>
+**Available from gateway 0.9.7.** If those endpoints answer `404`, your provider is running an
+older gateway and these screens are the way to ask.
+</Note>
+

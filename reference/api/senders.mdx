@@ -1,0 +1,202 @@
+---
+title: "/secure/senders"
+description: "Ask for a sender ID over the API, list what you have, change one, take a request back — and why what you write is not usable until your provider approves it."
+---
+
+The names your messages may be sent from, and the way to ask for another without opening the portal.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/senders'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "ACMEOTP",
+        "label": "Acme one-time",
+        "product": "",
+        "status": "APPROVED",
+        "note": "for our OTP traffic",
+        "updated_at": "2026-09-03T10:23:21.514572Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+<Note>
+**Asking is all this does.** Everything you write here is stored **awaiting approval** and is not
+usable. Your provider serves only what they have approved, so nothing you send to these endpoints
+changes what the gateway accepts until somebody decides.
+
+This is the part most often misread: a sender ID you have just created and can see in the list
+**will still be refused at submission**.
+</Note>
+
+## The four calls
+
+| | | |
+| :--- | :--- | :--- |
+| `GET /secure/senders` | | Everything on this account, whatever its state |
+| `POST /secure/senders` | | Ask for a new one |
+| `PUT /secure/senders/{id}` | | Change one you already have |
+| `DELETE /secure/senders/{id}` | | Take back a request nobody has decided |
+
+Available from **gateway 0.9.7**. Against anything older they are not routed and answer `404`.
+
+## What a listing tells you
+
+| Field | Meaning |
+| :--- | :--- |
+| `id` | Use it in the `PUT` and `DELETE` paths |
+| `value` | The sender ID itself — what a message is matched against |
+| `label` | A name for it. Never matched; shown to whoever reviews the request |
+| `product` | The product this applies to. Empty means every product on the account |
+| `status` | `PENDING`, `APPROVED` or `REJECTED` |
+| `requested_tlvs` | The stamps **you proposed**. See [Proposed stamps](#proposed-stamps) |
+| `note` | Why you asked |
+| `updated_at` | When the row last changed |
+
+### `enforcement` is the field worth reading first
+
+| Value | What it means for you |
+| :--- | :--- |
+| `enforce` | Only approved sender IDs are accepted. Anything else is refused at submission |
+| `report` | Your provider is recording what is not approved but not yet refusing it |
+| `off` | Not checked on this account at all — messages are accepted whatever is on this list |
+
+<Tip>
+**On `off`, a `PENDING` row is holding nothing up.** Without this field a list of rows awaiting
+approval reads as a queue of blocked work, when in fact nothing on the account is being checked.
+It is reported for the calling login's account and product, not for the gateway as a whole.
+</Tip>
+
+## Asking for one
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/senders' \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"ACMEOTP","label":"Acme one-time","note":"for our OTP traffic"}'
+```
+
+| Field | | |
+| :--- | :--- | :--- |
+| `sender` | **required** | What you want to send from |
+| `label` | optional | A name for it. Not matched by anything |
+| `note` | optional | Why you are asking. Read by whoever reviews it — a good one is answered faster |
+| `tlvs` | optional | Proposed stamps, `tag=value` comma separated. See below |
+
+The response is the stored row, which will read `"status": "PENDING"`.
+
+### There is no `account` field, and that is deliberate
+
+<Warning>
+**The account and the product come from your credentials, never from the body.** A request naming
+`account`, `product` or `system_id` is refused by name with `400 Unknown argument: account` rather
+than having the field quietly dropped.
+
+Quietly dropping it would leave you believing you had registered a sender ID for a different
+account. A refusal that names the field is the only honest answer.
+</Warning>
+
+A registration made this way applies to **every login on your account**. Scoping one to a single
+login is your provider's to do.
+
+### Proposed stamps
+
+`tlvs` is stored as **proposed** and is never applied as you sent it. Where stamps are required —
+India's DLT regime being the usual case — your provider decides the values that are actually
+attached to your traffic, and reads yours as a suggestion.
+
+This is why the listing calls the field `requested_tlvs` rather than `tlvs`. It is what you asked
+for, not what is in force.
+
+## Changing one
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X PUT 'https://sms.example.com/secure/senders/1' \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"ACMEALERT","note":"moving to alerts","confirm_suspend":true}'
+```
+
+<Warning>
+**`PUT` replaces; it does not patch.** A field you do not send is **cleared**, not kept. Send the
+whole row every time, including the fields you are not changing — most easily by reading the row
+with `GET` first.
+</Warning>
+
+### An edit can take a live sender ID out of service
+
+Changing the **sender ID itself** or the **note** on an approved registration puts it back to
+`PENDING`, and it stops being accepted until your provider approves it again. Your provider's
+decision was about the old text, so it does not carry over.
+
+Because that is you stopping your own traffic, and an API has no form to warn you in, it is
+**refused unless you say you mean it**:
+
+```json
+{ "message": "That sender ID is approved and in use. Changing its wording or its note would put it back to waiting for an operator, and it would stop being accepted until one approves it again. Send confirm_suspend if that is what you mean." }
+```
+
+Send `"confirm_suspend": true` to proceed. Read the `status` on the response — `PENDING` coming back
+is the only notice you get that it stopped being served.
+
+Changing only the **label** never suspends anything and needs no confirmation.
+
+## Taking a request back
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" -X DELETE 'https://sms.example.com/secure/senders/1'
+```
+
+Answers the remaining list, so one call refreshes your view.
+
+**Only a `PENDING` request can be withdrawn.** An approved sender ID is your provider's to remove —
+withdrawing one here would stop traffic that is flowing, from an endpoint whose whole job is to ask
+for permission.
+
+An id that is not yours, does not exist, or is no longer pending all answer the same `404`. They are
+deliberately indistinguishable, so an id cannot be probed to learn which accounts hold which
+registrations.
+
+## Errors
+
+| Status | When |
+| :--- | :--- |
+| `400` | A missing, unknown or invalid argument — named |
+| `404` | No such request is waiting on this account |
+| `409` | Already requested or already approved; or an edit that would suspend a live one |
+| `412` | The body was not parseable JSON |
+| `429` | This account has too many requests waiting. Withdraw one, or ask your provider to review them |
+| `503` | This gateway has no whitelist to register with |
+
+Plus the shared ones — see [API errors](/reference/api/errors).
+
+<Note>
+**A `409` on `POST` is usually good news.** "That sender ID is already approved for this account"
+means the thing you wanted registered is registered. It is answered as a conflict rather than a
+success because a second row for the same sender ID would be indistinguishable from the first.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Templates" icon="align-left" href="/reference/api/templates">
+    The same four calls for the wording you send.
+  </Card>
+  <Card title="Sender IDs and templates" icon="id-card" href="/developers/portal/registrations">
+    The same thing through the portal, with the states shown as badges.
+  </Card>
+  <Card title="Choosing a sender ID" icon="signature" href="/developers/send/sender-ids">
+    What a sender ID may contain and how carriers treat it.
+  </Card>
+  <Card title="Custom TLVs" icon="tag" href="/developers/send/custom-tlvs">
+    Stamps on an individual message, as opposed to on a registration.
+  </Card>
+</CardGroup>
