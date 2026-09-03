@@ -86,7 +86,7 @@ Le rapport de couverture TLV du panel indique, par ligne approuvée, quelles bal
 
 ## Approbation, et ce que coûte une modification
 
-Tout ce qu'un client soumet depuis le portail atterrit en `PENDING`. Le gateway ne sert une ligne que quand elle est `enabled` **et** `APPROVED`.
+Tout ce qu'un client soumet depuis le portail atterrit en `PENDING`. Le gateway ne sert une ligne que quand elle est `enabled` **et** `APPROVED`. À partir du gateway 0.9.8, un client lisant l'API d'inscription est informé quand une ligne est approuvée mais désactivée. Voir [Sender IDs](/platform/customers/sender-ids#qui-propose-et-qui-approuve), où les deux mêmes colonnes sont expliquées.
 
 <Warning>
 **Modifier un template approuvé le suspend.** Changer le nom, le libellé, la note ou le login remet la ligne à `PENDING` et efface la relecture précédente, donc il est hors service jusqu'à ce que quelqu'un l'approuve à nouveau. Et sur un compte fail-closed cela signifie que le trafic du client s'arrête jusque-là.

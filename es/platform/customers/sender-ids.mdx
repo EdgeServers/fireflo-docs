@@ -88,6 +88,17 @@ Sin reconectar. Ver abajo.
 al revisor. Desmarcar escribe `enabled = false` y deja `status` en paz: **retirar algo no es
 des-aprobarlo**, y una fila retirada vuelta al servicio no debería necesitar aprobarse de nuevo.
 
+<Note>
+**Un cliente que lee la API ve la retirada, desde el gateway 0.9.8.** Como las dos columnas están
+separadas, la API de registros solía reportar una fila retirada como `APPROVED`: lee la decisión de
+aprobación, y esa no había cambiado. Un cliente que la consultaba para decidir desde qué enviar
+recibía que el remitente estaba aprobado mientras el gateway rechazaba todos sus mensajes.
+
+Ahora reporta un cuarto estado, `WITHDRAWN`, así que la API y la pantalla del portal del cliente
+coinciden entre sí y con lo que el gateway hace realmente. Nada de su lado cambió; desmarcar sigue
+escribiendo una sola columna.
+</Note>
+
 <Warning>
 **Editar un registro aprobado lo suspende.** Cambiar el sender ID, la nota de solicitud o el
 login vuelve a poner la fila en `PENDING` y borra la revisión anterior, así que el registro queda fuera de

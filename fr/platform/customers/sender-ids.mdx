@@ -61,6 +61,12 @@ Pas de reconnexion. Voir ci-dessous.
 
 `status` et `enabled` sont des colonnes séparées faisant des travaux séparés. Approuver écrit `status` et enregistre le relecteur. Décocher écrit `enabled = false` et laisse `status` tranquille : **retirer quelque chose n'est pas le désapprouver**, et une ligne retirée remise en service ne devrait pas avoir besoin d'être approuvée à nouveau.
 
+<Note>
+**Un client lisant l'API voit le retrait, à partir du gateway 0.9.8.** Parce que les deux colonnes sont séparées, l'API d'inscription rapportait auparavant une ligne retirée comme `APPROVED`. Elle lit la décision d'approbation, et celle-ci n'avait pas changé. Un client qui la sondait pour décider depuis quoi envoyer se voyait dire que l'expéditeur était approuvé alors que le gateway refusait chacun de ses messages.
+
+Elle rapporte désormais un quatrième état, `WITHDRAWN`, donc l'API et l'écran du portail du client concordent entre eux et avec ce que le gateway fait réellement. Rien de votre côté n'a changé ; décocher écrit toujours une seule colonne.
+</Note>
+
 <Warning>
 **Modifier une inscription approuvée la suspend.** Changer le sender ID, la note de demande ou le login remet la ligne à `PENDING` et efface la relecture précédente, donc l'inscription est hors service jusqu'à ce que quelqu'un l'approuve à nouveau.
 

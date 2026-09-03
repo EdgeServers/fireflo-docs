@@ -17,12 +17,17 @@ Se algum dos dois é obrigatório é escolha do seu provedor. Onde é (o regime 
 
 ## Os quatro estados
 
-| Badge | Significado |
-| :--- | :--- |
-| **Aguardando aprovação** | Submetido, ainda não revisado. Não utilizável |
-| **Em uso** | Aprovado e no ar |
-| **Não aprovado** | Recusado, com o motivo do seu provedor exibido |
-| **Retirado** | Foi aprovado, desligado pelo seu provedor. Não utilizável |
+| Badge | Na API | Significado |
+| :--- | :--- | :--- |
+| **Aguardando aprovação** | `PENDING` | Submetido, ainda não revisado. Não utilizável |
+| **Em uso** | `APPROVED` | Aprovado e no ar |
+| **Não aprovado** | `REJECTED` | Recusado, com o motivo do seu provedor exibido |
+| **Retirado** | `WITHDRAWN` | Foi aprovado, desligado pelo seu provedor. Não utilizável |
+
+A coluna do meio é o que [`/secure/senders`](/reference/api/senders) e
+[`/secure/templates`](/reference/api/templates) retornam, então as duas superfícies descrevem os
+mesmos quatro estados em vez de oito. **Somente `APPROVED` é utilizável** — os outros três
+significam que uma mensagem será recusada, por motivos diferentes.
 
 Cada linha também diz a qual produto se aplica e a qual login: um específico ou **todos os seus
 logins**.

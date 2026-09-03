@@ -123,7 +123,10 @@ El informe de cobertura de TLV del panel dice, por fila aprobada, qué tags obli
 ## Aprobación, y lo que cuesta una edición
 
 Todo lo que un cliente envía desde el portal llega como `PENDING`. El gateway sirve una fila solo cuando
-está `enabled` **y** `APPROVED`.
+está `enabled` **y** `APPROVED`. Desde el gateway 0.9.8, un cliente que lee la API de registros es
+informado cuando una fila está aprobada pero desactivada. Consulta
+[Sender IDs](/platform/customers/sender-ids#quién-propone-y-quién-aprueba), donde se explican las
+mismas dos columnas.
 
 <Warning>
 **Editar una plantilla aprobada la suspende.** Cambiar el nombre, el texto, la nota o el login
