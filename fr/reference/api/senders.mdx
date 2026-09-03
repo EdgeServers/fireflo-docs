@@ -1,0 +1,207 @@
+---
+title: "/secure/senders"
+description: "Demander un sender ID via l'API, lister ce que vous avez, en modifier un, reprendre une demande — et pourquoi ce que vous écrivez n'est pas utilisable tant que votre fournisseur ne l'a pas approuvé."
+---
+
+Les noms depuis lesquels vos messages peuvent être envoyés, et le moyen d'en demander un autre sans
+ouvrir le portail.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/senders'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "ACMEOTP",
+        "label": "Acme one-time",
+        "product": "",
+        "status": "APPROVED",
+        "note": "for our OTP traffic",
+        "updated_at": "2026-09-03T10:23:21.514572Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+<Note>
+**Demander est tout ce que cela fait.** Tout ce que vous écrivez ici est stocké **en attente
+d'approbation** et n'est pas utilisable. Votre fournisseur ne sert que ce qu'il a approuvé, donc
+rien de ce que vous envoyez à ces endpoints ne change ce que la passerelle accepte tant que
+quelqu'un n'a pas décidé.
+
+C'est la partie la plus souvent mal lue : un sender ID que vous venez de créer et que vous voyez
+dans la liste **sera quand même refusé à la soumission**.
+</Note>
+
+## Les quatre appels
+
+| | | |
+| :--- | :--- | :--- |
+| `GET /secure/senders` | | Tout ce qu'il y a sur ce compte, quel que soit son état |
+| `POST /secure/senders` | | En demander un nouveau |
+| `PUT /secure/senders/{id}` | | En modifier un que vous avez déjà |
+| `DELETE /secure/senders/{id}` | | Reprendre une demande que personne n'a décidée |
+
+Disponibles à partir de la **passerelle 0.9.7**. Contre toute version plus ancienne ils ne sont pas
+routés et répondent `404`.
+
+## Ce qu'un listing vous dit
+
+| Champ | Signification |
+| :--- | :--- |
+| `id` | À utiliser dans les chemins `PUT` et `DELETE` |
+| `value` | Le sender ID lui-même — ce contre quoi un message est mis en correspondance |
+| `label` | Un nom pour lui. Jamais mis en correspondance ; montré à qui examine la demande |
+| `product` | Le produit auquel cela s'applique. Vide signifie chaque produit du compte |
+| `status` | `PENDING`, `APPROVED` ou `REJECTED` |
+| `requested_tlvs` | Les stamps **que vous avez proposés**. Voir [Stamps proposés](#stamps-proposés) |
+| `note` | Pourquoi vous avez demandé |
+| `updated_at` | Quand la ligne a changé pour la dernière fois |
+
+### `enforcement` est le champ à lire en premier
+
+| Valeur | Ce que cela signifie pour vous |
+| :--- | :--- |
+| `enforce` | Seuls les sender IDs approuvés sont acceptés. Tout le reste est refusé à la soumission |
+| `report` | Votre fournisseur enregistre ce qui n'est pas approuvé mais ne le refuse pas encore |
+| `off` | Rien n'est vérifié sur ce compte — les messages sont acceptés quoi qu'il y ait sur cette liste |
+
+<Tip>
+**Sur `off`, une ligne `PENDING` ne bloque rien.** Sans ce champ, une liste de lignes en attente
+d'approbation se lit comme une file de travail bloqué, alors qu'en fait rien sur le compte n'est
+vérifié. Il est rapporté pour le compte et le produit du login appelant, pas pour la passerelle
+dans son ensemble.
+</Tip>
+
+## En demander un
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/senders' \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"ACMEOTP","label":"Acme one-time","note":"for our OTP traffic"}'
+```
+
+| Champ | | |
+| :--- | :--- | :--- |
+| `sender` | **requis** | Ce depuis quoi vous voulez envoyer |
+| `label` | optionnel | Un nom pour lui. Mis en correspondance par rien |
+| `note` | optionnel | Pourquoi vous demandez. Lu par qui l'examine — une bonne note obtient une réponse plus vite |
+| `tlvs` | optionnel | Stamps proposés, `tag=value` séparés par des virgules. Voir plus bas |
+
+La réponse est la ligne stockée, qui portera `"status": "PENDING"`.
+
+### Il n'y a pas de champ `account`, et c'est délibéré
+
+<Warning>
+**Le compte et le produit viennent de vos identifiants, jamais du corps.** Une requête nommant
+`account`, `product` ou `system_id` est refusée en nommant le champ, avec
+`400 Unknown argument: account`, plutôt que de voir le champ silencieusement abandonné.
+
+L'abandonner en silence vous laisserait croire que vous avez enregistré un sender ID pour un autre
+compte. Un refus qui nomme le champ est la seule réponse honnête.
+</Warning>
+
+Un enregistrement fait de cette manière s'applique à **chaque login de votre compte**. En limiter
+un à un seul login est du ressort de votre fournisseur.
+
+### Stamps proposés
+
+`tlvs` est stocké comme **proposé** et n'est jamais appliqué tel que vous l'avez envoyé. Là où les
+stamps sont exigés — le régime DLT indien étant le cas habituel — votre fournisseur décide des
+valeurs réellement attachées à votre trafic, et lit les vôtres comme une suggestion.
+
+C'est pourquoi le listing appelle le champ `requested_tlvs` plutôt que `tlvs`. C'est ce que vous
+avez demandé, pas ce qui est en vigueur.
+
+## En modifier un
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X PUT 'https://sms.example.com/secure/senders/1' \
+  -H 'Content-Type: application/json' \
+  -d '{"sender":"ACMEALERT","note":"moving to alerts","confirm_suspend":true}'
+```
+
+<Warning>
+**`PUT` remplace ; il ne patche pas.** Un champ que vous n'envoyez pas est **effacé**, pas
+conservé. Envoyez la ligne entière à chaque fois, y compris les champs que vous ne changez pas —
+le plus simple étant de lire d'abord la ligne avec `GET`.
+</Warning>
+
+### Une modification peut mettre un sender ID en production hors service
+
+Changer le **sender ID lui-même** ou la **note** d'un enregistrement approuvé le remet à `PENDING`,
+et il cesse d'être accepté jusqu'à ce que votre fournisseur l'approuve à nouveau. La décision de
+votre fournisseur portait sur l'ancien texte, elle ne se reporte donc pas.
+
+Parce que c'est vous qui arrêtez votre propre trafic, et qu'une API n'a pas de formulaire pour vous
+avertir, c'est **refusé sauf si vous dites que c'est bien ce que vous voulez** :
+
+```json
+{ "message": "That sender ID is approved and in use. Changing its wording or its note would put it back to waiting for an operator, and it would stop being accepted until one approves it again. Send confirm_suspend if that is what you mean." }
+```
+
+Envoyez `"confirm_suspend": true` pour continuer. Lisez le `status` de la réponse — un `PENDING`
+en retour est le seul avis que vous recevez qu'il a cessé d'être servi.
+
+Changer uniquement le **label** ne suspend jamais rien et n'exige aucune confirmation.
+
+## Reprendre une demande
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" -X DELETE 'https://sms.example.com/secure/senders/1'
+```
+
+Répond avec la liste restante, donc un seul appel rafraîchit votre vue.
+
+**Seule une demande `PENDING` peut être retirée.** Un sender ID approuvé est à votre fournisseur de
+le retirer — le retirer ici arrêterait du trafic en cours, depuis un endpoint dont tout le rôle est
+de demander une permission.
+
+Un id qui n'est pas le vôtre, n'existe pas, ou n'est plus en attente répondent tous le même `404`.
+Ils sont délibérément indistinguables, pour qu'un id ne puisse pas être sondé afin d'apprendre
+quels comptes détiennent quels enregistrements.
+
+## Erreurs
+
+| Statut | Quand |
+| :--- | :--- |
+| `400` | Un argument manquant, inconnu ou invalide — nommé |
+| `404` | Aucune demande de ce genre n'attend sur ce compte |
+| `409` | Déjà demandé ou déjà approuvé ; ou une modification qui suspendrait un enregistrement en production |
+| `412` | Le corps n'était pas du JSON parseable |
+| `429` | Ce compte a trop de demandes en attente. Retirez-en une, ou demandez à votre fournisseur de les examiner |
+| `503` | Cette passerelle n'a pas de whitelist où enregistrer |
+
+Plus les erreurs partagées — voir [Erreurs de l'API](/reference/api/errors).
+
+<Note>
+**Un `409` sur `POST` est généralement une bonne nouvelle.** « Ce sender ID est déjà approuvé pour
+ce compte » signifie que la chose que vous vouliez enregistrer est enregistrée. C'est répondu comme
+un conflit plutôt qu'un succès parce qu'une seconde ligne pour le même sender ID serait
+indistinguable de la première.
+</Note>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Templates" icon="align-left" href="/reference/api/templates">
+    Les mêmes quatre appels pour le libellé que vous envoyez.
+  </Card>
+  <Card title="Sender IDs et templates" icon="id-card" href="/developers/portal/registrations">
+    La même chose via le portail, avec les états montrés en badges.
+  </Card>
+  <Card title="Choisir un sender ID" icon="signature" href="/developers/send/sender-ids">
+    Ce qu'un sender ID peut contenir et comment les opérateurs le traitent.
+  </Card>
+  <Card title="TLVs personnalisés" icon="tag" href="/developers/send/custom-tlvs">
+    Des stamps sur un message individuel, par opposition à un enregistrement.
+  </Card>
+</CardGroup>

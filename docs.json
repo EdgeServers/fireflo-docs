@@ -533,6 +533,8 @@
                   "fr/reference/api/sendbatch",
                   "fr/reference/api/balance",
                   "fr/reference/api/rate",
+                  "fr/reference/api/senders",
+                  "fr/reference/api/templates",
                   "fr/reference/api/ping",
                   "fr/reference/api/dlr-webhook",
                   "fr/reference/api/errors"
@@ -815,6 +817,8 @@
                   "es/reference/api/sendbatch",
                   "es/reference/api/balance",
                   "es/reference/api/rate",
+                  "es/reference/api/senders",
+                  "es/reference/api/templates",
                   "es/reference/api/ping",
                   "es/reference/api/dlr-webhook",
                   "es/reference/api/errors"
@@ -1097,6 +1101,8 @@
                   "pt/reference/api/sendbatch",
                   "pt/reference/api/balance",
                   "pt/reference/api/rate",
+                  "pt/reference/api/senders",
+                  "pt/reference/api/templates",
                   "pt/reference/api/ping",
                   "pt/reference/api/dlr-webhook",
                   "pt/reference/api/errors"

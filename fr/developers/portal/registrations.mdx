@@ -127,3 +127,26 @@ ceux-ci ne prennent effet que lorsqu'ils sont acceptés.
 
 Si vous avez besoin qu'un libellé modifié soit en production avant que l'ancien puisse partir,
 demandez le nouveau comme template distinct et laissez votre fournisseur retirer l'ancien après.
+
+## Faire cela depuis votre propre code
+
+Tout ce qui est sur ces deux écrans est aussi sur l'API REST, donc un client avec beaucoup
+d'enregistrements n'a pas à les passer un par un dans le portail :
+
+<CardGroup cols={2}>
+  <Card title="/secure/senders" icon="id-card" href="/reference/api/senders">
+    Lister, demander, modifier et retirer des sender IDs.
+  </Card>
+  <Card title="/secure/templates" icon="align-left" href="/reference/api/templates">
+    Les mêmes quatre appels pour le libellé.
+  </Card>
+</CardGroup>
+
+Les mêmes identifiants qu'à l'envoi, et les mêmes règles — ce que vous écrivez est une **demande**,
+et l'API dit dans quel état est chaque enregistrement et si les enregistrements sont appliqués sur
+votre compte tout court.
+
+<Note>
+**Disponible à partir de la passerelle 0.9.7.** Si ces endpoints répondent `404`, votre fournisseur
+fait tourner une passerelle plus ancienne et ces écrans sont le moyen de demander.
+</Note>

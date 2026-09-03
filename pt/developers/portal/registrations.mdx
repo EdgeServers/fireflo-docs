@@ -122,3 +122,26 @@ entram em vigor até serem aceitos, de qualquer forma.
 
 Se você precisa do novo texto ao vivo antes do antigo sair, solicite o novo como um template
 separado e deixe seu provedor retirar o antigo em seguida.
+
+## Fazendo isso do seu próprio código
+
+Tudo o que há nessas duas telas também está na API REST, então um cliente com muitos registros não
+precisa passar pelo portal um a um:
+
+<CardGroup cols={2}>
+  <Card title="/secure/senders" icon="id-card" href="/reference/api/senders">
+    Listar, solicitar, alterar e retirar sender IDs.
+  </Card>
+  <Card title="/secure/templates" icon="align-left" href="/reference/api/templates">
+    As mesmas quatro chamadas para texto.
+  </Card>
+</CardGroup>
+
+As mesmas credenciais com que você envia, e as mesmas regras — o que você escreve é uma
+**solicitação**, e a API diz em qual estado está cada registro e se registros estão sendo exigidos
+na sua conta.
+
+<Note>
+**Disponível a partir do gateway 0.9.7.** Se esses endpoints respondem `404`, seu provedor está
+rodando um gateway mais antigo e essas telas são o jeito de pedir.
+</Note>

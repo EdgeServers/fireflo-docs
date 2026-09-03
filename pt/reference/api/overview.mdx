@@ -3,7 +3,7 @@ title: "Visão geral da API REST"
 description: "A base URL, autenticação Basic, o envelope de resposta e a regra de nome de campo que pega a maioria dos que migram de outro gateway."
 ---
 
-Cinco endpoints, todos JSON, todos retornando o mesmo envelope. Quatro ficam em `/secure/` e usam
+Sete endpoints, todos JSON, todos retornando o mesmo envelope. Seis ficam em `/secure/` e usam
 autenticação HTTP Basic; `/ping` não usa nenhuma.
 
 | Endpoint | Método | O que faz |
@@ -12,7 +12,15 @@ autenticação HTTP Basic; `/ping` não usa nenhuma.
 | [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Enfileira várias, opcionalmente agendadas |
 | [`/secure/balance`](/reference/api/balance) | GET | O que sobrou na conta |
 | [`/secure/rate`](/reference/api/rate) | GET | Quanto uma mensagem custaria, sem enviar |
+| [`/secure/senders`](/reference/api/senders) | GET POST PUT DELETE | Os nomes dos quais você pode enviar, e pedir outro |
+| [`/secure/templates`](/reference/api/templates) | GET POST PUT DELETE | O texto que você pode enviar, e pedir mais |
 | [`/ping`](/reference/api/ping) | GET | Liveness, sem credenciais |
+
+<Note>
+**Os dois últimos pedem; não concedem.** Um sender ID ou template escrito por eles fica armazenado
+aguardando a aprovação do seu provedor e **não é utilizável até que ele aprove**. Eles chegaram no
+**gateway 0.9.7**; contra qualquer versão mais antiga respondem `404`.
+</Note>
 
 ## O envelope
 

@@ -1,0 +1,153 @@
+---
+title: "/secure/templates"
+description: "Demander un libellé de message via l'API — la grammaire des placeholders, ce qui est refusé au moment de la rédaction, et pourquoi un changement de nom suspend un template en production."
+---
+
+Le libellé que vos messages peuvent utiliser, et le moyen d'en demander davantage sans ouvrir le
+portail.
+
+Le frère de [`/secure/senders`](/reference/api/senders), et tout ce qui y est dit s'applique :
+quatre appels, la même enveloppe, et **ce que vous écrivez est stocké en attente d'approbation et
+n'est pas utilisable** tant que votre fournisseur n'a pas décidé.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "Your OTP is {#var#}, valid 10 minutes",
+        "label": "OTP",
+        "product": "",
+        "status": "APPROVED",
+        "updated_at": "2026-09-03T10:24:26.534374Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+## Les quatre appels
+
+| | |
+| :--- | :--- |
+| `GET /secure/templates` | Tout ce qu'il y a sur ce compte, quel que soit son état |
+| `POST /secure/templates` | Demander un nouveau libellé |
+| `PUT /secure/templates/{id}` | En modifier un que vous avez déjà |
+| `DELETE /secure/templates/{id}` | Reprendre une demande que personne n'a décidée |
+
+Disponibles à partir de la **passerelle 0.9.7**.
+
+Le listing porte les mêmes champs que les sender IDs, avec une différence à remarquer : **`value`
+est le libellé** et `label` est le nom que vous lui avez donné.
+
+## En demander un
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/templates' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OTP","body":"Your OTP is {#var#}, valid 10 minutes","note":"regulator template 4471"}'
+```
+
+| Champ | | |
+| :--- | :--- | :--- |
+| `name` | **requis** | Le nom du libellé. Montré à qui l'examine |
+| `body` | **requis** | Le libellé, avec un placeholder là où le message varie |
+| `note` | optionnel | Pourquoi vous demandez — une référence d'enregistrement a sa place ici |
+| `tlvs` | optionnel | Stamps proposés. Stockés comme proposés, jamais appliqués tels qu'envoyés |
+
+## La grammaire des placeholders
+
+Écrivez le message comme le régulateur l'écrit, avec un placeholder à la place de la partie qui
+change :
+
+```
+Your OTP is {#var#}, valid 10 minutes
+```
+
+| Placeholder | Accepte |
+| :--- | :--- |
+| `{#var#}` | N'importe quoi, jusqu'à la limite de longueur |
+| `{#num#}` | Chiffres `0`–`9` |
+| `{#alp#}` | Lettres, espaces, apostrophes et tirets |
+
+Tout ce qui est **autour** d'un placeholder est mis en correspondance à l'identique. Changez-en un
+mot et le message ne correspond plus au template.
+
+### Ce qui est refusé avant d'être stocké
+
+Le libellé est vérifié par le même code qui le compilera s'il est approuvé, donc tout ce qui est
+accepté ici se chargera. Quatre refus, chacun avec une raison :
+
+<AccordionGroup>
+  <Accordion title="Un placeholder qui n'est pas l'un des trois">
+    ```json
+    { "message": "'{#code#}' is not one of {#var#}, {#num#} or {#alp#}, so it is being matched as {#var#} -- anything at all, up to the length limit." }
+    ```
+
+    Refusé **ici** même si un template déjà stocké ainsi se charge encore. Avant que la ligne
+    n'existe, être strict ne coûte rien, et l'accepter approuverait un template qui correspond à
+    plus que ce que vous vouliez.
+  </Accordion>
+
+  <Accordion title="Rien d'autre qu'un placeholder">
+    ```json
+    { "message": "A template of nothing but {#var#} accepts every message, which is the same as not having one. Add the wording around the variable." }
+    ```
+  </Accordion>
+
+  <Accordion title="Deux placeholders sans rien entre eux">
+    ```json
+    { "message": "Two variables with nothing between them cannot be told apart, so they would act as one variable of twice the length. Put the wording that separates them between the two {#var#} tokens." }
+    ```
+  </Accordion>
+
+  <Accordion title="Un libellé vide, ou de plus de 2000 caractères">
+    Plus long que tout message qu'un template pourrait approuver.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+**Un libellé sans aucun placeholder est légitime** et constitue le template le plus strict qui
+soit : il approuve exactement un message et rien d'autre.
+</Tip>
+
+## En modifier un
+
+`PUT` **remplace plutôt que de patcher** — un champ que vous n'envoyez pas est effacé. Envoyez la
+ligne entière.
+
+<Warning>
+**Le nom d'un template est jugé, contrairement au label d'un sender ID.** Changer soit le
+**libellé** soit le **nom** d'un template approuvé le remet à `PENDING` et il cesse d'être accepté
+jusqu'à ce que votre fournisseur l'approuve à nouveau.
+
+L'asymétrie n'est pas arbitraire : le nom est ce *sous quoi* votre fournisseur a lu le libellé,
+donc un nom changé signifie que la décision portait sur autre chose. Le label d'un sender ID n'est
+mis en correspondance par rien et peut être changé librement.
+</Warning>
+
+Envoyez `"confirm_suspend": true` pour procéder à une modification qui suspendrait un template en
+production, et lisez le `status` de la réponse.
+
+## Erreurs
+
+Le même ensemble que [`/secure/senders`](/reference/api/senders#errors) — `400`, `404`, `409`,
+`412`, `429` et `503`, le message nommant lequel.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs" icon="id-card" href="/reference/api/senders">
+    Les mêmes quatre appels pour les noms depuis lesquels vous envoyez.
+  </Card>
+  <Card title="Sender IDs et templates" icon="align-left" href="/developers/portal/registrations">
+    La même chose via le portail.
+  </Card>
+</CardGroup>

@@ -1,0 +1,151 @@
+---
+title: "/secure/templates"
+description: "Solicitar texto de mensagem pela API — a gramática de placeholders, o que é recusado na autoria e por que mudar o nome suspende um template em uso."
+---
+
+O texto que suas mensagens podem usar, e o jeito de pedir mais sem abrir o portal.
+
+O irmão de [`/secure/senders`](/reference/api/senders), e tudo o que foi dito lá se aplica: quatro
+chamadas, o mesmo envelope, e **o que você escreve fica armazenado aguardando aprovação e não é
+utilizável** até que seu provedor decida.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "Your OTP is {#var#}, valid 10 minutes",
+        "label": "OTP",
+        "product": "",
+        "status": "APPROVED",
+        "updated_at": "2026-09-03T10:24:26.534374Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+## As quatro chamadas
+
+| | |
+| :--- | :--- |
+| `GET /secure/templates` | Tudo o que há nesta conta, em qualquer estado |
+| `POST /secure/templates` | Pedir texto novo |
+| `PUT /secure/templates/{id}` | Alterar um que você já tem |
+| `DELETE /secure/templates/{id}` | Retirar uma solicitação que ninguém decidiu |
+
+Disponível a partir do **gateway 0.9.7**.
+
+A listagem carrega os mesmos campos de sender IDs, com uma diferença que vale notar: **`value` é o
+texto** e `label` é o nome que você deu a ele.
+
+## Pedindo um
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/templates' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OTP","body":"Your OTP is {#var#}, valid 10 minutes","note":"regulator template 4471"}'
+```
+
+| Campo | | |
+| :--- | :--- | :--- |
+| `name` | **obrigatório** | Como o texto se chama. Mostrado a quem revisa |
+| `body` | **obrigatório** | O texto, com um placeholder onde a mensagem varia |
+| `note` | opcional | Por que você está pedindo — uma referência de registro pertence aqui |
+| `tlvs` | opcional | Stamps propostos. Armazenados como proposta, nunca aplicados como enviados |
+
+## A gramática de placeholders
+
+Escreva a mensagem como o regulador a escreve, com um placeholder no lugar da parte que muda:
+
+```
+Your OTP is {#var#}, valid 10 minutes
+```
+
+| Placeholder | Aceita |
+| :--- | :--- |
+| `{#var#}` | Qualquer coisa, até o limite de comprimento |
+| `{#num#}` | Dígitos `0`–`9` |
+| `{#alp#}` | Letras, espaços, apóstrofos e hifens |
+
+Tudo **ao redor** de um placeholder é comparado exatamente. Mude uma palavra e a mensagem deixa de
+casar com o template.
+
+### O que é recusado antes de ser armazenado
+
+O texto é checado pelo mesmo código que vai compilá-lo se for aprovado, então qualquer coisa aceita
+aqui vai carregar. Quatro recusas, cada uma com um motivo:
+
+<AccordionGroup>
+  <Accordion title="Um placeholder que não é um dos três">
+    ```json
+    { "message": "'{#code#}' is not one of {#var#}, {#num#} or {#alp#}, so it is being matched as {#var#} -- anything at all, up to the length limit." }
+    ```
+
+    Recusado **aqui** mesmo que um template já armazenado assim ainda carregue. Antes de a linha
+    existir, ser estrito não custa nada, e aceitá-lo aprovaria um template que casa mais do que
+    você quis.
+  </Accordion>
+
+  <Accordion title="Nada além de um placeholder">
+    ```json
+    { "message": "A template of nothing but {#var#} accepts every message, which is the same as not having one. Add the wording around the variable." }
+    ```
+  </Accordion>
+
+  <Accordion title="Dois placeholders sem nada entre eles">
+    ```json
+    { "message": "Two variables with nothing between them cannot be told apart, so they would act as one variable of twice the length. Put the wording that separates them between the two {#var#} tokens." }
+    ```
+  </Accordion>
+
+  <Accordion title="Texto em branco, ou mais de 2000 caracteres">
+    Mais longo do que qualquer mensagem que um template poderia aprovar.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+**Texto sem placeholder algum é legítimo** e é o template mais estrito que existe: ele aprova
+exatamente uma mensagem e nada mais.
+</Tip>
+
+## Alterando um
+
+`PUT` **substitui em vez de fazer patch** — um campo que você não envia é limpo. Envie a linha
+inteira.
+
+<Warning>
+**O nome de um template é julgado, ao contrário do label de um sender ID.** Mudar o **texto** ou o
+**nome** em um template aprovado o volta para `PENDING` e ele deixa de ser aceito até que seu
+provedor o aprove novamente.
+
+A assimetria não é arbitrária: o nome é aquilo *sob* o qual seu provedor leu o texto, então um nome
+mudado significa que a decisão foi sobre outra coisa. O label de um sender ID não é comparado por
+nada e pode ser mudado livremente.
+</Warning>
+
+Envie `"confirm_suspend": true` para prosseguir com uma edição que suspenderia um template em uso,
+e leia o `status` na resposta.
+
+## Erros
+
+O mesmo conjunto de [`/secure/senders`](/reference/api/senders#errors) — `400`, `404`, `409`,
+`412`, `429` e `503`, com a mensagem dizendo qual.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs" icon="id-card" href="/reference/api/senders">
+    As mesmas quatro chamadas para os nomes dos quais você envia.
+  </Card>
+  <Card title="Sender IDs e templates" icon="align-left" href="/developers/portal/registrations">
+    A mesma coisa pelo portal.
+  </Card>
+</CardGroup>
