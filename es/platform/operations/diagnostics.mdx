@@ -1,0 +1,92 @@
+---
+title: "Diagnósticos"
+description: "Un ajuste para cuánto registra el gateway sobre mensajes individuales — y los dos ajustes que deliberadamente no toca, porque almacenan contenido del cliente."
+---
+
+Cuando un cliente dice que sus recibos de entrega dejaron de llegar, la respuesta normalmente ya la
+conoce el gateway y simplemente no está escrita. `smsg.diagnostics` decide cuánto de ella lo está.
+
+<Note>
+Configúrelo desde el panel de control: **Configuration → Gateway → Diagnostics**. Sin SQL, y surte
+efecto en el siguiente poll de configuración — sin reinicio.
+</Note>
+
+## Los tres niveles
+
+| Nivel | Lo que obtiene | Lo que cuesta |
+| :--- | :--- | :--- |
+| `off` | Solo errores. Nada sobre mensajes individuales | Nada — y ninguna forma de responder una pregunta de soporte sin cambiar esto primero |
+| **`problems`** | Hitos del ciclo de vida, más un registro duradero de todo lo que no salió como el cliente pidió: un recibo suprimido, retenido, o que falló al enviarse, y callbacks que no tuvieron éxito | **Casi cero en un gateway sano.** Estas filas aparecen cuando algo va mal |
+| `verbose` | Cada decisión de enrutamiento, respuesta de submit y encolado, y una fila de evento por recibo | Volumen real de logs y base de datos. Para un cliente durante una tarde |
+
+**`problems` es el nivel para operar.** Es el que responde una pregunta de soporte sin que nadie
+tenga que activar algo primero — que es todo el problema que existe para resolver, porque el momento
+en que necesita la evidencia siempre es después de que la cosa ocurrió.
+
+## Configurarlo no cambia nada hasta que lo configura
+
+`smsg.diagnostics` suministra el valor **por defecto** de los dos ajustes de abajo. No los anula.
+
+| Antecede a | Que por sí solo aún gana |
+| :--- | :--- |
+| `message.trace.mode` | sí |
+| `smsg.cdr.events` | sí |
+
+Así que un gateway actualizado sin nivel configurado se comporta exactamente como antes, y un
+operador que ya había ajustado `message.trace.mode` conserva lo que eligió. El panel nombra
+cualquier ajuste que esté anulando el nivel, porque un nivel que parece vigente mientras una clave
+lo supera silenciosamente es el único estado confuso que este arreglo puede producir.
+
+## Lo que deliberadamente no toca
+
+<Warning>
+**Ningún nivel aquí almacena contenido de mensajes.**
+
+`smsg.cdr.body` conserva el texto de los mensajes del cliente. `print.msgs` registra números de
+teléfono, cuerpos de mensajes y contraseñas de bind. Ambas son decisiones sobre **retener datos del
+cliente**, tomadas por operadores en jurisdicciones que responden esa pregunta de forma distinta —
+no diales para cuánto detalle quiere hoy.
+
+Subir un nivel de diagnóstico para perseguir un recibo nunca debe empezar a retener contenido de
+mensajes como efecto secundario, así que ninguno forma parte de `smsg.diagnostics`. Configúrelos por
+separado, deliberadamente, y vuelva a apagarlos.
+</Warning>
+
+## Lo que `problems` registra
+
+Los eventos aterrizan en `cdr_event` y aparecen en la página de un mensaje bajo **Customer exchange**:
+
+| Evento | Significa |
+| :--- | :--- |
+| `receipt.sent` | El recibo llegó al bind del cliente |
+| `receipt.failed` | El `deliver_sm` no pudo ponerse en el cable |
+| `receipt.held` | El cliente no estaba alcanzable. **Se reproduce cuando ese system id vuelva a hacer bind** — un bind que nunca cae nunca lo dispara |
+| `receipt.suppressed` | Su `registered_delivery` no pidió este resultado. La línea lleva el octeto almacenado, que es el diagnóstico |
+| `callback.attempt` | Un intento a su `dlr-url`, con estado y duración — **una fila por intento**, no una por resultado |
+
+Las direcciones de callback se almacenan con la **query string eliminada**. Una `dlr-url` lleva
+rutinariamente una clave de API, y estas filas son ampliamente legibles, así que el endpoint se
+guarda como esquema, host y ruta y nada más. No se almacena ningún cuerpo de respuesta en absoluto.
+
+## `registered_delivery`, y el valor que sorprende a la gente
+
+Un recibo suprimido es casi siempre esto:
+
+| Octeto | Pide |
+| :--- | :--- |
+| `0x00` | Ningún recibo |
+| `0x01` | Éxito **o** fallo |
+| `0x02` | **Solo fallos** — así que cada entrega exitosa se retiene |
+
+`0x02` es el que produce "recibimos algunos recibos pero no otros". El evento `receipt.suppressed`
+imprime el octeto almacenado para que pueda leerse en lugar de adivinarse.
+
+## Subirlo para un solo mensaje
+
+```
+smsg.diagnostics = verbose
+```
+
+Luego envíe el mensaje, lea el log, y devuélvalo a `problems`. `verbose` registra cada fallo de
+enrutamiento, respuesta de submit y encolado — dejarlo activado es volumen real de escritura en un
+gateway en vivo.

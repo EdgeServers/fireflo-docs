@@ -1,0 +1,94 @@
+---
+title: "Diagnostics"
+description: "Un réglage pour ce que le gateway enregistre sur les messages individuels — et les deux réglages qu'il ne touche délibérément pas, parce qu'ils stockent du contenu client."
+---
+
+Quand un client dit que ses accusés de réception ont cessé d'arriver, la réponse est généralement
+déjà connue du gateway et simplement pas écrite. `smsg.diagnostics` décide dans quelle mesure elle l'est.
+
+<Note>
+Réglez-le depuis le panneau de contrôle : **Configuration → Gateway → Diagnostics**. Pas de SQL, et
+il prend effet au prochain poll de configuration — pas de redémarrage.
+</Note>
+
+## Les trois niveaux
+
+| Niveau | Ce que vous obtenez | Ce que ça coûte |
+| :--- | :--- | :--- |
+| `off` | Erreurs uniquement. Rien sur les messages individuels | Rien — et aucun moyen de répondre à une question de support sans changer ceci d'abord |
+| **`problems`** | Les jalons du cycle de vie, plus un enregistrement durable de tout ce qui ne s'est pas passé comme le client l'avait demandé : un accusé retenu, mis en attente, ou dont l'envoi a échoué, et les callbacks qui n'ont pas abouti | **Quasi nul sur un gateway sain.** Ces lignes apparaissent quand quelque chose va mal |
+| `verbose` | Chaque décision de routage, réponse de submit et mise en file, et une ligne d'événement par accusé | Un vrai volume de logs et de base de données. Pour un client, pour un après-midi |
+
+**`problems` est le niveau à utiliser.** C'est celui qui répond à une question de support sans que
+personne n'ait à activer quelque chose d'abord — ce qui est tout le problème qu'il existe pour
+résoudre, parce que le moment où vous avez besoin des preuves est toujours après que la chose s'est
+produite.
+
+## Le définir ne change rien tant que vous ne le définissez pas
+
+`smsg.diagnostics` fournit la valeur **par défaut** des deux réglages ci-dessous. Il ne les écrase pas.
+
+| Il précède | Qui, défini seul, gagne quand même |
+| :--- | :--- |
+| `message.trace.mode` | oui |
+| `smsg.cdr.events` | oui |
+
+Ainsi un gateway mis à niveau sans niveau défini se comporte exactement comme avant, et un opérateur
+qui avait déjà réglé `message.trace.mode` conserve son choix. Le panneau nomme tout réglage qui
+outrepasse le niveau, parce qu'un niveau qui semble en vigueur alors qu'une clé le supplante
+silencieusement est le seul état déroutant que cet arrangement peut produire.
+
+## Ce qu'il ne touche délibérément pas
+
+<Warning>
+**Aucun niveau ici ne stocke le contenu des messages.**
+
+`smsg.cdr.body` conserve le texte des messages des clients. `print.msgs` journalise les numéros de
+téléphone, les corps de messages et les mots de passe de bind. Les deux sont des décisions sur la
+**rétention de données client**, prises par des opérateurs dans des juridictions qui répondent
+différemment à cette question — pas des molettes pour régler le niveau de détail souhaité aujourd'hui.
+
+Augmenter un niveau de diagnostic pour traquer un accusé ne doit jamais commencer à retenir du
+contenu de message par effet de bord, donc aucun des deux ne fait partie de `smsg.diagnostics`.
+Définissez-les séparément, délibérément, et désactivez-les à nouveau.
+</Warning>
+
+## Ce que `problems` enregistre
+
+Les événements atterrissent dans `cdr_event` et apparaissent sur la page d'un message sous
+**Customer exchange** :
+
+| Événement | Signifie |
+| :--- | :--- |
+| `receipt.sent` | L'accusé a atteint le bind du client |
+| `receipt.failed` | Le `deliver_sm` n'a pas pu être mis sur le fil |
+| `receipt.held` | Le client n'était pas joignable. **Il est rejoué quand ce system id se reconnecte** — un bind qui ne tombe jamais ne le déclenche jamais |
+| `receipt.suppressed` | Leur `registered_delivery` ne demandait pas ce résultat. La ligne porte l'octet stocké, qui est le diagnostic |
+| `callback.attempt` | Une tentative vers leur `dlr-url`, avec statut et durée — **une ligne par tentative**, pas une par résultat |
+
+Les adresses de callback sont stockées avec la **query string retirée**. Une `dlr-url` transporte
+couramment une clé d'API, et ces lignes sont largement lisibles, donc l'endpoint est conservé comme
+schéma, hôte et chemin et rien d'autre. Aucun corps de réponse n'est stocké du tout.
+
+## `registered_delivery`, et la valeur qui surprend
+
+Un accusé supprimé est presque toujours ceci :
+
+| Octet | Demande |
+| :--- | :--- |
+| `0x00` | Pas d'accusé |
+| `0x01` | Succès **ou** échec |
+| `0x02` | **Échec uniquement** — donc chaque livraison réussie est retenue |
+
+`0x02` est celui qui produit « nous recevons certains accusés mais pas d'autres ». L'événement
+`receipt.suppressed` affiche l'octet stocké pour qu'il puisse être lu plutôt que deviné.
+
+## L'augmenter pour un seul message
+
+```
+smsg.diagnostics = verbose
+```
+
+Envoyez ensuite le message, lisez le log, et remettez-le à `problems`. `verbose` journalise chaque
+échec de routage, réponse de submit et mise en file — le laisser activé représente un vrai volume
+d'écriture sur un gateway en production.
