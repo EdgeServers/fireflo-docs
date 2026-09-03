@@ -3,7 +3,7 @@ title: "Vue d'ensemble de l'API REST"
 description: "L'URL de base, l'authentification Basic, l'enveloppe de réponse, et la règle de nommage des champs qui piège la plupart des gens migrant depuis une autre passerelle."
 ---
 
-Cinq endpoints, tous JSON, tous renvoyant la même enveloppe. Quatre sont sous `/secure/` et
+Sept endpoints, tous JSON, tous renvoyant la même enveloppe. Six sont sous `/secure/` et
 utilisent l'authentification HTTP Basic ; `/ping` n'en utilise aucune.
 
 | Endpoint | Méthode | Rôle |
@@ -12,7 +12,16 @@ utilisent l'authentification HTTP Basic ; `/ping` n'en utilise aucune.
 | [`/secure/sendbatch`](/reference/api/sendbatch) | POST | En mettre plusieurs, éventuellement planifiés |
 | [`/secure/balance`](/reference/api/balance) | GET | Ce qu'il reste sur le compte |
 | [`/secure/rate`](/reference/api/rate) | GET | Ce que coûterait un message, sans rien envoyer |
+| [`/secure/senders`](/reference/api/senders) | GET POST PUT DELETE | Les noms depuis lesquels vous pouvez envoyer, et en demander un autre |
+| [`/secure/templates`](/reference/api/templates) | GET POST PUT DELETE | Le libellé que vous pouvez envoyer, et en demander davantage |
 | [`/ping`](/reference/api/ping) | GET | Liveness, sans identifiants |
+
+<Note>
+**Les deux derniers demandent ; ils n'accordent pas.** Un sender ID ou un template écrit à travers
+eux est stocké en attente de l'approbation de votre fournisseur et n'est **pas utilisable tant
+qu'il ne l'a pas approuvé**. Ils sont arrivés avec la **passerelle 0.9.7** ; contre toute version
+plus ancienne ils répondent `404`.
+</Note>
 
 ## L'enveloppe
 

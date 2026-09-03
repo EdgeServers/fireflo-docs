@@ -126,3 +126,26 @@ no surten efecto hasta que se aceptan de todos modos.
 
 Si necesita una redacción alterada en vivo antes de retirar la antigua, solicite la nueva como una
 plantilla aparte y deje que su proveedor retire la antigua después.
+
+## Hacerlo desde su propio código
+
+Todo lo que hay en estas dos pantallas está también en la API REST, así que un cliente con muchos
+registros no tiene que recorrer el portal uno a uno:
+
+<CardGroup cols={2}>
+  <Card title="/secure/senders" icon="id-card" href="/reference/api/senders">
+    Listar, solicitar, cambiar y retirar sender IDs.
+  </Card>
+  <Card title="/secure/templates" icon="align-left" href="/reference/api/templates">
+    Las mismas cuatro llamadas para la redacción.
+  </Card>
+</CardGroup>
+
+Las mismas credenciales con las que envía, y las mismas reglas — lo que escribe es una
+**solicitud**, y la API dice en qué estado está cada registro y si los registros se están
+imponiendo siquiera en su cuenta.
+
+<Note>
+**Disponible a partir de la pasarela 0.9.7.** Si esos endpoints responden `404`, su proveedor
+ejecuta una pasarela más antigua y estas pantallas son la forma de pedir.
+</Note>

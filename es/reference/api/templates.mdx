@@ -1,0 +1,150 @@
+---
+title: "/secure/templates"
+description: "Solicitar redacción de mensajes por la API — la gramática de los marcadores, qué se rechaza al redactar, y por qué un cambio de nombre suspende una plantilla activa."
+---
+
+La redacción que pueden usar sus mensajes, y la forma de pedir más sin abrir el portal.
+
+El hermano de [`/secure/senders`](/reference/api/senders), y todo lo dicho allí se aplica: cuatro
+llamadas, la misma envoltura, y **lo que escribe se almacena a la espera de aprobación y no es
+utilizable** hasta que su proveedor decide.
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/templates'
+```
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "id": 1,
+        "value": "Your OTP is {#var#}, valid 10 minutes",
+        "label": "OTP",
+        "product": "",
+        "status": "APPROVED",
+        "updated_at": "2026-09-03T10:24:26.534374Z"
+      }
+    ],
+    "enforcement": "enforce"
+  }
+}
+```
+
+## Las cuatro llamadas
+
+| | |
+| :--- | :--- |
+| `GET /secure/templates` | Todo lo de esta cuenta, sea cual sea su estado |
+| `POST /secure/templates` | Pedir redacción nueva |
+| `PUT /secure/templates/{id}` | Cambiar una que ya tiene |
+| `DELETE /secure/templates/{id}` | Retirar una solicitud que nadie ha decidido |
+
+Disponibles a partir de la **pasarela 0.9.7**.
+
+El listado lleva los mismos campos que los sender IDs, con una diferencia que merece notarse:
+**`value` es la redacción** y `label` es el nombre que le dio.
+
+## Pedir una
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -X POST 'https://sms.example.com/secure/templates' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OTP","body":"Your OTP is {#var#}, valid 10 minutes","note":"regulator template 4471"}'
+```
+
+| Campo | | |
+| :--- | :--- | :--- |
+| `name` | **obligatorio** | Cómo se llama la redacción. Se muestra a quien la revisa |
+| `body` | **obligatorio** | La redacción, con un marcador donde el mensaje varía |
+| `note` | opcional | Por qué lo pide — una referencia de registro va aquí |
+| `tlvs` | opcional | Stamps propuestos. Se almacenan como propuestos, nunca se aplican tal como se enviaron |
+
+## La gramática de los marcadores
+
+Escriba el mensaje como lo escribe el regulador, con un marcador en lugar de la parte que cambia:
+
+```
+Your OTP is {#var#}, valid 10 minutes
+```
+
+| Marcador | Acepta |
+| :--- | :--- |
+| `{#var#}` | Cualquier cosa, hasta el límite de longitud |
+| `{#num#}` | Dígitos `0`–`9` |
+| `{#alp#}` | Letras, espacios, apóstrofes y guiones |
+
+Todo lo que hay **alrededor** de un marcador se compara exactamente. Cambie una palabra y el
+mensaje ya no coincide con la plantilla.
+
+### Qué se rechaza antes de almacenarse
+
+La redacción la comprueba el mismo código que la compilará si se aprueba, así que cualquier cosa
+aceptada aquí cargará. Cuatro rechazos, cada uno con su razón:
+
+<AccordionGroup>
+  <Accordion title="Un marcador que no es uno de los tres">
+    ```json
+    { "message": "'{#code#}' is not one of {#var#}, {#num#} or {#alp#}, so it is being matched as {#var#} -- anything at all, up to the length limit." }
+    ```
+
+    Rechazado **aquí** aunque una plantilla ya almacenada así todavía carga. Antes de que la fila
+    exista no cuesta nada ser estricto, y aceptarlo aprobaría una plantilla que coincide con más de
+    lo que pretendía.
+  </Accordion>
+
+  <Accordion title="Nada más que un marcador">
+    ```json
+    { "message": "A template of nothing but {#var#} accepts every message, which is the same as not having one. Add the wording around the variable." }
+    ```
+  </Accordion>
+
+  <Accordion title="Dos marcadores sin nada entre ellos">
+    ```json
+    { "message": "Two variables with nothing between them cannot be told apart, so they would act as one variable of twice the length. Put the wording that separates them between the two {#var#} tokens." }
+    ```
+  </Accordion>
+
+  <Accordion title="Redacción en blanco, o de más de 2000 caracteres">
+    Más larga que cualquier mensaje que una plantilla pudiera aprobar.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+**Una redacción sin ningún marcador es legítima** y es la plantilla más estricta que existe:
+aprueba exactamente un mensaje y nada más.
+</Tip>
+
+## Cambiar una
+
+`PUT` **reemplaza en lugar de parchear** — un campo que no envíe se borra. Envíe la fila completa.
+
+<Warning>
+**El nombre de una plantilla se juzga, a diferencia del label de un sender ID.** Cambiar la
+**redacción** o el **nombre** de una plantilla aprobada la devuelve a `PENDING` y deja de aceptarse
+hasta que su proveedor la apruebe de nuevo.
+
+La asimetría no es arbitraria: el nombre es aquello *bajo* lo que su proveedor leyó la redacción,
+así que un nombre cambiado significa que la decisión era sobre otra cosa. El label de un sender ID
+no se compara con nada y puede cambiarse libremente.
+</Warning>
+
+Envíe `"confirm_suspend": true` para continuar con una edición que suspendería una plantilla
+activa, y lea el `status` de la respuesta.
+
+## Errores
+
+El mismo conjunto que [`/secure/senders`](/reference/api/senders#errors) — `400`, `404`, `409`,
+`412`, `429` y `503`, con el mensaje nombrando cuál.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Sender IDs" icon="id-card" href="/reference/api/senders">
+    Las mismas cuatro llamadas para los nombres desde los que envía.
+  </Card>
+  <Card title="Sender IDs y plantillas" icon="align-left" href="/developers/portal/registrations">
+    Lo mismo a través del portal.
+  </Card>
+</CardGroup>

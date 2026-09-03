@@ -3,7 +3,7 @@ title: "Visión general de la API REST"
 description: "La URL base, la autenticación Basic, la envoltura de respuesta y la regla de nombres de campo que pilla a la mayoría de quienes portan desde otra pasarela."
 ---
 
-Cinco endpoints, todos JSON, todos devolviendo la misma envoltura. Cuatro cuelgan de `/secure/` y
+Siete endpoints, todos JSON, todos devolviendo la misma envoltura. Seis cuelgan de `/secure/` y
 usan autenticación HTTP Basic; `/ping` no usa ninguna.
 
 | Endpoint | Método | Qué hace |
@@ -12,7 +12,15 @@ usan autenticación HTTP Basic; `/ping` no usa ninguna.
 | [`/secure/sendbatch`](/reference/api/sendbatch) | POST | Encolar muchos, opcionalmente programados |
 | [`/secure/balance`](/reference/api/balance) | GET | Lo que queda en la cuenta |
 | [`/secure/rate`](/reference/api/rate) | GET | Lo que costaría un mensaje, sin enviar nada |
+| [`/secure/senders`](/reference/api/senders) | GET POST PUT DELETE | Los nombres desde los que puede enviar, y pedir otro |
+| [`/secure/templates`](/reference/api/templates) | GET POST PUT DELETE | La redacción que puede enviar, y pedir más |
 | [`/ping`](/reference/api/ping) | GET | Liveness, sin credenciales |
+
+<Note>
+**Los dos últimos piden; no conceden.** Un sender ID o una plantilla escritos a través de ellos se
+almacenan a la espera de la aprobación de su proveedor y **no son utilizables hasta que los
+apruebe**. Llegaron en la **pasarela 0.9.7**; contra cualquier versión anterior responden `404`.
+</Note>
 
 ## La envoltura
 
