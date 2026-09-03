@@ -57,10 +57,28 @@ e respondem `404`.
 | `value` | O próprio sender ID — aquilo contra o qual uma mensagem é comparada |
 | `label` | Um nome para ele. Nunca é comparado; mostrado a quem revisa a solicitação |
 | `product` | O produto ao qual se aplica. Vazio significa todos os produtos da conta |
-| `status` | `PENDING`, `APPROVED` ou `REJECTED` |
+| `status` | `PENDING`, `APPROVED`, `REJECTED` ou `WITHDRAWN` — veja abaixo |
 | `requested_tlvs` | Os stamps que **você propôs**. Veja [Stamps propostos](#stamps-propostos) |
 | `note` | Por que você pediu |
 | `updated_at` | Quando a linha mudou pela última vez |
+
+### Os quatro estados
+
+| `status` | Utilizável? | Significado |
+| :--- | :--- | :--- |
+| `PENDING` | **não** | Enviado, ninguém decidiu |
+| `APPROVED` | **sim** | Aprovado e em operação |
+| `REJECTED` | **não** | Recusado |
+| `WITHDRAWN` | **não** | Foi aprovado, e seu provedor o desativou desde então |
+
+<Warning>
+**`APPROVED` é o único do qual você pode enviar.** Em particular `WITHDRAWN` não é uma forma mais
+branda de aprovado — uma mensagem enviada dele é recusada exatamente como uma não registrada.
+
+Reportado a partir do **gateway 0.9.8**. Antes disso, um registro retirado reportava `APPROVED`
+aqui enquanto seu tráfego era recusado, então um cliente escrito contra o 0.9.7 deve tratar um
+status desconhecido como não utilizável em vez de assumir três valores.
+</Warning>
 
 ### `enforcement` é o campo que vale ler primeiro
 
