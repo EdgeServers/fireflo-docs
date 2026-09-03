@@ -19,12 +19,17 @@ envío.
 
 ## Los cuatro estados
 
-| Distintivo | Significado |
-| :--- | :--- |
-| **Waiting for approval** | Enviado, aún sin revisar. No utilizable |
-| **In use** | Aprobado y activo |
-| **Not approved** | Rechazado, con el motivo de su proveedor visible |
-| **Withdrawn** | Estaba aprobado, desactivado por su proveedor. No utilizable |
+| Distintivo | En la API | Significado |
+| :--- | :--- | :--- |
+| **Waiting for approval** | `PENDING` | Enviado, aún sin revisar. No utilizable |
+| **In use** | `APPROVED` | Aprobado y activo |
+| **Not approved** | `REJECTED` | Rechazado, con el motivo de su proveedor visible |
+| **Withdrawn** | `WITHDRAWN` | Estaba aprobado, desactivado por su proveedor. No utilizable |
+
+La columna del medio es lo que devuelven [`/secure/senders`](/reference/api/senders) y
+[`/secure/templates`](/reference/api/templates), así que las dos superficies describen los mismos
+cuatro estados en lugar de ocho. **Solo `APPROVED` es utilizable**: los otros tres significan que un
+mensaje será rechazado, por motivos distintos.
 
 Cada fila indica también a qué producto se aplica y a qué login: uno concreto o **todos sus
 logins**.

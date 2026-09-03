@@ -124,7 +124,10 @@ O TLV coverage report do painel diz, por linha aprovada, quais tags mandatórias
 ## Aprovação, e o custo de uma edição
 
 Tudo o que um cliente submete pelo portal chega `PENDING`. O gateway serve uma linha somente quando
-está `enabled` **e** `APPROVED`.
+está `enabled` **e** `APPROVED`. A partir do gateway 0.9.8, um cliente lendo a API de registros é
+informado quando uma linha está aprovada mas desligada. Veja
+[Sender IDs](/platform/customers/sender-ids#quem-propõe-e-quem-aprova), onde as mesmas duas colunas
+são explicadas.
 
 <Warning>
 **Editar um template aprovado o suspende.** Alterar o nome, o texto, a nota ou o login volta a linha

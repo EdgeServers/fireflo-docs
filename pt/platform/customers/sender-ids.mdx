@@ -91,6 +91,18 @@ registra o revisor. Desmarcar escreve `enabled = false` e deixa `status` em paz:
 desaprová-lo**, e uma linha retirada colocada de volta em serviço não deve precisar ser aprovada
 novamente.
 
+<Note>
+**Um cliente lendo a API vê a retirada, a partir do gateway 0.9.8.** Como as duas colunas são
+separadas, a API de registros costumava reportar uma linha retirada como `APPROVED` — ela lê a
+decisão de aprovação, e essa não havia mudado. Um cliente que a consultava para decidir de onde
+enviar era informado de que o remetente estava aprovado enquanto o gateway recusava todas as
+mensagens dele.
+
+Agora ela reporta um quarto estado, `WITHDRAWN`, então a API e a tela do portal do cliente concordam
+entre si e com o que o gateway realmente faz. Nada do seu lado mudou; desmarcar continua escrevendo
+uma única coluna.
+</Note>
+
 <Warning>
 **Editar um registro aprovado o suspende.** Alterar o sender ID, a nota de requisição ou o login volta
 a linha para `PENDING` e limpa a revisão anterior, então o registro fica fora de serviço até que

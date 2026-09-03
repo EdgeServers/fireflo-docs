@@ -19,12 +19,17 @@ est refusé à la soumission.
 
 ## Les quatre états
 
-| Badge | Signification |
-| :--- | :--- |
-| **En attente d'approbation** | Soumis, pas encore examiné. Non utilisable |
-| **En usage** | Approuvé et en production |
-| **Non approuvé** | Refusé, avec la raison de votre fournisseur affichée |
-| **Retiré** | A été approuvé, désactivé par votre fournisseur. Non utilisable |
+| Badge | Sur l'API | Signification |
+| :--- | :--- | :--- |
+| **En attente d'approbation** | `PENDING` | Soumis, pas encore examiné. Non utilisable |
+| **En usage** | `APPROVED` | Approuvé et en production |
+| **Non approuvé** | `REJECTED` | Refusé, avec la raison de votre fournisseur affichée |
+| **Retiré** | `WITHDRAWN` | A été approuvé, désactivé par votre fournisseur. Non utilisable |
+
+La colonne du milieu est ce que [`/secure/senders`](/reference/api/senders) et
+[`/secure/templates`](/reference/api/templates) renvoient, donc les deux surfaces décrivent les
+quatre mêmes états plutôt que huit. **Seul `APPROVED` est utilisable** — les trois autres signifient
+tous qu'un message sera refusé, pour des raisons différentes.
 
 Chaque ligne indique aussi le produit auquel il s'applique et le login concerné, soit un login
 nommé, soit **tous vos logins**.
