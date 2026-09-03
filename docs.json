@@ -1331,10 +1331,6 @@
       "destination": "/platform/control-panel/receipt-quality"
     },
     {
-      "source": "/platform/operations/diagnostics",
-      "destination": "/platform/control-panel/diagnostics"
-    },
-    {
       "source": "/platform/billing/revenue",
       "destination": "/platform/control-panel/revenue"
     }
