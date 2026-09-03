@@ -56,10 +56,28 @@ Available from **gateway 0.9.7**. Against anything older they are not routed and
 | `value` | The sender ID itself — what a message is matched against |
 | `label` | A name for it. Never matched; shown to whoever reviews the request |
 | `product` | The product this applies to. Empty means every product on the account |
-| `status` | `PENDING`, `APPROVED` or `REJECTED` |
+| `status` | `PENDING`, `APPROVED`, `REJECTED` or `WITHDRAWN` — see below |
 | `requested_tlvs` | The stamps **you proposed**. See [Proposed stamps](#proposed-stamps) |
 | `note` | Why you asked |
 | `updated_at` | When the row last changed |
+
+### The four states
+
+| `status` | Usable? | Meaning |
+| :--- | :--- | :--- |
+| `PENDING` | **no** | Submitted, nobody has decided |
+| `APPROVED` | **yes** | Approved and live |
+| `REJECTED` | **no** | Refused |
+| `WITHDRAWN` | **no** | Was approved, and your provider has since switched it off |
+
+<Warning>
+**`APPROVED` is the only one you can send from.** In particular `WITHDRAWN` is not a milder form of
+approved — a message from it is refused exactly as an unregistered one is.
+
+Reported from **gateway 0.9.8**. Before that a withdrawn registration reported `APPROVED` here while
+its traffic was being refused, so a client written against 0.9.7 should treat an unfamiliar status
+as not usable rather than assuming three values.
+</Warning>
 
 ### `enforcement` is the field worth reading first
 
