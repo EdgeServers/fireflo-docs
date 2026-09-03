@@ -123,7 +123,10 @@ The panel's TLV coverage report says, per approved row, which mandatory tags not
 ## Approval, and what an edit costs
 
 Everything a customer submits from the portal lands `PENDING`. The gateway serves a row only when it
-is `enabled` **and** `APPROVED`.
+is `enabled` **and** `APPROVED`. From gateway 0.9.8 a customer reading the registration API is told
+when a row is approved but switched off — see
+[Sender IDs](/platform/customers/sender-ids#who-proposes-and-who-approves), where the same two columns
+are explained.
 
 <Warning>
 **Editing an approved template suspends it.** Changing the name, the wording, the note or the login

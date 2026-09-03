@@ -17,12 +17,17 @@ the obvious case — an unregistered sender or unapproved wording is refused at 
 
 ## The four states
 
-| Badge | Meaning |
-| :--- | :--- |
-| **Waiting for approval** | Submitted, not yet reviewed. Not usable |
-| **In use** | Approved and live |
-| **Not approved** | Refused, with your provider's reason shown |
-| **Withdrawn** | Was approved, switched off by your provider. Not usable |
+| Badge | On the API | Meaning |
+| :--- | :--- | :--- |
+| **Waiting for approval** | `PENDING` | Submitted, not yet reviewed. Not usable |
+| **In use** | `APPROVED` | Approved and live |
+| **Not approved** | `REJECTED` | Refused, with your provider's reason shown |
+| **Withdrawn** | `WITHDRAWN` | Was approved, switched off by your provider. Not usable |
+
+The middle column is what [`/secure/senders`](/reference/api/senders) and
+[`/secure/templates`](/reference/api/templates) return, so the two surfaces describe the same four
+states rather than eight. **Only `APPROVED` is usable** — the other three all mean a message will be
+refused, for different reasons.
 
 Each row also says which product it applies to, and which login — either a named one or **all your
 logins**.

@@ -88,6 +88,17 @@ No reconnect. See below.
 the reviewer. Unticking writes `enabled = false` and leaves `status` alone: **withdrawing something is
 not un-approving it**, and a withdrawn row put back into service should not need approving again.
 
+<Note>
+**A customer reading the API sees the withdrawal, from gateway 0.9.8.** Because the two columns are
+separate, the registration API used to report a withdrawn row as `APPROVED` — it reads the approval
+decision, and that had not changed. A customer polling it to decide what to send from was told the
+sender was approved while the gateway refused every message from it.
+
+It now reports a fourth state, `WITHDRAWN`, so the API and the customer's portal screen agree with
+each other and with what the gateway actually does. Nothing about your side changed; unticking still
+writes one column.
+</Note>
+
 <Warning>
 **Editing an approved registration suspends it.** Changing the sender ID, the request note or the
 login sets the row back to `PENDING` and clears the earlier review, so the registration is out of
