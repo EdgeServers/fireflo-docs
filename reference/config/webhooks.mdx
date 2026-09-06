@@ -60,7 +60,7 @@ Correlation state for messages awaiting a receipt, and receipts held for a disco
 | :--- | :--- | :--- |
 | `smsg.dlr.store.path` | `data/dlr-mvstore.db` | Store file location. |
 | `smsg.dlr.retention.days` | `7` | How long a submitted message is remembered. |
-| `smsg.dlr.correlation.days` | `3` | How long a vendor message id can still be matched back. |
+| `smsg.dlr.correlation.days` | `2` | How long a vendor message id can still be matched back. |
 | `smsg.dlr.expiry.check.minutes` | `60` | Sweep interval. |
 
 The path was previously settable only as a `-D fireflo.dlr.db.path` system property. That is still

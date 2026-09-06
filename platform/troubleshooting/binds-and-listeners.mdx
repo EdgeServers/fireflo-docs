@@ -53,7 +53,10 @@ binds perfectly and sends nothing.
 - The credential is `type: SMPP`. An HTTP credential cannot bind, and the refusal does not say so.
 - The client is using the configured `systemId` and `password`.
 - No connection limit is exceeded: `srv.maxConnections`, `srv.maxConnectionsPerIP`,
-  `conf.maxConnectionsPerUser.default`, or the per-user limit.
+  `conf.maxConnectionsPerUser.default`, or the per-user limit. Since 0.9.20 the refusals are
+  counted by reason — `fireflo_smpp_bind_refused_total` on the metrics endpoint, and the Servers
+  page shows a notice when any have happened. A customer fleet behind one NAT counts as **one**
+  source IP against the per-IP limit.
 - If `allowedIps` is configured, the bind source IP is on it.
 
 ## The listener never opened

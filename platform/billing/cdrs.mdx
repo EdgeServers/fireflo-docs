@@ -158,7 +158,7 @@ customer's traffic.
 and `UNDELIV` all bill as failures but are worth telling apart.
 
 **The expiry sweep** closes anything past its deadline as `EXPIRED`, leaving billing to decide what an
-unknown outcome is worth. The deadline is capped below three days: past the correlation window a
+unknown outcome is worth. The deadline is capped below two days: past the correlation window a
 receipt can no longer be matched even if it arrives, so waiting longer cannot change the answer.
 
 ## If a message appears in no list at all

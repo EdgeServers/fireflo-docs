@@ -39,6 +39,7 @@ than as a broken monitor.
 | `fireflo_whitelist_header_rejects` / `_template_rejects` | Refused for an unapproved sender or content |
 | `fireflo_whitelist_would_reject` | What report-only mode **would** have refused |
 | `fireflo_balance_debits_refused` | Refused for want of prepaid credit |
+| `fireflo_smpp_bind_refused_total` | Binds refused, with a `reason` label — `ip-limit`, `account-limit`, `credentials` or `product`. A fleet behind one NAT counts as one IP against `srv.maxConnectionsPerIP` |
 | `fireflo_balance_refills_attempted` / `_failed` | Block reservations started, and those that found nothing |
 
 All gauges, read at scrape time, so **none of them costs anything per message**.
