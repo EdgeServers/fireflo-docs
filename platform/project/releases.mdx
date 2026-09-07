@@ -25,6 +25,7 @@ The current pair is <Versions />.
 
 | Gateway | Control panel | Date | What the release was about |
 | :--- | :--- | :--- | :--- |
+| **0.9.22** | 0.9.22.0 | 2026-09-07 | **Refused logins are recorded, visible and blockable.** Every refused SMPP bind, API password and panel sign-in goes to a file of its own, a new Security page shows them beside who is currently blocked, and `fireflo-install --with-fail2ban` ships the jails — off by default. **A security fix rides with it**: the REST API read the left-most `X-Forwarded-For` entry, which under the common nginx recipe is whatever the client sent, so a credential's allowed-ips list could be satisfied with a forged header. See [Blocking abusive clients](/platform/operations/blocking-abusive-clients) |
 | **0.9.21** | 0.9.21.0 | 2026-09-07 | **Stop sending and Hold now act on a listener's own traffic** — on earlier builds both controls paused only the receipts going back to bound customers, and submitted messages kept going out. A suspended listener now accepts and parks; a held one refuses at the door before charging. Stopping a vendor also stops its retries, and vendors gain a **Restart**. See [Controlling a worker](/platform/operations/worker-control) |
 | **0.9.20** | 0.9.20.0 | 2026-09-07 | Sustained-throughput work on the receipt store — the ten-minute 3,000 msg/s run now holds flat with a store a third the size — plus refused SMPP binds counted by reason and a lighter postpaid credit poll. **A default moved**: `smsg.dlr.correlation.days` is now `2` (was `3`); an estate that set the key explicitly is untouched |
 | **0.7.4** | 0.7.4.1 | 2026-08-20 | Three defects on the prepaid credit path |
@@ -34,7 +35,7 @@ The current pair is <Versions />.
 | **0.7.0** | 0.7.0.1 | 2026-08-19 | Concatenated messages end to end, and the segment billing defect |
 
 <Note>
-**This table lists selected releases, not every one.** The releases between 0.7.4 and 0.9.21
+**This table lists selected releases, not every one.** The releases between 0.7.4 and 0.9.22
 each shipped with their own notes; ask [support@fireflo.au](mailto:support@fireflo.au) for any of
 them. **0.7.0 is where this table starts, not where FireFlo starts.** Earlier releases exist and are in
 service; their notes are available from [support@fireflo.au](mailto:support@fireflo.au). Published
