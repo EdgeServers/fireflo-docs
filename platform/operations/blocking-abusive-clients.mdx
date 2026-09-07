@@ -135,6 +135,7 @@ What it writes:
 | `/etc/fireflo/fail2ban-ignore.conf` | the never-ban list. **Created once, never touched again** |
 | `/usr/local/sbin/fireflo-fail2ban` | the only fail2ban the panel can reach |
 | `/usr/local/sbin/fireflo-ignore` | consults the never-ban list, per attempt |
+| `<service>-fail2ban-reset.service` | releases FireFlo's bans at boot, and only FireFlo's |
 
 The panel jail is written **only when a control panel is actually installed on the host**. A jail
 whose log path matches nothing starts, reports itself as running, and protects nothing — so an
@@ -154,10 +155,10 @@ in a tight loop, so a value tuned for SSH would ban a customer with a typo withi
 jail is tighter — a person typing a password does not get five wrong, and nothing there retries
 automatically.
 
-**Bans cover every port, not just the listener's.** Your SMPP ports are a configurable range, so a
-port-scoped jail on a host whose range changed later would protect nothing while still appearing in
-`fail2ban-client status`. The trade is that a false positive costs that address more than SMPP, which
-is the other reason to fill in the never-ban list first.
+**Bans cover every port, not just the listener's** — that is deliberate, on the grounds that
+somebody working through SMPP passwords has no business anywhere on the host. It also means a false
+positive costs that address *everything*, which is why the never-ban list above is not optional and
+why a reboot releases them.
 
 ## Seeing who was refused, and who is blocked
 
@@ -175,6 +176,23 @@ On the host:
 ```bash
 sudo fail2ban-client status fireflo-gateway
 ```
+
+## A reboot releases FireFlo's bans
+
+fail2ban keeps its bans in a database and **restores every unexpired one when it restarts**, so
+without this a reboot would bring back an address banned ten minutes earlier. Since a ban covers
+every port — including SSH — that would make a reboot useless as an escape from a lockout, which is
+the one thing a reboot is for.
+
+So `--with-fail2ban` also installs a small unit that runs after fail2ban at boot and releases
+FireFlo's jails. **Only FireFlo's**: your `sshd`, `postfix` and other jails keep their bans, because
+clearing those is not this installer's business.
+
+<Note>
+The cost is that an attacker mid-ban is also released by a reboot. With a one-hour ban and reboots
+being rare, that is a small window, and they are banned again on their next attempt — whereas an
+operator locked out of their own host by a whole-port ban has no other lever.
+</Note>
 
 ## Releasing an address
 

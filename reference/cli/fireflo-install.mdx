@@ -81,6 +81,9 @@ rather than parsed.
 | `--fail2ban-ignore A,B` | Addresses or CIDRs that must never be banned. |
 
 <Warning>
+Also `fireflo-install fail2ban`, which turns blocking on for an install that already exists — the
+same step, reachable without reinstalling.
+
 **`--with-fail2ban` edits host security configuration**, and grants the control panel one narrow
 `sudo` rule. That is why it is opt-in rather than something an upgrade turns on: a jail that arrives
 by surprise is how an install starts refusing its own customers.
