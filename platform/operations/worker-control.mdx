@@ -14,36 +14,63 @@ These verbs apply immediately.
 ./scripts/fireflo suspend vendor1
 ```
 
-## The three pairs
+## They mean different things on a vendor and on a listener
+
+Both kinds of worker take the same verbs, and **the same verb does a different job on each** — which
+is the point. A vendor is somewhere traffic goes; a listener is where traffic comes from, and it also
+carries receipts back to a customer. So "stop sending" on one is not the same act as on the other.
+
+<Warning>
+**Before 0.9.21 the controls did not act on a listener's own traffic at all.** Stop sending and Hold
+on a listener paused only the loop carrying receipts back to bound customers; submitted messages kept
+going out. If you are running an earlier build, this is the release to take.
+</Warning>
+
+### On a vendor
 
 | Verb | What it does |
 | :--- | :--- |
-| `enable` / `disable` | Starts or stops the worker outright. **A disabled worker leaves `/ops/health` entirely.** |
-| `suspend` / `resume` | Stops accepting and **drains the queue back to the router**, so traffic reroutes to another vendor. The session stays bound. |
-| `hold` / `release` | Keeps accepting and **stops sending**, so the queue grows for as long as it is held. |
+| `suspend` / `resume` — **Stop sending** | No more messages go to this vendor, including any already queued and any part-way through a retry. New traffic **fails over to your other vendors**, so total outbound volume does not drop. The session stays bound. |
+| `restart` — **Restart** | Disables and re-enables it in one act, so the sessions are torn down and re-dialled. For a vendor that is bound but not behaving. |
+| `enable` / `disable` | Stops it outright and **disconnects** it. A disabled worker leaves `/ops/health` entirely. |
+
+### On a listener
+
+| Verb | What it does |
+| :--- | :--- |
+| `suspend` / `resume` — **Stop sending** | Submits are still **accepted** (`ESME_ROK`) and charged, then **parked** rather than routed. **Receipts keep being delivered** throughout. Resume routes everything parked, in arrival order and once each. |
+| `hold` / `release` — **Hold** | Every submit is **refused at the door** with `ESME_RMSGQFUL`, **before any charge is taken**, so a refused message costs nothing. Receipts are held too. Binds stay up, and well-behaved clients retry — so releasing resumes traffic without anyone reconnecting. |
+| `enable` / `disable` | Stops both directions and drops the binds. |
 
 ## Choosing between them
 
 <AccordionGroup>
 
-<Accordion title="Suspend — a vendor is misbehaving and you have another">
-The right default for a vendor problem. Queued traffic goes back to the router and finds an
-alternative, and the session stays bound so you can test it without a fresh bind.
+<Accordion title="Stop sending on a vendor — it is misbehaving and you have another">
+The right default for a vendor problem. New traffic finds an alternative route immediately and the
+session stays bound, so you can test it without a fresh bind.
 
-Nothing is lost and nothing waits.
+**Expect total outbound volume to stay flat**, because the traffic went somewhere else rather than
+stopping — look at the other vendors' counters, not the total, to confirm it worked.
 </Accordion>
 
-<Accordion title="Hold — you want the traffic kept, not rerouted">
-For a planned window where the vendor will be back shortly and you would rather queue than pay a more
-expensive route.
+<Accordion title="Stop sending on a listener — you want the messages, just not yet">
+For a short window where you would rather hold a customer's traffic than refuse it: a route being
+edited, a vendor being swapped. The customer sees nothing wrong, and every message is delivered when
+you resume.
 
 <Warning>
-**Watch `queue_depth` — and `queue_capacity`.** A held worker under a capacity limit will eventually
-make the gateway **refuse new traffic** rather than grow.
-
-That refusal reaches customers as `ESME_RMSGQFUL` or a `503`. Holding is not free; it converts a
-vendor problem into an ingress problem if you leave it long enough.
+**Parked messages are charged and are held in memory.** The customer has been told the message was
+accepted, so it is owed — but the parked copy does not survive a restart, and the parked count is
+capped. Past the cap the listener refuses further submits before charging them. Watch the parked
+count on the worker's health block and do not leave a listener parked for long.
 </Warning>
+</Accordion>
+
+<Accordion title="Hold on a listener — you want the traffic to stop arriving">
+The stronger control, and the safer one for anything longer than a moment. Nothing is accepted,
+nothing is charged, and nothing accumulates on this gateway. The customer's own stack holds their
+backlog and retries, which is where a backlog belongs.
 </Accordion>
 
 <Accordion title="Disable — take it out of service entirely">
@@ -54,6 +81,13 @@ Use it when you want the worker gone rather than paused.
 </Accordion>
 
 </AccordionGroup>
+
+<Warning>
+**A held vendor's queue grows, so watch `queue_depth` and `queue_capacity`.** Under a capacity limit
+the gateway eventually **refuses new traffic** rather than growing — reaching customers as
+`ESME_RMSGQFUL` or a `503`. Holding is not free; it converts a vendor problem into an ingress problem
+if you leave it long enough.
+</Warning>
 
 ## These are runtime state, not configuration
 

@@ -179,16 +179,20 @@ Captures contain message content and destination numbers. They are bounded and h
 the capture stops itself and is dropped fifteen minutes later, downloaded or not. This replaces turning
 on `log.pdus` for a whole worker, which wrote every session's PDUs to a shared log file.
 
-### The six control verbs
+### The seven control verbs
 
 | Verb | Effect |
 | :--- | :--- |
 | `enable` | Start it now |
 | `disable` | Stop it now |
-| `suspend` | Stop accepting; drain the queue back to the router |
-| `resume` | Start accepting again |
-| `hold` | Keep accepting but stop sending; the queue grows |
-| `release` | Start sending again |
+| `suspend` | Stop this worker's own traffic. On a **vendor**, no more messages are sent and the queue is held; on a **listener**, submits are still accepted and charged but parked un-routed, while receipts keep flowing |
+| `resume` | Undo `suspend`. A listener routes everything it parked, in arrival order and once each |
+| `hold` | On a **listener**, refuse every submit at the door with `ESME_RMSGQFUL` — before any charge — and hold receipts too. On a vendor this is the older stop-sending form; prefer `suspend` there |
+| `release` | Undo `hold` |
+| `restart` | Bounce a vendor's connection: disable, then enable. Sessions are torn down and re-dialled |
+
+What each does per worker kind is set out in
+[Controlling a worker](/platform/operations/worker-control).
 
 ### Purging sample data
 
