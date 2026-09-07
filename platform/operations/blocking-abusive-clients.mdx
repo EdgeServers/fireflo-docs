@@ -116,9 +116,24 @@ compromised trusted host stays visible instead of becoming the one place nobody 
 
 ## Turning it on
 
+On a gateway that is **already installed** — which is most of them:
+
+```bash
+sudo ./scripts/fireflo-install fail2ban --fail2ban-ignore "203.0.113.9,198.51.100.0/24"
+```
+
+On a **fresh** install, as part of it:
+
 ```bash
 sudo ./scripts/fireflo-install install --with-fail2ban --fail2ban-ignore "203.0.113.9,198.51.100.0/24"
 ```
+
+<Warning>
+**`install` refuses on a host that already has one**, so the first form is the one you want
+unless you are building a new host. `update --with-fail2ban` works from 0.9.24; on 0.9.22 and
+0.9.23 it accepts the flag and silently does nothing, which is what the `fail2ban` verb exists
+to route around.
+</Warning>
 
 Off unless you ask for it. It edits host security configuration, and a flag that arrived by surprise
 on an upgrade is how an install starts refusing its own customers. It refuses rather than
