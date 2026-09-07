@@ -156,7 +156,7 @@ credit**; a `kill -9` strands it until [`fireflo credit release`](/reference/cli
 ## Log retention, which you now own
 
 Nothing in the gateway removes `httpapi.log`. Quarkus rotates it daily and keeps every file forever.
-`fireflo-install` writes a `tmpfiles.d` rule for exactly this; **installing by hand means writing one
+`fireflo-install` installs a daily systemd timer for exactly this; **installing by hand means arranging one
 yourself, or accepting unbounded growth.** See [Logging](/reference/config/logging).
 
 ## Verify

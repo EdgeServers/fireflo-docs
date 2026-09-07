@@ -76,7 +76,19 @@ rather than parsed.
 | `--balance` / `--no-balance` | Whether prepaid credit is enforced. |
 | `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. A range lets the installer pick the next free listener port. |
 | `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ for the REST path. |
-| `--log-backups` / `--log-retain-days` | Log retention, including the `tmpfiles.d` rule that reaps `httpapi.log`. |
+| `--log-backups` / `--log-retain-days` | Log retention, including the daily timer that reaps `httpapi.log`. |
+| `--with-fail2ban` / `--no-fail2ban` | Whether fail2ban watches this install's refused logins and blocks the addresses behind them. **Off by default.** |
+| `--fail2ban-ignore A,B` | Addresses or CIDRs that must never be banned. |
+
+<Warning>
+**`--with-fail2ban` edits host security configuration**, and grants the control panel one narrow
+`sudo` rule. That is why it is opt-in rather than something an upgrade turns on: a jail that arrives
+by surprise is how an install starts refusing its own customers.
+
+Fill in the never-ban list before you rely on any of it. A ban is on an address, and an address
+usually carries a whole customer — see
+[Blocking abusive clients](/platform/operations/blocking-abusive-clients).
+</Warning>
 
 ### Running it
 
@@ -97,7 +109,7 @@ this script would make", not "everything that would change on this host".
 
 The **control panel**. That is `fireflo-panel-install`, and on a fresh host you run both.
 
-`--log-retain-days` writes a `tmpfiles.d` rule that deletes rotated logs, never touching the four live
-ones. **Installing by hand means arranging that yourself** — see [Logging](/reference/config/logging).
+`--log-retain-days` installs a daily systemd timer that deletes rotated logs, never touching the five
+live ones. **Installing by hand means arranging that yourself** — see [Logging](/reference/config/logging).
 
 See [Install in one command](/platform/install/one-command) for the walkthrough.

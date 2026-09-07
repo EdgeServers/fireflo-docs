@@ -94,8 +94,8 @@ a `--bootstrap` install and before you add a vendor.
 Yes, and it is the one bound nothing in the gateway enforces. Quarkus rotates it daily and offers no
 retention setting to go with that, so it writes one file per day and keeps every one forever.
 
-`fireflo-install --log-retain-days` writes a `tmpfiles.d` rule that deletes rotated files, never
-touching the four live ones. **A hand-built install must arrange that itself.**
+`fireflo-install --log-retain-days` installs a daily systemd timer that deletes rotated files, never
+touching the five live ones. **A hand-built install must arrange that itself.**
 </Accordion>
 
 <Accordion title="Do I need RabbitMQ?">

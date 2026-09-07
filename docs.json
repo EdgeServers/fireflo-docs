@@ -140,6 +140,7 @@
                   "platform/operations/diagnostics",
                   "platform/operations/reload",
                   "platform/operations/tokens-and-access",
+                  "platform/operations/blocking-abusive-clients",
                   "platform/operations/generating-traffic",
                   "platform/operations/throughput",
                   "platform/operations/faq"

@@ -98,8 +98,8 @@ control verb and they answer 404 — indistinguishable from a wrong token. See
 --log-backups 5 --log-retain-days 14
 ```
 
-`--log-retain-days` writes a `tmpfiles.d` rule that deletes rotated logs, never touching the four live
-ones. **This is the only thing that ever removes `httpapi.log`** — Quarkus rotates it daily and keeps
+`--log-retain-days` installs a daily systemd timer that deletes rotated logs, never touching the five
+live ones. **This is the only thing that ever removes `httpapi.log`** — Quarkus rotates it daily and keeps
 every file forever. A hand-built install must arrange this itself.
 
 ## After it finishes

@@ -1,6 +1,6 @@
 ---
 title: "Logging and log bounds"
-description: "The four log files, which of them is bounded, the one that will fill a disk, and the flags that write secrets."
+description: "The five log files, which of them is bounded, the one that will fill a disk, the one that is on when everything else is off, and the flags that write secrets."
 ---
 
 <Note>
@@ -10,7 +10,7 @@ description: "The four log files, which of them is bounded, the one that will fi
 The individual keys below still work and still win when set on their own.
 </Note>
 
-## The four logs
+## The five logs
 
 | Log | Records |
 | :--- | :--- |
@@ -18,6 +18,30 @@ The individual keys below still work and still win when set on their own.
 | `smppclient.log` | Vendor connection and message activity |
 | `smppserver.log` | Listener bind, session and message activity |
 | `httpapi.log` | HTTP access log, when file logging is enabled |
+| `auth-failed.log` | One line per refused login — SMPP binds and REST passwords. From 0.9.22 |
+
+### `auth-failed.log` follows different rules from the other four
+
+It is the file [fail2ban reads](/platform/operations/blocking-abusive-clients) to decide what to
+block, so it is deliberately not like its neighbours.
+
+| | |
+| :--- | :--- |
+| **On by default** | It does not follow `QUARKUS_LOG_FILE_ENABLE`, which is off by default. A gateway with general file logging off would otherwise record nothing here, leaving jails that look configured and protect nothing |
+| **Nothing else in it** | Only refusals, so it is empty on a healthy gateway and cheap to watch |
+| **Not in the main log too** | The same refusal in two files would be counted twice by a jail watching both, making it twice as aggressive as its settings say |
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `FIREFLO_AUTH_LOG_ENABLE` | `true` | Whether refused logins are recorded at all |
+| `FIREFLO_AUTH_LOG_MAX_SIZE` | `10M` | Smaller than the others: this file is empty unless somebody is attacking you |
+| `FIREFLO_AUTH_LOG_BACKUPS` | `3` | Roughly a million refused logins of history |
+| `QUARKUS_LOG_FILE_AUTHFAIL_PATH` | `auth-failed.log` | Where it is written |
+
+<Warning>
+**Turning it off turns off the evidence, not the enforcement.** Existing bans stand, and nothing new
+is ever recorded — so an attack in progress becomes invisible rather than harmless.
+</Warning>
 
 ## Bounds — and the one that has none
 
@@ -36,8 +60,8 @@ one. Neither is wrong; they are just different, and it is worth knowing which yo
 that — there is no setting for it — so it writes one file per day and keeps every
 one of them forever. **Nothing in the gateway will ever remove them.**
 
-`fireflo-install` handles this with a `tmpfiles.d` rule that deletes rotated files older than
-`--log-retain-days`, never touching the four live ones. **Installing by hand means arranging that
+`fireflo-install` handles this with a daily systemd timer that deletes rotated files older than
+`--log-retain-days`, never touching the five live ones. **Installing by hand means arranging that
 yourself, or accepting unbounded growth.**
 </Warning>
 

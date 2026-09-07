@@ -16,7 +16,7 @@ smsg.ops.admin.token = <a different long random string>
 | Token | Opens |
 | :--- | :--- |
 | `smsg.ops.token` | `GET /ops/health`, `GET /ops/queues`, `/q/metrics` — **everything that only reads** |
-| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture and the six control verbs |
+| `smsg.ops.admin.token` | `/ops/reload`, `/ops/credit/release`, `test-bind`, `disconnect`, capture and the seven control verbs |
 
 That way a dashboard or monitoring system can hold the read token **without also being able to stop a
 vendor**.

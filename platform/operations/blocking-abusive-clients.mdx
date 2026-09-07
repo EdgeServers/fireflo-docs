@@ -1,0 +1,224 @@
+---
+title: "Blocking abusive clients"
+description: "FireFlo records every refused login to a file of its own; fail2ban reads it and blocks the address. What is recorded, what deliberately is not, and the list to fill in before you switch any of it on."
+---
+
+Somebody will work through system IDs on your SMPP port, or passwords on your API, or addresses on
+your customer portal. FireFlo writes down every refusal; **fail2ban** reads that and blocks the
+address at the firewall.
+
+The split is deliberate. FireFlo reports, fail2ban decides, the firewall enforces. Nothing in the
+gateway or the panel blocks an address itself, so a fault in this feature cannot take your gateway
+with it — and if you do not run fail2ban, you lose the blocking and keep the record.
+
+<Note>
+**Available from 0.9.22.** Earlier releases record refused logins among ordinary traffic in the main
+logs, with no separate file to watch.
+</Note>
+
+## What gets recorded
+
+One line per refusal, in a file that holds nothing else.
+
+| Where | Written to |
+| :--- | :--- |
+| A refused SMPP bind | the gateway's `auth-failed.log` |
+| A refused password on the REST API | the same file |
+| A refused operator sign-in | the panel's `access/auth-failed-<date>.jsonl` |
+| A refused customer portal sign-in | the same panel file |
+
+The gateway's file looks like this, and is meant to be read by hand as well as by fail2ban:
+
+```
+2026-09-07 19:04:11,204 WARN  auth.refused surface=smpp reason=badPassword identity="acme" ip=203.0.113.9
+```
+
+so `grep ip=203.0.113.9 auth-failed.log` answers the obvious question with no tooling.
+
+**It is empty on a healthy gateway.** Nothing writes to it until somebody fails to log in, which is
+why it can afford to be on everywhere and cheap for fail2ban to watch.
+
+<Warning>
+**It is on by default and does not follow `QUARKUS_LOG_FILE_ENABLE`**, unlike every other log file.
+That variable defaults to off, and a gateway with general file logging off would otherwise record
+nothing here — leaving you with jails that look configured and protect nothing.
+
+Set `FIREFLO_AUTH_LOG_ENABLE=false` to turn it off, knowing that turns off the evidence, not the
+enforcement: existing bans stand and nothing new is ever recorded.
+</Warning>
+
+## What deliberately is not recorded
+
+This is the more important half, and it is what makes the feature safe to switch on.
+
+**Only failures to prove identity go in.** Everything that happens *after* a credential has been
+accepted stays out, however much it looks like a refusal — because the caller is an authenticated
+customer, and blocking them cuts off their working logins too.
+
+<AccordionGroup>
+
+<Accordion title="A sender ID or template that is not approved">
+The API answers `403` for this, and it answers `403` for a wrong password as well. A jail reading the
+HTTP access log could not tell them apart, and would block a paying customer whose registration is
+still pending. That is the whole reason refused logins have a file of their own.
+</Accordion>
+
+<Accordion title="A product that is not sold, on a bind">
+The credential was good; the product is a typo or a catalogue that has not caught up. The bind is
+refused, and nothing is recorded for blocking.
+</Accordion>
+
+<Accordion title="The per-IP and per-account connection limits">
+Capacity, not an attack. A customer whose client reconnects harder than the limit allows is not
+guessing anything. Those refusals are counted on the metrics endpoint instead — see
+[Prometheus and Grafana](/platform/operations/prometheus-grafana).
+</Accordion>
+
+<Accordion title="A sign-in link we could not send">
+If your SMTP is unconfigured, or the panel's base URL is unset, a customer's sign-in link fails to
+send. That is your fault, not theirs. Blocking them for it would cut a customer off because your
+mailer broke, and they would never learn why.
+</Accordion>
+
+</AccordionGroup>
+
+## Fill in the never-ban list first
+
+**Before you enable a single jail.** A ban is on an address, and an address usually carries a whole
+customer — so one wrong password in their configuration takes their working logins down with it.
+
+```
+/etc/fireflo/fail2ban-ignore.conf
+```
+
+One address or CIDR per line, `#` comments, IPv4 and IPv6 both. What belongs in it:
+
+- your monitoring and uptime probes, which authenticate on a loop and will eventually get one wrong
+- your own office and VPN, so a mistyped password cannot lock you out of the panel you would fix it
+  from
+- any customer whose traffic you cannot afford to interrupt while the numbers are still being tuned
+
+Two properties are worth knowing, because both are why this file exists rather than a longer
+`ignoreip` line in the jail:
+
+**No installer ever rewrites it.** The jail file *is* rewritten on every upgrade, so an address added
+there disappears silently and the first you hear of it is a banned customer.
+
+**Changes apply on the next attempt.** No reload, no restart, no service interruption — which is
+exactly what you want, because you edit this file at the moment somebody is being blocked and you
+need it to stop now.
+
+<Note>
+**An ignored address is still recorded.** This stops the ban, not the log line, so a trusted address
+that starts failing to sign in still appears on the Security page. That is deliberate: it is how a
+compromised trusted host stays visible instead of becoming the one place nobody looks.
+</Note>
+
+## Turning it on
+
+```bash
+sudo ./scripts/fireflo-install install --with-fail2ban --fail2ban-ignore "203.0.113.9,198.51.100.0/24"
+```
+
+Off unless you ask for it. It edits host security configuration, and a flag that arrived by surprise
+on an upgrade is how an install starts refusing its own customers. It refuses rather than
+half-installing when fail2ban is not present, because jails written for a fail2ban that is not there
+produce a host that looks protected and is not.
+
+What it writes:
+
+| | |
+| :--- | :--- |
+| `/etc/fail2ban/jail.d/<service>.conf` | the jails, with this tenant's log paths. **Rewritten on every update** |
+| `/etc/fail2ban/filter.d/fireflo-*.conf` | how the two files are read |
+| `/etc/fail2ban/action.d/fireflo-notify.conf` | records each ban and release for the panel to show |
+| `/etc/fireflo/fail2ban-ignore.conf` | the never-ban list. **Created once, never touched again** |
+| `/usr/local/sbin/fireflo-fail2ban` | the only fail2ban the panel can reach |
+| `/usr/local/sbin/fireflo-ignore` | consults the never-ban list, per attempt |
+
+The panel jail is written **only when a control panel is actually installed on the host**. A jail
+whose log path matches nothing starts, reports itself as running, and protects nothing — so an
+absent panel is said out loud instead.
+
+## The two settings that matter
+
+```properties
+[fireflo-gateway]
+maxretry = 10        # in findtime
+findtime = 10m
+bantime  = 1h
+```
+
+**`maxretry` on the gateway jail is deliberately generous.** A misconfigured ESME retries a bad bind
+in a tight loop, so a value tuned for SSH would ban a customer with a typo within seconds. The panel
+jail is tighter — a person typing a password does not get five wrong, and nothing there retries
+automatically.
+
+**Bans cover every port, not just the listener's.** Your SMPP ports are a configurable range, so a
+port-scoped jail on a host whose range changed later would protect nothing while still appearing in
+`fail2ban-client status`. The trade is that a false positive costs that address more than SMPP, which
+is the other reason to fill in the never-ban list first.
+
+## Seeing who was refused, and who is blocked
+
+**Security**, under Gateway in the control panel. All three surfaces in one list — because the same
+actor moves between them, and an address working through system IDs is often the one trying the panel
+afterwards — with filters, a window, and refusals-per-hour so a burst reads as a shape rather than as
+rows.
+
+The blocked list is asked of fail2ban directly rather than reconstructed, so it cannot drift from
+what is actually dropping traffic. The recorded bans and releases are still kept, because they are
+the only record of an address that *was* blocked and has since been let go.
+
+On the host:
+
+```bash
+sudo fail2ban-client status fireflo-gateway
+```
+
+## Releasing an address
+
+From the Security page, if the panel was given the grant at install time, or on the host:
+
+```bash
+sudo fail2ban-client set fireflo-gateway unbanip 203.0.113.9
+```
+
+<Warning>
+**The panel's Unban button is a privilege, and it is the only thing in the panel that changes the
+host.** The grant is one command path — not `fail2ban-client` itself, which would also reach the verb
+that *adds* a block — and the wrapper behind it refuses any jail that is not FireFlo's and anything
+that is not a literal address. There is no verb there that can block anybody.
+
+It is still a privilege. Anyone who reaches an operator session can release an address, and every
+release is recorded in the panel's own audit log with who did it.
+</Warning>
+
+If the grant was not written — no panel on the host, or `--with-fail2ban` was never passed — the
+button is absent and the page prints the host command instead.
+
+## Check it before you trust it
+
+**A filter that matches nothing and a filter that is working look identical once enabled.** Both
+report the jail as running.
+
+```bash
+sudo fail2ban-regex /var/log/fireflo/auth-failed.log /etc/fail2ban/filter.d/fireflo-gateway.conf
+```
+
+Expect a non-zero match count against a file that has refusals in it. Then prove the other half,
+which is the one that matters: from an address that is **not** on the never-ban list, send a message
+as a properly authenticated customer whose sender ID has not been approved, take the `403`, and
+confirm **nothing was banned**. Without that second check, "it blocks attackers" and "it blocks
+customers" are the same test.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Tokens and access" icon="key" href="/platform/operations/tokens-and-access">
+    The management port's two secrets, and why they differ.
+  </Card>
+  <Card title="Binds and listeners" icon="plug" href="/platform/troubleshooting/binds-and-listeners">
+    When a customer cannot bind and nothing is blocking them.
+  </Card>
+</CardGroup>
