@@ -65,6 +65,7 @@
               {
                 "group": "Install and run",
                 "pages": [
+                  "platform/install/blank-server",
                   "platform/install/getting-fireflo",
                   "platform/install/prepare-a-host",
                   "platform/install/one-command",

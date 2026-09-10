@@ -1,0 +1,260 @@
+---
+title: "A blank server, start to finish"
+description: "Every command from an empty Ubuntu or Debian host to a running gateway and control panel, with the prerequisites that decide whether it will work before you begin."
+---
+
+One page, in order, for the case that has no page today: **a host with nothing on it.** Each step
+links to the page that explains it in full; this one exists so you can follow it top to bottom
+without deciding what to read next.
+
+Roughly twenty minutes on a prepared host, most of it waiting for `apt`.
+
+## Before you begin
+
+Three of these decide whether the rest of the page works at all, so they are worth reading rather
+than discovering at step three.
+
+| | Requirement |
+| :--- | :--- |
+| **Architecture** | **linux-x86_64.** The gateway is a native binary and will not run on ARM |
+| **Operating system** | Ubuntu or Debian. Nothing else is supported by the host preparation script |
+| **Release** | Ubuntu focal, jammy, noble or plucky — Debian bullseye, bookworm or trixie |
+| **PostgreSQL** | **14 or newer** |
+| **Root** | Every step below except `check` is run with `sudo` |
+
+<Warning>
+**Debian bullseye ships PostgreSQL 13 and is refused.** Add the
+[PGDG repository](https://www.postgresql.org/download/linux/debian/) and upgrade deliberately before
+you start.
+
+The refusal is on purpose: below 14 the schema migrations fail partway, which leaves a
+half-migrated database rather than a clean error you can act on.
+</Warning>
+
+<Note>
+**No Java is needed, at any point.** The gateway carries its own runtime, and so do the operator
+commands — `fireflo db migrate`, `fireflo license activate` and the rest all run from the same
+executable. A JDK is wanted only for building from source.
+</Note>
+
+**No RAM or CPU minimum is published.** Anything that comfortably runs PostgreSQL is enough to
+install and evaluate; sizing for sustained high-rate traffic is a separate conversation and depends
+on your message mix.
+
+**Have your licence key to hand** for step 7 — though not having it does not block the install. An
+unlicensed gateway starts and carries traffic; what a missing licence stops is picking up
+configuration changes. See [Licensing](/platform/install/licensing).
+
+---
+
+## 1. Put the release on the host
+
+You are sent the tarball, its checksum, the signature and the host preparation script.
+
+```bash
+scp fireflo-0.9.23-linux-x86_64.tar.gz SHA256SUMS SHA256SUMS.asc SIGNING-KEY.asc setup.sh root@newhost:/root/
+```
+
+## 2. Verify it before anything else
+
+```bash
+gpg --import SIGNING-KEY.asc && gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum -c SHA256SUMS
+```
+
+<Warning>
+**Read the fingerprint, not just "Good signature".** `gpg --verify` must name:
+
+```text
+3A9B 256F DE50 75CA 5F76  ADAF 42D7 A01A ED0D 03BA
+FireFlo Releases
+```
+
+Any other fingerprint means stop and ask us. The checksum only proves the file arrived whole —
+anyone able to replace the tarball can replace the checksum beside it.
+</Warning>
+
+Full detail: [Getting FireFlo](/platform/install/getting-fireflo).
+
+## 3. Prepare the host
+
+`setup.sh` installs the services the gateway talks to. The gateway's own installer does not — it
+adds the PostgreSQL *client* and no server, and never mentions a broker.
+
+```bash
+sudo ./setup.sh --dry-run
+```
+
+```bash
+sudo ./setup.sh
+```
+
+It installs PostgreSQL, RabbitMQ and Node 22 — Node because the control panel needs it and Ubuntu
+ships 18, which will not run it. Add `--no-node` on a gateway-only host.
+
+<Note>
+**`setup.sh` is not signed**, unlike the release tarball. It is one plain shell file with no network
+fetch except the package repositories it names, and you are about to run it as root. Read it first.
+</Note>
+
+Full detail: [Prepare a host](/platform/install/prepare-a-host).
+
+## 4. Create the database and role
+
+Nothing does this for you, deliberately: installing a package is impersonal and reversible, and
+minting a credential is neither.
+
+```bash
+sudo -u postgres createuser --pwprompt fireflo
+```
+
+```bash
+sudo -u postgres createdb --owner=fireflo fireflo
+```
+
+RabbitMQ keeps its default `guest` account, which the broker itself restricts to loopback — the
+correct default, and the only one that needs no secret.
+
+## 5. Unpack
+
+```bash
+tar xzf fireflo-0.9.23-linux-x86_64.tar.gz && cd fireflo-0.9.23-linux-x86_64
+```
+
+Read `MANIFEST`. It names the version, the commit and the platform this binary was compiled for.
+
+## 6. Install the gateway
+
+Check first. It changes nothing.
+
+```bash
+./scripts/fireflo-install check
+```
+
+Three of its findings are worth understanding before you see them:
+
+<AccordionGroup>
+
+<Accordion title="psql missing — fatal in database mode">
+The operational tokens and the configuration rows are written with it. Without it the install runs
+the migrations and the bootstrap, then dies at the tokens — leaving a migrated, bootstrapped
+database and a gateway that answers `404` on every `/ops` endpoint. `setup.sh` installs it.
+</Accordion>
+
+<Accordion title="A port already held — fatal on install">
+2775, 8080 and 9000. A second instance given ports the first already holds completes, never binds,
+and then every check afterwards passes by answering from the **old** gateway. Give a second instance
+its own `--smpp-port`, `--http-port` and `--ops-port` — see
+[Multiple instances](/platform/install/multiple-instances).
+</Accordion>
+
+<Accordion title="rsync or python3 missing — warnings only">
+Needed by `update` and by `fireflo send` and `verify` respectively, not by the install itself.
+</Accordion>
+
+</AccordionGroup>
+
+Put the database password in a file rather than on the command line — an argument is a password in
+your shell history and in the output of `ps`.
+
+```bash
+umask 077 && printf '%s' 'THE-DB-PASSWORD' > /root/fireflo-db.pw
+```
+
+```bash
+sudo ./scripts/fireflo-install install --from ./gateway --config-source db --bootstrap --db-name fireflo --db-user fireflo --db-password-file /root/fireflo-db.pw
+```
+
+It prints every decision before acting and waits. `--yes` skips the confirmation for a scripted
+install; `--dry-run` shows the decisions without making them.
+
+<Note>
+**`--bootstrap` writes the minimum a fresh database needs** — the default routing table, one
+listener, one login. It refuses on a database that already has rows, so it is only ever right on a
+new one. Coming from an existing configuration, use `--import` instead.
+</Note>
+
+Add `--smpp-port-range 2775-2799` if you expect more than one listener later — it is the band the
+firewall opens and the band new listeners are allocated within, so declaring it now covers every
+listener you will ever create. Add `--firewall` to have the SMPP and HTTP ports opened for you, with
+OpenSSH allowed first.
+
+Full detail: [Install in one command](/platform/install/one-command).
+
+## 7. Activate the licence
+
+```bash
+FIREFLO_LICENSE_KEY=your-key-here scripts/fireflo license activate
+```
+
+The key goes in the environment and never on the command line, so it stays out of your shell history
+and out of `ps`.
+
+## 8. Install the control panel
+
+**After the gateway, not before** — the gateway owns the database schema and the panel only reads and
+writes rows in it. Run it from the panel's own scripts directory: it locates its source relative to
+itself.
+
+```bash
+sudo ./panel/scripts/fireflo-panel-install install --gateway-conf-dir /etc/fireflo
+```
+
+It derives the ops URL, the metrics database and both operational tokens from that one flag. There is
+no `--from`.
+
+Full detail: [The control panel](/platform/install/control-panel).
+
+## 9. Confirm it came up
+
+```bash
+cd /opt/fireflo && scripts/fireflo verify && systemctl is-active fireflo
+```
+
+`verify` exiting `4` on a brand-new install means the configuration is sound and there is nothing to
+route to yet — expected before you add a vendor.
+
+Then sign in to the panel and work through
+[First configuration](/platform/install/first-configuration).
+
+---
+
+## Optional, once it is running
+
+<CardGroup cols={2}>
+  <Card title="Blocking abusive clients" icon="ban" href="/platform/operations/blocking-abusive-clients">
+    Refused logins recorded, shown, and blocked at the firewall. **Fill in the never-ban list before
+    you enable a jail** — a ban covers every port of the host, including SSH.
+  </Card>
+  <Card title="A durable queue" icon="database" href="/platform/operations/queues">
+    Without a broker the queue is in memory and a restart drops whatever has not reached a vendor.
+    Pass `--broker-uri` to use the RabbitMQ `setup.sh` installed.
+  </Card>
+</CardGroup>
+
+**The customer-facing REST panel** is optional and installs the same way, from
+`rest-panel/scripts/`. It needs its **own** database — never the gateway's, whose schema is
+version-checked and would meet tables it does not know about.
+
+## When the next release arrives
+
+Verify it, unpack it, and:
+
+```bash
+sudo ./scripts/fireflo-install update --from ./gateway
+```
+
+`update` never touches your configuration directory, and keeps the previous version so
+`fireflo-install rollback` is one command. The panel is upgraded separately by its own installer.
+
+See [Upgrading](/platform/install/upgrading).
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Installing by hand" icon="wrench" href="/platform/install/by-hand">
+    Every step the installer automates, for a host where it cannot run.
+  </Card>
+  <Card title="Removing an install" icon="trash" href="/platform/install/removing">
+    What comes off, and what deliberately survives.
+  </Card>
+</CardGroup>
