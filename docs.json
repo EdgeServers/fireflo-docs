@@ -219,6 +219,7 @@
                 "group": "Billing and credit",
                 "pages": [
                   "developers/billing/balance-and-quotes",
+                  "developers/billing/credit-transfers",
                   "developers/billing/statements-and-limits",
                   "developers/billing/faq"
                 ]

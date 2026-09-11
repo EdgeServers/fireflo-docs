@@ -1,0 +1,168 @@
+---
+title: "Moving credit to your accounts"
+description: "If you hold accounts beneath yours, three endpoints move prepaid credit between them — queued, applied on the gateway's next poll, and never able to touch an account that is not yours."
+---
+
+If your account holds others beneath it, you can move prepaid credit to and from them over the
+same API you already send with. No separate portal sign-in and no second credential: the login
+you send messages with is the one that moves the money.
+
+<Note>
+**Available from 0.10.0.** Before it, funding an account beneath yours meant signing in to the
+customer portal by email link — which no billing system of your own could do.
+</Note>
+
+## The three endpoints
+
+| | |
+| :--- | :--- |
+| `POST /secure/transfers` | Move credit. Answers `202` and a transfer id |
+| `GET /secure/transfers/{id}` | Whether that one has been applied yet |
+| `GET /secure/transfers` | Your recent transfers, newest first |
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "account_id": "acme-retail",
+        "amount": "250.0000",
+        "direction": "down",
+        "idempotency_key": "topup-2026-09-11-0001"
+      }' \
+  'https://sms.example.com/secure/transfers'
+```
+
+```json
+{
+  "data": {
+    "id": 4187,
+    "status": "pending",
+    "payer": "acme-wholesale",
+    "payee": "acme-retail",
+    "amount": "250.0000",
+    "message": "Queued. The gateway applies it on its next poll, and leaves it pending if the paying account does not have enough at that moment."
+  }
+}
+```
+
+**`direction` has no default and must be one of two words.** `down` funds the named account;
+`up` takes credit back from it. A value that is neither is refused rather than assumed — the two
+move money in opposite directions, and guessing would be the worst possible way to be wrong.
+
+## Queued, not sent
+
+<Warning>
+**A `202` does not mean the balances have changed.** It means the transfer is recorded and will
+be applied on the gateway's next balance poll — normally within a minute.
+</Warning>
+
+That is deliberate rather than a limitation. Balances have exactly one writer, and it checks
+sufficiency in the same statement that moves the money. So whether the paying account can afford
+a transfer is decided **at the moment it is applied**, not at the moment you asked — which is
+the only way to get the right answer when that account is also sending traffic.
+
+Ask whether it landed:
+
+```bash
+curl -u "$SMS_LOGIN:$SMS_PASSWORD" 'https://sms.example.com/secure/transfers/4187'
+```
+
+```json
+{
+  "data": {
+    "id": 4187,
+    "status": "applied",
+    "direction": "down",
+    "payer": "acme-wholesale",
+    "payee": "acme-retail",
+    "amount": "250.0000",
+    "queued_at": "2026-09-11T13:41:07Z"
+  }
+}
+```
+
+**There are two statuses, and there is deliberately no `refused`.**
+
+| | |
+| :--- | :--- |
+| `pending` | Not applied yet, and it will be retried on every poll until it can be |
+| `applied` | The money has moved |
+
+A transfer the gateway cannot apply — the payer was short when its turn came, or the receiving
+account has no balance open — **stays `pending` and keeps trying**. It is not discarded, and
+nothing is half-done: a transfer either moves in full or not at all. If one sits `pending` far
+longer than a poll interval, the payer did not have the money at any point since you asked.
+
+## What it will not let you do
+
+**You cannot choose who pays.** The paying account is always the one your login bills to. A
+field in the body naming another account is ignored — there is no request you can construct that
+spends somebody else's credit.
+
+**You cannot name an account you do not hold.** Both directions are checked the same way, and a
+`404` is what you get for an account outside your own — including one that exists and belongs to
+somebody else. `direction: "up"` does not relax this; if anything it is the direction that
+matters more, because a pull takes money away.
+
+**You cannot move credit without holding accounts at all.** If nothing sits beneath your
+account, every one of these endpoints answers `404`.
+
+## Not sending the same transfer twice
+
+`idempotency_key` is yours to choose and is required. Send the same one again and you get `409`
+with the id of the transfer you already made — not a second movement.
+
+```json
+{ "message": "That idempotencyKey has already been used, and its transfer is queued." }
+```
+
+Use something from your own system that identifies the intent — an invoice line, a job id, a
+date and sequence. Two different customers may safely use the same key as each other; keys are
+scoped to the account that sent them.
+
+<Note>
+**Retry on a timeout.** If a request times out you do not know whether it landed, and sending it
+again with the same key is safe: either it queues for the first time, or you get the `409` that
+tells you it already had — with the id, so you can check it.
+</Note>
+
+## Amounts
+
+Four decimal places, as a string, with no thousands separators and no currency symbol.
+
+| | |
+| :--- | :--- |
+| `"250.0000"` | ✅ |
+| `"250"`, `"0.5"` | ✅ — padded to four places |
+| `"250.00001"` | ❌ more precision than the platform holds; refused rather than rounded |
+| `250.0` as a JSON number | ⚠️ works, but send a string — a float will eventually round |
+| Negative, or zero | ❌ use `direction` to choose the way, never a sign |
+
+## What the other account sees
+
+A transfer appears on **both** accounts' ledgers, so an account you fund can see where the
+credit came from, and a movement either of you disputes is checkable by either of you. The same
+is true of a pull: taking credit back is recorded on the account you took it from.
+
+## Responses
+
+| Code | Means |
+| :--- | :--- |
+| `202` | Queued, with the id to ask about it |
+| `400` | A missing or invalid argument — amount, direction, or idempotency key |
+| `403` | This login has no billing account |
+| `404` | No account of that name is one you hold |
+| `409` | That `idempotency_key` has already been used |
+| `429` | Too many transfers already waiting to be applied |
+| `503` | This platform holds no balances |
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Balance and quotes" icon="wallet" href="/developers/billing/balance-and-quotes">
+    What is left, and what a message will cost.
+  </Card>
+  <Card title="Authentication" icon="key" href="/developers/authentication">
+    The credentials these endpoints use.
+  </Card>
+</CardGroup>
