@@ -116,14 +116,17 @@ not the supplier.
 
 | Rule | Value |
 | :--- | :--- |
-| Success | HTTP **`200`–`399`** |
+| Success | HTTP **`200`–`299`** |
 | Retries | 10 by default, 120 seconds apart |
 | Timeout | 5 seconds, connect and request |
 
 <Warning>
-**A `302` to a login page counts as success** and swallows the receipt. So does any `2xx` from a proxy
-that never reached your application. If receipts "arrive" but your handler never runs, check what is
-in front of it.
+**A `3xx` stopped counting as success in 0.11.** A redirect to a login page used to be read as
+delivered and the receipt dropped; it is now retried like any other failure. If you relied on
+answering `301` or `302`, answer `200` instead.
+
+A `2xx` from a proxy that never reached your application **still** counts as success — nothing
+can see past it. If receipts "arrive" but your handler never runs, check what is in front of it.
 </Warning>
 
 ## Three segments, three receipts

@@ -11,7 +11,8 @@ In this order, because each rules out more than the next:
 1. **Did you ask for one?** `dlr: "yes"` *and* `dlr_url`. Either alone does nothing.
 2. **Is your endpoint reachable from the gateway host** — not from your laptop?
 3. **Does it return 200–399?** A `401` behind an authenticating proxy is the commonest silent
-   failure, and a `302` to a login page *counts as success* and swallows the receipt.
+   failure. Since 0.11 a `302` to a login page is a failure too and is retried; on earlier
+   releases it *counted as success* and swallowed the receipt.
 4. **Is the vendor asked to produce receipts at all?** If your provider has `request.dlrs` off for
    that vendor, nothing ever reports an outcome and every message settles as `EXPIRED`.
 </Accordion>

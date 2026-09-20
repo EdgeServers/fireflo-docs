@@ -10,7 +10,7 @@ share one delivery mechanism, so they share these rules.
 
 | Rule | Value |
 | :--- | :--- |
-| **Success** | HTTP **`200`–`399`**. Anything else is a failure. |
+| **Success** | HTTP **`200`–`299`**. Anything else is a failure. |
 | **Retries** | `smsg.webhook.retries`, default **10**, `smsg.webhook.retry.interval.ms` apart, default **120000** |
 | **Timeout** | `smsg.webhook.timeout.ms`, default **5000** — connect *and* request |
 
@@ -36,11 +36,20 @@ thread ceiling.
     and private subnets all bite here.
   </Step>
   <Step title="Does it return 200–399?">
-    A `401` behind an authenticating proxy is the commonest silent failure. So is a `302` to a login
+    A `401` behind an authenticating proxy is the commonest silent failure. Since 0.11 a `302` to a login
     page, which *does* count as success and swallows the receipt.
   </Step>
   <Step title="Did the gateway log the failure?">
     Forwarding failures and retries are logged. Ten quiet attempts mean the endpoint answered.
+  </Step>
+  <Step title="What did their endpoint actually say?">
+    Open the message in the control panel and read **Customer exchange**. Each callback attempt is a
+    row carrying the endpoint, the try number, how long it took and the status.
+
+    To see the answer itself rather than only its status code, set `smsg.cdr.events.response =
+    excerpt` and reproduce. The **Response** cell then expands to the first 500 characters the
+    endpoint returned, which is where a `401` behind a proxy stops looking like a `401` from the
+    application.
   </Step>
 </Steps>
 
@@ -69,7 +78,7 @@ empty callback is indistinguishable from a correctly configured one that happens
 
 ## MO forwards never arrive
 
-MO callbacks are **`POST`**, and the same `200`–`399` and retry rules apply.
+MO callbacks are **`POST`**, and the same `200`–`299` and retry rules apply.
 
 - `forward.mo.url` is set on the SMPP client worker **receiving** the MO — not on the listener, and
   not globally.

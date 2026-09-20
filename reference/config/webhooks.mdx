@@ -11,9 +11,9 @@ Applies to both `dlr_url` on a submission and `forward.mo.url` on a connector.
 | :--- | :--- | :--- |
 | `smsg.webhook.redirects` | `never` | `never`, `normal` or `always`. |
 | `smsg.webhook.schemes` | `https,http` | Schemes the gateway will call. |
-| `smsg.webhook.private.targets` | `allow` | `deny` refuses private, loopback and link-local targets. |
+| `smsg.webhook.private.targets` | `deny` | `allow` permits private, loopback and link-local targets. |
 | `smsg.webhook.retries` | `10` | Attempts before the receipt is abandoned. |
-| `smsg.webhook.retry.interval.ms` | `120000` | Wait between attempts. |
+| `smsg.webhook.retry.interval.ms` | `120000` | Wait before the **first** retry. Each wait after it doubles, held at an hour. |
 | `smsg.webhook.timeout.ms` | `5000` | Connect and request timeout. |
 
 <Warning>
@@ -23,15 +23,30 @@ that is fetched. An endpoint relying on a redirect now fails loudly rather than 
 somewhere else.
 </Warning>
 
-`private.targets` defaults to `allow` so deployments posting to an application on their own network
-keep working. Set `deny` where customers are external.
+<Warning>
+**`private.targets` changed to `deny` in 0.11.** A receipt URL resolving to a private, loopback or
+link-local address is refused unless you set `allow`. The old default let a customer's `dlr_url`
+address anything your gateway could reach, which is a request-forgery surface handed to whoever sends
+you traffic. If you post receipts to an application on your own network, set `allow` before you
+upgrade — the refusal is silent to the customer and shows up only as receipts that never arrive.
+</Warning>
 
 <Note>
 It resolves the host and then connects, so a name that answers differently in between defeats it. It
 raises the cost rather than closing the hole — egress firewall rules are what close it.
 </Note>
 
-At the default retry budget, one unreachable endpoint occupies a virtual thread for twenty minutes.
+**The retry ladder is exponential with full jitter, and that changed in 0.11.** At the defaults the
+ceilings are 2, 4, 8, 16 and 32 minutes, then an hour before each of the last four attempts — ten
+attempts spanning at most 5h 2m, where the old flat 120-second wait gave up eighteen minutes after
+the first failure and lost every receipt for an endpoint down over a lunchtime deploy. Each wait is
+drawn uniformly from zero up to its ceiling, so ten attempts average nearer two and a half hours, and
+receipts that failed together do not come due together at a host already in trouble.
+
+A first wait longer than an hour is honoured rather than cut to the ceiling. A receipt between
+attempts holds nothing open against the endpoint, so a long schedule costs nothing while it waits —
+and the gateway keeps at most ten calls in flight to any one host, so a slow endpoint cannot occupy
+the whole forwarder.
 
 ## Receipt forwarding
 

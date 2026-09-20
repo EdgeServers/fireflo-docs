@@ -112,15 +112,18 @@ accepted on a send but does **not** select it.
 
 | Rule | Value | Property |
 | :--- | :--- | :--- |
-| Success | HTTP **`200`–`399`** | — |
+| Success | HTTP **`200`–`299`** | — |
 | Retries | **10** | `smsg.webhook.retries` |
-| Interval | **120 000 ms** | `smsg.webhook.retry.interval.ms` |
+| First retry after | **120 000 ms**, doubling to an hour | `smsg.webhook.retry.interval.ms` |
 | Timeout | **5 000 ms**, connect and request | `smsg.webhook.timeout.ms` |
 
 <Warning>
-**A `302` to a login page counts as success and swallows the receipt.** So does any `2xx` from a proxy
-that never reached your application. If receipts "arrive" but your handler never runs, look at what
-is in front of it.
+**A `3xx` stopped counting as success in 0.11.** A redirect to a login page used to be read as
+delivered and the receipt was dropped; it is now retried like any other failure, and reported failed
+if it never succeeds. If you relied on answering `301` or `302`, answer `200` instead.
+
+A `2xx` from a proxy that never reached your application **still** counts as success — nothing can
+see past it. If receipts "arrive" but your handler never runs, look at what is in front of it.
 </Warning>
 
 Delivery is **at least once** — make your handler idempotent on `id` **plus `level`**, not on `id`
