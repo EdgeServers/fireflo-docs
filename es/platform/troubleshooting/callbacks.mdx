@@ -42,6 +42,19 @@ techo de hilos.
   <Step title="¿Registró la pasarela el fallo?">
     Los fallos de reenvío y los reintentos se registran. Diez intentos silenciosos significan que el endpoint respondió.
   </Step>
+  <Step title="¿Qué dijo realmente su endpoint?">
+    Abre el mensaje en el panel de control y lee **Intercambio con el cliente**. Cada intento de
+    callback es una fila con el endpoint, el número de intento, cuánto tardó y el estado.
+
+    Esas filas solo existen si `smsg.diagnostics` o `smsg.cdr.events` vale al menos `problems`; en
+    una instalación nueva ninguno está definido y no se registra nada. Si la tabla está vacía,
+    define uno y reproduce.
+
+    Para ver la respuesta en sí y no solo su código de estado, pon `smsg.cdr.events.response =
+    excerpt` y reproduce. La celda **Respuesta** se despliega entonces a los primeros 500 caracteres
+    que devolvió el endpoint, que es donde un `401` detrás de un proxy deja de parecerse a un `401`
+    de la aplicación.
+  </Step>
 </Steps>
 
 ## La trampa de los placeholders

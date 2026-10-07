@@ -11,7 +11,7 @@ description: "Currency and money scale, where call records are written, how long
 | `smsg.cdr.directory` | `data/cdr` | File sink location. |
 | `smsg.cdr.deadline.hours` | `48` | Wait before recording an outcome as `EXPIRED`. |
 | `smsg.cdr.body` | `off` | `off`, `excerpt` (160 characters) or `full`. Whether message content is recorded at all. |
-| `smsg.cdr.events` | `problems` | `off`, `problems` or `all`. Per-message customer-side events: receipts withheld, held or failed, and callback attempts. |
+| `smsg.cdr.events` | `off` | `off`, `problems` or `all`. Per-message customer-side events: receipts withheld, held or failed, and callback attempts. Unset, it follows `smsg.diagnostics`. |
 | `smsg.cdr.events.response` | `off` | `off` or `excerpt`. Whether a callback event keeps what the customer's endpoint answered. |
 | `smsg.cdr.interim.retention.days` | `30` | How long `cdr_interim` keeps progress receipts. |
 | `smsg.balance.enabled` | `false` | Enforce prepaid credit. PostgreSQL only. |
@@ -80,14 +80,16 @@ what a customer's own endpoint wrote back. Usually that is an error message and 
 need; an endpoint that echoes the request into its error body would put message content there too.
 </Warning>
 
-## `smsg.cdr.events` now defaults to `problems`
+## `smsg.cdr.events` and the diagnostics level
 
-It shipped `off` and was changed, because these rows are read **after** something has gone wrong and
-a level that has to be switched on beforehand is switched on too late every time. `problems` writes
-nothing while nothing is failing, so a healthy gateway sees close to no extra rows.
+Unset, `smsg.cdr.events` takes its value from `smsg.diagnostics`; with neither set it is `off` and no
+event rows are written. An unrecognised value is also `off`, so a typo cannot raise write volume on
+the queue these rows share with billing records.
 
-Set `smsg.cdr.events = off` to restore the old silence exactly. Note that only the literal value
-`off` does so — an unrecognised value falls back to `problems` rather than to silence.
+`problems` is the value to run. It writes nothing while nothing is failing, so a healthy gateway sees
+close to no extra rows — and set ahead of time, it has already recorded the failure by the time the
+support question arrives. See
+[Diagnostics](/platform/operations/diagnostics).
 
 ## Batch billing units
 

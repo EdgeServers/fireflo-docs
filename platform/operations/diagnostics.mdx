@@ -61,11 +61,40 @@ Events land in `cdr_event` and appear on a message's page under **Customer excha
 | `receipt.failed` | The `deliver_sm` could not be put on the wire |
 | `receipt.held` | The customer was not reachable. **It replays when that system id next binds** — a bind that never drops never triggers it |
 | `receipt.suppressed` | Their `registered_delivery` did not ask about this outcome. The line carries the stored octet, which is the diagnosis |
-| `callback.attempt` | One attempt at their `dlr-url`, with status and duration — **one row per attempt**, not one per outcome |
+| `callback.attempt` | One attempt at their `dlr-url`, with status, try number and duration — **one row per attempt**, not one per outcome |
 
 Callback addresses are stored with the **query string removed**. A `dlr-url` routinely carries an API
-key, and these rows are widely readable, so the endpoint is kept as scheme, host and path and
-nothing else. No response body is stored at all.
+key, and these rows are widely readable, so the endpoint is kept as scheme, host and path and nothing
+else. That has no setting and no way around it.
+
+## Seeing what their endpoint answered
+
+A status code says the callback failed. It does not say why, and the reason is usually in the body
+the endpoint returned — `{"error": "unknown template id"}` and an HTML login page are two entirely
+different faults that both arrive as a `500`.
+
+```
+smsg.cdr.events.response = excerpt
+```
+
+Then the **Customer exchange** table on a message's page shows a **Response** cell on each callback
+attempt, expanding to the first 500 characters of the answer and a fixed set of headers: content
+type, length and encoding, `retry-after`, `location` and `x-request-id`.
+
+<Note>
+It ships `off`, and it is a separate key from `smsg.cdr.events` on purpose. Recording that a callback
+failed and retaining what a customer's server wrote back are different decisions, and no diagnostic
+level turns the second one on for you.
+
+Nothing outside that header list is kept, so a `set-cookie` or an `authorization` an endpoint returns
+is not stored — it is never copied in the first place.
+</Note>
+
+Without it the page says **not captured** against each attempt, which is a different answer from
+**not available**: the second means the gateway predates the feature and no setting will help.
+
+An attempt that shows **no response** got no answer to keep at all — the request was refused or failed
+before the endpoint replied — and switching capture on would not have changed that.
 
 ## `registered_delivery`, and the value that surprises people
 

@@ -43,6 +43,19 @@ subir o teto de threads.
     Falhas de forward e retentativas são logadas. Dez tentativas em silêncio significam que o
     endpoint respondeu.
   </Step>
+  <Step title="O que o endpoint deles realmente disse?">
+    Abra a mensagem no painel de controle e leia **Troca com o cliente**. Cada tentativa de callback
+    é uma linha com o endpoint, o número da tentativa, quanto tempo levou e o status.
+
+    Essas linhas só existem se `smsg.diagnostics` ou `smsg.cdr.events` estiver em pelo menos
+    `problems` — nenhum dos dois vem definido numa instalação nova, que não registra nada. Se a
+    tabela estiver vazia, defina um e reproduza.
+
+    Para ver a resposta em si e não só o código de status, ponha `smsg.cdr.events.response =
+    excerpt` e reproduza. A célula **Resposta** então se expande para os primeiros 500 caracteres que
+    o endpoint devolveu, que é onde um `401` atrás de um proxy deixa de parecer um `401` da
+    aplicação.
+  </Step>
 </Steps>
 
 ## A armadilha do placeholder

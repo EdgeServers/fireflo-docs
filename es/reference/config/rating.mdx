@@ -11,6 +11,8 @@ description: "Moneda y escala de dinero, dónde se escriben los registros de lla
 | `smsg.cdr.directory` | `data/cdr` | Ubicación del sink de archivo. |
 | `smsg.cdr.deadline.hours` | `48` | Espera antes de registrar un resultado como `EXPIRED`. |
 | `smsg.cdr.body` | `off` | `off`, `excerpt` (160 caracteres) o `full`. Si el contenido del mensaje se registra en absoluto. |
+| `smsg.cdr.events` | `off` | `off`, `problems` o `all`. Eventos por mensaje del lado del cliente: acuses retenidos, en espera o fallidos, e intentos de callback. Sin definir, sigue a `smsg.diagnostics`. |
+| `smsg.cdr.events.response` | `off` | `off` o `excerpt`. Si un evento de callback guarda lo que respondió el endpoint del cliente. |
 | `smsg.cdr.interim.retention.days` | `30` | Cuánto tiempo `cdr_interim` guarda acuses de progreso. |
 | `smsg.balance.enabled` | `false` | Aplica crédito prepago. Solo PostgreSQL. |
 | `smsg.balance.block.min.messages` | `20` | Cuántos mensajes debe cubrir una reserva de crédito. |
@@ -72,7 +74,24 @@ nunca llevan credenciales.
 **Contienen contenido del mensaje solo cuando lo activas.** `smsg.cdr.body` se distribuye como `off`. Activarlo
 significa que los cuerpos de mensajes se retienen durante la ventana de retención y son legibles por cualquiera con acceso al panel
 o acceso a la base de datos. Aplica la misma política que aplicas al log de acceso.
+
+Lo mismo vale para `smsg.cdr.events.response`, que se distribuye como `off` y guarda hasta 500
+caracteres de lo que respondió el propio endpoint del cliente. Normalmente eso es un mensaje de error
+y justo lo que necesitas; un endpoint que devuelve la petición dentro de su cuerpo de error también
+pondría contenido de mensaje ahí.
 </Warning>
+
+## `smsg.cdr.events` y el nivel de diagnóstico
+
+Sin definir, `smsg.cdr.events` toma su valor de `smsg.diagnostics`; si ninguno está definido vale
+`off` y no se escribe ninguna fila de eventos. Un valor no reconocido también es `off`, así que una
+errata no puede aumentar el volumen de escritura en la cola que estas filas comparten con los
+registros de facturación.
+
+`problems` es el valor recomendado. No escribe nada mientras nada falla, así que un gateway sano ve
+casi ninguna fila extra, y si se define de antemano, el fallo ya está registrado cuando llega la
+consulta de soporte. Consulta
+[Diagnósticos](/platform/operations/diagnostics).
 
 ## Unidades de facturación de lote
 

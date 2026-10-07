@@ -64,11 +64,44 @@ Les événements atterrissent dans `cdr_event` et apparaissent sur la page d'un 
 | `receipt.failed` | Le `deliver_sm` n'a pas pu être mis sur le fil |
 | `receipt.held` | Le client n'était pas joignable. **Il est rejoué quand ce system id se reconnecte** — un bind qui ne tombe jamais ne le déclenche jamais |
 | `receipt.suppressed` | Leur `registered_delivery` ne demandait pas ce résultat. La ligne porte l'octet stocké, qui est le diagnostic |
-| `callback.attempt` | Une tentative vers leur `dlr-url`, avec statut et durée — **une ligne par tentative**, pas une par résultat |
+| `callback.attempt` | Une tentative vers leur `dlr-url`, avec statut, numéro d'essai et durée — **une ligne par tentative**, pas une par résultat |
 
 Les adresses de callback sont stockées avec la **query string retirée**. Une `dlr-url` transporte
 couramment une clé d'API, et ces lignes sont largement lisibles, donc l'endpoint est conservé comme
-schéma, hôte et chemin et rien d'autre. Aucun corps de réponse n'est stocké du tout.
+schéma, hôte et chemin et rien d'autre. Cela n'a aucun réglage et aucun contournement.
+
+## Voir ce que leur point de terminaison a répondu
+
+Un code de statut dit que le callback a échoué. Il ne dit pas pourquoi, et la raison se trouve
+généralement dans le corps renvoyé par le point de terminaison — `{"error": "unknown template id"}`
+et une page de connexion en HTML sont deux pannes entièrement différentes qui arrivent toutes deux
+comme un `500`.
+
+```
+smsg.cdr.events.response = excerpt
+```
+
+Le tableau **Échange client** sur la page d'un message affiche alors une cellule **Réponse** sur
+chaque tentative de callback, qui se déplie sur les 500 premiers caractères de la réponse et un
+ensemble fixe d'en-têtes : type, longueur et encodage du contenu, `retry-after`, `location` et
+`x-request-id`.
+
+<Note>
+Livré à `off`, et c'est délibérément une clé distincte de `smsg.cdr.events`. Enregistrer qu'un
+callback a échoué et conserver ce que le serveur d'un client a répondu sont deux décisions
+différentes, et aucun niveau de diagnostic n'active la seconde à votre place.
+
+Rien en dehors de cette liste d'en-têtes n'est conservé : un `set-cookie` ou un `authorization`
+renvoyé par un point de terminaison n'est pas stocké — il n'est jamais copié au départ.
+</Note>
+
+Sans cela, la page affiche **non capturé** en face de chaque tentative, ce qui est une réponse
+différente de **non disponible** : la seconde signifie que le gateway est antérieur à la
+fonctionnalité et qu'aucun réglage n'y changera rien.
+
+Une tentative qui affiche **pas de réponse** n'a reçu aucune réponse à conserver — la requête a été
+refusée ou a échoué avant que le point de terminaison ne réponde — et activer la capture n'y aurait
+rien changé.
 
 ## `registered_delivery`, et la valeur qui surprend
 

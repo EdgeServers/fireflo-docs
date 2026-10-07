@@ -62,11 +62,42 @@ Os eventos caem em `cdr_event` e aparecem na página de uma mensagem sob **Custo
 | `receipt.failed` | O `deliver_sm` não pôde ser colocado no fio |
 | `receipt.held` | O cliente não estava alcançável. **Ele é reproduzido quando aquele system id fizer bind de novo** — um bind que nunca cai nunca o dispara |
 | `receipt.suppressed` | O `registered_delivery` deles não pediu este resultado. A linha carrega o octeto armazenado, que é o diagnóstico |
-| `callback.attempt` | Uma tentativa na `dlr-url` deles, com status e duração — **uma linha por tentativa**, não uma por resultado |
+| `callback.attempt` | Uma tentativa na `dlr-url` deles, com status, número da tentativa e duração — **uma linha por tentativa**, não uma por resultado |
 
 Os endereços de callback são armazenados com a **query string removida**. Uma `dlr-url` carrega
 rotineiramente uma chave de API, e essas linhas são amplamente legíveis, então o endpoint é mantido
-como esquema, host e caminho e nada mais. Nenhum corpo de resposta é armazenado.
+como esquema, host e caminho e nada mais. Isso não tem configuração nem como contornar.
+
+## Ver o que o endpoint deles respondeu
+
+Um código de status diz que o callback falhou. Não diz por quê, e o motivo costuma estar no corpo que
+o endpoint devolveu — `{"error": "unknown template id"}` e uma página de login em HTML são duas
+falhas completamente diferentes que chegam as duas como um `500`.
+
+```
+smsg.cdr.events.response = excerpt
+```
+
+A tabela **Troca com o cliente** na página de uma mensagem passa então a mostrar uma célula
+**Resposta** em cada tentativa de callback, que se expande para os primeiros 500 caracteres da
+resposta e um conjunto fixo de cabeçalhos: tipo, tamanho e encoding do conteúdo, `retry-after`,
+`location` e `x-request-id`.
+
+<Note>
+Vem `off`, e é uma chave separada de `smsg.cdr.events` de propósito. Registrar que um callback falhou
+e reter o que o servidor de um cliente escreveu de volta são decisões diferentes, e nenhum nível de
+diagnóstico liga a segunda por você.
+
+Nada fora dessa lista de cabeçalhos é mantido, então um `set-cookie` ou um `authorization` que um
+endpoint devolva não é armazenado — nunca é copiado, para começar.
+</Note>
+
+Sem isso a página diz **não capturado** em cada tentativa, o que é uma resposta diferente de **não
+disponível**: a segunda significa que o gateway é anterior ao recurso e nenhuma configuração vai
+ajudar.
+
+Uma tentativa que mostra **sem resposta** não recebeu resposta nenhuma para guardar — a requisição foi
+recusada ou falhou antes de o endpoint responder — e ligar a captura não teria mudado isso.
 
 ## `registered_delivery`, e o valor que surpreende as pessoas
 

@@ -43,6 +43,19 @@ avant de relever le plafond de threads.
     Les échecs de transfert et les tentatives sont journalisés. Dix tentatives silencieuses
     signifient que l'endpoint a répondu.
   </Step>
+  <Step title="Qu'a réellement dit leur point de terminaison ?">
+    Ouvrez le message dans le panneau de contrôle et lisez **Échange client**. Chaque tentative de
+    callback est une ligne portant l'endpoint, le numéro d'essai, la durée et le statut.
+
+    Ces lignes n'existent que si `smsg.diagnostics` ou `smsg.cdr.events` vaut au moins `problems` —
+    aucun des deux n'est défini sur une installation neuve, qui n'enregistre rien. Si le tableau est
+    vide, définissez-en un et reproduisez.
+
+    Pour voir la réponse elle-même plutôt que son seul code de statut, mettez
+    `smsg.cdr.events.response = excerpt` et reproduisez. La cellule **Réponse** se déplie alors sur
+    les 500 premiers caractères renvoyés par le point de terminaison — c'est là qu'un `401` derrière
+    un proxy cesse de ressembler à un `401` de l'application.
+  </Step>
 </Steps>
 
 ## Le piège des placeholders

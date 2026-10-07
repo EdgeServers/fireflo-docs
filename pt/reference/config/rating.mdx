@@ -11,6 +11,8 @@ description: "Moeda e escala monetária, onde call records são escritos, quanto
 | `smsg.cdr.directory` | `data/cdr` | Localização do sink de arquivo. |
 | `smsg.cdr.deadline.hours` | `48` | Espera antes de registrar um desfecho como `EXPIRED`. |
 | `smsg.cdr.body` | `off` | `off`, `excerpt` (160 caracteres) ou `full`. Se o conteúdo da mensagem é registrado. |
+| `smsg.cdr.events` | `off` | `off`, `problems` ou `all`. Eventos por mensagem do lado do cliente: receipts retidos, em espera ou que falharam, e tentativas de callback. Sem definir, segue `smsg.diagnostics`. |
+| `smsg.cdr.events.response` | `off` | `off` ou `excerpt`. Se um evento de callback guarda o que o endpoint do cliente respondeu. |
 | `smsg.cdr.interim.retention.days` | `30` | Por quanto tempo `cdr_interim` mantém receipts de progresso. |
 | `smsg.balance.enabled` | `false` | Fazer enforcement de crédito pré-pago. PostgreSQL apenas. |
 | `smsg.balance.block.min.messages` | `20` | Quantas mensagens uma reserva de crédito deve cobrir. |
@@ -72,7 +74,24 @@ carregam credenciais.
 **Contêm conteúdo de mensagem só quando você liga.** `smsg.cdr.body` vem `off`. Ligar significa que
 corpos de mensagem são retidos pela janela de retenção e podem ser lidos por qualquer um com acesso
 ao painel ou ao banco. Aplique a mesma política que você aplica ao access log.
+
+O mesmo vale para `smsg.cdr.events.response`, que vem `off` e guarda até 500 caracteres do que o
+endpoint do próprio cliente respondeu. Normalmente isso é uma mensagem de erro e exatamente o que
+você precisa; um endpoint que devolve a requisição no corpo de erro colocaria conteúdo de mensagem
+ali também.
 </Warning>
+
+## `smsg.cdr.events` e o nível de diagnóstico
+
+Sem definir, `smsg.cdr.events` herda o valor de `smsg.diagnostics`; sem nenhum dos dois ele é `off` e
+nenhuma linha de evento é gravada. Um valor não reconhecido também é `off`, então um erro de digitação
+não consegue aumentar o volume de escrita na fila que essas linhas dividem com os registros de
+cobrança.
+
+`problems` é o valor a usar. Não escreve nada enquanto nada falha, então um gateway saudável vê quase
+nenhuma linha a mais — e, definido de antemão, a falha já está registrada quando a pergunta do
+suporte chega. Veja
+[Diagnósticos](/platform/operations/diagnostics).
 
 ## Unidades de billing em batch
 

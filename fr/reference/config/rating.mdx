@@ -11,6 +11,8 @@ description: "Devise et échelle monétaire, où sont écrits les enregistrement
 | `smsg.cdr.directory` | `data/cdr` | Emplacement du sink fichier. |
 | `smsg.cdr.deadline.hours` | `48` | Attente avant d'enregistrer un résultat comme `EXPIRED`. |
 | `smsg.cdr.body` | `off` | `off`, `excerpt` (160 caractères) ou `full`. Si le contenu de message est enregistré du tout. |
+| `smsg.cdr.events` | `off` | `off`, `problems` ou `all`. Les événements côté client par message : accusés retenus, mis en attente ou échoués, et tentatives de callback. Non défini, il suit `smsg.diagnostics`. |
+| `smsg.cdr.events.response` | `off` | `off` ou `excerpt`. Si un événement de callback conserve ce que le point de terminaison du client a répondu. |
 | `smsg.cdr.interim.retention.days` | `30` | Combien de temps `cdr_interim` conserve les accusés de progression. |
 | `smsg.balance.enabled` | `false` | Appliquer le crédit prépayé. PostgreSQL uniquement. |
 | `smsg.balance.block.min.messages` | `20` | Combien de messages une réservation de crédit doit couvrir. |
@@ -75,7 +77,23 @@ litiges en ont besoin, et ne portent jamais d'identifiants.
 livré à `off`. L'activer signifie que les corps de messages sont conservés pour la fenêtre de
 rétention et sont lisibles par toute personne ayant accès au panneau ou à la base. Appliquez la
 même politique que celle appliquée au log d'accès.
+
+Il en va de même pour `smsg.cdr.events.response`, livré à `off`, qui conserve jusqu'à 500 caractères
+de ce que le point de terminaison du client a répondu. C'est en général un message d'erreur et
+exactement ce dont vous avez besoin ; un point de terminaison qui renvoie la requête dans son corps
+d'erreur y placerait aussi du contenu de message.
 </Warning>
+
+## `smsg.cdr.events` et le niveau de diagnostic
+
+Non défini, `smsg.cdr.events` prend sa valeur de `smsg.diagnostics` ; si aucun des deux n'est défini,
+il vaut `off` et aucune ligne d'événement n'est écrite. Une valeur non reconnue vaut aussi `off` : une
+faute de frappe ne peut pas augmenter le volume d'écriture sur la file que ces lignes partagent avec
+les enregistrements de facturation.
+
+`problems` est la valeur à utiliser. Il n'écrit rien tant que rien n'échoue, donc une passerelle en
+bonne santé ne voit presque aucune ligne supplémentaire — et, défini à l'avance, il a déjà enregistré
+l'échec quand la question du support arrive. Voir [Diagnostics](/platform/operations/diagnostics).
 
 ## Unités de facturation des lots
 

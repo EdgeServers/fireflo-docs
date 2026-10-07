@@ -62,11 +62,41 @@ Los eventos aterrizan en `cdr_event` y aparecen en la página de un mensaje bajo
 | `receipt.failed` | El `deliver_sm` no pudo ponerse en el cable |
 | `receipt.held` | El cliente no estaba alcanzable. **Se reproduce cuando ese system id vuelva a hacer bind** — un bind que nunca cae nunca lo dispara |
 | `receipt.suppressed` | Su `registered_delivery` no pidió este resultado. La línea lleva el octeto almacenado, que es el diagnóstico |
-| `callback.attempt` | Un intento a su `dlr-url`, con estado y duración — **una fila por intento**, no una por resultado |
+| `callback.attempt` | Un intento a su `dlr-url`, con estado, número de intento y duración — **una fila por intento**, no una por resultado |
 
 Las direcciones de callback se almacenan con la **query string eliminada**. Una `dlr-url` lleva
 rutinariamente una clave de API, y estas filas son ampliamente legibles, así que el endpoint se
-guarda como esquema, host y ruta y nada más. No se almacena ningún cuerpo de respuesta en absoluto.
+guarda como esquema, host y ruta y nada más. Eso no tiene ajuste ni forma de evitarlo.
+
+## Ver qué respondió su endpoint
+
+Un código de estado dice que el callback falló. No dice por qué, y la razón suele estar en el cuerpo
+que devolvió el endpoint: `{"error": "unknown template id"}` y una página de login en HTML son dos
+fallos completamente distintos que llegan ambos como un `500`.
+
+```
+smsg.cdr.events.response = excerpt
+```
+
+La tabla **Intercambio con el cliente** en la página de un mensaje muestra entonces una celda
+**Respuesta** en cada intento de callback, que se despliega a los primeros 500 caracteres de la
+respuesta y un conjunto fijo de cabeceras: tipo, longitud y codificación del contenido,
+`retry-after`, `location` y `x-request-id`.
+
+<Note>
+Se distribuye como `off`, y es una clave separada de `smsg.cdr.events` a propósito. Registrar que un
+callback falló y retener lo que escribió de vuelta el servidor de un cliente son decisiones
+distintas, y ningún nivel de diagnóstico activa la segunda por ti.
+
+No se guarda nada fuera de esa lista de cabeceras, así que un `set-cookie` o un `authorization` que
+devuelva un endpoint no se almacena: nunca se copia en primer lugar.
+</Note>
+
+Sin ello la página dice **no capturado** en cada intento, que es una respuesta distinta de **no
+disponible**: la segunda significa que el gateway es anterior a la función y ningún ajuste ayudará.
+
+Un intento que muestra **sin respuesta** no recibió ninguna respuesta que guardar: la petición fue
+rechazada o falló antes de que el endpoint contestara, y activar la captura no lo habría cambiado.
 
 ## `registered_delivery`, y el valor que sorprende a la gente
 

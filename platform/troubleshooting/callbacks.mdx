@@ -46,6 +46,10 @@ thread ceiling.
     Open the message in the control panel and read **Customer exchange**. Each callback attempt is a
     row carrying the endpoint, the try number, how long it took and the status.
 
+    Those rows exist only where `smsg.diagnostics` or `smsg.cdr.events` is at least `problems` —
+    both are unset on a fresh install, which records nothing. Set one and reproduce if the table is
+    empty.
+
     To see the answer itself rather than only its status code, set `smsg.cdr.events.response =
     excerpt` and reproduce. The **Response** cell then expands to the first 500 characters the
     endpoint returned, which is where a `401` behind a proxy stops looking like a `401` from the
