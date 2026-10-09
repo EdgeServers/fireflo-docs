@@ -18,8 +18,8 @@ writes rows in it.
 
 | Verb | Does | Never touches |
 | :--- | :--- | :--- |
-| `check` | Is this host ready. Changes nothing. | Everything |
-| `install` | Node, service user, directories, source, `npm ci`, build, environment, systemd unit, then a check that it answers | — |
+| `check` | Is this host ready. Changes nothing. A missing or old Node fails it | Everything |
+| `install` | Node, service user, directories, source, `npm ci`, build, environment, systemd unit, then a check that it answers. A missing Node is a warning here, because this is the step that adds it — unless `--no-packages` | — |
 | `update` | Pulls a new build over an existing install | **The environment file** |
 | `service` | Generates the unit on an existing install, and starts it | The environment file |
 | `passwd` | Rolls the operator password and restarts | Everything else |
@@ -33,6 +33,33 @@ operator account. `passwd` is therefore the supported way to change it — it re
 file and restarts the unit in one step, rather than leaving you to edit a file the installer otherwise
 promises never to replace.
 
+```bash
+sudo ./scripts/fireflo-panel-install passwd --tenant websmsc --vhost /home/websmsc
+```
+
+Name the install the way you installed it — the same `--tenant` and `--vhost`, or `--conf-dir` — so it
+finds that `panel.env`. The account and the unit are read back from the installed service, as `update`
+does, so `--user` is not needed.
+
+| Option | Does |
+| :--- | :--- |
+| *(none)* | Generates a password, restarts the panel, and prints it **once** |
+| `--password-file PATH` | Uses the first line of that file instead. There is no `--password`: one in an argument is one in shell history and in `ps` |
+| `--rotate-secret` | Also rolls the session secret, signing everyone out |
+| `--operator NAME` | Changes the sign-in name as well |
+
+<Warning>
+**A new password alone does not sign anyone out.** Sessions are signed tokens and nothing re-checks the
+password after sign-in, so a stolen session survives a reset. After a suspected compromise, pass
+`--rotate-secret`.
+</Warning>
+
+<Note>
+The 0.11.3 tarball as first published read the account as the default `fireflo` instead, and on an
+install made with `--user` stopped with `install: invalid user: 'fireflo'`, having changed nothing.
+On a host with that installer, add `--user` with the panel's account.
+</Note>
+
 ## Layout
 
 | Option | Default | Notes |
@@ -44,7 +71,7 @@ promises never to replace.
 | `--vhost PATH` **with** `--tenant` | — | `PATH/panel`, with the gateway at `PATH/gateway` |
 | `--vhost PATH` **alone** | — | Legacy flat layout: `PATH/app`, `PATH/conf`, `PATH/data` |
 | `--port N` | `3000` | **Never derived from `--tenant`** — a second panel on one host needs its own |
-| `--user NAME` | `fireflo` | **Required under `--vhost`**: it must be the account that owns the virtualhost, or nothing running as the service can traverse it |
+| `--user NAME` | `fireflo` | **Required under `--vhost`**: it must be the account that owns the virtualhost, or nothing running as the service can traverse it. `update`, `service` and `passwd` read it back from the installed unit |
 
 **`--tenant` is the point of the shared vocabulary**: the same word names the same instance to the
 gateway installer. One name per customer, two products. The three directory flags still win over

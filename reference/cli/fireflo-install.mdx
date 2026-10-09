@@ -55,6 +55,18 @@ gateway cannot see any other customer's home directory. That is a namespace, not
 directory's own mode still decides who may enter it, which is why `--user` matters above.
 
 <Note>
+**Refused because the application directory is an account's home.** An update replaces the
+application directory wholesale, so the installer refuses any layout where that is a real home under
+`/home` or `/root`. Under `--vhost` the fix is the account, not the path: pass `--user` with the
+account that owns the virtualhost, or give the service account the virtualhost as its home
+(`usermod -d /home/<name> <account>`).
+
+The 0.11.3 tarball as first published refused **every** first `--vhost` install for a service
+account that did not exist yet, and suggested a second `--vhost` that would have nested the install
+inside itself. On a host with that installer, pass `--user` with an existing account.
+</Note>
+
+<Note>
 Every flag takes a **space-separated** value. `--vhost=/home/acme` is rejected as an unknown option
 rather than parsed.
 </Note>

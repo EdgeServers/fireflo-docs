@@ -24,6 +24,10 @@ sudo ./scripts/fireflo-panel-install install
 `install` does Node, service user, directories, source, `npm ci`, build, environment, systemd unit, and
 then checks that it answers. It asks for what it needs first and changes nothing until you agree.
 
+**A host without Node is fine for `install`**: it adds Node 22 from NodeSource itself. `check` still
+reports a missing Node as a failure, because on its own it installs nothing; so does `install
+--no-packages`.
+
 ## What it derives
 
 Given the gateway's configuration directory, the installer reads out the **operational tokens** and the
@@ -43,10 +47,13 @@ There is no user table.
 
 ```bash
 sudo ./scripts/fireflo-panel-install passwd
+sudo ./scripts/fireflo-panel-install passwd --tenant websmsc --vhost /home/websmsc   # a tenant
 ```
 
 That is the supported way to change it — it rewrites the environment file and restarts the unit in one
-step, rather than leaving you to edit a file the installer otherwise promises never to replace.
+step, rather than leaving you to edit a file the installer otherwise promises never to replace. It
+prints the new password once. Add `--rotate-secret` to sign everyone out as well; see
+[`passwd`](/reference/cli/fireflo-panel-install#why-passwd-exists-as-a-verb) for the rest.
 
 ## The two URLs that are easy to swap
 
