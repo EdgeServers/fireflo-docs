@@ -74,6 +74,7 @@
                   "platform/install/configuration-source",
                   "platform/install/first-configuration",
                   "platform/install/control-panel",
+                  "platform/install/omni",
                   "platform/install/upgrading",
                   "platform/install/removing",
                   "platform/install/licensing",

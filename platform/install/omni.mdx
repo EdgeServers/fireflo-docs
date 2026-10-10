@@ -1,0 +1,224 @@
+---
+title: "Installing FireFlo OMNI"
+description: "The offline OMNI bundle: what the server needs, the first install, the panel on Vercel, upgrades and rollback."
+---
+
+FireFlo OMNI is the customer-facing layer on top of the gateway: contacts, the Inbox, broadcasts,
+billing, and the channels and plugins your licence covers. It ships as **one bundle per release**,
+built for your server's CPU with the modules you take already inside it.
+
+The bundle is supplied by FireFlo — ask **support@fireflo.au** — as two files:
+
+```
+fireflo-omni-<release>-<target>-<arch>.tar.gz
+fireflo-omni-<release>-<target>-<arch>.tar.gz.sha256
+```
+
+| Target | The API | The panel |
+| :--- | :--- | :--- |
+| `api-vercel` | on your Linux server, installed by `install.sh` | a folder in the bundle, deployed to Vercel |
+| `single` | on your Linux server, installed by `install.sh` | on the same server, as the `omni-panel` service |
+
+<Note>
+**Nothing is downloaded during the install.** Python, its packages and (for `single`) Node.js are in
+the bundle, so the server needs no internet access and no build tools of its own.
+</Note>
+
+## What the server needs
+
+- Debian 12 or Ubuntu 22.04 / 24.04, on the CPU the bundle is for, with systemd, and root.
+- **PostgreSQL 15 or newer**, with a database and a user that owns it.
+- **Redis 6 or newer.**
+- DNS for the API's domain, and a web server with TLS in front (Apache/Virtualmin or nginx).
+- `/opt/fireflo` **must not exist yet** — the installer refuses a server that already has one.
+
+```bash
+apt update
+apt install -y postgresql redis-server
+systemctl enable --now postgresql redis-server
+
+sudo -u postgres createuser --pwprompt omni
+sudo -u postgres createdb --owner omni omni
+```
+
+## Install
+
+<Steps>
+  <Step title="Copy the bundle over and check it">
+```bash
+scp fireflo-omni-<release>-<target>-<arch>.tar.gz* root@SERVER:/root/
+
+# on the server
+cd /root
+sha256sum -c fireflo-omni-<release>-<target>-<arch>.tar.gz.sha256
+tar xzf fireflo-omni-<release>-<target>-<arch>.tar.gz
+cd fireflo-omni-<release>-<target>-<arch>
+```
+  </Step>
+  <Step title="Write the answers">
+```bash
+cp site.env.example site.env
+nano site.env
+```
+
+```ini
+API_DOMAIN=api.example.com
+PANEL_DOMAIN=app.example.com          # on api-vercel: the domain the panel gets on Vercel
+DATABASE_URL=postgres://omni:CHANGE-ME@127.0.0.1:5432/omni
+REDIS_URL=redis://127.0.0.1:6379/0
+REDIS_CACHE_URL=redis://127.0.0.1:6379/1
+DJANGO_DEFAULT_FROM_EMAIL=FireFlo OMNI <no-reply@example.com>
+```
+
+Any other line — mail, error reporting, the AI provider — is copied into the server's settings as it
+is. Without `--env-file`, `install.sh` asks for the first six instead.
+  </Step>
+  <Step title="Run the installer">
+```bash
+./install.sh --env-file site.env
+```
+
+It checks the bundle's checksums, the CPU, and that PostgreSQL and Redis answer **before it changes
+anything**. Then it creates the `omni` user, installs into `/opt/fireflo/releases/<release>`, writes
+`/opt/fireflo/shared/.env` with generated secrets, runs the migrations, starts the services and waits
+for the API to report healthy.
+  </Step>
+  <Step title="Back up the settings file">
+```bash
+cp /opt/fireflo/shared/.env /root/omni-env.backup     # and keep a copy off the server
+```
+
+<Warning>
+**This file holds the generated secrets**, including the key stored gateway and AI credentials are
+encrypted with. Lose it and those credentials have to be entered again.
+</Warning>
+  </Step>
+  <Step title="Put HTTPS in front">
+Proxy the API's domain to `127.0.0.1:8200`. The bundle's `api/deploy/virtualmin-proxy.conf` is the
+Apache version. For nginx:
+
+```nginx
+server {
+    server_name api.example.com;
+    client_max_body_size 50m;
+    location / {
+        proxy_pass http://127.0.0.1:8200;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+certbot --nginx -d api.example.com
+curl -fsS https://api.example.com/api/health/
+```
+
+Webhooks from the gateway arrive at this domain, so it must be reachable from the gateway.
+  </Step>
+  <Step title="Create the first staff user">
+```bash
+cd /opt/fireflo/current/api
+sudo -u omni DJANGO_SETTINGS_MODULE=config.settings.production .venv/bin/python manage.py createsuperuser
+```
+  </Step>
+</Steps>
+
+### What it runs
+
+| Service | Does |
+| :--- | :--- |
+| `omni-api` | the API, on `127.0.0.1:8200` |
+| `omni-celery` | background jobs |
+| `omni-celery-sends` | sending |
+| `omni-celery-prepare` | preparing broadcasts |
+| `omni-celery-beat` | the schedule |
+| `omni-panel` | the panel, on a `single` server only |
+
+```bash
+systemctl is-active omni-api omni-celery omni-celery-sends omni-celery-prepare omni-celery-beat
+```
+
+## The panel on Vercel
+
+On an `api-vercel` bundle, `panel/` is ready to deploy as it is — the modules are already in it. From
+any machine with the bundle unpacked:
+
+```bash
+cd fireflo-omni-<release>-api-vercel-<arch>/panel
+npm i -g vercel
+vercel link
+vercel env add API_BASE_URL production       # https://api.example.com
+vercel env add PANEL_PROXY_KEY production    # the PANEL_PROXY_KEY line in /opt/fireflo/shared/.env
+vercel deploy --prod
+```
+
+- Add the panel's domain in Vercel (Settings → Domains). It must be the `PANEL_DOMAIN` you gave the
+  installer: the API only accepts the browser from that origin, and anything else shows as CORS errors.
+- Put the function region next to the API server (Settings → Functions).
+
+## Connecting it to the gateway
+
+1. **Platform → Products**: turn on SMS for the plans that should have it. A channel is only on for
+   plans whose product enables it.
+2. Enter the gateway account in the SMS channel's settings.
+3. Optionally turn on bulk callbacks on the gateway for that account, so its receipts arrive hundreds
+   to a request (gateway 0.11.3 or newer; see [releases](/platform/project/releases)):
+   `smsg.callback.bulk.accounts=<account>`.
+4. Send one test message and watch it reach **Delivered**.
+
+## Upgrading
+
+FireFlo supplies a new bundle. It must carry **at least the channels and plugins the server runs**.
+
+```bash
+cd /root
+sha256sum -c fireflo-omni-<new>-<target>-<arch>.tar.gz.sha256
+tar xzf fireflo-omni-<new>-<target>-<arch>.tar.gz
+cd fireflo-omni-<new>-<target>-<arch>
+./upgrade.sh
+```
+
+It installs into a new release folder beside the running one, migrates, switches
+`/opt/fireflo/current`, restarts the services and waits for health. `/opt/fireflo/shared/.env` is
+kept as it is.
+
+- **If the new release isn't healthy within 90 seconds, the server switches back** to the release that
+  was running and restarts on it. Migrations are not reversed; they only add.
+- The last three releases are kept.
+- A bundle that leaves out a module the server runs is refused: its menus, pages, webhooks and jobs
+  would go (its data would stay). `./upgrade.sh --allow-remove` when that is the intent.
+
+On `api-vercel`, deploy the new bundle's panel too, so it matches the API. The Vercel variables stay:
+
+```bash
+cd fireflo-omni-<new>-api-vercel-<arch>/panel
+vercel link          # the existing project
+vercel deploy --prod
+```
+
+### Rolling back by hand
+
+```bash
+ls /opt/fireflo/releases/
+ln -sfn /opt/fireflo/releases/<previous> /opt/fireflo/current
+systemctl restart omni-api omni-celery omni-celery-sends omni-celery-prepare omni-celery-beat
+```
+
+Add `omni-panel` on a `single` server.
+
+## When something goes wrong
+
+```bash
+journalctl -u omni-api -n 100
+journalctl -u omni-celery -u omni-celery-sends -u omni-celery-prepare -u omni-celery-beat -f
+```
+
+| Message | Means |
+| :--- | :--- |
+| `… already has an install: use ./upgrade.sh.` | `/opt/fireflo` exists: this is an upgrade, not an install |
+| `The database or Redis isn't reachable with these settings` | check `DATABASE_URL` and `REDIS_URL`; nothing was changed |
+| `This release is for amd64; this server is arm64.` | ask for a bundle for this CPU |
+| `The bundle's files don't match SHA256SUMS` | the copy is damaged: copy it again |
+| `Not healthy after 90 s` | `journalctl -u omni-api -n 100` says why |
