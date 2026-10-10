@@ -26,20 +26,35 @@ the bundle, so the server needs no internet access and no build tools of its own
 
 ## What the server needs
 
-- Debian 12 or Ubuntu 22.04 / 24.04, on the CPU the bundle is for, with systemd, and root.
+- Debian 12 or Ubuntu 22.04 / 24.04 / 26.04, on the CPU the bundle is for, with systemd, and root.
 - **PostgreSQL 15 or newer**, with a database and a user that owns it.
-- **Redis 6 or newer.**
+- **Redis 6 or newer**, or Valkey, which speaks the same protocol on the same port.
 - DNS for the API's domain, and a web server with TLS in front (Apache/Virtualmin or nginx).
 - `/opt/fireflo` **must not exist yet** — the installer refuses a server that already has one.
 
 ```bash
 apt update
-apt install -y postgresql redis-server
-systemctl enable --now postgresql redis-server
+apt install -y postgresql
+apt install -y redis-server || apt install -y valkey-server
+systemctl enable --now postgresql
+systemctl enable --now redis-server 2>/dev/null || systemctl enable --now valkey-server
+
+psql --version                                   # 15 or newer
+redis-cli ping 2>/dev/null || valkey-cli ping    # PONG
 
 sudo -u postgres createuser --pwprompt omni
 sudo -u postgres createdb --owner omni omni
 ```
+
+<Note>
+**Ubuntu 26.04.** Debian 12 and Ubuntu 22.04 / 24.04 are the releases the bundle is tested on; on 26.04 it
+installs the same way, because the bundle brings its own Python and the installer only requires a
+Debian-family system. Two things differ there:
+
+- The archive may offer **Valkey** in place of Redis — hence the fallback above. It listens on
+  `6379` as Redis does, so `REDIS_URL` and `REDIS_CACHE_URL` stay `redis://127.0.0.1:6379/…`.
+- The system Python is newer than any earlier release's; nothing in OMNI uses it.
+</Note>
 
 ## Install
 
