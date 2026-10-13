@@ -111,6 +111,11 @@ exports keep four for the same reason — a spreadsheet sums that column.
 Storage never changes: amounts are integers of ten-thousandths. The setting is presentation only and
 can be changed at any time.
 
+**The control panel trims trailing zeros** when it shows an amount, keeping at least one decimal
+place: `0.0000` reads `0.0`, `0.0100` reads `0.01`, `12.5000` reads `12.5`. A rate is trimmed the same
+way but never rounded, so `0.0450` reads `0.045`. Only the panel's display changes — the API, the
+database and CSV exports keep every place.
+
 ## Least-cost routing
 
 A table marked `->function(LCR)` picks the cheapest vendor rather than the first matching rule:

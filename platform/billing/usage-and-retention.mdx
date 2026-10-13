@@ -35,6 +35,22 @@ This is what makes the rollup safe to re-run.
 The rollup is idempotent and restates **only** the delivery columns. A finished day's money is settled
 the moment the day ends.
 
+## MT parts
+
+`mt_parts` counts the SMS segments each line's messages were sent as: a three-part message counts
+three, and a message every vendor refused counts none. It is what the Billing tab's **MT parts sent**
+figures are built from.
+
+It arrived in gateway 0.12.4. **Lines summarised before that hold no count** — empty, not zero, so
+nobody mistakes them for a day that sent nothing. A re-run fills them:
+
+```bash
+fireflo usage rollup --catch-up
+```
+
+Unlike the delivery columns, a re-run never lowers a part count; it can only fill one that is
+missing. A day whose call records were already purged cannot be filled and stays uncounted.
+
 ## A billing day is a local day
 
 `FIREFLO_BILLING_ZONE` decides where a day starts, and it is read from `app_config` so the rollup and

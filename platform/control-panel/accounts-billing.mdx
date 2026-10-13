@@ -1,10 +1,12 @@
 ---
 title: "The Billing tab"
-description: "The only place credit is created, and the only write in the panel that cannot be undone — plus the ledger, and a reconciliation that fixes nothing."
+description: "Balance and MT usage side by side, the only place credit is created, the ledger, and a reconciliation that fixes nothing."
 ---
 
-Open an account and choose **Billing**. Four cards: what the account holds, how to add to it, whether
-the credit adds up, and every movement.
+Open an account and choose **Billing**. Across the top, one card answers the two questions you open
+it with: on the left, what the account holds and the actions that change it; on the right, how many
+MT parts it has sent. Beneath it, **MT usage** over time beside **Does the credit add up?**, and the
+full ledger at the bottom.
 
 <Warning>
 **Adding credit cannot be undone from the panel.** There is no "remove credit" and no reversal.
@@ -16,9 +18,13 @@ rather than clicking through it — it is the last point at which the number is 
 
 ## What the account holds
 
-Prepaid accounts show **Available**. Postpaid accounts show a **Credit limit** — what they may run
-up before the gateway refuses them, which is the same refusal a prepaid account gets when it runs
-out. The two are never given the same name.
+Prepaid accounts show **Available**, with **Reserved**, **Spent this month** and the **Last top-up**
+beneath it. Postpaid accounts show a **Credit limit** — what they may run up before the gateway
+refuses them, which is the same refusal a prepaid account gets when it runs out — with lifetime and
+this month's spend. The two are never given the same name.
+
+Amounts are shown with trailing zeros trimmed, keeping at least one decimal place: `0.0000` reads
+`0.0`, `0.0100` reads `0.01`. That is display only — see [Precision](/platform/billing/how-pricing-works#precision).
 
 <Note>
 **Reserved is not a hold that shrinks as messages go out.** It is credit that has been moved out of
@@ -36,6 +42,27 @@ consequential state: a top-up against an account with no row is left pending rat
 Currency is not asked for. There is one currency per platform, taken from the gateway, and FireFlo
 never converts — a balance in anything else could never be spent against a price. The field appears
 only when the panel cannot read the platform currency at all.
+
+## MT parts sent
+
+An **MT part** is one SMS segment handed to a vendor. A message long enough to be split into three
+parts counts three; a message every vendor refused counts none. The card shows the lifetime total,
+how many messages it came from, and the parts sent this month, in the last seven days and today so
+far. Months and days are cut in the billing time zone, the same as statements.
+
+**MT usage** draws parts per day over 7, 30 or 90 days, with today's bar paler because it is still
+counting, and a table by product with messages, parts and what was charged over the same window.
+
+Past days come from the daily usage summary; today, and any day not yet summarised, are counted
+from the message records directly, so the figures are live.
+
+<Note>
+**After upgrading to 0.12.4, days summarised before the upgrade have no part count.** They are left
+out of the totals, not counted as zero, and the card says how many there are. Running
+`fireflo usage rollup --catch-up` fills every such day whose message records are still kept — see
+[Usage and retention](/platform/billing/usage-and-retention#mt-parts). Days already purged stay
+uncounted.
+</Note>
 
 ## Adding credit
 
@@ -111,9 +138,9 @@ a month but not over the account's life has not held.
 
 Every recharge and transfer, searchable by reference, note or type, sortable and paged.
 
-By default the ledger lists only entries a person or the billing system wrote. The gateway's own
-credit reservations are hidden and counted instead — roughly one every twenty messages, each moving
-credit between two columns of one row and netting to zero. **Show them** reveals the lot.
+The ledger lists only entries a person or the billing system wrote. The gateway's own credit
+reservations are bookkeeping, not money — each moves credit between two columns of one row and nets
+to zero — and are kept elsewhere.
 
 The **State** column carries the part people miss: **Pending** means the gateway has not applied it
 yet. Where an account has no balance row, a positive entry says either that it is waiting for the row
