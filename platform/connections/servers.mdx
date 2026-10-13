@@ -39,7 +39,9 @@ A clean start is not proof every listener is up. Check `/ops/health`.
     [credentials.yml](/reference/files/credentials-yml).
   </Step>
   <Step title="allowedIps, if set">
-    Empty means **no restriction**.
+    Empty means **no restriction** — unless `smsg.smpp.whitelist.first.bind` is on, when the first
+    bind saves its address as the login's only allowed one. See
+    [Locking a login to its first address](/platform/connections/credentials#locking-a-login-to-its-first-address).
   </Step>
   <Step title="Connection limits">
     `srv.maxConnections` overall, `srv.maxConnectionsPerIP`, and

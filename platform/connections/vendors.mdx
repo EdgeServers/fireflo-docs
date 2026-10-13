@@ -69,6 +69,21 @@ for exactly this case.
 added, or it is not reading workers from the database at all. The badge's detail text says which.
 </Note>
 
+## Peak throughput
+
+Each vendor card, each server card and the **Throughput** card on the Vendors and Servers pages carry
+a small line: **Peak 1,436/s · 13 Oct, 02:58** — the highest rate reached there, and when. The
+Throughput card's peak is every vendor (or every listener) together.
+
+It is measured the way **tps now** is: messages per second over the gateway's sampling window
+(`smsg.ops.tps.sample.seconds`, 5 by default), so it is a figure you could have watched live, and it
+covers SMPP only. The gateway keeps it across restarts; on a cluster the highest node's figure is the
+one kept.
+
+After a load test or a capacity change the old figure stops describing the platform. An admin can
+**reset** it from the vendor's or server's own page, or the total from the Throughput card; the next
+measured traffic sets a new one.
+
 ## Retries, and the number that used to lie
 
 `maxRetries` bounds the **total** `submit_sm` one message may cost at this vendor — across in-worker

@@ -6,7 +6,7 @@ description: "The two tokens, why unset means 404 rather than open, and why this
 | Property | Default | Description |
 | :--- | :--- | :--- |
 | `smsg.ops.token` | *(unset)* | Shared secret for `GET /ops/health` and `/q/metrics` — the reads. |
-| `smsg.ops.admin.token` | *(unset)* | Shared secret for everything that changes what the gateway is doing: `/ops/reload`, `test-bind`, `disconnect` and the six control verbs. |
+| `smsg.ops.admin.token` | *(unset)* | Shared secret for everything that changes what the gateway is doing: `/ops/reload`, `test-bind`, `disconnect`, the six control verbs, and `DELETE /ops/tps-peaks` (reset a throughput peak: `?scope=` a worker's full name, `all:vendors` or `all:servers`, or none for every peak). |
 
 ## Two tokens, not one
 

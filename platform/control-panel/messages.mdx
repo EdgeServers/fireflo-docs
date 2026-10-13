@@ -18,6 +18,18 @@ vendor, product, ingress, and from-number.
 **Awaiting a receipt** is listed first among outcomes rather than alphabetically. On a healthy busy
 gateway it is the largest group, and it is what people are usually looking for.
 
+### A receipt that is not an outcome
+
+Carriers often answer twice: first a **progress receipt** — *Accepted by the carrier* (`ACCEPTD`) or
+*Held, still being attempted* (`BUFFRED`) — and later the outcome. A progress receipt does not close
+the message, so until the outcome arrives the row has no outcome, and its badge names the progress
+receipt instead: **Accepted by the carrier** rather than **Awaiting receipt**. Only a message the
+carrier has not answered at all reads **Awaiting receipt**.
+
+The **Awaiting a receipt** filter covers both, and the line above the table says how many of the open
+messages the carrier has acknowledged. The list does not refresh by itself; **Refresh** reads the
+same page again, which is how a receipt that landed after the page loaded shows up.
+
 <Note>
 **Message text search finds nothing unless the gateway is recording message content**, which is off
 by default. An empty result may mean the text is not kept rather than that nothing matched. See
@@ -49,6 +61,11 @@ rate rules, receipt state and error code.
 empty* means the vendor was asked and carried none. Reading the first as the second sends you looking
 for a stamping fault that never happened.
 </Warning>
+
+**Ingress server** names the listener a message came in on, with its port — `smppserver.smpp :2790`.
+The port is the listener's as it is configured now, not one recorded with the message, so after a
+listener's port changes its older messages show the new one. REST traffic has no listener and shows
+none.
 
 Column choices are kept in your browser. A link you share carries your filters, never your columns.
 
