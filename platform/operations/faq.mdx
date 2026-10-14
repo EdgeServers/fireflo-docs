@@ -90,6 +90,11 @@ submitted upstream as brand new outbound traffic — which you pay for.
 
 `conf/routingTable.conf` has always carried this rule; the database did not, and **in database mode
 the database wins.**
+
+From 0.12.9 the control panel creates a locked receipt rule for every SMPP listener. Open
+**Servers**, then **Edit** and **Save** on each listener once after upgrading to add any that are
+missing. If receipts still reach a vendor, a catch-all rule sits above the receipt rules: move it
+to the end of the table.
 </Accordion>
 
 <Accordion title="How much logging is safe to leave on?">

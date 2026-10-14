@@ -62,6 +62,11 @@ outbound message.**
 
 `conf/routingTable.conf` has always carried this rule. The database did not — and in database mode
 the database wins.
+
+Since 0.12.9 the control panel keeps this rule for you: every SMPP listener gets its own receipt
+rule in `default`, created with the listener and locked so it can't be deleted or switched off. A
+receipt that still matches no rule goes back to its own listener rather than being dropped. A
+catch-all placed **above** the receipt rules still takes them, so keep catch-alls last.
 </Accordion>
 
 </AccordionGroup>
