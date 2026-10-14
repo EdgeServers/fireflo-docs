@@ -9,7 +9,7 @@ verb, and knowing which is most of knowing how to use it.
 | Group | Talks to | Needs a running gateway |
 | :--- | :--- | :--- |
 | `db`, `bootstrap`, `import`, `show` | The database directly | No |
-| `send` | The **message** port, as a customer would | Yes |
+| `send`, `selftest` | The **message** port, as a customer would (`selftest` reads the database too) | Yes |
 | everything else | The **operational** port, 9000 by default | Yes |
 
 <Warning>
@@ -45,6 +45,17 @@ prints **once**.
 It writes nothing else on purpose — no vendor, because one needs a host and credentials nobody can
 guess; no rates, because an invented price bills silently where an absent one shows up unpriced. Both
 absences are named in its closing output.
+
+Optional flags fill those in when you do know them — the installer passes them when you choose
+SMPPSim:
+
+| Flag | Writes |
+| :--- | :--- |
+| `--vendor NAME --vendor-host H --vendor-port P --vendor-system-id ID --vendor-password-file F` | An SMPP vendor, and a catch-all to it in `MESSAGE`. All five or none; the password is read from the file, never the command line |
+| `--vendor-cost RATE` | A cost on that vendor, so margins are real |
+| `--product P --rate R --currency C` | The first price, on the login's product |
+| `--opening-balance AMOUNT` | Prepaid credit on the first account, recorded as a recharge |
+| `--login-file F` | An HTTP login `fireflo-http` on the same account, its password saved to `F` (owner-only) for `selftest` |
 
 <Note>
 `bootstrap` refuses the moment it finds a routing table, a worker or a login, so it cannot overwrite a
@@ -93,6 +104,31 @@ fireflo send <from> <to> <text>
 
 Goes through the HTTP API exactly as a customer would. Needs `FIREFLO_SEND_LOGIN` and
 `FIREFLO_SEND_PASSWORD`.
+
+### selftest
+
+```bash
+fireflo selftest [--to N] [--from S] [--account ID] [--expect-vendor NAME] [--login-file F] [--timeout 60]
+```
+
+Sends **one real message** and follows it through every record it leaves, printing PASS, FAIL or
+SKIP for each step and why:
+
+| Step | Checks |
+| :--- | :--- |
+| send | The gateway accepted it. A `402` is a FAIL: no prepaid credit |
+| routed | A call record names the vendor it went to (and it is `--expect-vendor`, when given) and the rule that sent it |
+| billed | It carries a price and the rule that set it, plus cost and margin when the vendor has a cost. SKIP when no price rule matched |
+| delivered | A final outcome came back from the vendor |
+| debited | With prepaid on, the account's balance fell by exactly the price |
+
+The debit is read from the balance the account's owner sees — the durable balance plus the
+gateway's unspent reservation — before and after the send, so it needs no admin token and works on
+an unlicensed gateway. It signs in with `FIREFLO_SEND_LOGIN` and `FIREFLO_SEND_PASSWORD`, or the
+login bootstrap saved. It changes no configuration.
+
+Exit codes: `0` nothing failed, `1` a step failed, `2` misused. The installer runs it at the end of
+an install with SMPPSim; run it again whenever you want to know the path still works end to end.
 
 ## Operational
 

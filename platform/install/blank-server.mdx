@@ -34,7 +34,8 @@ half-migrated database rather than a clean error you can act on.
 <Note>
 **No Java is needed, at any point.** The gateway carries its own runtime, and so do the operator
 commands — `fireflo db migrate`, `fireflo license activate` and the rest all run from the same
-executable. A JDK is wanted only for building from source.
+executable. A JDK is wanted only for building from source. The optional SMPPSim test SMSC is the
+one exception: choosing it adds your distribution's Java runtime, for SMPPSim alone.
 </Note>
 
 **No RAM or CPU minimum is published.** Anything that comfortably runs PostgreSQL is enough to
@@ -177,6 +178,14 @@ Add `--smpp-port-range 2775-2799` if you expect more than one listener later —
 firewall opens and the band new listeners are allocated within, so declaring it now covers every
 listener you will ever create. Add `--firewall` to have the SMPP and HTTP ports opened for you, with
 OpenSSH allowed first.
+
+<Tip>
+**Want to see a message go all the way through first?** Add `--with-smppsim` (and `--balance` to try
+prepaid). It installs SMPPSim, a test SMSC included in the release, routes `MESSAGE` to it, and ends by
+running [`fireflo selftest`](/reference/cli/fireflo#selftest): one message routed, priced, delivered
+and debited. Replace SMPPSim with a real vendor before real traffic — see
+[fireflo-install](/reference/cli/fireflo-install#trying-it-with-smppsim).
+</Tip>
 
 Full detail: [Install in one command](/platform/install/one-command).
 

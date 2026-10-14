@@ -20,7 +20,7 @@ writes rows in it.
 | :--- | :--- | :--- |
 | `check` | Is this host ready. Changes nothing. A missing or old Node fails it | Everything |
 | `install` | Node, service user, directories, source, `npm ci`, build, environment, systemd unit, then a check that it answers. A missing Node is a warning here, because this is the step that adds it — unless `--no-packages` | — |
-| `update` | Pulls a new build over an existing install | **The environment file** |
+| `update` | Pulls a new build over an existing install. Asks for the public URL only when `panel.env` has none, or a localhost one; a public value is kept | **The environment file** |
 | `service` | Generates the unit on an existing install, and starts it | The environment file |
 | `passwd` | Rolls the operator password and restarts | Everything else |
 

@@ -91,6 +91,9 @@ rather than parsed.
 | `--log-backups` / `--log-retain-days` | Log retention, including the daily timer that reaps `httpapi.log`. |
 | `--with-fail2ban` / `--no-fail2ban` | Whether fail2ban watches this install's refused logins and blocks the addresses behind them. **Off by default.** |
 | `--fail2ban-ignore A,B` | Addresses or CIDRs that must never be banned. |
+| `--with-smppsim` / `--no-smppsim` | Also install SMPPSim, a test SMSC, as its own service, and route `MESSAGE` to it. `--bootstrap` installs only. **Off by default.** |
+| `--smppsim-port` / `--smppsim-console-port` | SMPPSim's ports, default 7775 and 7788. Never opened in the firewall. |
+| `--vendor-cost RATE` / `--opening-balance AMOUNT` | A cost on SMPPSim, and prepaid credit on the first account. |
 
 <Warning>
 Also `fireflo-install fail2ban`, which turns blocking on for an install that already exists — the
@@ -119,6 +122,21 @@ usually carries a whole customer — see
 in, or what a migration would find in a database it has not connected to. Read it as "the decisions
 this script would make", not "everything that would change on this host".
 </Note>
+
+## Trying it with SMPPSim
+
+The release includes **SMPPSim**, a third-party test SMSC (GPL-2; its licence and source are in
+`smppsim/`). `--with-smppsim` installs it beside the gateway, as its own systemd unit, and has
+bootstrap add it as the vendor `smppsim` with a catch-all in `MESSAGE` — so a message can be sent,
+priced, delivered and debited the moment the install finishes. The install then runs
+[`fireflo selftest`](/reference/cli/fireflo#selftest) and prints its result.
+
+<Warning>
+**SMPPSim accepts everything and invents delivery receipts.** It is for trying FireFlo out, never for
+customer traffic — replace it with a real vendor first. It needs a Java runtime, which the installer
+adds from your distribution for SMPPSim alone. It listens on every interface and its console can
+inject messages, so keep a firewall in front of ports 7775 and 7788; the installer never opens them.
+</Warning>
 
 ## What it does not install
 
