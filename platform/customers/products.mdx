@@ -47,6 +47,11 @@ which is what `conf.product.required` does, and why it is not simply "product mu
 
 HTTP has no bind and therefore no override: there the credential's `product` is the only source.
 
+A session that bound **without** a `system_type` follows the login's product as it is saved: change it
+under Accounts → Logins and the next message on an already-bound session carries the new product
+(gateway 0.12.14 and later; before that the session kept the product it bound with until it rebound).
+A session that bound with a `system_type` keeps it — that was the client's choice, not the operator's.
+
 <Warning>
 **File configuration has no catalogue, so only the non-empty half is enforced.** `app_product` is a
 database table; a gateway running on files, or one whose database is unreachable, cannot check

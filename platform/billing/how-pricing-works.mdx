@@ -72,6 +72,17 @@ tried first and the first match still wins, so anything it carries beats the def
 bare catch-all**, which is what makes a negotiated tariff an override rather than a suggestion.
 
 <Warning>
+**A price for one product reaches only messages that carry that product.** A message carries the
+product of its login (or, over SMPP, the `system_type` the client bound with). Creating a product and a
+rule for it changes nothing until the account's logins are given that product under **Accounts →
+Logins**; until then those messages match only any-product rules, and if there are none they are
+recorded with no price and nothing is debited — while the tester, which reads the logins as they are
+now, prices them. The tester and the pricing page both name logins that carry no product. Before
+gateway 0.12.14 an SMPP client already bound kept the product it bound with until it rebound; from
+0.12.14 it picks up the login's product on its next message.
+</Warning>
+
+<Warning>
 **Without a default, an account nobody has priced is not refused — it sends unpriced and uncharged**,
 with one line at `debug`.
 
