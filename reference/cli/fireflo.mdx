@@ -105,6 +105,22 @@ fireflo send <from> <to> <text>
 Goes through the HTTP API exactly as a customer would. Needs `FIREFLO_SEND_LOGIN` and
 `FIREFLO_SEND_PASSWORD`.
 
+### smppsim-setup
+
+```bash
+fireflo smppsim-setup --vendor-port P --vendor-system-id ID --vendor-password-file F \
+    [--vendor NAME] [--vendor-host H] [--vendor-cost RATE] [--account ID --login-file F] [--no-route]
+```
+
+Adds an SMPP vendor — SMPPSim by default — to a configuration that already exists. It writes:
+
+- the vendor, or refreshes its connection details when it's already there;
+- its cost, only when it has no cost rules yet;
+- a catch-all to it in `MESSAGE`, only when `MESSAGE` has none;
+- an HTTP login `fireflo-selftest` on the account, saved owner-only for `selftest`.
+
+One transaction, so a refusal writes nothing. Safe to run again. `fireflo-install smppsim` runs it.
+
 ### selftest
 
 ```bash

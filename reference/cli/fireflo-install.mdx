@@ -123,6 +123,21 @@ in, or what a migration would find in a database it has not connected to. Read i
 this script would make", not "everything that would change on this host".
 </Note>
 
+## Adding SMPPSim to an existing install
+
+`fireflo-install smppsim --tenant NAME [--account ID] [--vendor-cost RATE]` does for an installed
+gateway what `--with-smppsim` does at install time:
+
+1. installs SMPPSim as its own service;
+2. adds it as the vendor `smppsim`, and its cost when it has none;
+3. adds a catch-all to it at the end of `MESSAGE`, **only if `MESSAGE` has no catch-all already**, so
+   an existing route is never overridden;
+4. creates an HTTP test login `fireflo-selftest` on the account (default `fireflo`);
+5. restarts the gateway and runs `fireflo selftest`.
+
+It needs database mode, is safe to run again, and refuses a folder it didn't make. The database
+changes go through [`fireflo smppsim-setup`](/reference/cli/fireflo#smppsim-setup).
+
 ## Trying it with SMPPSim
 
 The release includes **SMPPSim**, a third-party test SMSC (GPL-2; its licence and source are in

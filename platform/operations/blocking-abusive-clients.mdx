@@ -209,6 +209,29 @@ being rare, that is a small window, and they are banned again on their next atte
 operator locked out of their own host by a whole-port ban has no other lever.
 </Note>
 
+## Forcing a disconnect, and holding a client out
+
+Fail2ban answers repeated failed logins. When a client is **logged in** and misbehaving, use
+**Force disconnect** instead — on a server's page, on a login's live-sessions box under the account's
+**Logins** tab, or on **Security**:
+
+- **Choose the target:** an IP address, an account, or a login. It's matched exactly, never by prefix,
+  so `acme` never touches `acme2`. A preview lists the sessions that would be dropped before
+  anything happens.
+- **Choose what happens next:**
+  - **Allow them to reconnect:** the sessions are dropped, and a client with a reconnect loop is back
+    within seconds.
+  - **Keep them out** for 15 minutes, 1 hour, 24 hours or until lifted: new SMPP binds from that
+    target are refused on every node while the hold lasts.
+- **Lifting:** active holds are listed on **Security → Held out**, with who made them and why. **Lift**
+  ends a hold at once on the node you're on, and on the others within ten seconds.
+
+A refused bind from a held-out client is logged with `reason=heldOut`, which the fail2ban filter
+ignores — the hold is already the response, and a host-wide ban on top would outlast it. Holds are
+kept in the database (from 0.12.8); without one they last until the gateway restarts.
+
+Disabling a login still stops it binding for good, and now drops its live sessions in one step.
+
 ## Releasing an address
 
 From the Security page, if the panel was given the grant at install time, or on the host:
