@@ -25,6 +25,11 @@ string `61`.
 **`startsWith` compares literal text.** A regular expression handed to it asks whether a destination
 literally begins with the characters `^(?:\+61` — nothing does, so the rule stores, loads, displays
 and never fires. The control panel warns about this; a hand-edited file does not.
+
+**For several prefixes, use `startsWithAny`**, not an alternation. `to:startsWithAny:91,+91` matches a
+destination beginning with either. Before 0.12.6 the panel's "Any of these prefixes" saved
+`matches:^(\+91|91)`, which — being anchored — matched only a destination that *was* `91` or `+91`;
+upgrading rewrites those conditions for you.
 </Warning>
 
 <Warning>
@@ -74,9 +79,28 @@ Any operator can be negated with a leading `!`.
 | Kind | Operators |
 | :--- | :--- |
 | Always true | `default` — attribute and value left blank |
-| Text | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
+| Text | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `startsWithAny`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
 | Boolean | `isTrue`, `isFalse` |
 | Numeric | `==`, `>`, `>=`, `<`, `<=` |
+
+`startsWithAny` takes a comma-separated list of literal prefixes, with no spaces: `91,+91,0091`. Each
+is compared exactly as written — `91` does not match `+919812345678` — and a long list costs no more
+per message than a short one. An empty list, or an entry with a space in it, is refused when the rule
+loads.
+
+## Testing a message before it is sent
+
+**Test a message**, on the Routing, Pricing and Filters pages, takes a destination, a sender ID, a
+product and an account, and asks the running gateway what it would do with them — nothing is sent or
+charged. Three tabs answer from the same matchers the message path uses:
+
+- **Routing** walks the tables from `default` to the vendor, and shows every rule it tried with the
+  condition that failed, against the exact text compared.
+- **Pricing** shows the rule that sets the account's price, the vendor's cost, and the margin.
+- **Filters** shows every named filter, matched or not, and the rules that use it.
+
+When nothing matches, it offers to create the rule, opened in the editor with the destination's
+country code filled in for you to correct.
 
 The four text comparisons are lexicographical, not numeric — `greaterThan` on a phone number compares
 strings.

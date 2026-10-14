@@ -67,6 +67,12 @@ rather than on every publish.
 | `no-catch-all` | Every rule in a `NORMAL` table is narrowed, so a message matching none of them is requeued, retried and dropped at `outSms.routing.maxAttempts` — minutes later, with nothing linking the drop to the table. |
 | `unreachable-rules` | A rule that matches everything sits above others. The table stops at the first match, so the rules below it have never run. |
 
+The control panel adds a third it can see and the gateway does not report: **a table nothing routes
+to**. Every message starts at `default`, so a table that no enabled rule — in `default` or in a table
+it leads to — sends into never runs, however its rules read. The table's page says so, its rules are
+marked "Never runs", the Routing rail shows a warning, and the message tester marks any filter used
+only there.
+
 <Warning>
 **The catch-all belongs last.** Placed above other rules it makes everything below it unreachable, and
 nothing refuses the table — the rules parse perfectly, they simply never run. A catch-all is a rule

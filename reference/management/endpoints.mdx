@@ -14,6 +14,10 @@ operational surface for one deployment's operators, not an API customers integra
 | :--- | :--- | :--- | :--- |
 | `GET` | `/ops/health` | read | Everything the gateway knows about itself right now |
 | `GET` | `/q/metrics` | read | Prometheus exposition, as text |
+| `GET` | `/ops/sessions/summary?system_id=a,b` | read | Each named login's sessions by bind type, on every listener and per listener. A login with nothing bound is absent |
+| `GET` | `/ops/routing/explain` | read | Which rule a described message would meet, table by table |
+| `GET` | `/ops/rating/explain` | read | What an account would pay for a described message, and a vendor's cost |
+| `GET` | `/ops/filters/test` | read | Every named filter against a described message |
 | `POST` | `/ops/reload` | admin | Re-read configuration now, instead of waiting for the poll |
 | `POST` | `/ops/workers/{name}/test-bind` | admin | Dial a vendor once and report what happened |
 | `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Drop one customer's bind, leaving others alone |
