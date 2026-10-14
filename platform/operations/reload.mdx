@@ -14,7 +14,9 @@ Only the first is what people usually mean, and only the third is surprising.
 ## Configuration reloads on its own anyway
 
 The gateway polls for database changes. `reload` exists because the poll is up to thirty seconds
-behind, which is too slow when you are watching.
+behind, which is too slow when you are watching. The control panel offers the same reload as
+**Apply now** on the Servers, Vendors, Routing, Pricing and Filters pages, and tells you when a
+reload ran but was not adopted because the licence is not current.
 
 <Warning>
 **A change made in the panel does nothing if the gateway is reading a file for that domain.**
