@@ -13,6 +13,9 @@ description: "What each CLI verb reads from the environment, and the flags that 
 | `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, the six control verbs | Must match `smsg.ops.admin.token`. |
 | `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | A customer credential — this verb goes through the **message** port. |
 | `FIREFLO_CONF_DIR` | `verify` | Where to look for the configuration it checks. |
+| `FIREFLO_SECRETS_KEY` | the gateway, `db secrets`, the control panel | Customer passwords are stored encrypted with it. The **same value** on the gateway and the panel; 32 bytes of base64 or any passphrase. Absent, passwords are stored as they are. |
+| `FIREFLO_SECRETS_KEY_NEXT` | the gateway, `db secrets`, the control panel | A second key tried when opening, never used to seal: set it to the old key while rotating, run `db secrets seal`, then drop it. |
+| `FIREFLO_INSTANCE_ID` | the gateway | What this gateway writes into `account_balance.reserved_by`; the host name when unset. Two gateways on one host must each set their own. |
 
 ## The four permission flags
 

@@ -89,9 +89,29 @@ rollup bug is discovered by the command that deletes the evidence.
 | :--- | :--- | :--- |
 | `cdr_submit`, `cdr_final` | `FIREFLO_CDR_KEEP_DAYS`, default 90 | Per-message detail — but not the totals, if the rollup ran |
 | `cdr_interim` | `smsg.cdr.interim.retention.days`, default 30 | **A report, not an invoice** — it is vendor quality history |
+| `cdr_event` | `smsg.cdr.event.retention.days`, default 90 | The receipt and callback events behind a message's timeline |
+| `cdr_rejected` | `smsg.cdr.rejected.retention.days`, default 90 | What the Refused page shows |
 
 `cdr_interim` is pruned on its own shorter window precisely because it answers a question about
 *recent* traffic: how fast a vendor reports, and whether it reports at all.
+
+## Retention is a partition drop
+
+From 0.12.10 the four large tables (`cdr_submit`, `cdr_final`, `cdr_interim`, `cdr_event`) are
+partitioned by calendar month, in UTC. The gateway creates the coming months' partitions itself, and
+retention drops whole months in one statement instead of deleting rows: `fireflo usage purge` drops
+every month that is entirely past the window (after the same rollup check as before) and deletes
+row by row only inside the month the horizon falls in; `cdr_interim` and `cdr_event` are dropped by
+month on their own windows by the expiry sweep. A row that arrives outside every month lands in a
+default partition rather than failing.
+
+<Warning>
+The 0.12.10 upgrade is the one that partitions these tables, and it is the one upgrade a previous
+binary cannot run against afterwards: rolling back means restoring the database. The installer says
+so and asks before migrating; take the backup it suggests. The migration attaches your existing rows
+without copying them, but it builds two indexes over all of them while the gateway is stopped — seconds
+on a small install, up to an hour on a hundred million rows.
+</Warning>
 
 ## A retention policy is not optional
 

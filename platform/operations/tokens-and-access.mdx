@@ -93,6 +93,26 @@ A failed batch is **never retried** and those records are gone. It is not a tran
 Anything acting on a result — disconnecting a login's binds, say — must compare `system_id`
 **exactly** rather than trusting the match.
 
+## Customer passwords at rest
+
+A customer's SMPP or REST password cannot be hashed: an SMPP bind compares the raw value, and the
+control panel shows it in connection instructions and dials with it in the SMPP test. Until 0.12.10 it
+was therefore stored as typed, and a copy of the database gave away every customer's password.
+
+Set `FIREFLO_SECRETS_KEY` on the gateway (`fireflo.env`) **and** on the control panel (`panel.env`), the
+same value on both, and every password either of them writes is stored encrypted (`enc:v1:…`,
+AES-256-GCM) and decrypted in memory where it is used. A fresh install gets a key from the installer,
+and the panel installer copies it from the gateway's environment as it does the two tokens. An
+install upgraded from before 0.12.10 keeps storing passwords as they are until you set the key on
+both sides, restart both, and run `fireflo db secrets seal` once.
+
+The API key of an HTTP login is not a secret in this sense: it is the login's **name**, the Basic
+username, and stays readable. The secret is the password beside it.
+
+A panel without the key cannot show or dial with a sealed password; it says so rather than guessing.
+To rotate, put the new key in `FIREFLO_SECRETS_KEY`, the old one in `FIREFLO_SECRETS_KEY_NEXT`, run
+`fireflo db secrets seal`, and remove `_NEXT`.
+
 ## Related
 
 <CardGroup cols={2}>

@@ -27,10 +27,17 @@ fireflo db info        # applied and pending versions
 fireflo db validate    # do the applied migrations still match the files
 fireflo db migrate     # apply what is pending      (needs FIREFLO_DB_MIGRATE=true)
 fireflo db repair      # realign Flyway history with the files
+fireflo db secrets status | seal | open   # customer passwords at rest (needs FIREFLO_SECRETS_KEY to seal or open)
 ```
 
 `info` and `validate` do **not** need the write-enabling flag. Reading the schema version changes
 nothing, and needing a flag before you may look would be a trap in the middle of an incident.
+
+`db secrets` is how encryption at rest is turned on for an install that already has customers:
+with `FIREFLO_SECRETS_KEY` set on the gateway and the control panel, `seal` rewrites every stored
+password in one transaction, `status` counts what is sealed and what is not, and `open` is the way
+back before removing the key. From then on every password either side writes is sealed as it is
+written. See [tokens and access](/platform/operations/tokens-and-access#customer-passwords-at-rest).
 
 ### bootstrap
 
