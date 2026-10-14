@@ -92,7 +92,10 @@ loads.
 
 **Test a message**, on the Routing, Pricing and Filters pages, takes a destination, a sender ID, a
 product and an account, and asks the running gateway what it would do with them — nothing is sent or
-charged. Three tabs answer from the same matchers the message path uses:
+charged. Leave the product empty and the test runs as the account's login would send it: a real
+message always carries its login's product (or the `system_type` it bound with), and a price rule
+saved under a product only prices messages carrying it. The tester says on every tab which product it
+ran as. Three tabs answer from the same matchers the message path uses:
 
 - **Routing** walks the tables from `default` to the vendor, and shows every rule it tried with the
   condition that failed, against the exact text compared.
