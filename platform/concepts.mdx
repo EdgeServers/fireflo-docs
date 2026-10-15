@@ -47,8 +47,11 @@ Both are **workers**, and share [a set of base settings](/reference/smpp/worker-
 credential — a per-login limit would let a customer raise their own by creating another login.
 </Note>
 
-A product resolves, in order: the `system_type` on an SMPP bind, then the credential's `product`
-field. HTTP callers have no bind, so the credential value is the only source.
+A product resolves, in order: the `system_type` on an SMPP bind, **when the login may name it** (its
+own product, or one listed under the products it may select; from 0.12.16), then the credential's
+`product` field. A `system_type` the login may not name is ignored and logged once per bind. HTTP
+callers have no bind, so the credential value, or a `product` field from the same allowed list, is
+the only source.
 
 <Warning>
 **An unset product is a supported state that can send messages for free.** A message with no product

@@ -121,10 +121,11 @@ strings.
 | :--- | :--- |
 | `owner_id` | The credential's `accountId`, falling back to its `systemId`. On the HTTP API an explicit `account` parameter overrides it. |
 | `systemId` | The credential's `systemId` — the specific bound client, where several share one account. |
-| `product` | The `system_type` on the client's SMPP bind, falling back to the credential's `product`. HTTP callers have no bind, so they always use the credential value. |
+| `product` | The `system_type` on the client's SMPP bind when the login may name it (from 0.12.16; its own product or one on its allowed list), falling back to the credential's `product`. HTTP callers have no bind, so they use the credential value or an allowed `product` field. |
 
 `product` is how one customer selects routing per session: the same credential binding with
-`system_type=premium` and `system_type=bulk` produces two sessions that route differently. See
+`system_type=premium` and `system_type=bulk` produces two sessions that route differently, once
+`premium` and `bulk` are listed under the products that login may select. See
 [Concepts](/platform/concepts).
 
 Message types for `type` rules: `0` text, `10` binary, `11` UCS-2, `14` flash, `17` push, `18` delivery

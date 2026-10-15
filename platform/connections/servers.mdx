@@ -64,7 +64,9 @@ client looping on a wrong password shows up there before it shows up anywhere el
 
 ## Where the product comes from
 
-`system_type` on the bind request, falling back to the credential's `product` field.
+`system_type` on the bind request when the login may name it (its own product, or one listed under
+the products it may select; from 0.12.16 any other value is ignored and logged), falling back to the
+credential's `product` field.
 
 <Warning>
 `system_type` is free text validated nowhere else. A customer binding `prem` instead of `premium`

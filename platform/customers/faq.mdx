@@ -18,8 +18,11 @@ of traffic that carried no price and names the accounts and products it came fro
 </Accordion>
 
 <Accordion title="Their credential names the right product and it is still unrated">
-`system_type` on an SMPP bind **overrides** the credential's product, and it is free text validated
-nowhere else. A client binding `prem` for `premium` lands in exactly the unrated state above.
+Before 0.12.16, `system_type` on an SMPP bind **overrode** the credential's product as free text
+validated nowhere else: a client binding `prem` for `premium`, or a client whose software sends
+`smpp` by default, landed in exactly the unrated state above. From 0.12.16 a `system_type` the login
+may not name (its own product, or one on its allowed list) is ignored and the credential's product
+applies, with a `bind.system_type.ignored` line in the gateway log.
 
 This is why `conf.product.required` checks **membership of the catalogue** rather than
 non-emptiness — `prem` passes any "is it set?" test perfectly. HTTP has no bind and so no override.
