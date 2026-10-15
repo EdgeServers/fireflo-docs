@@ -10,16 +10,61 @@ two are kept apart because an operator staring at a delivery problem does not wa
 about heap size.
 
 Everything on the page obeys one range control — **24 hours**, **7 days** or **30 days**, defaulting
-to 24 hours. Figures refresh every sixty seconds, and stop refreshing while the browser tab is in the
-background.
+to 24 hours. The page asks for fresh figures every thirty seconds, and stops asking while the browser
+tab is in the background.
 
-From 0.12.15 the 7- and 30-day views are built from the gateway's **daily usage summary** for every
-whole day it has summarised, with only today (and a day's margin behind the newest summary) read
-live from the call records — see [Usage and retention](/platform/billing/usage-and-retention#the-dashboards-read-it).
-The 24-hour view, the hourly traffic chart and the failure breakdown are always live. Two consequences:
-a gateway whose nightly rollup has not run reads everything live and slows as the range grows, and
-on a summarised day **In flight** reads zero, because the summary does not record what was still
-pending. Today's figure is the live one.
+## When the figures were read
+
+From 0.12.16 the figures are a **snapshot the panel builds in the background**, not a query run for
+your tab. A line under the title says when: **as of 10:42:17** means the panel last read the
+database at that second, in your browser's time zone. Open the page in three tabs, or three
+operators open it, and the database does the same work as for one.
+
+The snapshot is rebuilt once a minute. Most of a minute's rebuild is small: the last three hours
+and the current one are re-read, and so is today; everything older is kept from a full rebuild,
+which happens every fifteen minutes. The failure breakdown is re-read every five minutes. So a
+message submitted just now appears within a minute, and a receipt that changes the outcome of a
+message from six hours ago is reflected within a quarter of an hour. On a gateway that keeps the
+hourly usage summary (0.12.16, see below) the whole 24-hour view is re-read every minute, because
+there it is cheap.
+
+Two words can appear beside the time:
+
+- **stale** — the last read of the named section failed (the database was unreachable, or a query
+  timed out) and what you see is the reading before it. The time still advances, because it says when
+  the panel last *tried*. A stale badge that persists is a database problem, not a traffic one.
+- **Settling** — in the traffic chart's legend, with the most recent part of the chart shaded.
+  Messages in the shaded hours or days may still receive a receipt, so their delivered and failed
+  counts are not final. The shading covers the gateway's receipt deadline (`smsg.cdr.deadline.hours`,
+  48 hours by default), so on the 24-hour view it is the whole chart, which is the truth: nothing
+  on that view has settled yet.
+
+The first request after the panel starts has nothing to serve and builds the snapshot while you
+wait; if that takes longer than eight seconds the page says it is warming up and asks again on its
+next poll.
+
+The cadence is a panel setting, `OVERVIEW_REFRESH_SECONDS` in the panel's environment: 60 by default,
+never below 15, and `0` turns the snapshot off and builds the figures on every request — what the
+automated test rig uses, and not a setting for a busy platform.
+
+### Where the figures come from
+
+The 7- and 30-day views are built from the gateway's **daily usage summary** for every whole day it
+has summarised, with only today read from the call records — see
+[Usage and retention](/platform/billing/usage-and-retention#the-dashboards-read-it). From 0.12.16 the
+gateway also keeps an **hourly usage summary**, brought up to date every minute as traffic flows, and
+a panel on such a gateway reads the 24-hour view and today's part of the longer views from it rather
+than from the records: 24 small rows plus the last minute or two of traffic, whatever the volume. Both
+summaries are the gateway's work, switched on by default and tuned on the gateway settings page under
+**Usage summaries**; the daily one is now written by the gateway itself each night rather than by a
+command somebody has to run.
+
+Three consequences worth knowing. On a summarised day **In flight** reads zero, because the daily
+summary does not record what was still pending; today's figure is the live one. A message the gateway
+retried across a minute boundary can be counted twice in the hourly summary until the gateway's
+quarter-hourly recount of recent hours corrects it — retries are a small fraction of traffic and the
+recount is the truth. And a gateway with neither summary reads everything live and slows as the range
+grows, as before.
 
 ## The four figures
 
@@ -44,7 +89,9 @@ sits here, and on a busy platform it always will.
 
 Three series — submitted, delivered, failed — over the chosen range. With nothing in the window the
 chart is replaced by **No traffic in this period**, which is a statement about the range you picked
-as much as about the platform.
+as much as about the platform. Hours on the 24-hour view are clock hours in UTC; days on the longer
+views are billing days, cut in the platform's billing zone. The shaded part of the chart is still
+settling (see above).
 
 ## Why messages failed
 
