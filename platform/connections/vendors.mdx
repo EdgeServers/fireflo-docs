@@ -124,7 +124,9 @@ then fail with a stack trace. From 0.12.15 it waits `window.offer.timeout.ms` (2
 applied live) and, if no slot frees in that time, goes back to this vendor's queue without spending
 any of its retry budget. The wait is counted in `fireflo_smpp_client_window_full_total`, labelled by
 vendor, and logged at most once a minute. The gateway also prefers a bound session with a free slot
-when it has more than one to choose from.
+when it has more than one to choose from. From 0.12.16 the same wait bounds the socket write:
+a vendor that stops reading for that long has its connection dropped and dialled again, instead of
+holding the vendor's one sending lane, and its restart, indefinitely.
 
 <Tip>
 If that counter climbs while the vendor's queue stays deep, the ceiling is the window size times the
