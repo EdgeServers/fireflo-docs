@@ -18,6 +18,11 @@ vendor, product, ingress, and from-number.
 **Awaiting a receipt** is listed first among outcomes rather than alphabetically. On a healthy busy
 gateway it is the largest group, and it is what people are usually looking for.
 
+**A text, number or outcome filter needs a period**, of at most 92 days. Those three are searches
+across rows rather than a walk from the newest, and over every message ever sent they would run for
+minutes; from 0.12.14 the page asks you to choose a period instead of trying. An exact message id, or
+an account alone, still works over all time.
+
 ### A receipt that is not an outcome
 
 Carriers often answer twice: first a **progress receipt** — *Accepted by the carrier* (`ACCEPTD`) or

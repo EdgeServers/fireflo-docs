@@ -11,9 +11,10 @@ Applies to both `dlr_url` on a submission and `forward.mo.url` on a connector.
 | :--- | :--- | :--- |
 | `smsg.webhook.redirects` | `never` | `never`, `normal` or `always`. |
 | `smsg.webhook.schemes` | `https,http` | Schemes the gateway will call. |
-| `smsg.webhook.private.targets` | `deny` | `allow` permits private, loopback and link-local targets. |
+| `smsg.webhook.private.targets` | `deny` | `allow` permits private, loopback and link-local targets. From 0.12.15 `deny` also refuses IPv6 unique-local, carrier-grade NAT and any name that does not resolve, and covers batch `callback_url`/`errback_url`. |
 | `smsg.webhook.retries` | `10` | Attempts before the receipt is abandoned. |
 | `smsg.webhook.retry.interval.ms` | `120000` | Wait before the **first** retry. Each wait after it doubles, held at an hour. |
+| `smsg.webhook.retry.pending.max` | `10000` | From 0.12.15. Attempts (first and retries, receipts and inbound messages) held in memory when there is no broker. At the cap the oldest is dropped, counted in `fireflo_webhook_retry_dropped_total` and, for a receipt, written to its callback record. Read at startup. |
 | `smsg.webhook.timeout.ms` | `5000` | Connect and request timeout. |
 
 <Warning>
@@ -33,7 +34,9 @@ upgrade — the refusal is silent to the customer and shows up only as receipts 
 
 <Note>
 It resolves the host and then connects, so a name that answers differently in between defeats it. It
-raises the cost rather than closing the hole — egress firewall rules are what close it.
+raises the cost rather than closing the hole — egress firewall rules are what close it. What makes
+the two lookups agree in practice is the JVM's own positive address cache, so do not set
+`networkaddress.cache.ttl` to `0` on a gateway that posts receipts.
 </Note>
 
 **The retry ladder is exponential with full jitter, and that changed in 0.11.** At the defaults the

@@ -161,6 +161,31 @@ and `UNDELIV` all bill as failures but are worth telling apart.
 unknown outcome is worth. The deadline is capped below two days: past the correlation window a
 receipt can no longer be matched even if it arrives, so waiting longer cannot change the answer.
 
+## How the rows get written
+
+Nothing on the message path waits for the database. A record is queued and written by a writer
+thread in batches of `smsg.cdr.batch.size` (200), one transaction each. From 0.12.15 there are
+several writers — `smsg.cdr.writers`, 2 by default and at most 8 — and **a message's rows always go
+to the same one**, so its `cdr_submit` lands before its `cdr_final`. Nothing orders different
+messages against each other, and nothing ever did. A file sink keeps one writer whatever the key says.
+
+The queue holds `smsg.cdr.queue.size` records across all writers — **100,000 from 0.12.15, up from
+10,000**, because ten thousand was five seconds of traffic at the design rate and no database
+checkpoint or failover fits in five seconds. When it is full, the thread that produced the record
+waits at most `smsg.cdr.put.timeout.ms` (500 ms) for room and then the record **overflows**, because
+that thread is an SMPP I/O thread or the router and a wait on the database froze every listener behind
+it. What happens next depends on what the record was:
+
+| Record | On overflow |
+| :--- | :--- |
+| `cdr_submit`, `cdr_final` | **Spilled** to a JSONL file under `spill/` in `smsg.cdr.directory`, one object per line, so it can be re-imported by hand. Money is never dropped |
+| `cdr_rejected`, `cdr_interim`, `cdr_event` | Counted on `cdr.failed` and dropped |
+
+A batch the database refuses goes the same way. `cdr.failed` means "did not reach the database" in
+every case — a spill that worked still counts, so the alert keeps firing until someone reads the file.
+The back-pressure warning is logged once every ten seconds while it lasts. All four keys are read at
+startup.
+
 ## If a message appears in no list at all
 
 The writer is usually pointed at a different database from the panel. Check `smsg.cdr.sink` and the

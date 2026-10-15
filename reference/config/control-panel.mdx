@@ -16,9 +16,12 @@ ability to send.
 | Variable | Required | Description |
 | :--- | :--- | :--- |
 | `AUTH_SECRET` | yes | Signs the session cookie. Changing it signs everybody out. |
-| `AUTH_URL` | yes in production | The panel's public origin. Unset, a sign-out redirects to localhost. |
+| `AUTH_URL` | yes in production | The panel's public origin. Unset, a sign-out redirects to localhost and no operator sign-in link is sent. From 0.12.15 every write from the browser must come from this origin, or the panel answers `403` naming the fix. |
 | `NODE_ENV` | yes | `production`. Decides whether the session cookie is marked secure, so it is set for the **build** as well as the run. |
-| `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` | yes | There is no user table — **these two are the whole operator account.** Roll them with `fireflo-panel-install passwd`. |
+| `TRUSTED_PROXY_HOPS` | behind a proxy | How many `X-Forwarded-For` entries, from the right, your own proxies wrote — `1` behind one nginx. Unset, the panel ignores forwarding headers and records no client address. |
+| `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` | no (deprecated) | Honoured only while no admin or operator row exists; removed in 0.13. Create an admin with `fireflo user add --role admin` on the gateway instead. |
+| `SMPP_TEST_HOST` | no | Where the SMPP client test tool finds this gateway's listeners; default the `GATEWAY_OPS_URL` host, else `127.0.0.1`. |
+| `SMPP_TEST_ALLOWED_HOSTS` | no | From 0.12.15. Further hosts the test tool may bind to, comma or space separated. Any other host typed into the tool is refused. |
 | `METRICS_DATABASE_URL` | yes | Read-only connection for call records and metrics. |
 | `CDR_EXPORT_DIR` | yes | Where prepared CSV exports are written. |
 | `PORT` | no | Listen port, default `3000`. |

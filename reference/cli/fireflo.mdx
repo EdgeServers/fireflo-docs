@@ -208,6 +208,10 @@ fireflo usage rollup [--catch-up]     # summarise cdr_submit into usage_daily
 fireflo usage purge                   # delete call records past retention
 ```
 
+From 0.12.15 `rollup` summarises finished days only (yesterday and back, in the billing zone), and
+restates once any line it had written while its day was still open. `purge` also prunes `cdr_event`
+and `cdr_rejected` on their own retention keys, after the call-record purge.
+
 <Warning>
 `usage purge` **refuses the whole run** if any day it would delete has no rollup, and names the days.
 Not a warning — deleting an unsummarised day destroys the consumption record permanently, with nothing

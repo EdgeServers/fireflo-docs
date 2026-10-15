@@ -26,7 +26,9 @@ customer's count against your own.
 ## The reasons
 
 Summary cards lead the page — one per reason, with a count for the whole window. They do not shift as
-you page, and clicking one filters to it.
+you page, and clicking one filters to it. From 0.12.14 the summary is taken over the **latest 50,000
+refusals** and the page says so: on a gateway refusing more than that in the window, the cards
+describe the recent shape rather than an exact total, and the table beneath is still complete.
 
 | Reason | Usually means |
 | :--- | :--- |
@@ -67,6 +69,10 @@ name, product, ingress, listener, from-number and message id.
 
 **Carrier status** takes the carrier's number in decimal — 69 is the generic "refused and will not
 say why" — and only vendor refusals carry one.
+
+**The page always needs a period, of at most 92 days.** Refusals cannot be listed over all time:
+earlier builds quietly showed a day's refusals under an **All time** heading, which is the kind of
+wrong that gets believed, so from 0.12.14 the page asks for a period instead.
 
 ## The table
 

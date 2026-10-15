@@ -35,6 +35,25 @@ This is what makes the rollup safe to re-run.
 The rollup is idempotent and restates **only** the delivery columns. A finished day's money is settled
 the moment the day ends.
 
+From 0.12.15 the rollup writes **finished days only** — it stops at yesterday in the billing zone, and
+`--catch-up` no longer lists the open day as missing. Earlier builds also wrote today's line, and
+because the money columns are never restated, a line first written at three in the afternoon kept
+that afternoon's totals for good: `usage_daily` under-reported yesterday on any gateway whose rollup
+had run during the day. The first rollup after upgrading repairs those lines — a line that was
+written before its own day ended is restated in full, once.
+
+## The dashboards read it
+
+From 0.12.15 the control panel's Overview, Usage and Revenue screens, and an account's usage and
+reconciliation, read every **whole day** the rollup has summarised from `usage_daily`, and scan the
+call records only for the tail: today, plus a day behind the newest summarised line. That is what
+keeps a 30-day view answering in under a second at volume, and it is one more reason the nightly
+rollup is not optional. A gateway whose rollup has not run reads everything live, as before, and gets
+slower as the window grows.
+
+Two figures cannot be read from the summary, because it does not hold them: a summarised day shows
+**refused** and **pending revenue** as zero. Today, and the 24-hour range, are always live.
+
 ## MT parts
 
 `mt_parts` counts the SMS segments each line's messages were sent as: a three-part message counts
@@ -82,6 +101,13 @@ rollup bug is discovered by the command that deletes the evidence.
 </Tip>
 
 `FIREFLO_CDR_KEEP_DAYS` sets the window, default **90**.
+
+From 0.12.15 the same run also prunes the two tables the rollup does not cover, because nothing
+summarises them: `cdr_event` past `smsg.cdr.event.retention.days` and `cdr_rejected` past
+`smsg.cdr.rejected.retention.days`. That happens after the call-record purge and outside its rollup
+check, and a failure there is reported without undoing the purge above it. The running gateway's
+sweep prunes both on its own schedule anyway; the command is the same work done now, reported, and
+available while the gateway is stopped.
 
 ## Two windows, two purposes
 

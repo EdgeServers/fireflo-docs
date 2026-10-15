@@ -33,6 +33,11 @@ expired after 48 hours — so **anything in this figure older than 48 hours mean
 running**, and that is an operator problem, not an accounting one.
 </Warning>
 
+From 0.12.15 the 7- and 30-day views take every whole day the nightly rollup has summarised from the
+daily usage summary and read only today live. Billed and cost on a summarised day are the settled
+figures the summary holds; **In flight** on such a day reads zero, because the summary does not record
+pending revenue — the live figure is today's.
+
 ## By account and product
 
 One row per account and product pairing:

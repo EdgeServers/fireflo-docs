@@ -104,6 +104,33 @@ starts a fresh budget — the bound is per vendor.
 answer rather than after twenty. Carriers that mean transient overload by it are opted back in per
 vendor: `status.retry.worker = 20,88,69`.
 
+## While the vendor is down
+
+From 0.12.15 a vendor that will not bind is retried with a widening wait rather than every minute
+flat. The first retry waits `reconnect.interval.millis` (60 s by default); each round after that waits
+a random time between that interval and a ceiling that doubles per round, up to ten minutes. One
+successful bind resets it. The log carries **one warning** when the outage starts, the repeats at
+debug, and **one line on recovery** naming how many attempts the streak took — an outage over a
+weekend is a few lines, not thousands.
+
+Keep-alives (`enquire_link`) run on their own schedule and are no longer delayed by a bind in
+progress on another session of the same vendor.
+
+## When the vendor's window is full
+
+A bind's send window is the number of `submit_sm` the vendor allows unanswered at once. When every
+slot is taken, a message used to wait the whole response timeout (`request.tout`, 30 s) for one and
+then fail with a stack trace. From 0.12.15 it waits `window.offer.timeout.ms` (2 s by default,
+applied live) and, if no slot frees in that time, goes back to this vendor's queue without spending
+any of its retry budget. The wait is counted in `fireflo_smpp_client_window_full_total`, labelled by
+vendor, and logged at most once a minute. The gateway also prefers a bound session with a free slot
+when it has more than one to choose from.
+
+<Tip>
+If that counter climbs while the vendor's queue stays deep, the ceiling is the window size times the
+number of binds, not `tps`. Ask the carrier for a larger window or more binds before lowering `tps`.
+</Tip>
+
 ## Receipts
 
 `request.dlrs` (default on) sets `registered_delivery` on every `submit_sm` to this vendor.

@@ -48,6 +48,38 @@ runs, so the outcome can only reach you as a
 | `sdt` | string | — | Scheduled delivery time, passed to the carrier unchanged and **not validated here**. |
 | `product` | string | your login's product | Prices this message on a different product. Only products your operator has allowed for this login — **most logins are allowed none**. |
 | `custom_tlvs` | object | — | Extra SMPP parameters as a JSON **object** — `{"0x1401": "…"}`. Not a list of pairs, not a quoted string. |
+| `client_ref` | string | — | From 0.12.15. Your own reference for this send, 1–64 printable characters. A repeat inside 24 hours is answered with the first send's `messageId` instead of sending again — see [Retrying safely](#retrying-safely-with-client_ref). |
+
+## Retrying safely with `client_ref`
+
+A send that times out on your side may or may not have been accepted, and without a reference the
+only safe retry is none. Give each send a reference of your own — an order id, a UUID — and a repeat
+is answered rather than sent:
+
+```json
+{"to":"61491570006","content":"Your OTP is 4417.","client_ref":"order-8841"}
+```
+
+```json
+{ "data": { "messageId": "7a2a5b6c-3ec3-44e0-b2a6-9b056b887c46", "duplicate": true } }
+```
+
+The repeat is a `200`, not an error: the message exists and here is its identifier. `duplicate` is
+present **only** on a repeat, so a client that ignores it is still correct. Nothing is sent, rated or
+charged for the repeat, and it does not count against your rate limit.
+
+What counts as the same send is your **account** plus the reference, whichever login sent it; two
+customers may use the same reference without colliding. The reference is remembered for 24 hours
+(`smsg.restapi.client.ref.window.hours` on the gateway). A send that was **refused** — `400`, `402`,
+`403`, `429`, `503` — frees its reference, so the corrected request may reuse it. Two identical
+requests in flight at once resolve to one message. The one gap: on a gateway cluster, a repeat that
+reaches a **different** node within the few hundred milliseconds between the first send being
+accepted and its call record being written becomes a second message; retry after a second, not
+immediately.
+
+An empty reference, a control character or anything over 64 characters is a `400` naming
+`client-ref`. A number is accepted as its text. Entries in [`/secure/sendbatch`](/reference/api/sendbatch)
+carry the field too, one reference per message.
 
 ## `coding` values
 
@@ -76,7 +108,8 @@ passed to the carrier unchanged, so it chooses how the body is encoded, not mere
 | 403 | `'<id>' is not an approved sender ID for this account.` | The `from` has not been approved. |
 | 403 | `The message content does not match any approved template for this account.` | Your account sends only approved wording. |
 | 412 | `Got unparseable json data: <body>` | Body empty, not JSON, or a bare array rather than an object. |
-| 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
+| 400 | `Argument client-ref has an invalid value: <value>.` | Empty, over 64 characters, or not printable. |
+| 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** Safe to retry with the same `client_ref`. |
 
 The shared errors — `401`, `403 Authentication failure`, `415`, `429` — are on
 [API errors](/reference/api/errors).

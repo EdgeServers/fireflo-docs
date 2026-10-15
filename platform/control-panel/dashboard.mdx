@@ -13,6 +13,14 @@ Everything on the page obeys one range control — **24 hours**, **7 days** or *
 to 24 hours. Figures refresh every sixty seconds, and stop refreshing while the browser tab is in the
 background.
 
+From 0.12.15 the 7- and 30-day views are built from the gateway's **daily usage summary** for every
+whole day it has summarised, with only today (and a day's margin behind the newest summary) read
+live from the call records — see [Usage and retention](/platform/billing/usage-and-retention#the-dashboards-read-it).
+The 24-hour view, the hourly traffic chart and the failure breakdown are always live. Two consequences:
+a gateway whose nightly rollup has not run reads everything live and slows as the range grows, and
+on a summarised day **In flight** reads zero, because the summary does not record what was still
+pending. Today's figure is the live one.
+
 ## The four figures
 
 | Card | What it counts |

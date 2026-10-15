@@ -38,8 +38,10 @@ A receiver-only vendor binds successfully and sends nothing — which is why the
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| `request.tout` | `30000` | Milliseconds waiting for a response. |
-| `enquire.link.interval.millis` | `30000` | Keep-alive interval. |
+| `request.tout` | `30000` | Milliseconds waiting for a response to a request that has a window slot. |
+| `window.offer.timeout.ms` | `2000` | From 0.12.15. Milliseconds one `submit_sm` waits for a free slot in the bind's send window. On expiry the message goes back to this vendor's queue, no retry spent, and `fireflo_smpp_client_window_full_total` counts it. Applied live. |
+| `reconnect.interval.millis` | `60000` | The first wait after a failed bind. From 0.12.15, while the vendor stays down each further round waits a random time between this and a ceiling that doubles per round up to ten minutes; a successful bind resets it. |
+| `enquire.link.interval.millis` | `30000` | Keep-alive interval. From 0.12.15 keep-alives run on their own schedule, unaffected by a bind in progress. |
 | `enquire.link.noTrafficOnly` | `false` | Only send keep-alives when there has been no other traffic. |
 
 ## Retry classification

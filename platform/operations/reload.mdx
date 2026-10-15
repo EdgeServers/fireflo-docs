@@ -18,6 +18,13 @@ behind, which is too slow when you are watching. The control panel offers the sa
 **Apply now** on the Servers, Vendors, Routing, Pricing and Filters pages, and tells you when a
 reload ran but was not adopted because the licence is not current.
 
+From 0.12.15 a poll that finds nothing changed re-reads nothing: the gateway takes a fingerprint of
+the configuration tables first and loads them only when it differs from the one it last adopted. An
+idle gateway therefore no longer rebuilds its snapshots every thirty seconds — the rate snapshot's
+generation number stands still while nothing changes, which is correct, not stuck.
+`reload` and **Apply now** skip the comparison and load regardless, so they remain the way to prove
+a change has been read.
+
 <Warning>
 **A change made in the panel does nothing if the gateway is reading a file for that domain.**
 

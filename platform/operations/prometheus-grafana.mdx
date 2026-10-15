@@ -40,9 +40,14 @@ than as a broken monitor.
 | `fireflo_whitelist_would_reject` | What report-only mode **would** have refused |
 | `fireflo_balance_debits_refused` | Refused for want of prepaid credit |
 | `fireflo_smpp_bind_refused_total` | Binds refused, with a `reason` label — `ip-limit`, `account-limit`, `credentials` or `product`. A fleet behind one NAT counts as one IP against `srv.maxConnectionsPerIP` |
+| `fireflo_smpp_bind_backoff_total` | From 0.12.15. Binds answered `ESME_RBINDFAIL` because the address had five credential refusals inside a minute — a client looping on a wrong password, before it reaches the credential store |
+| `fireflo_smpp_client_window_full_total{worker}` | From 0.12.15. Submits that waited `window.offer.timeout.ms` for a slot in a vendor bind's send window and went back to the queue. Climbing while that vendor's queue stays deep means the window times the bind count is the ceiling, not `tps` |
+| `fireflo_webhook_retry_pending` | From 0.12.15. Webhook attempts waiting in memory for their turn or their backoff; capped by `smsg.webhook.retry.pending.max` |
+| `fireflo_webhook_retry_dropped_total` | From 0.12.15. **Receipts lost.** Attempts evicted because that store was full — a customer endpoint has been down longer than the store can hold its traffic |
 | `fireflo_balance_refills_attempted` / `_failed` | Block reservations started, and those that found nothing |
 
-All gauges, read at scrape time, so **none of them costs anything per message**.
+All but the `_total` counters are gauges read at scrape time, so **none of them costs anything per
+message** beyond one increment on a path that was already waiting.
 
 ## The four worth an alert
 

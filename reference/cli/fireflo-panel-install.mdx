@@ -28,10 +28,11 @@ writes rows in it.
 
 ## Why `passwd` exists as a verb
 
-**There is no user table.** `OPERATOR_USERNAME` and `OPERATOR_PASSWORD` in `panel.env` are the whole
-operator account. `passwd` is therefore the supported way to change it — it rewrites the environment
-file and restarts the unit in one step, rather than leaving you to edit a file the installer otherwise
-promises never to replace.
+Operators and admins are rows in the gateway's database, managed from the panel's **Users** page and
+`fireflo user` on the gateway. `OPERATOR_USERNAME` and `OPERATOR_PASSWORD` in `panel.env` are the
+deprecated fallback account, honoured only while no such row exists, and `passwd` is the supported
+way to change *that* one — it rewrites the environment file and restarts the unit in one step, rather
+than leaving you to edit a file the installer otherwise promises never to replace.
 
 ```bash
 sudo ./scripts/fireflo-panel-install passwd --tenant websmsc --vhost /home/websmsc
@@ -49,9 +50,11 @@ does, so `--user` is not needed.
 | `--operator NAME` | Changes the sign-in name as well |
 
 <Warning>
-**A new password alone does not sign anyone out.** Sessions are signed tokens and nothing re-checks the
-password after sign-in, so a stolen session survives a reset. After a suspected compromise, pass
-`--rotate-secret`.
+**For the environment account, a new password alone does not sign anyone out.** Sessions are signed
+tokens and that account has no database row to compare against, so a stolen session survives a reset.
+After a suspected compromise, pass `--rotate-secret`. A database user is different from 0.12.15: a
+password change — on the Users page, by the person, or with `fireflo user passwd` — signs that user's
+other browsers out on their next request.
 </Warning>
 
 <Note>

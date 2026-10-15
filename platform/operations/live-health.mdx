@@ -30,6 +30,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/ops/health
       "routing": "database", "rates": "database"
     },
     "tps_window_seconds": 5,
+    "schema_version": "1.90.0",
+    "api": { "schema_version": true, "send_client_ref": true, "webhook_retry_store": true, "…": true },
     "cdr": { "enabled": true, "sink": "postgres", "written": 1, "failed": 0 },
     "workers": [
       { "name": "smppclient.vendor1", "type": "smppclient", "accepting": true,
@@ -106,6 +108,20 @@ It says, per domain, whether the gateway is reading files or the database.
 
 That matters because **a change made in the panel does nothing if the gateway is reading a file for
 that domain** — and the symptom is "my edit did not apply", which sends people looking at the edit.
+
+## `schema_version` and `api` say what you are talking to
+
+From 0.12.15. `schema_version` is the newest migration the database has been through — the same
+number `fireflo db info` reports — read at start and again on reload, never per poll. It reads `none`
+on a gateway running from files, which has no schema to version, and `unknown` when a database is
+configured but its migration history could not be read; either mismatches whatever a panel expects,
+and the word says where to look. It exists so that a control panel or a provisioning
+platform can tell it is talking to a schema it was not built for before a query fails, rather than
+after.
+
+`api` lists by name what this build's operational API can do, every value `true`. It describes the
+build, not the configuration, so it is identical on every node of a cluster. A monitor or an
+integrating platform should check for a name, not parse the version.
 
 ## `bound: 0` on a listener is usually fine
 

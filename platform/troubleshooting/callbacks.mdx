@@ -15,13 +15,56 @@ share one delivery mechanism, so they share these rules.
 | **Timeout** | `smsg.webhook.timeout.ms`, default **5000** — connect *and* request |
 
 <Warning>
-**At the default budget, one unreachable endpoint occupies a virtual thread for twenty minutes.**
-Ten attempts, two minutes apart. A customer whose endpoint is down for an hour is not merely missing
-receipts — they are holding threads for the whole hour, and so is every other customer in the same
-state.
+**At the default budget, one unreachable endpoint is retried for hours** — ten attempts on a
+doubling ladder, two minutes before the first and up to an hour before the last. A customer whose
+endpoint is down for an afternoon is not merely missing receipts; every receipt they were owed is
+waiting in the gateway for the whole afternoon, and so is every other customer's in the same state.
 
 If you run many customers with unreliable endpoints, lower the retry count before you raise the
-thread ceiling.
+store cap below.
+</Warning>
+
+## When an endpoint is down for a long time
+
+Without a broker, every receipt or inbound message about to be posted, and every retry waiting out
+its backoff, is an entry in one store in memory. From 0.12.15 that store is **bounded**:
+`smsg.webhook.retry.pending.max` attempts (10,000 by default, read at startup). Past the cap the
+**oldest** waiting attempt is dropped to make room — it has been failing the longest, and the newest
+is the likeliest to find its endpoint back.
+
+A drop is never silent. It is counted in `fireflo_webhook_retry_dropped_total`, logged at error once
+a minute while it goes on, and for a receipt written to the message's **Customer exchange** as the
+attempt it was waiting to make — so a customer asking where a receipt went can be shown the row.
+`fireflo_webhook_retry_pending` reports the store's depth; alert on it approaching the cap before the
+other counter moves. An endpoint already at its ten-calls-in-flight limit no longer queues attempts
+behind it, so one endpoint that has stopped answering costs its own ten slots and nothing else.
+
+<Tip>
+A deployment that forwards more receipts than the cap holds during a customer outage wants the
+broker, which keeps retries durably and needs no cap. Raising the cap buys memory, roughly a
+kilobyte an entry.
+</Tip>
+
+## Private addresses are refused
+
+`smsg.webhook.private.targets` is `deny` by default, and from 0.12.15 `deny` means what it should:
+loopback, link-local, the RFC 1918 ranges, **carrier-grade NAT** (`100.64/10`), **IPv6 unique-local**
+(`fc00::/7`), an IPv4 address carried inside an IPv6 one, and the reserved ranges. Earlier builds
+let unique-local and carrier-grade NAT through. Every address a name resolves to is checked, so a
+name with one public and one private address is refused, and **a name that does not resolve is
+refused too** rather than waved through to fail on its own. A host's verdict is kept for five
+seconds, so a burst of receipts to one endpoint is one lookup.
+
+**Batch callbacks go through the same guard** from 0.12.15. The `callback_url` and `errback_url` a
+customer gives a batch were the one customer-supplied address the gateway called without checking;
+a batch whose callback names a private address or an unresolvable name now gets no callback, and the
+refusal is logged.
+
+<Warning>
+An install that tested callbacks against a host on its own network — a receiver on the LAN, a
+loopback sink — needs `smsg.webhook.private.targets = allow` from 0.12.15, or those callbacks stop
+arriving with nothing visible to the customer. Set it knowing it re-opens the gateway's network to
+every customer's `dlr_url`; an egress firewall rule for the one host is the better fix.
 </Warning>
 
 ## A receipt never arrives

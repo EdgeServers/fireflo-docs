@@ -27,6 +27,11 @@ So a rate of 98% means 98% *of the messages that have an outcome*. Messages stil
 in **Sent**, and in **Pending** in the table, and are in neither half of the rate.
 </Warning>
 
+From 0.12.15 whole days the gateway's nightly rollup has summarised are read from the daily usage
+summary and only today is read live, which is what keeps a 30-day view quick at volume. A summarised
+day's **Pending** is therefore zero — today's is live. A gateway whose rollup has not run reads
+everything live, as before.
+
 ## Traffic
 
 Delivered and failed stacked per day against volume on the left, and the delivery rate as a line

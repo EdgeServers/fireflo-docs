@@ -53,6 +53,15 @@ A clean start is not proof every listener is up. Check `/ops/health`.
   </Step>
 </Steps>
 
+### Repeated refused binds pause the address
+
+From 0.12.15, five credential refusals from one address inside a minute and the listener answers
+that address's binds with `ESME_RBINDFAIL` for thirty seconds **before** looking at the credential
+at all. A successful bind clears the count. It is per listener and on by default;
+`srv.bind.backoff.enabled = false` turns it off for a listener whose clients you would rather keep
+hammering the credential store. `fireflo_smpp_bind_backoff_total` counts the paused answers, so a
+client looping on a wrong password shows up there before it shows up anywhere else.
+
 ## Where the product comes from
 
 `system_type` on the bind request, falling back to the credential's `product` field.

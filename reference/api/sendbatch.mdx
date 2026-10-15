@@ -35,9 +35,9 @@ per-message ids in this response and no per-message results — see
 
 | Field | Type | Required | Notes |
 | :--- | :--- | :--- | :--- |
-| `messages` | array | **yes** | One object per message, each taking the fields of a single send. Its `to` may also be an array. |
+| `messages` | array | **yes** | One object per message, each taking the fields of a single send, including `client_ref` from 0.12.15 — one reference per message, deduplicated as on [`/secure/send`](/reference/api/send#retrying-safely-with-client_ref). Its `to` may also be an array. |
 | `globals` | object | no | Defaults **merged under** every message, so a field set on a message wins. |
-| `batch_config` | object | no | `schedule_at`, `callback_url`, `errback_url`. |
+| `batch_config` | object | no | `schedule_at`, `callback_url`, `errback_url`. From 0.12.15 the two URLs are checked like a `dlr_url`: a private address or a name that does not resolve gets no callback unless the operator allows private targets. |
 
 <Warning>
 **Other keys in `batch_config` are ignored, not refused.** A misspelled `errback_url` costs you every

@@ -16,7 +16,8 @@ A **server** is a listener your customers bind in to. Keys below are set as
 | `srv.port` | `0` | The port it binds to. |
 | `srv.systemId` | `FireFlo` | System ID presented in bind responses. |
 | `srv.maxConnections` | `1000` | Absolute maximum concurrent connections. |
-| `srv.maxConnectionsPerIP` | `0` | Per-source-IP ceiling. `0` is unlimited. |
+| `srv.maxConnectionsPerIP` | `0` | Per-source-IP ceiling. `0` is unlimited. From 0.12.15 a value that is not a number is logged and the default applies, rather than becoming unlimited. |
+| `srv.bind.backoff.enabled` | `true` | From 0.12.15. After five credential refusals from one address inside a minute, answer its binds `ESME_RBINDFAIL` for thirty seconds without a credential lookup. A successful bind clears the count; `fireflo_smpp_bind_backoff_total` counts the paused answers. |
 | `srv.bindTimeout` | `5000` | Milliseconds waiting for a bind request. |
 | `srv.maxInactivityTime` | `60` | Session inactivity, **in minutes**. Sessions beyond it are terminated. |
 

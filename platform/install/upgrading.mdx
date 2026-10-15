@@ -67,7 +67,26 @@ The panel's version repeats the gateway release it was built against in its firs
 
 The panel checks the pair at runtime and reports a mismatch on screen. A mismatched pair is not
 necessarily broken — but it means the panel is describing a gateway it was not built against, and a
-feature added in the newer one may be missing or mis-rendered.
+feature added in the newer one may be missing or mis-rendered. From 0.12.15 the gateway also reports
+the schema version it is running against on `/ops/health`, so a panel or a provisioning platform can
+tell before its first query that the database is not the one it was built for.
+
+## What 0.12.15 carries
+
+Nine migrations, and the panel must move with the gateway: 0.12.15's panel writes rows the older
+schema refuses (the `config_changed` audit event, the password-change stamp) and reads a column the
+older schema lacks.
+
+| Migration | Does | Takes |
+| :--- | :--- | :--- |
+| V1.82.0, V1.83.0, V1.85.0, V1.89.0, V1.90.0 | Register new settings so the panel can show them: the webhook store cap, the vendor window-slot wait, the four call-record writer keys, the `client_ref` window, the bind backoff switch | Instant |
+| V1.84.0 | Lets the panel's Access log hold the `config_changed` event | Instant |
+| V1.86.0 | A password-changed stamp on each panel user, kept by the database whoever changes the hash. Rows never stamped admit every session, so **the upgrade signs nobody out** | Instant |
+| V1.87.0 | Checks on the four call-record columns that hold a fixed set of values (margin status, final state, event kind and channel). Each is added without a scan and then **validated once over `cdr_final` and `cdr_submit`** — a share lock that does not block a writer, but on a table of a hundred million rows **plan for minutes rather than seconds**. A historic row outside the set leaves that one check unvalidated, prints a notice naming the table and does not fail the upgrade | Minutes on a large table |
+| V1.88.0 | A status (current, deprecated, retired) and a replacement on each registered setting, so the panel can grey out a retired key and warn on a deprecated one | Instant |
+| V1.89.0 | The `client_ref` column on `cdr_submit` and an index over the rows that carry one — none yet, so seconds | Seconds |
+
+Nothing is rewritten and nothing is deleted; the previous binary runs against the upgraded schema.
 
 ## What an update replaces
 

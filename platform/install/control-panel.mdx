@@ -41,19 +41,38 @@ Without it the panel reports every configuration domain as **not editable**, rat
 the first save.
 </Warning>
 
-## The operator account is two environment variables
+## Operators and admins
 
-There is no user table.
+Operators and admins are rows in the gateway's database. Create the first admin on the gateway and
+add the rest from the panel's **Users** page:
 
 ```bash
-sudo ./scripts/fireflo-panel-install passwd
-sudo ./scripts/fireflo-panel-install passwd --tenant websmsc --vhost /home/websmsc   # a tenant
+fireflo user add --email you@example.com --role admin --generate
 ```
 
-That is the supported way to change it — it rewrites the environment file and restarts the unit in one
-step, rather than leaving you to edit a file the installer otherwise promises never to replace. It
-prints the new password once. Add `--rotate-secret` to sign everyone out as well; see
-[`passwd`](/reference/cli/fireflo-panel-install#why-passwd-exists-as-a-verb) for the rest.
+`OPERATOR_USERNAME` / `OPERATOR_PASSWORD` in `panel.env` are a deprecated fallback, honoured only
+while no admin or operator row exists and removed in 0.13; `fireflo-panel-install passwd` still rolls
+that one account — see [`passwd`](/reference/cli/fireflo-panel-install#why-passwd-exists-as-a-verb).
+
+**From 0.12.15 a password change signs that user's other browsers out.** An admin's reset on the Users
+page, the person's own change, and `fireflo user passwd` on the gateway all count: every session
+signed in before the change is refused on its next request, and the browser that made its own change
+stays signed in. The upgrade itself signs nobody out. `--rotate-secret` remains for the other case, a
+suspected compromise of the session secret, and signs out every user at once.
+
+**Changing the licence is an admin's job** from 0.12.15. Activating, the two offline halves and
+releasing answer an operator as if the route did not exist; an operator still sees the licence state
+on `/cp/verify` and can press **Check again**.
+
+## What the panel writes down
+
+From 0.12.15 **every configuration change leaves a `config_changed` row in the Access log** — logins,
+routing tables and rules, vendors and listeners and their live controls, filters, groups, TLV
+definitions, products, pricing, whitelist policies and rows, balances and top-ups, statement closes,
+exports, reloads, disconnects and lifted holds. Each carries what it was and what it became, with
+secrets reported only as present or absent, and a change scoped to an account also appears in that
+account's activity history. On a database the gateway's 0.12.15 migrations have not reached, the row
+is skipped with one console line and the panel's log file still has it.
 
 ## The two URLs that are easy to swap
 
@@ -79,6 +98,23 @@ through from the proxy.
 Every response carries `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
 `X-Content-Type-Options: nosniff`; with `AUTH_COOKIE_SECURE=true` it also sends HSTS for a year, so
 turn that on only once the panel is served over TLS for good.
+
+**`AUTH_URL` is also the origin every write is checked against.** From 0.12.15 a request that would
+change something — any `POST`, `PUT`, `PATCH` or `DELETE` under `/api/control` or `/api/mis` — whose
+`Origin` header names a different origin than `AUTH_URL` is refused with `403` before the route runs;
+reads, and requests that carry no `Origin` such as scripts, are untouched. The consequence worth
+knowing: **a panel opened at an address other than its `AUTH_URL`** — the server's IP while the DNS
+name is being set up, say — **can read everything and change nothing.** The error says both addresses
+and what to set, so it is not a mystery when it happens. With `AUTH_URL` unset the request's own host
+is the reference instead, and no operator sign-in link is emailed at all, because the request's host
+header is not trusted enough to put in a mail.
+
+**The SMPP client test tool reaches only this gateway's own hosts.** It binds from the panel's process
+with a login's stored password, so from 0.12.15 it will dial only hosts it already knows as the
+gateway's — the hosts in `GATEWAY_OPS_URL` and `GATEWAY_API_URL`, `FIREFLO_PUBLIC_HOST`, each
+listener's public host, and `SMPP_TEST_HOST`. A gateway reached through a load balancer under another
+name goes in `SMPP_TEST_ALLOWED_HOSTS`, comma or space separated; anything else typed into **Other
+host:port** is refused with a sentence naming that variable.
 
 `NODE_ENV=production` is set for the **build** as well as the run, because it decides whether the
 session cookie is marked secure.
