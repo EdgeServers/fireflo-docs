@@ -37,8 +37,9 @@ same page again, which is how a receipt that landed after the page loaded shows 
 
 <Note>
 **Message text search finds nothing unless the gateway is recording message content**, which is off
-by default. An empty result may mean the text is not kept rather than that nothing matched. See
-`smsg.cdr.body` in [the configuration reference](/reference/config/paths).
+by default. An empty result may mean the text is not kept rather than that nothing matched. Switch it
+on under **Gateway settings → Call records → Keep message text** (from 0.12.17; the key is
+`smsg.cdr.body`, see [the configuration reference](/reference/config/paths)).
 </Note>
 
 ### One row per message, or one per attempt

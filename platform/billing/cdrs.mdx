@@ -121,7 +121,9 @@ segments, reads as the sequence it actually was rather than as one row per part.
 
 ## The message body
 
-Recorded **only if you switch it on**.
+Recorded **only if you switch it on**: in the control panel under **Gateway settings → Call records →
+Keep message text** (from 0.12.17), or as `smsg.cdr.body` in the configuration. It applies to messages
+sent from the next configuration poll; earlier messages never gain text.
 
 | `smsg.cdr.body` | Stored |
 | :--- | :--- |
@@ -130,7 +132,8 @@ Recorded **only if you switch it on**.
 | `full` | The whole message |
 
 An unrecognised value is treated as `off` — the failure that matters is storing content nobody asked
-to store, so a typo must not turn recording on.
+to store, so a typo must not turn recording on. From 0.12.17 the database refuses any other value when
+it is saved.
 
 <Warning>
 **This is a deliberate choice with consequences.** Content is the most sensitive thing a gateway
