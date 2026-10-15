@@ -41,6 +41,7 @@ going out. If you are running an earlier build, this is the release to take.
 | `suspend` / `resume` — **Stop sending** | Submits are still **accepted** (`ESME_ROK`) and charged, then **parked** rather than routed. **Receipts keep being delivered** throughout. Resume routes everything parked, in arrival order and once each. |
 | `hold` / `release` — **Hold** | Every submit is **refused at the door** with `ESME_RMSGQFUL`, **before any charge is taken**, so a refused message costs nothing. Receipts are held too. Binds stay up, and well-behaved clients retry — so releasing resumes traffic without anyone reconnecting. |
 | `enable` / `disable` | Stops both directions and drops the binds. |
+| `restart` — **Restart** | Disables and re-enables it in one act: every bound client is disconnected and the listener is rebuilt from its saved settings. **This is how a changed listen port, TLS setting or thread count takes effect** — the gateway reads those when it builds the listener, so Apply now and Stop sending / Resume do not move them. Messages in flight are kept; clients reconnect on the new port. The panel offers it on the listener's page (confirmed, because it drops the binds) and on the "saved, but needs a restart" card after such a save. |
 
 ## Choosing between them
 
