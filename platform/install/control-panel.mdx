@@ -70,6 +70,16 @@ outage and are not.
 The panel speaks plain HTTP on `PORT` (3000 by default). Put nginx or similar in front of it, and set
 `AUTH_URL` to the public origin — unset, a sign-out redirects to localhost.
 
+Tell the panel how many proxies sit in front of it with `TRUSTED_PROXY_HOPS` (the installer writes
+`1`). Since 0.12.14 the panel reads a client's address from `X-Forwarded-For` only when this is set;
+without it every sign-in, lockout and fail2ban entry is recorded with no address, and a panel reached
+directly cannot be fed a forged address. Pass `X-Forwarded-For`, `X-Forwarded-Proto` and `Host`
+through from the proxy.
+
+Every response carries `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
+`X-Content-Type-Options: nosniff`; with `AUTH_COOKIE_SECURE=true` it also sends HSTS for a year, so
+turn that on only once the panel is served over TLS for good.
+
 `NODE_ENV=production` is set for the **build** as well as the run, because it decides whether the
 session cookie is marked secure.
 
