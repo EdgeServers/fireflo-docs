@@ -29,7 +29,7 @@ restitué.
 
 Le voir grimper sur un compte actif est correct. Le voir stagner sur un compte inactif signifie
 que du crédit a été bloqué par un arrêt non propre, et il est restitué en libérant le crédit
-retenu. Rien n'est perdu dans les deux cas, parce que balance plus reserved est conservé.
+retenu. Rien n'est perdu dans les deux cas, parce que balance plus reserved plus spent est conservé.
 </Note>
 
 Une ligne de solde manquante se lit comme **No balance row — not zero, absent**, ce qui est un
@@ -98,7 +98,7 @@ comptent :
 | Verdict | Signifie |
 | :--- | :--- |
 | **Pending credit** | Rechargements que le gateway n'a pas encore appliqués. Pas un problème — attendez un sondage |
-| **Credit lost** | Crédité, et ni dans balance ni dans reserved |
+| **Credit lost** | Crédité, et ni dans balance, ni dans reserved, ni dans spent |
 | **Credit minted** | Détenu, sans rechargement ni transfert pour l'expliquer — la direction la plus sérieuse |
 | **Charged without reserving** | La consommation est réelle, la réservation ne l'est pas |
 | **Held unspent** | Bloqué par un arrêt non propre. Libéré à la main, pas perdu |

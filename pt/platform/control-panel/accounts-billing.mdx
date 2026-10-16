@@ -26,7 +26,7 @@ do balance, e só cresce até ser liberado.
 
 Vê-lo subir em uma conta ocupada está correto. Vê-lo parado em uma ociosa significa que crédito
 ficou preso por uma parada não limpa, e é devolvido liberando crédito retido — nada é perdido de
-qualquer forma, porque balance mais reserved é conservado.
+qualquer forma, porque balance mais reserved mais spent é conservado.
 </Note>
 
 Uma linha de saldo ausente é lida como **No balance row — not zero, absent**, que é um estado
@@ -92,7 +92,7 @@ importam:
 | Veredicto | Significa |
 | :--- | :--- |
 | **Pending credit** | Top-ups que o gateway ainda não aplicou. Não é problema — espere um poll |
-| **Credit lost** | Creditado, e nem em balance nem em reserved |
+| **Credit lost** | Creditado, e nem em balance, nem em reserved, nem em spent |
 | **Credit minted** | Retido, sem top-up ou transferência contabilizando por ele — a direção mais séria |
 | **Charged without reserving** | Consumo é real, a reserva não |
 | **Held unspent** | Preso por uma parada não limpa. Liberado manualmente, não perdido |

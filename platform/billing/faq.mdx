@@ -32,18 +32,20 @@ account.
 You are using the wrong identity. `credited − consumed = balance + reserved` is **wrong** and fails
 this way on every account.
 
-Consumption never touches the balance columns — `reserved` is a lifetime-consumed counter, not a
-hold. The correct pair is:
+Consumption is not subtracted anywhere; the gateway settles it into `spent`. The correct pair is:
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
-reserved − consumed    = reserved but not yet spent  (≥ 0)
+Σ(RECHARGE + TRANSFER)     = balance + reserved + spent
+reserved + spent − consumed = reserved but not yet spent  (≥ 0)
 ```
+
+Before 0.12.23 there was no `spent`: read it as 0 and these are the identities those releases used.
 </Accordion>
 
 <Accordion title="Credit is stuck in reserved after a crash">
-A `kill -9` strands it. `balance + reserved` is still conserved — **the money is parked, not lost** —
-and `POST /ops/credit/release` returns it. A clean shutdown does this automatically.
+A `kill -9` strands it. `balance + reserved + spent` is still conserved — **the money is parked, not
+lost** — and the next start of the same gateway returns it, as does `POST /ops/credit/release`. A
+clean shutdown leaves nothing to strand.
 </Accordion>
 
 <Accordion title="Traffic is being sent and nothing is charged for it">

@@ -25,8 +25,18 @@ distribuir o mesmo crédito. A reserva é a exclusão mútua.
 ## A identidade que precisa se manter
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
+Σ(RECHARGE + TRANSFER) = balance + reserved + spent
 ```
+
+Desde 0.12.23 o gateway liquida o que gastou de `reserved` para `spent` a cada poucos segundos e no
+shutdown, então `reserved` é só o crédito retido e ainda não gasto.
+
+<Warning>
+**De 0.12.10 a 0.12.22 cada reinício devolvia o gasto pré-pago.** O gasto nunca era liquidado, então
+`reserved` misturava gasto e não gasto, e a recuperação na partida devolvia tudo para `balance`. A
+migração V1.95.0 (com todos os gateways parados) move o que está em `reserved` para `spent`. Os
+saldos dessas versões podem ser maiores do que foi pago.
+</Warning>
 
 Toda unidade que entrou pelo ledger está ou gastável ou estacionada. **Um `kill -9` deixa crédito
 preso em `reserved`; ele não o perde.** `POST /ops/credit/release` o devolve, e um shutdown limpo o

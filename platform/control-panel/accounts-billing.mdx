@@ -27,12 +27,14 @@ Amounts are shown with trailing zeros trimmed, keeping at least one decimal plac
 `0.0`, `0.0100` reads `0.01`. That is display only — see [Precision](/platform/billing/how-pricing-works#precision).
 
 <Note>
-**Reserved is not a hold that shrinks as messages go out.** It is credit that has been moved out of
-the balance, and it only ever grows until it is released.
+**Reserved is credit a running gateway holds and has not spent yet.** What it spends is settled into
+**spent** every few seconds, so on a busy account reserved stays small — a few seconds of traffic —
+and spent grows.
 
-Seeing it climb on a busy account is correct. Seeing it sit on an idle one means credit was stranded
-by an unclean stop, and it is returned by releasing held credit — nothing is lost either way, because
-balance plus reserved is conserved.
+Seeing reserved sit on an idle account means credit was stranded by an unclean stop. The gateway
+returns it on its next start, and releasing held credit returns it at once — nothing is lost either
+way, because balance plus reserved plus spent is conserved. (Before 0.12.23 reserved only ever grew,
+because spending was never settled out of it.)
 </Note>
 
 A missing balance row reads as **No balance row — not zero, absent**, which is a different and more
@@ -106,8 +108,9 @@ stops. It is not instant.
 
 ## Does the credit add up?
 
-Two identities over the account's whole lifetime: every unit credited is still in the balance or
-reserved against it, and what was reserved covers what was spent.
+Two identities over the account's whole lifetime: every unit credited is still in the balance,
+reserved against it, or spent, and what was reserved and spent covers what the call records say was
+consumed.
 
 It does not run on its own — press **Reconcile**. Two figures come back. **Unexplained** is the
 residual, and the one worth acting on. **Reserved, not yet spent** is normal on an account that is
@@ -119,7 +122,7 @@ matter:
 | Verdict | Means |
 | :--- | :--- |
 | **Pending credit** | Top-ups the gateway has not applied yet. Not a problem — wait a poll |
-| **Credit lost** | Credited, and in neither balance nor reserved |
+| **Credit lost** | Credited, and in none of balance, reserved or spent |
 | **Credit minted** | Held, with no top-up or transfer accounting for it — the more serious direction |
 | **Charged without reserving** | Consumption is real, the reservation is not |
 | **Held unspent** | Stranded by an unclean stop. Released by hand, not lost |

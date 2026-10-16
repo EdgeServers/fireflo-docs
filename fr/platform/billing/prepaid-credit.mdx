@@ -26,8 +26,18 @@ ne peuvent pas distribuer le même crédit. La réservation est l'exclusion mutu
 ## L'identité qui doit tenir
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
+Σ(RECHARGE + TRANSFER) = balance + reserved + spent
 ```
+
+Depuis 0.12.23 le gateway solde ce qu'il a dépensé de `reserved` vers `spent` toutes les quelques
+secondes et à l'arrêt, donc `reserved` n'est que le crédit retenu et pas encore dépensé.
+
+<Warning>
+**De 0.12.10 à 0.12.22 chaque redémarrage remboursait la dépense prépayée.** La dépense n'était
+jamais soldée, donc `reserved` mêlait dépensé et non dépensé, et la récupération au démarrage rendait
+tout à `balance`. La migration V1.95.0 (tous les gateways arrêtés) déplace ce qui est dans `reserved`
+vers `spent`. Les soldes de ces versions peuvent être supérieurs à ce qui a été payé.
+</Warning>
 
 Chaque unité entrée par le grand livre est soit dépensable, soit garée. **Un `kill -9` bloque du
 crédit dans `reserved` ; il ne le perd pas** — `POST /ops/credit/release` le restitue, et un arrêt

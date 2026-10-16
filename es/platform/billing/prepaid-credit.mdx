@@ -26,8 +26,18 @@ pueden repartir el mismo crédito. La reserva es la exclusión mutua.
 ## La identidad que debe cumplirse
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
+Σ(RECHARGE + TRANSFER) = balance + reserved + spent
 ```
+
+Desde 0.12.23 la pasarela liquida lo gastado de `reserved` a `spent` cada pocos segundos y al apagarse,
+así que `reserved` es solo el crédito retenido y aún no gastado.
+
+<Warning>
+**De 0.12.10 a 0.12.22 cada reinicio devolvía el gasto prepago.** Lo gastado nunca se liquidaba, así
+que `reserved` mezclaba gastado y no gastado, y la recuperación al arrancar lo devolvía todo a
+`balance`. La migración V1.95.0 (con todas las pasarelas paradas) pasa lo que hay en `reserved` a
+`spent`. Los saldos de esas versiones pueden ser mayores de lo pagado.
+</Warning>
 
 Cada unidad que entró por el libro mayor es o gastable o está aparcada. **Un `kill -9` vara crédito
 en `reserved`; no lo pierde.** `POST /ops/credit/release` lo devuelve, y un apagado limpio lo

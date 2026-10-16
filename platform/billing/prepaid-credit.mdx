@@ -11,7 +11,8 @@ simply not enforced.
 
 An account's spendable balance is held **in memory** and decremented per message, so the message path
 does no database work at all. Durability comes from reserving in blocks: one atomic statement moves
-an amount from `balance` into `reserved`, and the gateway spends that block from memory.
+an amount from `balance` into `reserved`, and the gateway spends that block from memory. Every few
+seconds, and on shutdown, it settles what it spent: that amount moves from `reserved` to `spent`.
 
 At a few thousand messages a second that is a couple of database writes per second rather than a
 couple of thousand — **and no message is ever sent against credit that was not committed first**.
@@ -24,12 +25,22 @@ the same credit. The reservation is the mutual exclusion.
 ## The identity that must hold
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
+Σ(RECHARGE + TRANSFER) = balance + reserved + spent
 ```
 
-Every unit that entered through the ledger is either spendable or parked. **A `kill -9` strands
-credit in `reserved`; it does not lose it** — `POST /ops/credit/release` returns it, and a clean
-shutdown returns it automatically.
+Every unit that entered through the ledger is spendable (`balance`), held by a running gateway
+(`reserved`), or spent (`spent`). A clean shutdown settles what was spent and returns the rest to
+`balance`, so `reserved` is back to zero. **After a `kill -9`, the next start of that gateway returns
+what it still held** — its unspent block and at most the last few seconds of spending
+(`smsg.balance.settle.seconds`, default 5), which had not been settled yet.
+
+<Warning>
+**0.12.10 to 0.12.22 refunded prepaid spending on every restart.** Before 0.12.23 spending was never
+settled, so `reserved` held spent and unspent credit alike, and the reclaim on start returned all of
+it to `balance`. Upgrading (migration V1.95.0, run with every gateway stopped) moves what is in
+`reserved` to `spent`, and the identity above is exact from then on. Customers' balances on those
+releases may be higher than what they paid for.
+</Warning>
 
 If the two sides disagree, that is a real discrepancy and not a rounding artefact.
 

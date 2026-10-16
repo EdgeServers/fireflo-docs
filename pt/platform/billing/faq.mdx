@@ -37,13 +37,15 @@ Consumo nunca toca as colunas de balance. `reserved` é um contador de lifetime-
 hold. O par correto é:
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
-reserved − consumed    = reserved but not yet spent  (≥ 0)
+Σ(RECHARGE + TRANSFER)      = balance + reserved + spent
+reserved + spent − consumed = reserved but not yet spent  (≥ 0)
 ```
+
+Antes de 0.12.23 não existia `spent`: leia-o como 0 e estas são as identidades dessas versões.
 </Accordion>
 
 <Accordion title="Crédito ficou preso em reserved após um crash">
-Um `kill -9` o deixa preso. `balance + reserved` ainda é conservado — **o dinheiro está estacionado,
+Um `kill -9` o deixa preso. `balance + reserved + spent` ainda é conservado — **o dinheiro está estacionado,
 não perdido** — e `POST /ops/credit/release` o devolve. Um shutdown limpo faz isso automaticamente.
 </Accordion>
 

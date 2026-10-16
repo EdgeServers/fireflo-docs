@@ -38,13 +38,15 @@ El consumo nunca toca las columnas de saldo: `reserved` es un contador de consum
 retención. El par correcto es:
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
-reserved − consumed    = reserved but not yet spent  (≥ 0)
+Σ(RECHARGE + TRANSFER)      = balance + reserved + spent
+reserved + spent − consumed = reserved but not yet spent  (≥ 0)
 ```
+
+Antes de 0.12.23 no existía `spent`: léalo como 0 y estas son las identidades de esas versiones.
 </Accordion>
 
 <Accordion title="El crédito quedó atascado en reservado tras un fallo">
-Un `kill -9` lo vara. `balance + reserved` sigue conservándose. **El dinero está aparcado, no
+Un `kill -9` lo vara. `balance + reserved + spent` sigue conservándose. **El dinero está aparcado, no
 perdido.** Y `POST /ops/credit/release` lo devuelve. Un apagado limpio hace esto automáticamente.
 </Accordion>
 

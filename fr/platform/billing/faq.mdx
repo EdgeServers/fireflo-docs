@@ -39,13 +39,15 @@ La consommation ne touche jamais les colonnes de solde — `reserved` est un com
 vie du compte, pas un blocage. La bonne paire est :
 
 ```
-Σ(RECHARGE + TRANSFER) = balance + reserved
-reserved − consumed    = reserved but not yet spent  (≥ 0)
+Σ(RECHARGE + TRANSFER)      = balance + reserved + spent
+reserved + spent − consumed = reserved but not yet spent  (≥ 0)
 ```
+
+Avant 0.12.23 `spent` n'existait pas : lisez-le comme 0, ce sont les identités de ces versions.
 </Accordion>
 
 <Accordion title="Du crédit est bloqué en reserved après un crash">
-Un `kill -9` le bloque. `balance + reserved` est toujours conservé — **l'argent est garé, pas
+Un `kill -9` le bloque. `balance + reserved + spent` est toujours conservé — **l'argent est garé, pas
 perdu** — et `POST /ops/credit/release` le restitue. Un arrêt propre le fait automatiquement.
 </Accordion>
 
