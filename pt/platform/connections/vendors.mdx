@@ -90,6 +90,28 @@ localmente; `status.retry.router` empurra de volta para outra rota.
 primeira resposta em vez de após vinte. Operadoras que significam overload transitório por ele são
 reincluídas por vendor: `status.retry.worker = 20,88,69`.
 
+## Formato do número do destinatário
+
+Os destinatários chegam ao fornecedor exatamente como os seus clientes os enviaram, a menos que ative
+**Convert recipient automatically** (sob **Detect sender type automatically**, na secção
+**Addressing** do fornecedor). Com ela ativa, cada número é reescrito depois do roteamento na forma
+que o **Recipient type of number** do fornecedor pede:
+
+| Recipient type of number | O que o fornecedor recebe |
+| :--- | :--- |
+| 1 — Internacional | Código do país e número, só dígitos: `0412 345 678` → `61412345678` |
+| 2 — Nacional | O número como é marcado dentro do país padrão: `+61412345678` → `0412345678`. Um número de outro país segue internacional, com tipo 1 |
+| Qualquer outro | Sem alteração |
+
+**Recipient default country** (ao lado de **Address range**) é o código ISO de duas letras, como
+`AU` ou `IN`, para números escritos sem código do país. Em branco, só os números escritos com `+` são
+convertidos.
+
+Um número que não se consegue ler é enviado como chegou; nada é recusado. Só muda o que vai para o
+fornecedor: os registos de chamadas, os recibos, a tarifação e uma nova tentativa por outro
+fornecedor mantêm o número como o seu cliente o enviou. Os números que já estão na forma do
+fornecedor são reconhecidos sem serem analisados, por isso o débito não é afetado.
+
 ## Recibos
 
 `request.dlrs` (default ligado) configura `registered_delivery` em todo `submit_sm` para este vendor.

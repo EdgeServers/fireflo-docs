@@ -133,6 +133,28 @@ If that counter climbs while the vendor's queue stays deep, the ceiling is the w
 number of binds, not `tps`. Ask the carrier for a larger window or more binds before lowering `tps`.
 </Tip>
 
+## Recipient number format
+
+Recipients reach a vendor exactly as your customers sent them unless you turn on **Convert recipient
+automatically** (under **Detect sender type automatically** in the vendor's **Addressing** section).
+With it on, each number is rewritten after routing into the form the vendor's **Recipient type of
+number** asks for:
+
+| Recipient type of number | Sent to the vendor |
+| :--- | :--- |
+| 1 — International | Country code and number, digits only: `0412 345 678` → `61412345678` |
+| 2 — National | The number as dialled inside the default country: `+61412345678` → `0412345678`. A number of another country goes international, with type 1 |
+| Any other | Unchanged |
+
+**Recipient default country** (beside **Address range**) is the two-letter ISO code, such as `AU` or
+`IN`, used for numbers written without a country code. Left blank, only numbers written with `+` are
+converted.
+
+A number that cannot be read is sent as it came; nothing is refused. Only what goes to the vendor
+changes: call records, receipts, pricing and a retry through another vendor keep the number as your
+customer sent it. Numbers already in the vendor's form are recognised without being parsed, so
+throughput is unaffected.
+
 ## Receipts
 
 `request.dlrs` (default on) sets `registered_delivery` on every `submit_sm` to this vendor.
