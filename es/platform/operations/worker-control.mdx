@@ -55,6 +55,14 @@ dashboard y concluir que algo ha crasheado.
 
 </AccordionGroup>
 
+## Cuando los mensajes retenidos nunca se enviarán
+
+Suspender y retener conservan lo que está en cola, y por eso son la primera herramienta. Si lo retenido
+no se enviará nunca, desde 0.12.19 la cola se puede **limpiar**: cada mensaje se archiva, se reembolsa
+si se cobró, recibe un recibo fallido si se pidió y queda registrado como rechazado (`operatorPurge`).
+No se puede deshacer. En el panel es **Clean queue…** en el pie de la página del proveedor o del
+listener, solo para administradores. Ver [Inspeccionar una cola](/platform/operations/queues).
+
 ## Estos son estado de runtime, no configuración
 
 <Warning>

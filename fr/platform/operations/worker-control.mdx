@@ -48,6 +48,15 @@ Utilisez-le quand vous voulez le worker parti plutôt que en pause.
 
 </AccordionGroup>
 
+## Quand les messages retenus ne partiront jamais
+
+Suspendre et retenir conservent ce qui est en file, et c'est pourquoi ce sont les premiers outils. Si
+ce qui est retenu ne partira jamais, depuis 0.12.19 la file peut être **nettoyée** : chaque message est
+archivé, remboursé s'il a été facturé, reçoit un accusé d'échec s'il a été demandé et est enregistré
+comme refusé (`operatorPurge`). C'est irréversible. Dans le panneau, c'est **Clean queue…** en pied de
+la page du vendeur ou du listener, réservé aux administrateurs. Voir
+[Inspecter une file](/platform/operations/queues).
+
 ## Ce sont des états d'exécution, pas de la configuration
 
 <Warning>

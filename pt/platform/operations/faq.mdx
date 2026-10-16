@@ -83,11 +83,13 @@ por mensagem.
 </Accordion>
 
 <Accordion title="Posso limpar uma fila travada?">
-Deliberadamente não existe `queue flush`. Descartar uma fila destrói mensagens que foram aceitas,
-cobradas e prometidas a um cliente.
+Não descartando: essas mensagens foram aceitas, cobradas e prometidas a um cliente. Para parar o
+tráfego, use `suspend` no fornecedor (ou segure o listener): nada se perde.
 
-Use `suspend` — ele drena a fila daquele fornecedor de volta para o router para que o roteamento
-possa escolher outro fornecedor.
+Para mensagens que nunca serão enviadas, a partir da 0.12.19 uma fila pode ser **limpa**: cada mensagem
+é arquivada, reembolsada se foi cobrada, recebe um receipt de falha se pedido e fica registrada como
+recusada (`operatorPurge`). É uma simulação até você confirmar, e não pode ser desfeita. Veja
+[Limpando uma fila](/platform/operations/queues#cleaning-a-queue-archive-then-end) (em inglês).
 </Accordion>
 
 <Accordion title="Delivery receipts estão sendo enviados a uma operadora como novas mensagens">

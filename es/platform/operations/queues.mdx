@@ -1,6 +1,6 @@
 ---
 title: "Inspeccionar una cola"
-description: "La profundidad te dice que algo está atascado; un dump te dice qué. El único campo que separa un problema de volumen de un problema de proveedor, y por qué no hay flush."
+description: "La profundidad te dice que algo está atascado; un dump te dice qué. El único campo que separa un problema de volumen de un problema de proveedor, y cómo limpiar una cola con honestidad cuando sus mensajes nunca se enviarán."
 ---
 
 `/ops/health` dice cuán profunda es cada cola. Eso es suficiente para saber que algo está atascado y **no suficiente
@@ -93,14 +93,32 @@ reordenaría la cola y resetearía los contadores de entrega en los mensajes de 
 Así que la profundidad se reporta y el dump lo dice. **Un broker que no responde reporta la profundidad como
 desconocida en lugar de como cero**. Lo que importa, porque cero es una afirmación y desconocido no.
 
-## Deliberadamente no hay `queue flush`
+## Limpiar una cola: archivar y terminar
 
 <Warning>
-Descartar una cola destruye mensajes que fueron **aceptados, facturados y prometidos a un cliente**.
-
-Para quitar tráfico de un proveedor atascado sin perderlo, usa `suspend`. Drena la cola de ese proveedor
-de vuelta al router para que el enrutamiento pueda elegir otro.
+**Primero suspende o retén.** Si solo necesitas que el tráfico pare, suspende el proveedor o retén el
+listener: no se pierde nada. Limpia una cola solo para mensajes que nunca se enviarán.
 </Warning>
+
+Desde 0.12.19 una cola se puede limpiar, desde la línea de comandos o el panel; ambos usan el mismo
+endpoint de la pasarela con el token admin:
+
+```bash
+./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held
+FIREFLO_QUEUE_ARCHIVE=true ./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held \
+      --note "vendor withdrawn" --yes
+```
+
+Cada mensaje se saca de la cola de forma atómica, se **archiva** en una transacción confirmada (si el
+archivo falla, todo se devuelve a la cola) y luego se **termina**: reembolsado si se cobró, un recibo
+fallido si se pidió, y registrado como `REJECTED` con motivo `operatorPurge`. Los recibos y los
+reintentos de webhook no llevan dinero: se archivan y se eliminan. **Nada archivado se puede devolver.**
+Una cola en el broker no se puede limpiar (`broker-backed`).
+
+<Note>
+Traducción pendiente: el detalle completo está
+[en inglés](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+</Note>
 
 ## Acceso
 

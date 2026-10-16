@@ -1,6 +1,6 @@
 ---
 title: "Inspecter une file"
-description: "La profondeur vous dit que quelque chose est bloqué ; un dump vous dit quoi. Le seul champ qui sépare un problème de volume d'un problème vendeur. Et pourquoi il n'y a pas de flush."
+description: "La profondeur vous dit que quelque chose est bloqué ; un dump vous dit quoi. Le seul champ qui sépare un problème de volume d'un problème vendeur. Et comment nettoyer une file honnêtement quand ses messages ne partiront jamais."
 ---
 
 `/ops/health` dit à quelle profondeur est chaque file. Cela suffit à savoir que quelque chose est bloqué et **ne suffit pas à faire quoi que ce soit à ce sujet** : 4 000 messages en attente sur `vendor1` se lit identiquement que ce soit le batch loupé d'un client ou chaque compte sur la boîte.
@@ -81,13 +81,33 @@ AMQP n'a pas de moyen de regarder un message en file sans le prendre. `basicGet`
 
 Donc la profondeur est rapportée et le dump le dit. **Un broker qui ne répond pas rapporte la profondeur comme inconnue plutôt que comme zéro.** Ce qui compte, parce que zéro est une affirmation et inconnu ne l'est pas.
 
-## Il n'y a délibérément pas de `queue flush`
+## Nettoyer une file : archiver, puis terminer
 
 <Warning>
-Jeter une file détruit des messages qui ont été **acceptés, facturés et promis à un client**.
-
-Pour retirer le trafic d'un vendeur bloqué sans le perdre, utilisez `suspend`. Il draine la file de ce vendeur vers le routeur pour que le routage puisse en choisir un autre.
+**Suspendez ou retenez d'abord.** Si vous avez seulement besoin que le trafic s'arrête, suspendez le
+vendeur ou retenez le listener : rien n'est perdu. Ne nettoyez une file que pour des messages qui ne
+partiront jamais.
 </Warning>
+
+Depuis 0.12.19 une file peut être nettoyée, en ligne de commande ou depuis le panneau ; les deux
+utilisent le même endpoint de la passerelle avec le jeton admin :
+
+```bash
+./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held
+FIREFLO_QUEUE_ARCHIVE=true ./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held \
+      --note "vendor withdrawn" --yes
+```
+
+Chaque message est retiré de la file de façon atomique, **archivé** dans une transaction validée (si
+l'archive échoue, tout est remis en file) puis **terminé** : remboursé s'il a été facturé, un accusé
+d'échec s'il a été demandé, et enregistré `REJECTED` avec le motif `operatorPurge`. Les accusés et les
+nouvelles tentatives de webhook ne portent pas d'argent : ils sont archivés et supprimés. **Rien
+d'archivé ne peut être remis.** Une file sur le broker ne peut pas être nettoyée (`broker-backed`).
+
+<Note>
+Traduction en attente : le détail complet est
+[en anglais](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+</Note>
 
 ## Accès
 

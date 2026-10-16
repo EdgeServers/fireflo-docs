@@ -74,6 +74,21 @@ mensagem de um cliente, portanto o tamanho e a codificação a substituem — o 
 distinguir uma mensagem Unicode de três segmentos de uma GSM curta sem ler a correspondência de
 ninguém.
 
+## Clean up: arquivar e encerrar o que nunca será enviado
+
+A partir da 0.12.19, um cartão **Clean up** abaixo das filas: escolha o quê (fila de fornecedor ou
+listener, roteamento, receipts não entregues, retentativas de webhook), filtre por fornecedor, conta,
+login e idade, e **Show** faz uma simulação que não tira nada. **Archive & clean…** é só para
+administradores: pede uma nota e a confirmação exata `CLEAN <n>`, conta de novo antes de começar,
+trabalha em lotes de até 10 000 e leva aos lotes em **Reports → Archives**. Cada mensagem é reembolsada
+se foi cobrada, recebe um receipt de falha se pedido e fica registrada como recusada (`operatorPurge`).
+Na página de um fornecedor ou listener há **Clean queue…** no rodapé.
+
+<Note>
+Tradução pendente: veja [a página em inglês](/platform/control-panel/queues) e
+[Archives](/platform/control-panel/archives).
+</Note>
+
 ## Uma tela vazia é o bom desfecho
 
 **No in-process queues** significa que toda mensagem que chegou já foi entregue a um vendor. É como

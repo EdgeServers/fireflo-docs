@@ -10,11 +10,11 @@ description: "O que cada verbo do CLI lê do ambiente, e as flags que existem ap
 | `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge` | As mesmas variáveis que o gateway lê, então importar seu arquivo de env é a configuração inteira. |
 | `FIREFLO_OPS_URL` | tudo na porta operacional | A interface de **gerenciamento**, 9000 por padrão. |
 | `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify` | Precisa bater com `smsg.ops.token`. |
-| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, os seis verbos de controle | Precisa bater com `smsg.ops.admin.token`. |
+| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, os seis verbos de controle, `queue archive`, `receipts repush` | Precisa bater com `smsg.ops.admin.token`. |
 | `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | Uma credencial de cliente. Esse verbo passa pela porta **de mensagens**. |
 | `FIREFLO_CONF_DIR` | `verify` | Onde procurar a configuração que ele verifica. |
 
-## As quatro flags de permissão
+## As flags de permissão
 
 Cada uma existe porque o comando que ela protege é destrutivo de um jeito que não é óbvio pelo
 nome. Nenhuma tem equivalente em linha de comando, de propósito: uma flag que você precisa exportar
@@ -26,6 +26,8 @@ nome. Nenhuma tem equivalente em linha de comando, de propósito: uma flag que v
 | `FIREFLO_CONFIG_IMPORT=true` | `import` (sem `--dry-run`) | Substituir as regras que decidem o que os clientes são cobrados. |
 | `FIREFLO_CDR_PURGE=true` | `usage purge` | Apagar call records. O único registro por mensagem do que foi cobrado. |
 | `FIREFLO_DB_RESET=true` | `purge --reset-database` | Esvaziar cada tabela. Também recusa enquanto o gateway está alcançável, e pede para você digitar o nome do banco. |
+| `FIREFLO_QUEUE_ARCHIVE=true` | `queue archive … --yes` | Encerrar mensagens para sempre: cada uma é reembolsada, recebe um receipt de falha se pedido e fica registrada como recusada. Sem ela, ou sem `--yes`, é uma simulação. |
+| `FIREFLO_QUEUE_ARCHIVE_PURGE=true` | `queue archive purge --yes` | Apagar meses do arquivo. Cada mês é conciliado antes com o resumo por dia, que é mantido. |
 
 <Note>
 `FIREFLO_DB_MIGRATE` e `FIREFLO_CONFIG_IMPORT` são separadas deliberadamente. Uma aplica mudanças

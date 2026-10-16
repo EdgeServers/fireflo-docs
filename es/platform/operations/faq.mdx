@@ -78,10 +78,13 @@ ejecución a cero perdidos, cero `ESME_RMSGQFUL`, y exactamente 1.00 submits por
 </Accordion>
 
 <Accordion title="¿Puedo vaciar una cola atascada?">
-Deliberadamente no hay `queue flush`. Descartar una cola destruye mensajes que fueron aceptados,
-facturados y prometidos a un cliente.
+No descartándola: esos mensajes fueron aceptados, facturados y prometidos a un cliente. Para parar el
+tráfico, usa `suspend` en el proveedor (o retén el listener): no se pierde nada.
 
-Usa `suspend`. Drena la cola de ese proveedor de vuelta al router para que el enrutamiento pueda elegir otro proveedor.
+Para mensajes que nunca se enviarán, desde 0.12.19 una cola se puede **limpiar**: cada mensaje se
+archiva, se reembolsa si se cobró, recibe un recibo fallido si se pidió y queda registrado como
+rechazado (`operatorPurge`). Es una simulación hasta que confirmas, y no se puede deshacer. Ver
+[Limpiar una cola](/platform/operations/queues#cleaning-a-queue-archive-then-end) (en inglés).
 </Accordion>
 
 <Accordion title="Los recibos de entrega se están enviando a un operador como mensajes nuevos">

@@ -55,6 +55,14 @@ Use quando quiser o worker fora em vez de pausado.
 
 </AccordionGroup>
 
+## Quando as mensagens seguradas nunca serão enviadas
+
+Suspender e segurar mantêm o que está na fila, e por isso são a primeira ferramenta. Se o que está
+segurado nunca vai sair, a partir da 0.12.19 a fila pode ser **limpa**: cada mensagem é arquivada,
+reembolsada se foi cobrada, recebe um receipt de falha se pedido e fica registrada como recusada
+(`operatorPurge`). Não pode ser desfeito. No painel é **Clean queue…** no rodapé da página do
+fornecedor ou do listener, só para administradores. Veja [Inspecionando uma fila](/platform/operations/queues).
+
 ## Estes são estado de runtime, não configuração
 
 <Warning>

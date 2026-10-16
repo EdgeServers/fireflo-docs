@@ -62,9 +62,13 @@ Probablement pas. Cela a été mesuré et ça n'aide pas. Augmenter `maxAttempts
 </Accordion>
 
 <Accordion title="Puis-je vider une file bloquée ?">
-Il n'y a délibérément pas de `queue flush`. Jeter une file détruit des messages qui ont été acceptés, facturés et promis à un client.
+Pas en la jetant : ces messages ont été acceptés, facturés et promis à un client. Pour arrêter le
+trafic, utilisez `suspend` sur le vendeur (ou retenez le listener) : rien n'est perdu.
 
-Utilisez `suspend`. Il draine la file de ce vendeur vers le routeur pour que le routage puisse choisir un autre vendeur.
+Pour des messages qui ne partiront jamais, depuis 0.12.19 une file peut être **nettoyée** : chaque
+message est archivé, remboursé s'il a été facturé, reçoit un accusé d'échec s'il a été demandé et est
+enregistré comme refusé (`operatorPurge`). C'est une simulation tant que vous ne confirmez pas, et
+c'est irréversible. Voir [Nettoyer une file](/platform/operations/queues#cleaning-a-queue-archive-then-end) (en anglais).
 </Accordion>
 
 <Accordion title="Les accusés de réception sont envoyés à un opérateur comme des nouveaux messages">

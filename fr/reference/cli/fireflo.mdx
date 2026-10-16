@@ -138,16 +138,60 @@ réservable à nouveau.
 
 ### Files d'attente
 
+Chaque action sur une file du panneau de contrôle a sa commande, et les deux appellent le même
+endpoint de la passerelle : le résultat est identique.
+
 ```bash
-fireflo queue dump [worker] [limit]
+fireflo queue dump smppclient.acme 50
+fireflo queue dump routing
+fireflo queue dump receipts --system-id acme01
+fireflo queue dump callbacks --account acme
+
+fireflo queue archive worker --worker smppclient.acme --sub held
+FIREFLO_QUEUE_ARCHIVE=true fireflo queue archive worker --worker smppclient.acme --sub held \
+      --note "stuck after vendor outage" --yes
+fireflo queue archive routing --sub failed --older-than 1d --all
+fireflo queue archive receipts --system-id acme01 --older-than 3d
+fireflo queue archive spill --include-today
+
+fireflo queue archived --account acme --since 7d
+fireflo queue archive summary --by account --since 2026-01
+FIREFLO_QUEUE_ARCHIVE_PURGE=true fireflo queue archive purge --older-than 180d --yes
 ```
 
-Liste les messages en attente, pas juste combien — compte, produit, destination, nombre de
-tentatives et âge. Répond à « à qui est ce trafic » quand une file est profonde. En lecture seule :
-rien n'est retiré d'une file et rien n'est réordonné. Par défaut 20 par file, maximum 500.
+- `queue dump` (jeton de lecture) liste ce qui attend : la file d'un vendeur ou d'un listener, le
+  routage, les accusés non remis d'un login SMPP ou les nouvelles tentatives de webhook. Rien n'est
+  retiré ni réordonné ; pas de texte de message.
+- `queue archive` (jeton admin) **archive et termine** les entrées correspondantes. C'est une
+  simulation sauf avec `--yes` **et** `FIREFLO_QUEUE_ARCHIVE=true`. Chaque message est d'abord archivé
+  (une transaction validée) puis terminé comme lorsque la passerelle l'abandonne elle-même : remboursé
+  s'il a été facturé, un accusé d'échec si le client l'a demandé, et enregistré `REJECTED` avec le motif
+  `operatorPurge`. **Rien d'archivé ne peut être remis.** Suspendre ou retenir reste le premier outil.
+  Une file sur le broker (RabbitMQ) ne peut pas être nettoyée.
+- `queue archived` et `queue archive summary` lisent l'archive avec les identifiants de la base. Le
+  résumé par jour n'est jamais supprimé.
+- `queue archive purge` supprime des mois entiers de l'archive, après avoir rapproché chaque mois du
+  résumé ; exige `--yes` **et** `FIREFLO_QUEUE_ARCHIVE_PURGE=true`.
 
-Il n'y a pas de texte de message dans la sortie, selon la même règle qui le tient hors des
-enregistrements d'appel par défaut.
+### Accusés de réception
+
+```bash
+fireflo receipts repush --system-id acme01 --from 2026-10-01 --to 2026-10-07
+fireflo receipts repush --system-id acme01 --from 2026-10-01T09:00 --to 2026-10-01T12:00 \
+      --state DELIVERED,UNDELIV --tps 50 --note "customer lost receipts in their outage" --yes
+fireflo receipts repush status <job-id>
+fireflo receipts repush cancel <job-id>
+```
+
+Renvoie les accusés de réception d'un login SMPP pour une période (31 jours au plus par tâche),
+reconstruits depuis les enregistrements d'appel avec l'identifiant de message d'origine ; sur ses
+sessions s'il est connecté, sinon stockés et rejoués à son prochain bind. Le client reçoit de nouveau
+des accusés pour des messages qu'il a peut-être déjà clos.
+
+<Note>
+Traduction en attente : la description complète de ces options est
+[en anglais](/reference/cli/fireflo#queues).
+</Note>
 
 ### Usage et rétention
 

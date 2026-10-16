@@ -76,6 +76,22 @@ gateway ne nécessite jamais de lire le message d'un client, donc la taille et l
 tiennent lieu — assez pour distinguer un message Unicode de trois segments d'un court GSM sans
 lire le courrier de personne.
 
+## Clean up : archiver et terminer ce qui ne partira jamais
+
+Depuis 0.12.19, une carte **Clean up** sous les files : choisissez quoi (file d'un vendeur ou d'un
+listener, routage, accusés non remis, nouvelles tentatives de webhook), filtrez par vendeur, compte,
+login et âge, et **Show** fait une simulation qui ne retire rien. **Archive & clean…** est réservé aux
+administrateurs : il demande une note et la confirmation exacte `CLEAN <n>`, recompte avant de
+commencer, travaille par lots de 10 000 au plus et renvoie aux lots dans **Reports → Archives**. Chaque
+message est remboursé s'il a été facturé, reçoit un accusé d'échec s'il a été demandé et est enregistré
+comme refusé (`operatorPurge`). Sur la page d'un vendeur ou d'un listener, **Clean queue…** est en pied
+de page.
+
+<Note>
+Traduction en attente : voir [la page en anglais](/platform/control-panel/queues) et
+[Archives](/platform/control-panel/archives).
+</Note>
+
 ## Un écran vide est le bon résultat
 
 **No in-process queues** signifie que chaque message qui est arrivé a déjà été remis à un vendor.

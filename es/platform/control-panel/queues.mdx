@@ -76,6 +76,21 @@ nunca requiere leer el mensaje de un cliente, así que el tamaño y la codificac
 suficiente para distinguir un mensaje Unicode de tres segmentos de un GSM corto sin leer el correo
 de nadie.
 
+## Clean up: archivar y terminar lo que nunca se enviará
+
+Desde 0.12.19, una tarjeta **Clean up** debajo de las colas: elige qué (cola de proveedor o listener,
+enrutamiento, recibos sin entregar, reintentos de webhook), filtra por proveedor, cuenta, login y
+antigüedad, y **Show** hace una simulación que no toma nada. **Archive & clean…** es solo para
+administradores: pide una nota y la confirmación exacta `CLEAN <n>`, vuelve a contar antes de empezar,
+trabaja en lotes de hasta 10 000 y enlaza a los lotes en **Reports → Archives**. Cada mensaje se
+reembolsa si se cobró, recibe un recibo fallido si se pidió y queda registrado como rechazado
+(`operatorPurge`). En la página de un proveedor o listener está **Clean queue…** en el pie.
+
+<Note>
+Traducción pendiente: ver [la página en inglés](/platform/control-panel/queues) y
+[Archives](/platform/control-panel/archives).
+</Note>
+
 ## Una pantalla vacía es el resultado bueno
 
 **No in-process queues** significa que cada mensaje que llegó ya se ha entregado a un vendor. Así
