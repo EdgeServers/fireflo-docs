@@ -26,6 +26,11 @@ operational surface for one deployment's operators, not an API customers integra
 | `POST` | `/ops/workers/{name}/test-bind` | admin | Dial a vendor once and report what happened |
 | `POST` | `/ops/workers/{name}/sessions/{sessionId}/disconnect` | admin | Drop one customer's bind, leaving others alone |
 | `POST` | `/ops/workers/{name}/{action}` | admin | `enable`, `disable`, `suspend`, `resume`, `hold`, `release` |
+| `POST` | `/ops/housekeeping/{worker\|routing\|receipts\|callbacks}` | admin | Archive and end matching queue entries (0.12.19). JSON body: `subStore`, `worker`, `account`, `systemId`, `olderThanSeconds`, `limit` (at most 10,000), `dryRun`, `all`, `note`, `actor`. Answers `batchId`, `matched`, `archived`, `refunded`, `receiptsSent`, `failed`, `byWorker`, `byAccount`, `sample`, `more`. An unscoped worker or routing clean without `all` is a 400; a broker-backed queue a 409 |
+| `GET` | `/ops/housekeeping/archive?account=&worker=&systemId=&batch=&since=&limit=` | read | Archived entries, newest first, at most 500 |
+| `POST` | `/ops/receipts/repush` | admin | Re-send an SMPP login's receipts for a period (0.12.19). JSON body: `systemId`, `since`, `until`, `states`, `includeProgress`, `tps`, `dryRun`, `note`, `actor`. A dry run answers the counts; otherwise a `jobId` |
+| `GET` | `/ops/receipts/repush/{jobId}` | read | The job's `state`, `total`, `sent`, `storedForReplay`, `skippedPending`, `failed`, `startedAt`, `eta` |
+| `DELETE` | `/ops/receipts/repush/{jobId}` | admin | Cancel the job; receipts already sent stay sent |
 
 ```bash
 curl -s -H "Authorization: Bearer $FIREFLO_OPS_TOKEN" \

@@ -1,6 +1,6 @@
 ---
 title: "Inspecting a queue"
-description: "Depth tells you something is stuck; a dump tells you what. The one field that separates a volume problem from a vendor problem — and why there is no flush."
+description: "Depth tells you something is stuck; a dump tells you what. The one field that separates a volume problem from a vendor problem — and how to clean a queue honestly when its messages will never be sent."
 ---
 
 `/ops/health` says how deep each queue is. That is enough to know something is stuck and **not enough
@@ -11,6 +11,14 @@ customer's misfired batch or every account on the box.
 ./scripts/fireflo queue dump
 ./scripts/fireflo queue dump vendor1
 ./scripts/fireflo queue dump vendor1 100
+```
+
+From 0.12.19 the dump also reaches the queues that are not a worker's:
+
+```bash
+./scripts/fireflo queue dump routing                     # router queue, routing retry, failed-routing park
+./scripts/fireflo queue dump receipts --system-id acme01 # receipts waiting for an SMPP login to bind
+./scripts/fireflo queue dump callbacks --account acme    # webhook retries waiting on a dead endpoint
 ```
 
 A bare number is read as a **limit** rather than a worker name, so `queue dump 100` widens everything.
@@ -93,19 +101,63 @@ reorder the queue and reset delivery counts on paying customers' messages to sat
 So the depth is reported and the dump says so. **A broker that is not answering reports the depth as
 unknown rather than as zero** — which matters, because zero is a claim and unknown is not.
 
-## There is deliberately no `queue flush`
+## Cleaning a queue: archive, then end
 
 <Warning>
-Discarding a queue destroys messages that were **accepted, billed and promised to a customer**.
-
-To take traffic off a stuck vendor without losing it, use `suspend` — it drains that vendor's queue
-back to the router so routing can pick another.
+**Stop sending or Hold first.** If you need traffic to stop, suspend the vendor or hold the listener
+([Controlling a worker](/platform/operations/worker-control)) — nothing is lost, and resuming carries
+on. Clean a queue only for messages that will never be sent: a vendor that is gone, a routing park
+nobody will fix, receipts for a login that will never bind again.
 </Warning>
+
+From 0.12.19 a queue can be cleaned, from the command line or the control panel — both call the same
+gateway endpoint, with the admin token:
+
+```bash
+./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held   # dry run: counts, refund total, sample
+FIREFLO_QUEUE_ARCHIVE=true ./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held \
+      --note "vendor withdrawn" --yes
+```
+
+What happens to each matched message, in this order:
+
+1. **Taken off the queue** — atomically: a message is taken by the vendor's session or by the clean,
+   never both. The gateway keeps running; nothing has to be suspended first.
+2. **Archived**, in one committed database transaction, with who did it, why (the note) and the batch
+   it belongs to. If the archive cannot be written, every message is put back and the command answers
+   that it could not — nothing is lost.
+3. **Ended**, exactly as a message the gateway drops itself: **refunded** if it was charged, a **failed
+   receipt** sent where the customer asked for one, and recorded as `REJECTED` with reason
+   `operatorPurge` — which is what the message's timeline and the Refused page show.
+
+Receipts waiting for a login and webhook callback retries carry no money: they are archived and
+removed. **Nothing archived can be put back** — cleaning ends a message, it does not park it.
+
+| Store | Holds | Sub-stores |
+| :--- | :--- | :--- |
+| `worker` | A vendor's or a listener's queues | `pending`, `retry`, `held` (while stopped), `parked` (a listener's inbound while stopped) |
+| `routing` | The gateway-wide queues before a vendor is chosen | `router`, `retry`, `failed` (failed-routing park) |
+| `receipts` | Receipts waiting for an SMPP login to bind | per login or account |
+| `callbacks` | Webhook callbacks waiting to be retried | per account |
+
+A clean of a worker or routing store with no vendor, listener, account or login named is refused
+unless you say `--all`. Each call archives at most 10,000; the command and the panel work in batches
+until nothing more matches.
+
+<Note>
+**A queue held on the message broker cannot be cleaned.** AMQP cannot read a message without taking
+it, and a clean has to see a message to archive it — so a broker-backed queue is refused with
+`broker-backed`, and the broker's own tooling is the way to deal with it.
+</Note>
+
+The archive is read on **Reports → Archives** in the panel, or with `fireflo queue archived` and
+`fireflo queue archive summary`; it is kept in monthly partitions beside a per-day summary that is
+never deleted. See [the command reference](/reference/cli/fireflo#queues).
 
 ## Access
 
 The **read** token, not the admin one. A dump takes nothing and moves nothing, so a monitoring system
-holding the watching secret can ask for it.
+holding the watching secret can ask for it. Cleaning takes the **admin** token — dry run included.
 
 ## Related
 

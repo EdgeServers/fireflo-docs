@@ -7,17 +7,17 @@ description: "What each CLI verb reads from the environment, and the flags that 
 
 | Variable | Used by | Notes |
 | :--- | :--- | :--- |
-| `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge` | The same variables the gateway reads, so sourcing your env file is the whole setup. |
+| `FIREFLO_DB_URL` / `FIREFLO_DB_USER` / `FIREFLO_DB_PASSWORD` | `db`, `bootstrap`, `import`, `show`, `usage`, `purge`, `queue archived`, `queue archive summary`, `queue archive purge`, `queue archive spill` | The same variables the gateway reads, so sourcing your env file is the whole setup. |
 | `FIREFLO_OPS_URL` | everything on the operational port | The **management** interface, 9000 by default. |
-| `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify` | Must match `smsg.ops.token`. |
-| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, the six control verbs | Must match `smsg.ops.admin.token`. |
+| `FIREFLO_OPS_TOKEN` | `health`, `version`, `verify`, `queue dump`, `receipts repush status` | Must match `smsg.ops.token`. |
+| `FIREFLO_OPS_ADMIN_TOKEN` | `reload`, `test-bind`, `disconnect`, `capture`, `credit release`, the six control verbs, `queue archive` (cleaning, dry run included), `receipts repush` and `receipts repush cancel` | Must match `smsg.ops.admin.token`. |
 | `FIREFLO_SEND_LOGIN` / `FIREFLO_SEND_PASSWORD` | `send` | A customer credential — this verb goes through the **message** port. |
 | `FIREFLO_CONF_DIR` | `verify` | Where to look for the configuration it checks. |
 | `FIREFLO_SECRETS_KEY` | the gateway, `db secrets`, the control panel | Customer passwords are stored encrypted with it. The **same value** on the gateway and the panel; 32 bytes of base64 or any passphrase. Absent, passwords are stored as they are. |
 | `FIREFLO_SECRETS_KEY_NEXT` | the gateway, `db secrets`, the control panel | A second key tried when opening, never used to seal: set it to the old key while rotating, run `db secrets seal`, then drop it. |
 | `FIREFLO_INSTANCE_ID` | the gateway | What this gateway writes into `account_balance.reserved_by`; the host name when unset. Two gateways on one host must each set their own. |
 
-## The four permission flags
+## The permission flags
 
 Each one exists because the command it guards is destructive in a way that is not obvious from its
 name. None of them has a command-line equivalent, on purpose: a flag you have to export is a flag you
@@ -29,11 +29,18 @@ cannot pass by accident from shell history.
 | `FIREFLO_CONFIG_IMPORT=true` | `import` (not `--dry-run`) | Replacing the rules that decide what customers are charged. |
 | `FIREFLO_CDR_PURGE=true` | `usage purge` | Deleting call records — the only per-message record of what was charged. |
 | `FIREFLO_DB_RESET=true` | `purge --reset-database` | Emptying every table. Also refuses while the gateway is reachable, and asks you to type the database name. |
+| `FIREFLO_QUEUE_ARCHIVE=true` | `queue archive worker\|routing\|receipts\|callbacks\|spill --yes` | Ending messages for good. Each archived message is refunded, gets a failed receipt where one was asked for and is recorded as refused; none can be put back. Without it — or without `--yes` — the command is a dry run. |
+| `FIREFLO_QUEUE_ARCHIVE_PURGE=true` | `queue archive purge --yes` | Deleting archive months. Each month is reconciled against the per-day summary first and the summary is kept, but the archived entries themselves are gone. |
 
 <Note>
 `FIREFLO_DB_MIGRATE` and `FIREFLO_CONFIG_IMPORT` are separate deliberately. One applies schema
 changes; the other replaces pricing and credentials. A deployment that is happy to auto-migrate is not
 necessarily happy to have its tariffs overwritten.
+</Note>
+
+<Note>
+`FIREFLO_QUEUE_ARCHIVE` and `FIREFLO_QUEUE_ARCHIVE_PURGE` are separate for the same reason: permission
+to clean queues is not permission to delete the record of what was cleaned.
 </Note>
 
 ## Exit codes

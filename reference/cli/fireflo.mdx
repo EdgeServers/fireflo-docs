@@ -191,15 +191,131 @@ takes nothing away — the block is reservable again immediately.
 
 ### Queues
 
+Every queue action the control panel offers has a command, and both call the same gateway endpoint,
+so the outcome is identical whichever you use.
+
+**See what is waiting** — read token, changes nothing:
+
 ```bash
-fireflo queue dump [worker] [limit]
+fireflo queue dump smppclient.acme 50          # a vendor's pending, retry and held entries
+fireflo queue dump smppserver.smpp             # a listener's parked inbound
+fireflo queue dump routing                     # router queue, routing retry, failed-routing park
+fireflo queue dump receipts --system-id acme01 # unpushed receipts for an SMPP login
+fireflo queue dump callbacks --account acme    # webhook retries waiting on a dead endpoint
 ```
 
 Lists the messages waiting, not just how many — account, product, destination, retry count and age.
-Answers "whose traffic is this" when a queue is deep. Read-only: nothing is taken off a queue and
-nothing is reordered. Default 20 per queue, maximum 500.
+Nothing is taken off a queue and nothing is reordered. Default 20 per queue, maximum 500. There is no
+message text in the output, by the same rule that keeps it out of call records by default.
 
-There is no message text in the output, by the same rule that keeps it out of call records by default.
+**Clean a queue: archive, then end** — admin token; a dry run unless you pass `--yes` **and** set
+`FIREFLO_QUEUE_ARCHIVE=true`:
+
+```bash
+fireflo queue archive worker --worker smppclient.acme --sub held                 # dry run: counts, refund total, sample
+FIREFLO_QUEUE_ARCHIVE=true fireflo queue archive worker --worker smppclient.acme --sub held \
+      --note "stuck after vendor outage" --yes                                    # archive and end them
+fireflo queue archive worker --account acme --older-than 2h --sub pending        # one account across all vendors
+fireflo queue archive routing --sub failed --older-than 1d --all                 # failed-routing park, every account
+fireflo queue archive receipts --system-id acme01 --older-than 3d                # receipts for a login that never binds
+fireflo queue archive callbacks --account acme                                   # webhook retries for one account
+fireflo queue archive spill --include-today                                      # import spill files into call records, then remove
+```
+
+| Option | Meaning |
+| :--- | :--- |
+| `--worker W` | A vendor (`smppclient.<name>`) or a listener (`smppserver.<name>`) |
+| `--account A` / `--system-id S` | One account, or one SMPP login |
+| `--older-than 2h` | Only entries queued longer ago than this (`s`, `m`, `h`, `d`) |
+| `--sub` | `pending`, `retry`, `held`, `parked` (worker); `router`, `retry`, `failed` (routing) |
+| `--limit N` | At most N per batch, up to 10,000 |
+| `--all` | Required to clean a worker or routing store with no vendor, listener, account or login named |
+| `--note TEXT` | Why. Recorded on every archived entry |
+
+Each matched message is **archived first** — one committed database transaction — and then ended
+exactly as a message the gateway drops itself: refunded if it was charged, a failed receipt sent where
+the customer asked for one, and recorded as `REJECTED` with reason `operatorPurge`, which is what its
+timeline shows. Receipts and callback retries carry no money; they are archived and removed. With
+`--yes` the command works in batches until nothing more matches, printing running totals. **Nothing
+archived can be put back.**
+
+For spill files, "archive" means the records they hold are imported into the call-record tables, the
+import is recorded, and only then is the file deleted. Today's file is skipped unless you pass
+`--include-today`, because the gateway may still be writing to it.
+
+<Warning>
+Stop sending or Hold is still the first tool. Use them when you need traffic to stop; clean a queue
+only for messages that will never be sent. A queue held on the message broker (RabbitMQ) cannot be
+cleaned this way — AMQP cannot read a message without taking it — and the command says so.
+</Warning>
+
+**Read the archive** — database credentials from your env file, no running gateway needed:
+
+```bash
+fireflo queue archived --account acme --since 7d             # archived entries, newest first
+fireflo queue archived --batch 6f1c…                         # one run's entries
+fireflo queue archive summary                                # per month: rows, first/last time, size, purged months
+fireflo queue archive summary --by account --since 2026-01   # reconciliation: messages, refunded, receipts, price per account
+fireflo queue archive summary --by day --account acme
+```
+
+The archive is kept in monthly partitions, like the call records, beside a per-day summary — per
+account, store, kind and worker: messages archived, refunded, receipts sent and price total — that is
+**never deleted**. `--by account` reads that summary, so it reconciles the same before and after old
+months are purged.
+
+**Delete old archive months** — a dry run unless you pass `--yes` **and** set
+`FIREFLO_QUEUE_ARCHIVE_PURGE=true`:
+
+```bash
+fireflo queue archive purge --before 2026-04                 # dry run: months, rows, reconciled totals
+FIREFLO_QUEUE_ARCHIVE_PURGE=true fireflo queue archive purge --older-than 180d --yes
+```
+
+Only whole months entirely before the cutoff go, never the current month. Each month is reconciled
+first: its row count, overall and per account, must equal the summary's for those days. A month that
+does not reconcile is refused with both numbers and nothing is deleted (exit `2`). The summary rows of
+a purged month are kept and marked purged, with the row count. A cutoff in the middle of a month keeps
+that month and says so.
+
+The archive is never deleted automatically unless `smsg.queue.archive.retention.days` is set (default
+`0`, never); then the gateway's expiry sweep runs this same reconciled purge.
+
+<Note>
+The admin token is shared, so the gateway records the actor the command sends — `$USER@host` — on
+every batch. From the control panel it is the signed-in user's address.
+</Note>
+
+### Receipts
+
+**Re-send delivery receipts to an SMPP login for a period** — admin token; a dry run unless `--yes`:
+
+```bash
+fireflo receipts repush --system-id acme01 --from 2026-10-01 --to 2026-10-07              # dry run: messages, receipts by state, bound now?
+fireflo receipts repush --system-id acme01 --from 2026-10-01T09:00 --to 2026-10-01T12:00 \
+      --state DELIVERED,UNDELIV --tps 50 --note "customer lost receipts in their outage" --yes  # starts a job, prints its id
+fireflo receipts repush status <job-id>                                                     # progress: sent, stored for replay, failed
+fireflo receipts repush cancel <job-id>
+```
+
+For when a customer's system lost receipts — their outage, a bug on their side, or a bind that stayed
+down longer than unpushed receipts are kept — and they ask for them again. The receipts are rebuilt
+from the call records: the message id the customer was given when they submitted, the state from the
+final outcome, one receipt per part, as the live ones were. Messages with no outcome yet are skipped
+and counted. `--include-progress` adds progress receipts.
+
+They are delivered the live way: on the login's sessions if it is bound, otherwise stored and replayed
+when it next binds. `--tps` paces the job (default 50, never above the login's own limit) so a re-push
+never floods the customer's window. One job per login at a time, at most 31 days per job — the command
+splits a longer range into consecutive jobs. A job does not survive a gateway restart; its status says
+so, and you rerun with `--from` the last receipt sent.
+
+<Warning>
+The customer receives receipts again for messages they may already have closed. A correct SMPP client
+treats a repeated receipt for a message id it knows as a no-op; check with them before re-sending a
+large range. Each re-sent receipt appears on the message's timeline beside the original, and the job
+is recorded as a batch. HTTP customers' callbacks are not re-posted by this command.
+</Warning>
 
 ### Usage and retention
 

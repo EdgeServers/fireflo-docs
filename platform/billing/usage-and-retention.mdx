@@ -117,6 +117,7 @@ available while the gateway is stopped.
 | `cdr_interim` | `smsg.cdr.interim.retention.days`, default 30 | **A report, not an invoice** — it is vendor quality history |
 | `cdr_event` | `smsg.cdr.event.retention.days`, default 90 | The receipt and callback events behind a message's timeline |
 | `cdr_rejected` | `smsg.cdr.rejected.retention.days`, default 90 | What the Refused page shows |
+| `queue_archive` | `smsg.queue.archive.retention.days`, default 0 (never); or `fireflo queue archive purge` | The detail of what a queue clean archived. Its per-day summary, `queue_archive_summary`, is never deleted |
 
 `cdr_interim` is pruned on its own shorter window precisely because it answers a question about
 *recent* traffic: how fast a vendor reports, and whether it reports at all.

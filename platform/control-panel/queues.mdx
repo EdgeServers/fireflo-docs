@@ -71,6 +71,41 @@ Deliberately absent, and not kept in call records either. Operating the gateway 
 reading a customer's message, so the size and encoding stand in for it — enough to tell a
 three-segment Unicode message from a short GSM one without reading anybody's mail.
 
+## Clean up: archive and end what will never be sent
+
+From 0.12.19, below the queues, a **Clean up** card ends messages that will never be sent — honestly:
+each is archived, refunded if charged, sent a failed receipt where the customer asked for one, and
+recorded as refused (`operatorPurge`). **Stop sending or Hold on the vendor is still the first tool**
+if you only need traffic to stop.
+
+1. Choose the **Store** — a vendor's or listener's waiting, retry, held or parked messages; the routing
+   queue, routing retries or the failed-routing park; unpushed receipts; or callback retries — and
+   narrow it by **Vendor or listener**, **Account**, **System id** and **Older than** (`2h`, `3d`).
+   Cleaning a whole store with nothing named needs **Every account** ticked.
+2. **Show** is a dry run: it takes nothing, and prints how many match, across how many accounts, and
+   the refund they would get, above a sample of the matching messages. Anyone who can read the queues
+   may run it.
+3. **Archive & clean…** is shown to **admins only**. The dialog restates what will happen, asks for a
+   **note** (recorded on every archived entry) and for the exact confirmation `CLEAN <n>`.
+4. Just before it starts, the count is read again. If it changed, the dialog shows the new number and
+   asks you to confirm that one — it never archives more than you agreed to. It then works in batches
+   of up to 10,000, showing the running totals, with **Stop** (the batch in flight finishes first), and
+   ends with links to the runs on [Reports → Archives](/platform/control-panel/archives).
+
+On a vendor's or listener's own page the same dialog opens from **Clean queue…** in the footer, beside
+Stop sending, Hold and Restart, while something is waiting there. It is already scoped to that worker
+and shows the count in each of its queues — held, waiting, retries, and parked on a listener — with an
+optional account and age.
+
+The operator log records each clean against the person who ran it, and the gateway's archive carries
+the same name. The command line does the same thing with `fireflo queue archive`; see
+[Inspecting a queue](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+
+<Note>
+A queue held on the message broker cannot be cleaned: the broker cannot show a message without taking
+it. The gateway refuses with `broker-backed`, and the dialog shows that.
+</Note>
+
 ## An empty screen is the good outcome
 
 **No in-process queues** means every message that arrived has already been handed to a vendor. That
@@ -85,5 +120,8 @@ here when something else has already told you to.
   </Card>
   <Card title="Live health" icon="heart-pulse" href="/platform/operations/live-health">
     Bind state and queue depth from the gateway itself.
+  </Card>
+  <Card title="Archives" icon="box-archive" href="/platform/control-panel/archives">
+    What a clean took off the queues, and who ran it.
   </Card>
 </CardGroup>

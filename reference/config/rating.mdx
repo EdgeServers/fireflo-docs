@@ -14,6 +14,7 @@ description: "Currency and money scale, where call records are written, how long
 | `smsg.cdr.events` | `off` | `off`, `problems` or `all`. Per-message customer-side events: receipts withheld, held or failed, and callback attempts. Unset, it follows `smsg.diagnostics`. |
 | `smsg.cdr.events.response` | `off` | `off` or `excerpt`. Whether a callback event keeps what the customer's endpoint answered. |
 | `smsg.cdr.interim.retention.days` | `30` | How long `cdr_interim` keeps progress receipts. |
+| `smsg.queue.archive.retention.days` | `0` | Whole months of the queue archive older than this are purged by the expiry sweep, each reconciled against the per-day summary first; the summary is kept. `0` never deletes automatically — only `fireflo queue archive purge` does. From 0.12.19. |
 | `smsg.balance.enabled` | `false` | Enforce prepaid credit. PostgreSQL only. |
 | `smsg.balance.block.min.messages` | `20` | How many messages one credit reservation must cover. |
 | `smsg.balance.ledger.blocks` | `true` | Whether `RESERVE`/`RELEASE` bookkeeping is written to `balance_ledger`. |

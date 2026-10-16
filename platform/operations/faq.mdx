@@ -78,10 +78,13 @@ run to zero lost, zero `ESME_RMSGQFUL`, and exactly 1.00 submits per message.
 </Accordion>
 
 <Accordion title="Can I clear a stuck queue?">
-There is deliberately no `queue flush`. Discarding a queue destroys messages that were accepted,
-billed and promised to a customer.
+Not by discarding it — those messages were accepted, billed and promised to a customer. If you need the
+traffic to stop, `suspend` the vendor (or hold the listener): nothing is lost.
 
-Use `suspend` — it drains that vendor's queue back to the router so routing can pick another vendor.
+For messages that will never be sent, from 0.12.19 a queue can be **cleaned**: each message is
+archived first, then refunded if charged, sent a failed receipt where one was asked for, and recorded
+as refused (`operatorPurge`). It is a dry run until you confirm, and it cannot be undone. See
+[Cleaning a queue](/platform/operations/queues#cleaning-a-queue-archive-then-end).
 </Accordion>
 
 <Accordion title="Delivery receipts are being sent to a carrier as new messages">

@@ -90,6 +90,24 @@ the gateway eventually **refuses new traffic** rather than growing — reaching 
 if you leave it long enough.
 </Warning>
 
+## When the held messages will never be sent
+
+Stop sending and Hold keep what is queued, and that is what makes them the first tool: release them
+and traffic carries on, with nothing lost and nothing charged twice. **Reach for them first.**
+
+Sometimes what is held will never go — the vendor is gone for good, or a customer's backlog is no longer
+wanted. From 0.12.19 a held, pending or retry queue (and a listener's parked inbound) can be
+**cleaned**: each message is archived, then refunded if charged, sent a failed receipt where one was
+asked for, and recorded as refused (`operatorPurge`). It cannot be undone.
+
+```bash
+fireflo queue archive worker --worker smppclient.vendor1 --sub held      # dry run first
+```
+
+In the control panel the same thing is **Clean queue…** in the vendor's or listener's footer, beside
+Stop sending, Hold and Restart — shown to admins, and only while something is waiting. See
+[Inspecting a queue](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+
 ## These are runtime state, not configuration
 
 <Warning>

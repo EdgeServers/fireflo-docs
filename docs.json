@@ -57,6 +57,7 @@
                   "platform/control-panel/accounts-billing",
                   "platform/control-panel/refused",
                   "platform/control-panel/queues",
+         "platform/control-panel/archives",
                   "platform/control-panel/receipt-quality",
                   "platform/control-panel/runtime-metrics",
                   "platform/control-panel/diagnostics"
