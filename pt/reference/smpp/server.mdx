@@ -82,7 +82,7 @@ desaparece em silêncio a menos que você observe essa linha de log.
 | Chave | Padrão | Descrição |
 | :--- | :--- | :--- |
 | `forward.dlrs` | `true` | Chave mestra para encaminhar receipts a clientes neste listener. **Off suprime para todos que fizeram bind aqui, independente do que pediram.** |
-| `flag.reverseDlrSrcDst` | `true` | Inverte origem e destino dentro dos receipts. |
+| `flag.reverseDlrSrcDst` | `false` | Desligado, um receipt vai do celular para o sender ID do cliente, como fazem a prática SMPP 3.4 e o Kannel. Ligado, vai do sender ID para o celular: a ordem enviada até 0.12.33, para um cliente cujo parser a espera. |
 | `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Expressão regular que valida o endereço do receiver. |
 | `charset.gsm` | `GSM` | Charset para data coding `0`. |
 | `charset.latin1` | `ISO-8859-1` | Charset para Latin-1. |

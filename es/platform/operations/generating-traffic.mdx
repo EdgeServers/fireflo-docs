@@ -46,8 +46,8 @@ se siguen, y **ambas ya han mordido a un despliegue real**:
 <AccordionGroup>
 
 <Accordion title="Las reglas que seleccionan por clase de mensaje deben estar arriba de las que seleccionan por destino">
-Un recibo de entrega para un mensaje cuyo emisor era una dirección india numérica llega con ese número
-en `to`, una vez que `flag.reverseDlrSrcDst` ha intercambiado origen y destino.
+Un recibo de entrega para un mensaje cuyo emisor era una dirección india numérica llega al enrutador con ese número
+en `to`, porque un acuse vuelve por el camino del mensaje.
 
 Colocado **debajo** de una regla `to matches ^91…`, ese recibo va a un **proveedor** en lugar de al
 cliente.

@@ -46,8 +46,8 @@ O router toma a **primeira** regra que casa, e a última regra casa com tudo. Du
 <AccordionGroup>
 
 <Accordion title="Regras que selecionam por classe de mensagem devem ficar acima de regras que selecionam por destino">
-Um delivery receipt para uma mensagem cujo remetente era um endereço indiano numérico chega com aquele
-número em `to`, uma vez que `flag.reverseDlrSrcDst` tenha trocado source e destination.
+Um delivery receipt para uma mensagem cujo remetente era um endereço indiano numérico chega ao roteador com aquele
+número em `to`, porque um receipt volta pelo caminho da mensagem.
 
 Colocada **abaixo** de uma regra `to matches ^91…`, esse receipt vai para um **fornecedor** em vez de
 para o cliente.

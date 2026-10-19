@@ -46,8 +46,8 @@ follow, and **both have already bitten a real deployment**:
 <AccordionGroup>
 
 <Accordion title="Rules selecting on message class must sit above rules selecting on destination">
-A delivery receipt for a message whose sender was a numeric Indian address arrives with that number
-in `to`, once `flag.reverseDlrSrcDst` has swapped source and destination.
+A delivery receipt for a message whose sender was a numeric Indian address reaches the router with that
+number in `to`, because a receipt travels back the way the message came.
 
 Placed **below** a `to matches ^91…` rule, that receipt goes to a **vendor** instead of to the
 customer.

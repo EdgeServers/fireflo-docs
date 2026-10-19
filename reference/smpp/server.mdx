@@ -83,7 +83,7 @@ unless you watch for that log line.
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `forward.dlrs` | `true` | Master switch for forwarding receipts to clients on this listener. **Off suppresses them for everyone bound here, whatever they asked for.** |
-| `flag.reverseDlrSrcDst` | `true` | Reverses source and destination inside receipts. |
+| `flag.reverseDlrSrcDst` | `false` | Off, a receipt goes from the handset to the customer's sender ID, as SMPP 3.4 practice and Kannel send it. On, it goes from the sender ID to the handset, the order sent until 0.12.33, for a customer whose parser expects it. |
 | `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Regular expression validating the receiver address. |
 | `charset.gsm` | `GSM` | Charset for data coding `0`. |
 | `charset.latin1` | `ISO-8859-1` | Charset for Latin-1. |

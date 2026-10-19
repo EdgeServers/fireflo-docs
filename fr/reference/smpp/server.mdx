@@ -83,7 +83,7 @@ trafic MO non mappé disparaît silencieusement sauf si vous surveillez cette li
 | Clé | Défaut | Description |
 | :--- | :--- | :--- |
 | `forward.dlrs` | `true` | Interrupteur maître pour transférer les accusés aux clients sur ce listener. **Éteint les supprime pour tous ceux bindés ici, quoi qu'ils aient demandé.** |
-| `flag.reverseDlrSrcDst` | `true` | Inverse source et destination dans les accusés. |
+| `flag.reverseDlrSrcDst` | `false` | Désactivé, un accusé part du mobile vers l'identifiant d'expéditeur du client, comme le veulent l'usage SMPP 3.4 et Kannel. Activé, il part de l'identifiant d'expéditeur vers le mobile : l'ordre envoyé jusqu'à 0.12.33, pour un client dont l'analyseur l'attend. |
 | `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Expression régulière validant l'adresse receveur. |
 | `charset.gsm` | `GSM` | Charset pour data coding `0`. |
 | `charset.latin1` | `ISO-8859-1` | Charset pour Latin-1. |

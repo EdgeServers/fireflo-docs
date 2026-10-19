@@ -82,7 +82,7 @@ a menos que vigiles esa línea de log.
 | Clave | Predeterminado | Descripción |
 | :--- | :--- | :--- |
 | `forward.dlrs` | `true` | Interruptor maestro para reenviar acuses a clientes en este listener. **Apagado los suprime para todos los conectados aquí, sea lo que sea que pidieron.** |
-| `flag.reverseDlrSrcDst` | `true` | Invierte origen y destino dentro de los acuses. |
+| `flag.reverseDlrSrcDst` | `false` | Desactivado, un acuse va del móvil al identificador de remitente del cliente, como lo envían la práctica SMPP 3.4 y Kannel. Activado, va del identificador de remitente al móvil: el orden enviado hasta 0.12.33, para un cliente cuyo analizador lo espera. |
 | `ptrn.valid.receiver` | `[+]?[0-9]{10,20}` | Expresión regular que valida la dirección del receptor. |
 | `charset.gsm` | `GSM` | Charset para data coding `0`. |
 | `charset.latin1` | `ISO-8859-1` | Charset para Latin-1. |
