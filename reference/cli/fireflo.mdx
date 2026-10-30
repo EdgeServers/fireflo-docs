@@ -10,6 +10,7 @@ verb, and knowing which is most of knowing how to use it.
 | :--- | :--- | :--- |
 | `db`, `bootstrap`, `import`, `show` | The database directly | No |
 | `send`, `selftest` | The **message** port, as a customer would (`selftest` reads the database too) | Yes |
+| `load` | An **SMPP listener**, as a customer would — nothing else | Yes |
 | everything else | The **operational** port, 9000 by default | Yes |
 
 <Warning>
@@ -152,6 +153,54 @@ login bootstrap saved. It changes no configuration.
 
 Exit codes: `0` nothing failed, `1` a step failed, `2` misused. The installer runs it at the end of
 an install with SMPPSim; run it again whenever you want to know the path still works end to end.
+
+### Generating load
+
+```bash
+fireflo load --system-id ID (--password P | --password-file F) --port N \
+    --tps N (--seconds S | --count N) --from SENDER --to DIGITS [options]
+```
+
+Sends SMPP traffic into a running gateway **as one of its customers**: it binds the customer's
+listener with the login you give, submits at `--tps` messages per second, answers the delivery
+receipts that come back, and unbinds at the end. It is a plain SMPP client — it uses no HTTP API, no
+operator port and no database — so the gateway treats the traffic exactly as the customer's own.
+
+**It is real traffic.** Every accepted message is priced, charged to the account and sent to the
+vendor the routing chooses. `--to` has no default, and the command prints what it is about to do —
+login, listener, rate, count, destination range, and each body's length, encoding and parts per
+message (what each message costs) — and asks before sending unless `--yes`. With
+`smsg.smpp.whitelist.first.bind` on, a login that has no allowed IPs is locked to the address of its
+first bind, so set the customer's allowed IPs before running it from the gateway box.
+
+| Option | Default | |
+| :--- | :--- | :--- |
+| `--system-id`, `--password` or `--password-file` | required | The login. The file is owner-only (`chmod 600`), first line; the password is never printed |
+| `--system-type T` | empty | The bind's `system_type` |
+| `--host`, `--port` | `127.0.0.1`, required | The SMPP listener |
+| `--bind-type trx\|txrx` | `trx` | A transceiver per bind, or a transmitter + receiver pair |
+| `--binds N`, `--window N` | `1`, `100` | Sessions, and outstanding submits per session |
+| `--tps N` | required | Submits per second — what the gateway's TPS limits count |
+| `--seconds S` or `--count N` | one required | `--seconds` sends up to `tps × S` messages and stops after `S` seconds |
+| `--from`, `--to` | required | Sender, and the first destination (digits, no `+`) |
+| `--to-spread N` | `1` | Destinations `to` … `to+N−1`, round-robin |
+| `--body TEXT` or `--body-file F` | a 20-character marker | The text, or one text per line used round-robin. GSM-7 or UCS-2 and split into parts as the gateway does |
+| `--receipts`, `--drain-seconds S` | off, `30` | Ask for receipts, and how long to wait for them after sending |
+| `--json`, `--yes` | off | The summary as one JSON object on stdout; no confirmation |
+
+Every 10 seconds it prints a progress line; at the end, a summary: offered and accepted, refusals by
+status — `0x58` (a TPS ceiling: the login's or the account's), `0x14` (a full queue, credit being
+reserved, or a vendor backlog), `0x45`, other — a verdict (`held`, `throttled`, `queue-full`,
+`refused`, `unanswered`, `generator-behind`, `transport-failed`), p50/p95/p99 response time, and
+receipts split into delivered, failed, other and MO. The cost is "see the account statement": the
+gateway returns no price on a submit.
+
+Run on the gateway's own machine it shares the CPU with the gateway; for a ceiling figure, run it
+from another machine with `--host`.
+
+Exit codes: `0` the run completed (refusals are a finding, not a failure), `1` the bind or the
+connection failed, `2` refused before sending — a bad option, no `--to`, or the confirmation
+declined.
 
 ## Operational
 

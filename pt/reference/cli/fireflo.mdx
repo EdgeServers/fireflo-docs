@@ -10,6 +10,7 @@ verbo, e saber com qual é boa parte de saber usar.
 | :--- | :--- | :--- |
 | `db`, `bootstrap`, `import`, `show` | O banco diretamente | Não |
 | `send` | A porta de **mensagens**, como um cliente faria | Sim |
+| `load` | Um **listener SMPP**, como um cliente faria — nada mais | Sim |
 | tudo o mais | A porta **operacional**, 9000 por padrão | Sim |
 
 <Warning>
@@ -94,6 +95,53 @@ fireflo send <from> <to> <text>
 
 Passa pela HTTP API exatamente como um cliente faria. Precisa de `FIREFLO_SEND_LOGIN` e
 `FIREFLO_SEND_PASSWORD`.
+
+### Gerando carga
+
+```bash
+fireflo load --system-id ID (--password P | --password-file F) --port N \
+    --tps N (--seconds S | --count N) --from REMETENTE --to DÍGITOS [opções]
+```
+
+Envia tráfego SMPP para um gateway em execução **como um dos seus clientes**: conecta ao listener do
+cliente com o login informado, envia a `--tps` mensagens por segundo, responde aos recibos de entrega
+que voltam e desconecta no fim. É um cliente SMPP simples — sem HTTP API, sem porta de operador e sem
+banco de dados — então o gateway trata esse tráfego exatamente como o do cliente.
+
+**É tráfego real.** Cada mensagem aceita é precificada, debitada da conta e enviada ao fornecedor que
+o roteamento escolher. `--to` não tem valor padrão, e o comando mostra o que vai fazer — login,
+listener, taxa, quantidade, faixa de destinos e, para cada texto, o tamanho, a codificação e as partes
+por mensagem (o custo de cada mensagem) — e pede confirmação, exceto com `--yes`. Com
+`smsg.smpp.whitelist.first.bind` ativado, um login sem IPs permitidos fica preso ao endereço da sua
+primeira conexão: defina os IPs permitidos do cliente antes de rodar o comando na máquina do gateway.
+
+| Opção | Padrão | |
+| :--- | :--- | :--- |
+| `--system-id`, `--password` ou `--password-file` | obrigatório | O login. O arquivo é só do dono (`chmod 600`), primeira linha; a senha nunca é exibida |
+| `--system-type T` | vazio | O `system_type` da conexão |
+| `--host`, `--port` | `127.0.0.1`, obrigatório | O listener SMPP |
+| `--bind-type trx\|txrx` | `trx` | Um transceiver por conexão, ou um par transmissor + receptor |
+| `--binds N`, `--window N` | `1`, `100` | Sessões, e envios pendentes por sessão |
+| `--tps N` | obrigatório | Envios por segundo — o que os limites de TPS do gateway contam |
+| `--seconds S` ou `--count N` | um dos dois | `--seconds` envia até `tps × S` mensagens e para após `S` segundos |
+| `--from`, `--to` | obrigatório | Remetente, e o primeiro destino (dígitos, sem `+`) |
+| `--to-spread N` | `1` | Destinos `to` … `to+N−1`, em rodízio |
+| `--body TEXTO` ou `--body-file F` | um marcador de 20 caracteres | O texto, ou um texto por linha usado em rodízio. GSM-7 ou UCS-2, dividido em partes como o gateway faz |
+| `--receipts`, `--drain-seconds S` | não, `30` | Pedir recibos, e quanto tempo esperar por eles depois do envio |
+| `--json`, `--yes` | não | O resumo como um objeto JSON no stdout; sem confirmação |
+
+A cada 10 segundos, uma linha de progresso; no fim, um resumo: enviados e aceitos, recusas por status
+— `0x58` (um teto de TPS: do login ou da conta), `0x14` (uma fila cheia, crédito sendo reservado ou
+backlog do fornecedor), `0x45`, outros — um veredito (`held`, `throttled`, `queue-full`, `refused`,
+`unanswered`, `generator-behind`, `transport-failed`), tempos de resposta p50/p95/p99, e os recibos
+divididos em entregues, falhos, outros e MO. O custo é "see the account statement": o gateway não
+devolve preço num envio.
+
+Rodado na própria máquina do gateway, divide a CPU com ele; para medir um teto, rode de outra máquina
+com `--host`.
+
+Códigos de saída: `0` a execução terminou (recusas são um achado, não uma falha), `1` a conexão
+falhou, `2` recusado antes do envio — opção inválida, sem `--to`, ou confirmação negada.
 
 ## Operacional
 

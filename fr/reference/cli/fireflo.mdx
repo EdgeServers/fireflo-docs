@@ -10,6 +10,7 @@ le verbe, et savoir laquelle est l'essentiel pour savoir l'utiliser.
 | :--- | :--- | :--- |
 | `db`, `bootstrap`, `import`, `show` | La base de données directement | Non |
 | `send` | Le port de **message**, comme le ferait un client | Oui |
+| `load` | Un **listener SMPP**, comme le ferait un client — rien d'autre | Oui |
 | tout le reste | Le port **opérationnel**, 9000 par défaut | Oui |
 
 <Warning>
@@ -97,6 +98,56 @@ fireflo send <from> <to> <text>
 
 Passe par l'API HTTP exactement comme le ferait un client. Nécessite `FIREFLO_SEND_LOGIN` et
 `FIREFLO_SEND_PASSWORD`.
+
+### Générer de la charge
+
+```bash
+fireflo load --system-id ID (--password P | --password-file F) --port N \
+    --tps N (--seconds S | --count N) --from EXPÉDITEUR --to CHIFFRES [options]
+```
+
+Envoie du trafic SMPP dans une passerelle en marche **comme l'un de ses clients** : il se connecte
+au listener du client avec l'identifiant donné, soumet à `--tps` messages par seconde, répond aux
+accusés de réception qui reviennent et se déconnecte à la fin. C'est un simple client SMPP — ni API
+HTTP, ni port opérateur, ni base de données — donc la passerelle traite ce trafic exactement comme
+celui du client.
+
+**C'est du vrai trafic.** Chaque message accepté est tarifé, débité du compte et envoyé au
+fournisseur choisi par le routage. `--to` n'a pas de valeur par défaut, et la commande affiche ce
+qu'elle va faire — identifiant, listener, débit, nombre, plage de destinations, et pour chaque texte
+sa longueur, son encodage et ses parties par message (ce que coûte chaque message) — puis demande
+confirmation, sauf avec `--yes`. Avec `smsg.smpp.whitelist.first.bind` activé, un identifiant sans
+IP autorisée est verrouillé sur l'adresse de sa première connexion : définissez les IP autorisées du
+client avant de lancer la commande depuis la machine de la passerelle.
+
+| Option | Défaut | |
+| :--- | :--- | :--- |
+| `--system-id`, `--password` ou `--password-file` | requis | L'identifiant. Le fichier est réservé à son propriétaire (`chmod 600`), première ligne ; le mot de passe n'est jamais affiché |
+| `--system-type T` | vide | Le `system_type` de la connexion |
+| `--host`, `--port` | `127.0.0.1`, requis | Le listener SMPP |
+| `--bind-type trx\|txrx` | `trx` | Un transceiver par connexion, ou une paire émetteur + récepteur |
+| `--binds N`, `--window N` | `1`, `100` | Sessions, et soumissions en attente par session |
+| `--tps N` | requis | Soumissions par seconde — ce que comptent les limites TPS de la passerelle |
+| `--seconds S` ou `--count N` | l'un des deux | `--seconds` envoie au plus `tps × S` messages et s'arrête après `S` secondes |
+| `--from`, `--to` | requis | Expéditeur, et première destination (chiffres, sans `+`) |
+| `--to-spread N` | `1` | Destinations `to` … `to+N−1`, à tour de rôle |
+| `--body TEXTE` ou `--body-file F` | un marqueur de 20 caractères | Le texte, ou un texte par ligne utilisé à tour de rôle. GSM-7 ou UCS-2, découpé en parties comme le fait la passerelle |
+| `--receipts`, `--drain-seconds S` | non, `30` | Demander les accusés, et combien de temps les attendre après l'envoi |
+| `--json`, `--yes` | non | Le résumé en un objet JSON sur stdout ; pas de confirmation |
+
+Toutes les 10 secondes, une ligne de progression ; à la fin, un résumé : soumis et acceptés, refus
+par statut — `0x58` (un plafond TPS : celui de l'identifiant ou du compte), `0x14` (une file pleine,
+du crédit en cours de réservation ou un arriéré fournisseur), `0x45`, autres — un verdict (`held`,
+`throttled`, `queue-full`, `refused`, `unanswered`, `generator-behind`, `transport-failed`), les
+temps de réponse p50/p95/p99, et les accusés répartis en délivrés, échoués, autres et MO. Le coût
+est « see the account statement » : la passerelle ne renvoie aucun prix sur une soumission.
+
+Lancée sur la machine de la passerelle, elle partage son processeur avec elle ; pour mesurer un
+plafond, lancez-la depuis une autre machine avec `--host`.
+
+Codes de sortie : `0` l'exécution est allée au bout (les refus sont un constat, pas un échec), `1`
+la connexion a échoué, `2` refusé avant l'envoi — option invalide, pas de `--to`, ou confirmation
+refusée.
 
 ## Opérationnel
 
