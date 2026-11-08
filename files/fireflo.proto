@@ -65,7 +65,7 @@ message TlvValue {
   oneof value {
     string string_value = 1;
     int64  int_value    = 2;
-    uint64 uint_value   = 3;   // up to 2^64-1 exactly, as REST accepts a large JSON integer
+    uint64 uint_value   = 3;   // up to 2^64-1 exactly, the same range REST takes as a JSON integer
   }
 }
 
@@ -129,7 +129,7 @@ message AckResponse {
   int32 already_gone = 2;            // unknown, already acked or expired: not an error
 }
 
-// The receipt webhook's JSON body, one field per key, plus delivery fields.
+// The receipt webhook JSON (docs.fireflo.au/reference/api/dlr-webhook), one field per key, plus delivery fields.
 message Receipt {
   string id = 1;                     // message_id from SendResponse
   string stat = 2;                   // DELIVRD, UNDELIV, EXPIRED, REJECTD, UNKNOWN, ACCEPTD, ENROUTE...
