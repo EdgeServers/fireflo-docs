@@ -28,8 +28,15 @@ avant de relever le plafond de threads.
 
 <Steps>
   <Step title="Un dlr_url a-t-il été fourni du tout ?">
-    Via HTTP, il doit être présent et URL-encodé, et `dlr` doit valoir `yes`. Définir l'un sans
-    l'autre ne fait rien.
+    Via HTTP, il doit être présent et URL-encodé, et `dlr` doit valoir `yes`. Un `dlr_url` sans `dlr`
+    ne fait rien.
+
+    À partir de 0.15.9, avec l'[API gRPC](/platform/operations/grpc) activée et son flux d'accusés en
+    service (le défaut une fois gRPC activé), `dlr=yes` **sans** `dlr_url` est accepté — et ses accusés
+    n'atteignent jamais un webhook. Ils attendent dans le flux d'accusés gRPC du login émetteur jusqu'à
+    ce que le client les lise et les acquitte. Un client qui attendait un callback et n'a envoyé aucune
+    URL regarde au mauvais endroit ; le bloc `grpc.receipts` de health montre quels logins ont des
+    accusés en attente.
   </Step>
   <Step title="L'endpoint est-il joignable depuis l'hôte de la passerelle ?">
     Pas depuis votre portable — depuis l'hôte ou le conteneur sur lequel tourne la passerelle. La

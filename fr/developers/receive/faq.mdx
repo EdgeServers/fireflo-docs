@@ -8,7 +8,10 @@ description: "Ordre, doublons, accusés manquants, et les états qui ressemblent
 <Accordion title="Un accusé n'est jamais arrivé. Par où commencer ?">
 Dans cet ordre, car chaque étape écarte plus de causes que la suivante :
 
-1. **En avez-vous demandé un ?** `dlr: "yes"` *et* `dlr_url`. L'un sans l'autre ne fait rien.
+1. **En avez-vous demandé un, et où est-il allé ?** `dlr: "yes"` *et* `dlr_url` pour un webhook. Un
+   `dlr_url` sans `dlr` ne fait rien. `dlr` sans `dlr_url` est un `400` — sauf sur une plateforme qui
+   fait tourner le flux d'accusés gRPC, où il est accepté et où les accusés attendent dans le
+   [flux](/developers/grpc/receipts) de votre login au lieu d'arriver quelque part d'eux-mêmes.
 2. **Votre endpoint est-il joignable depuis le host de la passerelle**, pas depuis votre portable ?
 3. **Renvoie-t-il 200–399 ?** Un `401` derrière un proxy authentifiant est l'échec silencieux le
    plus courant, et un `302` vers une page de connexion *compte comme succès* et avale l'accusé.
@@ -90,6 +93,10 @@ transmis.
 <Accordion title="Puis-je voir les accusés sans exploiter un endpoint ?">
 Oui. Le portail client montre vos messages avec leur état final et vous permet de les exporter. Un
 endpoint est la manière de réagir en temps réel ; le portail est la manière de vérifier après coup.
+
+À partir de la passerelle 0.15.9, il existe une troisième voie, là où votre fournisseur a activé l'API
+gRPC : envoyez sans `dlr_url` et récupérez les accusés depuis un flux durable sur gRPC, en temps réel et
+sans exposer d'endpoint. Voir [Accusés de livraison sur gRPC](/developers/grpc/receipts).
 </Accordion>
 
 </AccordionGroup>

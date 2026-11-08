@@ -68,6 +68,15 @@ Sans ceux-ci, le gateway démarre sans tarification. Un message qui ne correspon
 
 Une plage permet à l'installateur de choisir le prochain port listener libre, ce qui rend plusieurs instances sur un hôte pratiques. Voir [Plusieurs instances](/platform/install/multiple-instances).
 
+À partir de 0.15.9, l'API gRPC a aussi un port, et il reste **désactivé** sauf si vous le demandez :
+
+```bash
+--grpc                                  # port 8090, lié à 127.0.0.1
+--grpc-port 8090 --grpc-host 0.0.0.0    # un proxy ailleurs, ou des clients directs
+```
+
+Lié à loopback, il sert à un proxy sur le même hôte et rien n'est ouvert dans le pare-feu. Lié plus largement, `--firewall` l'ouvre — et un proxy placé devant a alors besoin de `smsg.grpc.proxy.forwarding`, sinon fail2ban bannit le proxy. Voir [Faire tourner l'API gRPC](/platform/operations/grpc).
+
 ## Les deux tokens
 
 L'installateur génère les deux et les écrit dans le fichier d'environnement.

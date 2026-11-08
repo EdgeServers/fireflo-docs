@@ -106,6 +106,20 @@ d'un proxy qui n'a jamais atteint votre application. Si les accusés "arrivent" 
 s'exécute jamais, vérifiez ce qui est en amont.
 </Warning>
 
+## Pas d'endpoint ? Récupérez les accusés sur gRPC
+
+À partir de la passerelle 0.15.9, là où votre fournisseur a activé l'[API gRPC](/developers/grpc/overview),
+vous n'avez pas besoin de faire tourner un endpoint du tout. Envoyez `"dlr": "yes"` **sans** `dlr_url` —
+sur REST ou gRPC — et les accusés attendent votre login dans une file durable, avec les mêmes champs que
+le JSON ci-dessus plus un jeton d'acquittement. Vous les récupérez avec `Subscribe` ou `Pull` et les
+retirez avec `Ack`.
+
+Rien n'est perdu pendant que vous ne regardez pas : un accusé reste jusqu'à ce que vous l'acquittiez,
+ou pendant sept jours. Voir [Accusés de livraison sur gRPC](/developers/grpc/receipts).
+
+Un `dlr_url` l'emporte toujours — un message qui en a un y est POSTé et n'apparaît jamais dans le flux.
+Là où gRPC est désactivé, `dlr` sans `dlr_url` est refusé `400`.
+
 ## Trois segments, trois accusés
 
 Par défaut, vous obtenez un accusé par `submit_sm` envoyé, chacun citant l'id qui vous a été remis.
@@ -128,5 +142,8 @@ taux de livraison plus bas que ceux des passerelles qui rapportent le premier se
   </Card>
   <Card title="Gérer les erreurs" icon="code-branch" href="/developers/errors">
     Construire pour l'accusé plutôt que pour la réponse.
+  </Card>
+  <Card title="Accusés de livraison sur gRPC" icon="receipt" href="/developers/grpc/receipts">
+    Les mêmes accusés depuis un flux durable, sans endpoint.
   </Card>
 </CardGroup>

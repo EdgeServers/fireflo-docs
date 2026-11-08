@@ -41,7 +41,7 @@ fois qu'elle est fixée.
 
 | Propriété | Défaut | Description |
 | :--- | :--- | :--- |
-| `smsg.restapi.maxRate.default` | `0` | Messages par seconde par compte de facturation. `0` est illimité. |
+| `smsg.restapi.maxRate.default` | `0` | Messages par seconde par compte de facturation, **REST et gRPC ensemble** (à partir de 0.15.9). `0` est illimité. |
 | `smsg.restapi.maxRate.<accountId>` | *(non défini)* | Plafond pour un compte, surchargeant le défaut. |
 | `quarkus.http.limits.max-body-size` | `1M` | Plus grand corps de requête accepté. |
 | `quarkus.http.read-timeout` | `60S` | Combien de temps une requête peut mettre à arriver. |
@@ -49,6 +49,10 @@ fois qu'elle est fixée.
 
 Clé sur le **compte**, pas sur le credential : un compte peut porter plusieurs logins, et une clé par
 login permettrait à un client de relever son propre plafond en en créant un autre.
+
+L'[API gRPC](/platform/operations/grpc) n'a pas de plafond propre, délibérément : ses envois comptent
+dans celui-ci, donc déplacer du trafic de REST vers gRPC ne peut pas doubler ce qu'un compte a le droit
+d'envoyer.
 
 Le contrôle s'exécute avant que le message soit tarifé ou facturé, donc un message refusé n'est
 jamais facturé. L'appelant reçoit `429`, délibérément pas `403` — rien à propos de la requête ou du

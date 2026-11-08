@@ -23,7 +23,7 @@ Tout le reste a une valeur par défaut. Le tableau complet est sur
 | `content` | — | Requis sauf si vous envoyez `hex_content`. Jamais les deux. |
 | `from` | votre nom de login | Doit être approuvé, sinon `403`. |
 | `coding` | `0` | `8` pour tout ce qui sort du GSM-7. Divise votre capacité par deux. |
-| `dlr` | `no` | `yes` nécessite `dlr_url`. |
+| `dlr` | `no` | `yes` nécessite `dlr_url`, sauf si vous récupérez les accusés via [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Où l'accusé est POSTé. |
 
 ## Mettez le destinataire entre guillemets
@@ -93,6 +93,13 @@ Deux champs, et les deux sont nécessaires. Régler l'un sans l'autre ne fait ri
 
 `dlr_level` choisit quels accusés vous recevez : `1` progression uniquement, `2` l'issue (défaut),
 `3` les deux.
+
+<Tip>
+**Pas d'endpoint à faire tourner ?** Depuis la passerelle 0.15.9, là où votre fournisseur a activé
+l'API gRPC, vous pouvez envoyer `"dlr": "yes"` sans `dlr_url` et récupérer plutôt les accusés depuis
+un flux durable via gRPC — voir [Accusés de livraison sur gRPC](/developers/grpc/receipts). Ailleurs,
+`dlr` sans `dlr_url` est un `400`.
+</Tip>
 
 <Warning>
 **Le niveau 1 seul n'envoie pas l'issue.** Un client qui demande `1` et attend un état final

@@ -3,12 +3,16 @@ title: "Envoyer des SMS avec FireFlo"
 description: "Deux voies d'entrée, un même ensemble de règles derrière, et la poignée de choses qui se comportent différemment d'autres passerelles."
 ---
 
-Vous pouvez atteindre FireFlo par deux voies, et votre choix tient surtout au volume et à ce que
+Vous pouvez atteindre FireFlo par trois voies, et votre choix tient surtout au volume et à ce que
 votre stack parle déjà.
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="REST" icon="code" href="/developers/quickstart">
     JSON sur HTTPS. Un appel, un message. Commencez ici sauf raison contraire.
+  </Card>
+  <Card title="gRPC" icon="bolt" href="/developers/grpc/overview">
+    L'envoi REST sur HTTP/2 et protobuf, avec streaming et un flux d'accusés. À partir de 0.15.9, là
+    où votre fournisseur l'a activé.
   </Card>
   <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
     Un bind persistant. Débit plus élevé, et ce que parlent les opérateurs eux-mêmes.
@@ -62,5 +66,6 @@ inconnu.
 | Envoyer à plusieurs personnes en une fois | [Batches](/developers/send/batches) |
 | Savoir pourquoi un long message coûte trois unités | [Encodage et segments](/developers/send/encoding-and-segments) |
 | Recevoir les accusés de livraison | [Accusés de livraison](/developers/receive/delivery-receipts) |
+| Envoyer sur gRPC, ou récupérer les accusés sans endpoint | [API gRPC](/developers/grpc/overview) |
 | Gérer une erreur correctement | [Erreurs](/developers/errors) |
 | Migrer depuis Jasmin | [Migration depuis Jasmin](/developers/migrating/from-jasmin) |

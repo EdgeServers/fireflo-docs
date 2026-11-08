@@ -44,9 +44,11 @@ Le port de gestion porte son propre token à la place. Et un identifiant de mess
 | Port | Sert |
 | ---: | :--- |
 | 8080 | `/secure/*`, `/ping`. Ce que les clients appellent |
+| 8090 | L'API gRPC. Ce que les clients appellent, à partir de 0.15.9, **uniquement quand vous l'activez** |
 | 9000 | `/q/metrics` et `/ops/*` |
 
 Gardez 9000 sur un réseau admin et ne le publiez pas. Le token est une deuxième ligne, pas la première.
+Ne donnez jamais à l'API gRPC le port de gestion : les deux doivent différer, et l'installateur refuse de les rendre identiques. Voir [Faire tourner l'API gRPC](/platform/operations/grpc).
 
 ## Absent n'est pas zéro
 
