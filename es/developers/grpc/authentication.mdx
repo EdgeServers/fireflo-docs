@@ -1,0 +1,130 @@
+---
+title: "Autenticación y sesiones"
+description: "Inicie sesión una vez con su login HTTP, lleve el token de sesión en cada llamada y vuelva a iniciar sesión cuando la pasarela responda SESSION_EXPIRED, cosa que hará por motivos que no son culpa suya."
+---
+
+Usted inicia sesión **una vez** con el mismo **login HTTP** que usa para la autenticación Basic de
+REST, y obtiene un **token de sesión**. Todas las demás llamadas llevan ese token en sus metadatos:
+
+```
+authorization: Bearer ffg1.Jq3…
+```
+
+```bash
+grpcurl -plaintext -d '{"system_id":"acme-http","password":"secret"}' \
+  sms.example.com:8090 fireflo.v1.AuthService/Login
+```
+
+```json
+{
+  "sessionToken": "ffg1.Jq3…",
+  "expiresAt": "2026-11-10T09:12:03Z",
+  "idleTimeoutSeconds": "3600"
+}
+```
+
+`grpcurl` imprime los nombres de campo en el camelCase de JSON; los nombres del proto son
+`session_token`, `expires_at` e `idle_timeout_seconds`. Trate el token como opaco, y como un secreto:
+vale tanto como su contraseña hasta que caduca.
+
+## Qué comprueba Login
+
+Exactamente lo que comprueba la autenticación Basic de REST:
+
+- que el login existe y es un **login HTTP** con contraseña;
+- que la contraseña coincide;
+- que la dirección desde la que llama está entre las direcciones permitidas del login, cuando tiene
+  alguna.
+
+<Warning>
+**Un system id SMPP no puede iniciar sesión aquí**, y el rechazo no lo dice: es el mismo
+`AUTH_FAILED` que recibe una contraseña incorrecta. Si un login funciona por SMPP y se rechaza por
+gRPC, compruebe su tipo antes de comprobar su contraseña.
+</Warning>
+
+## Cuánto dura un token
+
+| Límite | Por defecto | Qué pasa |
+| :--- | :--- | :--- |
+| **Inactividad** | 1 hora | Si no hay ninguna llamada con el token durante este tiempo, caduca. Cada llamada reinicia el reloj. |
+| **Absoluto** | 24 horas | El token caduca este tiempo después del Login por mucho que se use. `expires_at` en la respuesta es ese momento. |
+| **Por login** | 64 sesiones | Un Login por encima de este número termina la sesión usada menos recientemente de ese login. |
+
+Su proveedor puede cambiar los tres; `idle_timeout_seconds` en la respuesta de Login es el límite de
+inactividad vigente.
+
+Un token está ligado a **la dirección para la que se emitió**: presentado desde otra dirección, se
+rechaza. No está ligado a la conexión, así que un segundo canal desde la misma dirección puede usar
+el mismo token.
+
+## Volver a iniciar sesión: `SESSION_EXPIRED`
+
+Las sesiones se mantienen en la memoria de la pasarela. Por eso un token puede dejar de funcionar en
+cualquier momento por motivos que no son culpa suya:
+
+- la pasarela se reinició;
+- un balanceador de carga movió su canal a otro nodo de la pasarela;
+- el token alcanzó uno de los límites anteriores;
+- su login se modificó o se deshabilitó.
+
+Todos ellos se responden de la misma forma:
+
+```
+UNAUTHENTICATED, ErrorDetail.code = SESSION_EXPIRED
+```
+
+**Gestiónelo llamando de nuevo a Login y reintentando la llamada una vez con el nuevo token.** Hágalo
+en un solo lugar de su cliente (un interceptor, o un envoltorio alrededor del stub) en lugar de en cada
+punto de llamada. Los [ejemplos](/developers/grpc/examples) muestran el envoltorio en Python, Java y Go.
+
+<Note>
+**`SESSION_EXPIRED` nunca cuenta en contra de su dirección.** Los inicios de sesión rechazados
+repetidos desde una dirección hacen que su proveedor bloquee esa dirección (en todos los puertos,
+igual que para REST y SMPP), pero una sesión caducada no es un inicio de sesión rechazado. Una flota
+de clientes que se reconecta tras un reinicio de la pasarela no queda bloqueada por ello. Cualquier
+otro rechazo de esta página sí cuenta, exactamente igual que un login REST fallido.
+</Note>
+
+Si el reintento tras un Login nuevo se rechaza otra vez, pare: algo distinto de una sesión caducada
+está mal, y repetir Login en bucle es lo que hace que una dirección quede bloqueada.
+
+## Cerrar sesión
+
+`Logout` termina la sesión de inmediato. Es opcional (un token sin usar caduca por sí solo), pero es lo
+correcto para un proceso de corta duración, y libera una de las 64 plazas del login.
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  sms.example.com:8090 fireflo.v1.AuthService/Logout
+```
+
+## Rechazos
+
+| Situación | Código gRPC | `ErrorDetail.code` |
+| :--- | :--- | :--- |
+| Login: contraseña incorrecta, login desconocido, no es un login HTTP, o no tiene contraseña | `UNAUTHENTICATED` | `AUTH_FAILED` |
+| Login, o cualquier llamada: su dirección no está entre las direcciones permitidas del login | `PERMISSION_DENIED` | `AUTHORIZATION_FAILED` |
+| Sin metadato `authorization`, o no es un token `Bearer ffg1.…` | `UNAUTHENTICATED` | `MISSING_CREDENTIAL` |
+| Token desconocido, caducado, cerrado con Logout, o el login se ha deshabilitado desde entonces | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+| Token presentado desde una dirección distinta de aquella para la que se emitió | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+
+**Los cuatro rechazos de Login de la primera fila son una sola respuesta a propósito.** Probar nombres
+no le dice a quien llama nada sobre qué logins existen.
+
+## Detrás de su propio proxy o NAT
+
+El token está ligado a la dirección que ve la pasarela. Si su tráfico saliente sale por varias
+direcciones (un pool de pasarelas NAT, por ejemplo), un token emitido en una y usado desde otra recibe
+`SESSION_EXPIRED`. Fije cada canal a una sola dirección de salida, o deje que el envoltorio de nuevo
+inicio de sesión lo gestione, sabiendo que cada cambio de dirección cuesta un Login.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Errores y códigos de estado" icon="triangle-exclamation" href="/developers/grpc/errors">
+    Cada rechazo, y qué hacer al respecto.
+  </Card>
+  <Card title="Autenticación REST" icon="key" href="/developers/authentication">
+    El mismo login, por HTTP Basic.
+  </Card>
+</CardGroup>

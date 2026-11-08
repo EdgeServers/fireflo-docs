@@ -28,8 +28,15 @@ techo de hilos.
 
 <Steps>
   <Step title="¿Se proporcionó dlr_url?">
-    Sobre HTTP debe estar presente y URL-codificada, y `dlr` debe ser `yes`. Establecer uno sin el
-    otro no hace nada.
+    Sobre HTTP debe estar presente y URL-codificada, y `dlr` debe ser `yes`. Una `dlr_url` sin `dlr`
+    no hace nada.
+
+    A partir de la 0.15.9, con la [API gRPC](/platform/operations/grpc) activada y su feed de acuses
+    habilitado (el valor por defecto una vez que gRPC está activado), `dlr=yes` **sin** `dlr_url` se
+    acepta, y sus acuses nunca llegan a un webhook. Esperan en el feed de acuses gRPC del login que
+    envió hasta que el cliente los lee y los confirma. Un cliente que esperaba un callback y no envió
+    ninguna URL está mirando en el lugar equivocado; `grpc.receipts` en health muestra qué logins tienen
+    acuses esperando.
   </Step>
   <Step title="¿El endpoint es alcanzable desde el host de la pasarela?">
     No desde tu portátil, desde el host o contenedor donde se ejecuta la pasarela. La política de egreso, split DNS

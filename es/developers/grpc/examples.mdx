@@ -1,0 +1,451 @@
+---
+title: "Ejemplos de gRPC"
+description: "Login, Send, SendStream y el feed de acuses con grpcurl, Python, Java y Go, escritos solo a partir del proto, con el envoltorio de nuevo inicio de sesión que todo cliente necesita."
+---
+
+Cada ejemplo de esta página usa solo [`fireflo.proto`](/reference/grpc/proto) y la biblioteca gRPC
+estándar de su lenguaje. Sustituya `sms.example.com:8090` por la dirección que le dé su proveedor, y
+mantenga la contraseña fuera de su código: los ejemplos la leen de `SMS_PASSWORD`.
+
+<Note>
+Los ejemplos se conectan sin TLS (`-plaintext`, un canal inseguro), como lo haría con una pasarela en
+una red privada. Si su proveedor le da una dirección TLS (a menudo el puerto 443), use en su lugar un
+canal seguro; cada sección muestra el cambio de una línea.
+</Note>
+
+## grpcurl
+
+Gracias a la reflexión del servidor, `grpcurl` no necesita ningún archivo proto. Si su proveedor ha
+desactivado la reflexión, añada `-proto fireflo.proto` a cada comando.
+
+```bash
+GW=sms.example.com:8090
+
+# 1. Inicie sesión una vez; guarde el token
+TOKEN=$(grpcurl -plaintext \
+  -d '{"system_id":"acme-http","password":"'"$SMS_PASSWORD"'"}' \
+  $GW fireflo.v1.AuthService/Login | jq -r .sessionToken)
+
+# 2. Envíe; sin dlr_url, los acuses van a su feed
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"to":"61491570006","content":"Your OTP is 4417.","dlr":true,"client_ref":"order-1001"}' \
+  $GW fireflo.v1.SendService/Send
+
+# 3. Recoja los acuses, esperando hasta 20 s cuando no hay ninguno
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"max":100,"wait_seconds":20}' \
+  $GW fireflo.v1.ReceiptService/Pull
+
+# 4. Confirme lo que ha guardado
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"ack_tokens":["<ackToken from step 3>"]}' \
+  $GW fireflo.v1.ReceiptService/Ack
+
+# 5. O reciba los acuses en stream según llegan (Ctrl-C para parar; los no confirmados vuelven)
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"window":100}' \
+  $GW fireflo.v1.ReceiptService/Subscribe
+```
+
+Con TLS, quite `-plaintext`. Un rechazo imprime el código y el mensaje gRPC; añada `-v` para ver los
+trailers, incluido el detalle del error.
+
+## Python (grpcio)
+
+Genere los stubs una vez:
+
+```bash
+pip install grpcio grpcio-tools grpcio-status
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. fireflo.proto
+```
+
+### Login, el envoltorio de nuevo inicio de sesión y Send
+
+```python
+import os
+import grpc
+from grpc_status import rpc_status
+import fireflo_pb2 as pb
+import fireflo_pb2_grpc as rpc
+
+LOGIN = "acme-http"
+channel = grpc.insecure_channel("sms.example.com:8090")
+# Con TLS: channel = grpc.secure_channel("sms.example.com:443", grpc.ssl_channel_credentials())
+
+auth = rpc.AuthServiceStub(channel)
+send = rpc.SendServiceStub(channel)
+receipts = rpc.ReceiptServiceStub(channel)
+
+
+def error_detail(e: grpc.RpcError):
+    """El fireflo.v1.ErrorDetail empaquetado en un rechazo, o None."""
+    status = rpc_status.from_call(e)
+    if status is None:
+        return None
+    for any_detail in status.details:
+        if any_detail.Is(pb.ErrorDetail.DESCRIPTOR):
+            detail = pb.ErrorDetail()
+            any_detail.Unpack(detail)
+            return detail
+    return None
+
+
+class Session:
+    def __init__(self):
+        self.metadata = None
+        self.login()
+
+    def login(self):
+        reply = auth.Login(pb.LoginRequest(system_id=LOGIN, password=os.environ["SMS_PASSWORD"]))
+        self.metadata = [("authorization", "Bearer " + reply.session_token)]
+
+    def call(self, method, request, **kwargs):
+        """Llama una vez; ante SESSION_EXPIRED inicia sesión de nuevo y reintenta una vez."""
+        try:
+            return method(request, metadata=self.metadata, **kwargs)
+        except grpc.RpcError as e:
+            d = error_detail(e)
+            if e.code() == grpc.StatusCode.UNAUTHENTICATED and d and d.code == "SESSION_EXPIRED":
+                self.login()
+                return method(request, metadata=self.metadata, **kwargs)
+            raise
+
+
+session = Session()
+try:
+    sent = session.call(send.Send, pb.SendRequest(
+        to="61491570006", content="Your OTP is 4417.", dlr=True, client_ref="order-1001"))
+    print(sent.message_id, sent.price, sent.currency, sent.duplicate)
+except grpc.RpcError as e:
+    d = error_detail(e)
+    if d and d.code == "OUTCOME_UNKNOWN":
+        pass  # puede haber salido: reintente SOLO con el mismo client_ref
+    elif d and d.HasField("retry_after_seconds"):
+        pass  # espere d.retry_after_seconds y luego reintente
+    else:
+        raise
+```
+
+### SendStream
+
+```python
+import queue
+import threading
+
+outbox = queue.Queue()
+DONE = object()
+
+def requests():
+    while (item := outbox.get()) is not DONE:
+        yield item
+
+results = send.SendStream(requests(), metadata=session.metadata)
+
+def reader():                          # lee de forma continua, en su propio hilo
+    for r in results:
+        if r.code == 0:
+            print(r.correlation_id, "accepted", r.response.message_id)
+        else:
+            print(r.correlation_id, "refused", r.error.code, r.error.message)
+
+t = threading.Thread(target=reader)
+t.start()
+
+for i, number in enumerate(["61491570006", "61491570007"]):
+    ref = f"batch-42-{i}"
+    outbox.put(pb.SendStreamRequest(
+        correlation_id=ref,
+        request=pb.SendRequest(to=number, content="Hello", client_ref=ref)))
+outbox.put(DONE)                       # cierra su lado; el stream termina tras el último resultado
+t.join()
+```
+
+### Acuses: Pull, o Subscribe
+
+```python
+# Sondeo
+while True:
+    r = session.call(receipts.Pull, pb.PullRequest(max=500, wait_seconds=20))
+    for x in r.receipts:
+        store(x)                       # idempotente sobre (x.id, x.level)
+    if r.receipts:
+        session.call(receipts.Ack, pb.AckRequest(ack_tokens=[x.ack_token for x in r.receipts]))
+
+# O en streaming: primero lo que espera, luego los acuses en vivo
+for x in receipts.Subscribe(pb.SubscribeRequest(window=500), metadata=session.metadata):
+    store(x)
+    receipts.Ack(pb.AckRequest(ack_tokens=[x.ack_token]), metadata=session.metadata)
+```
+
+Un `Subscribe` que termina con `SESSION_EXPIRED` o `UNAVAILABLE` se reabre tras un Login nuevo; lo
+que no había confirmado se entrega de nuevo.
+
+## Java (grpc-java)
+
+Genere con el plugin de protobuf para Gradle o Maven y el plugin `protoc-gen-grpc-java`; las clases
+quedan en el paquete `fireflo.v1`. Necesita `grpc-netty-shaded` (u otro transporte), `grpc-protobuf` y
+`grpc-stub`.
+
+### Login, el envoltorio de nuevo inicio de sesión y Send
+
+```java
+import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
+import fireflo.v1.*;
+import io.grpc.*;
+import io.grpc.protobuf.StatusProto;
+import io.grpc.stub.MetadataUtils;
+import java.util.function.Function;
+
+public final class FireFloClient {
+    private static final Metadata.Key<String> AUTHORIZATION =
+            Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
+
+    private final ManagedChannel channel = ManagedChannelBuilder
+            .forAddress("sms.example.com", 8090).usePlaintext()   // con TLS: puerto 443, .useTransportSecurity()
+            .build();
+    private final AuthServiceGrpc.AuthServiceBlockingStub auth = AuthServiceGrpc.newBlockingStub(channel);
+    private volatile Metadata session;
+
+    public FireFloClient() {
+        login();
+    }
+
+    private void login() {
+        LoginResponse r = auth.login(LoginRequest.newBuilder()
+                .setSystemId("acme-http").setPassword(System.getenv("SMS_PASSWORD")).build());
+        Metadata md = new Metadata();
+        md.put(AUTHORIZATION, "Bearer " + r.getSessionToken());
+        session = md;
+    }
+
+    /** Adjunta el token actual a las llamadas de un stub. */
+    private ClientInterceptor bearer() {
+        return MetadataUtils.newAttachHeadersInterceptor(session);
+    }
+
+    /** El fireflo.v1.ErrorDetail de un rechazo, o null. */
+    static ErrorDetail errorDetail(Throwable t) {
+        com.google.rpc.Status st = StatusProto.fromThrowable(t);
+        if (st == null) return null;
+        for (Any any : st.getDetailsList()) {
+            if (any.is(ErrorDetail.class)) {
+                try { return any.unpack(ErrorDetail.class); }
+                catch (InvalidProtocolBufferException e) { return null; }
+            }
+        }
+        return null;
+    }
+
+    /** Llama una vez; ante SESSION_EXPIRED inicia sesión de nuevo y reintenta una vez. */
+    <T> T call(Function<ClientInterceptor, T> call) {
+        try {
+            return call.apply(bearer());
+        } catch (StatusRuntimeException e) {
+            ErrorDetail d = errorDetail(e);
+            if (e.getStatus().getCode() == Status.Code.UNAUTHENTICATED
+                    && d != null && d.getCode().equals("SESSION_EXPIRED")) {
+                login();
+                return call.apply(bearer());
+            }
+            throw e;
+        }
+    }
+
+    SendResponse sendOne(String to, String text, String clientRef) {
+        SendRequest req = SendRequest.newBuilder()
+                .setTo(to).setContent(text).setDlr(true).setClientRef(clientRef).build();
+        return call(i -> SendServiceGrpc.newBlockingStub(channel).withInterceptors(i).send(req));
+    }
+}
+```
+
+Ante una `StatusRuntimeException` de `sendOne`, lea `errorDetail(e)`: para `OUTCOME_UNKNOWN`,
+reintente solo con el mismo `clientRef`; cuando `d.hasRetryAfterSeconds()`, espere ese tiempo y
+reintente; en otro caso, corrija la petición.
+
+### SendStream
+
+```java
+StreamObserver<SendStreamRequest> out = SendServiceGrpc.newStub(channel)
+        .withInterceptors(bearer())
+        .sendStream(new StreamObserver<>() {
+            @Override public void onNext(SendStreamResult r) {
+                if (r.getCode() == 0) accepted(r.getCorrelationId(), r.getResponse().getMessageId());
+                else refused(r.getCorrelationId(), r.getError().getCode(), r.getError().getMessage());
+            }
+            @Override public void onError(Throwable t) { reconnectAndResendPending(t); }   // mismo client_ref
+            @Override public void onCompleted()        { done(); }
+        });
+
+for (Message m : batch) {
+    out.onNext(SendStreamRequest.newBuilder()
+            .setCorrelationId(m.id())
+            .setRequest(SendRequest.newBuilder().setTo(m.to()).setContent(m.text()).setClientRef(m.id()))
+            .build());
+}
+out.onCompleted();
+```
+
+`onNext` se ejecuta en los propios hilos de gRPC, así que los resultados se leen mientras usted
+escribe. Para un lote muy grande, compruebe `isReady()` en un `ClientCallStreamObserver` (o use
+`ClientResponseObserver`) antes de cada escritura, para que su proceso no acumule en búfer lo que la
+pasarela aún no está leyendo.
+
+### Acuses con Pull
+
+```java
+ReceiptServiceGrpc.ReceiptServiceBlockingStub receipts =
+        ReceiptServiceGrpc.newBlockingStub(channel);
+while (running) {
+    PullResponse r = call(i -> receipts.withInterceptors(i)
+            .pull(PullRequest.newBuilder().setMax(500).setWaitSeconds(20).build()));
+    if (r.getReceiptsCount() == 0) continue;
+    r.getReceiptsList().forEach(this::store);                // idempotente sobre (id, level)
+    AckRequest.Builder ack = AckRequest.newBuilder();
+    r.getReceiptsList().forEach(x -> ack.addAckTokens(x.getAckToken()));
+    call(i -> receipts.withInterceptors(i).ack(ack.build()));
+}
+```
+
+## Go (grpc-go)
+
+Genere con `protoc --go_out=. --go-grpc_out=. fireflo.proto` (plugins `protoc-gen-go` y
+`protoc-gen-go-grpc`). El nombre del paquete es `fireflov1`; la ruta de importación depende de su
+módulo y de los ajustes de `--go_opt`.
+
+### Login, el envoltorio de nuevo inicio de sesión y Send
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
+	fireflov1 "example.com/yourapp/gen/fireflo/v1"
+)
+
+type session struct {
+	auth  fireflov1.AuthServiceClient
+	token string
+}
+
+func (s *session) login(ctx context.Context) error {
+	r, err := s.auth.Login(ctx, &fireflov1.LoginRequest{
+		SystemId: "acme-http", Password: os.Getenv("SMS_PASSWORD"),
+	})
+	if err != nil {
+		return err
+	}
+	s.token = r.SessionToken
+	return nil
+}
+
+func (s *session) ctx(ctx context.Context) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+s.token)
+}
+
+// errorDetail devuelve el fireflo.v1.ErrorDetail de un rechazo, o nil.
+func errorDetail(err error) *fireflov1.ErrorDetail {
+	st, ok := status.FromError(err)
+	if !ok {
+		return nil
+	}
+	for _, d := range st.Details() {
+		if e, ok := d.(*fireflov1.ErrorDetail); ok {
+			return e
+		}
+	}
+	return nil
+}
+
+// call ejecuta f una vez; ante SESSION_EXPIRED inicia sesión de nuevo y lo ejecuta una vez más.
+func call[T any](ctx context.Context, s *session, f func(context.Context) (T, error)) (T, error) {
+	v, err := f(s.ctx(ctx))
+	if status.Code(err) == codes.Unauthenticated {
+		if d := errorDetail(err); d != nil && d.Code == "SESSION_EXPIRED" {
+			if lerr := s.login(ctx); lerr != nil {
+				return v, lerr
+			}
+			return f(s.ctx(ctx))
+		}
+	}
+	return v, err
+}
+
+func main() {
+	conn, err := grpc.NewClient("sms.example.com:8090",
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Con TLS: grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	ctx := context.Background()
+	s := &session{auth: fireflov1.NewAuthServiceClient(conn)}
+	if err := s.login(ctx); err != nil {
+		log.Fatal(err)
+	}
+	send := fireflov1.NewSendServiceClient(conn)
+
+	r, err := call(ctx, s, func(c context.Context) (*fireflov1.SendResponse, error) {
+		return send.Send(c, &fireflov1.SendRequest{
+			To:        "61491570006",
+			Content:   proto.String("Your OTP is 4417."),
+			Dlr:       proto.Bool(true),
+			ClientRef: proto.String("order-1001"),
+		})
+	})
+	if err != nil {
+		if d := errorDetail(err); d != nil && d.Code == "OUTCOME_UNKNOWN" {
+			// puede haber salido: reintente SOLO con el mismo ClientRef
+		}
+		log.Fatal(err)
+	}
+	fmt.Println(r.MessageId, r.GetPrice(), r.GetCurrency(), r.Duplicate)
+}
+```
+
+Los campos opcionales del proto son punteros en Go: establézcalos con `proto.String`, `proto.Bool` y
+`proto.Int32`, y léalos con los métodos `Get…` generados.
+
+### Acuses con Subscribe
+
+```go
+receipts := fireflov1.NewReceiptServiceClient(conn)
+stream, err := receipts.Subscribe(s.ctx(ctx), &fireflov1.SubscribeRequest{Window: proto.Int32(500)})
+if err != nil {
+	log.Fatal(err)
+}
+for {
+	x, err := stream.Recv()
+	if err != nil {
+		break // inicie sesión de nuevo si es SESSION_EXPIRED y vuelva a suscribirse: los acuses sin confirmar vuelven
+	}
+	store(x) // idempotente sobre (x.Id, x.Level)
+	if _, err := receipts.Ack(s.ctx(ctx), &fireflov1.AckRequest{AckTokens: []string{x.AckToken}}); err != nil {
+		log.Print(err) // seguro de repetir: un segundo Ack cuenta como already_gone
+	}
+}
+```
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Errores y códigos de estado" icon="triangle-exclamation" href="/developers/grpc/errors">
+    Qué significa cada rechazo, y cuáles reintentar.
+  </Card>
+  <Card title="El archivo proto" icon="file-code" href="/reference/grpc/proto">
+    El contrato a partir del cual se generan estos ejemplos.
+  </Card>
+</CardGroup>

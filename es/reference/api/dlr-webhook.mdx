@@ -6,6 +6,16 @@ description: "Lo que la pasarela hace POST a su dlr_url: cada campo, ambos forma
 La única dirección en la que **usted es el servidor**. Pídalo con `"dlr": "yes"` y un `dlr_url`
 en el envío.
 
+<Note>
+**¿Sin `dlr_url`? El feed de acuses de gRPC.** A partir de la pasarela 0.15.9, donde su proveedor haya
+activado la [API gRPC](/developers/grpc/overview), un envío puede indicar `"dlr": "yes"` sin `dlr_url`,
+por REST o por gRPC. Sus acuses, con los mismos campos que el cuerpo que se describe abajo, esperan al
+login que lo envió en una cola duradera que se lee por gRPC: consulte
+[Acuses de entrega por gRPC](/developers/grpc/receipts). **Un `dlr_url` siempre gana**: un mensaje que lo
+tiene se envía aquí y nunca aparece en el feed. Sin gRPC, `"dlr": "yes"` sin `dlr_url` se rechaza con
+`400`, porque sus acuses no tendrían adónde ir.
+</Note>
+
 ## `json`: el valor por defecto
 
 Un `POST` con `Content-Type: application/json`:
