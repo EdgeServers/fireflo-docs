@@ -71,8 +71,14 @@ every customer's `dlr_url`; an egress firewall rule for the one host is the bett
 
 <Steps>
   <Step title="Was a dlr_url supplied at all?">
-    Over HTTP it must be present and URL-encoded, and `dlr` must be `yes`. Setting one without the
-    other does nothing.
+    Over HTTP it must be present and URL-encoded, and `dlr` must be `yes`. A `dlr_url` without `dlr`
+    does nothing.
+
+    From 0.15.9, with the [gRPC API](/platform/operations/grpc) on and its receipt feed enabled (the
+    default once gRPC is on), `dlr=yes` **without** a `dlr_url` is accepted — and its receipts never
+    reach a webhook. They wait in the sending login's gRPC receipt feed until the customer reads and
+    acknowledges them. A customer who expected a callback and sent no URL is reading the wrong place;
+    health's `grpc.receipts` shows which logins have receipts waiting.
   </Step>
   <Step title="Is the endpoint reachable from the gateway host?">
     Not from your laptop — from the host or container the gateway runs on. Egress policy, split DNS

@@ -82,6 +82,17 @@ Without these, the gateway starts with no pricing. A message that matches no rat
 A range lets the installer pick the next free listener port, which is what makes several instances on
 one host practical. See [Several instances](/platform/install/multiple-instances).
 
+From 0.15.9 the gRPC API has a port too, and it stays **off** unless you ask for it:
+
+```bash
+--grpc                                  # port 8090, bound to 127.0.0.1
+--grpc-port 8090 --grpc-host 0.0.0.0    # a proxy elsewhere, or direct clients
+```
+
+Bound to loopback, it is for a proxy on the same host and nothing is opened in the firewall. Bound
+wider, `--firewall` opens it — and a proxy in front then needs `smsg.grpc.proxy.forwarding`, or
+fail2ban bans the proxy. See [Running the gRPC API](/platform/operations/grpc).
+
 ## The two tokens
 
 The installer generates both and writes them to the environment file.

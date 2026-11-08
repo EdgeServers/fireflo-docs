@@ -143,6 +143,7 @@
                   "platform/operations/diagnostics",
                   "platform/operations/reload",
                   "platform/operations/tokens-and-access",
+                  "platform/operations/grpc",
                   "platform/operations/blocking-abusive-clients",
                   "platform/operations/generating-traffic",
                   "platform/operations/throughput",
@@ -209,6 +210,17 @@
                 ]
               },
               {
+                "group": "gRPC API",
+                "pages": [
+                  "developers/grpc/overview",
+                  "developers/grpc/authentication",
+                  "developers/grpc/sending",
+                  "developers/grpc/errors",
+                  "developers/grpc/receipts",
+                  "developers/grpc/examples"
+                ]
+              },
+              {
                 "group": "SMPP",
                 "pages": [
                   "developers/smpp/binding",
@@ -259,6 +271,12 @@
                   "reference/api/ping",
                   "reference/api/dlr-webhook",
                   "reference/api/errors"
+                ]
+              },
+              {
+                "group": "gRPC API",
+                "pages": [
+                  "reference/grpc/proto"
                 ]
               },
               {
@@ -430,6 +448,7 @@
                   "fr/platform/operations/diagnostics",
                   "fr/platform/operations/reload",
                   "fr/platform/operations/tokens-and-access",
+                  "fr/platform/operations/grpc",
                   "fr/platform/operations/generating-traffic",
                   "fr/platform/operations/throughput",
                   "fr/platform/operations/faq"
@@ -495,6 +514,17 @@
                 ]
               },
               {
+                "group": "gRPC API",
+                "pages": [
+                  "fr/developers/grpc/overview",
+                  "fr/developers/grpc/authentication",
+                  "fr/developers/grpc/sending",
+                  "fr/developers/grpc/errors",
+                  "fr/developers/grpc/receipts",
+                  "fr/developers/grpc/examples"
+                ]
+              },
+              {
                 "group": "SMPP",
                 "pages": [
                   "fr/developers/smpp/binding",
@@ -544,6 +574,12 @@
                   "fr/reference/api/ping",
                   "fr/reference/api/dlr-webhook",
                   "fr/reference/api/errors"
+                ]
+              },
+              {
+                "group": "gRPC API",
+                "pages": [
+                  "fr/reference/grpc/proto"
                 ]
               },
               {
@@ -715,6 +751,7 @@
                   "es/platform/operations/diagnostics",
                   "es/platform/operations/reload",
                   "es/platform/operations/tokens-and-access",
+                  "es/platform/operations/grpc",
                   "es/platform/operations/generating-traffic",
                   "es/platform/operations/throughput",
                   "es/platform/operations/faq"
@@ -780,6 +817,17 @@
                 ]
               },
               {
+                "group": "gRPC API",
+                "pages": [
+                  "es/developers/grpc/overview",
+                  "es/developers/grpc/authentication",
+                  "es/developers/grpc/sending",
+                  "es/developers/grpc/errors",
+                  "es/developers/grpc/receipts",
+                  "es/developers/grpc/examples"
+                ]
+              },
+              {
                 "group": "SMPP",
                 "pages": [
                   "es/developers/smpp/binding",
@@ -829,6 +877,12 @@
                   "es/reference/api/ping",
                   "es/reference/api/dlr-webhook",
                   "es/reference/api/errors"
+                ]
+              },
+              {
+                "group": "gRPC API",
+                "pages": [
+                  "es/reference/grpc/proto"
                 ]
               },
               {
@@ -1000,6 +1054,7 @@
                   "pt/platform/operations/diagnostics",
                   "pt/platform/operations/reload",
                   "pt/platform/operations/tokens-and-access",
+                  "pt/platform/operations/grpc",
                   "pt/platform/operations/generating-traffic",
                   "pt/platform/operations/throughput",
                   "pt/platform/operations/faq"
@@ -1065,6 +1120,17 @@
                 ]
               },
               {
+                "group": "gRPC API",
+                "pages": [
+                  "pt/developers/grpc/overview",
+                  "pt/developers/grpc/authentication",
+                  "pt/developers/grpc/sending",
+                  "pt/developers/grpc/errors",
+                  "pt/developers/grpc/receipts",
+                  "pt/developers/grpc/examples"
+                ]
+              },
+              {
                 "group": "SMPP",
                 "pages": [
                   "pt/developers/smpp/binding",
@@ -1114,6 +1180,12 @@
                   "pt/reference/api/ping",
                   "pt/reference/api/dlr-webhook",
                   "pt/reference/api/errors"
+                ]
+              },
+              {
+                "group": "gRPC API",
+                "pages": [
+                  "pt/reference/grpc/proto"
                 ]
               },
               {

@@ -39,7 +39,7 @@ depth under normal load first — `router_queue` and each worker's `queue_depth`
 
 | Property | Default | Description |
 | :--- | :--- | :--- |
-| `smsg.restapi.maxRate.default` | `0` | Messages per second per billing account. `0` is unlimited. |
+| `smsg.restapi.maxRate.default` | `0` | Messages per second per billing account, **REST and gRPC together** (from 0.15.9). `0` is unlimited. |
 | `smsg.restapi.maxRate.<accountId>` | *(unset)* | Ceiling for one account, overriding the default. |
 | `quarkus.http.limits.max-body-size` | `1M` | Largest request body accepted. |
 | `quarkus.http.read-timeout` | `60S` | How long a request may take to arrive. |
@@ -47,6 +47,9 @@ depth under normal load first — `router_queue` and each worker's `queue_depth`
 
 Keyed on the **account**, not the credential: one account may hold several logins, and a per-login key
 would let a customer raise their own ceiling by creating another one.
+
+The [gRPC API](/platform/operations/grpc) has no ceiling of its own, deliberately: its sends count
+against this one, so moving traffic from REST to gRPC cannot double what an account is allowed.
 
 The check runs before the message is rated or charged, so a refused message is never billed. The
 caller gets `429`, deliberately not `403` — nothing about the request or the credential is wrong.

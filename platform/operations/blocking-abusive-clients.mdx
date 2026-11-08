@@ -24,6 +24,7 @@ One line per refusal, in a file that holds nothing else.
 | :--- | :--- |
 | A refused SMPP bind | the gateway's `auth-failed.log` |
 | A refused password on the REST API | the same file |
+| A refused gRPC login, or a gRPC call without a valid token (from 0.15.9) | the same file |
 | A refused operator sign-in | the panel's `access/auth-failed-<date>.jsonl` |
 | A refused customer portal sign-in | the same panel file |
 
@@ -33,7 +34,13 @@ The gateway's file looks like this, and is meant to be read by hand as well as b
 2026-09-07 19:04:11,204 WARN  auth.refused surface=smpp reason=badPassword identity="acme" ip=203.0.113.9
 ```
 
-so `grep ip=203.0.113.9 auth-failed.log` answers the obvious question with no tooling.
+so `grep ip=203.0.113.9 auth-failed.log` answers the obvious question with no tooling. SMPP and gRPC
+lines also name the listener and the port the attempt arrived on, so you can see which port is being
+worked:
+
+```
+2026-11-09 10:12:03,511 WARN  auth.refused surface=grpc reason=badPassword identity="acme" listener=grpc port=8090 ip=203.0.113.9
+```
 
 **It is empty on a healthy gateway.** Nothing writes to it until somebody fails to log in, which is
 why it can afford to be on everywhere and cheap for fail2ban to watch.
@@ -74,6 +81,14 @@ guessing anything. Those refusals are counted on the metrics endpoint instead �
 [Prometheus and Grafana](/platform/operations/prometheus-grafana).
 </Accordion>
 
+<Accordion title="An expired gRPC session">
+gRPC sessions live in the gateway's memory, so a restart — or a customer's channel moving to another
+node — expires every one of them, and each customer's next call is refused once with
+`reason=sessionExpired` before it logs in again. **That reason never bans.** Counting it would ban
+every reconnecting customer after every restart, on every port. It is still written, so the Security
+page shows it. A gRPC call with **no** token at all is `missingCredential`, and does count.
+</Accordion>
+
 <Accordion title="A sign-in link we could not send">
 If your SMTP is unconfigured, or the panel's base URL is unset, a customer's sign-in link fails to
 send. That is your fault, not theirs. Blocking them for it would cut a customer off because your
@@ -81,6 +96,13 @@ mailer broke, and they would never learn why.
 </Accordion>
 
 </AccordionGroup>
+
+<Warning>
+**Behind a proxy, the address on every line is the proxy's** unless the gateway trusts its
+`X-Forwarded-For` — `quarkus.http.proxy.proxy-address-forwarding` for REST, and for gRPC
+`smsg.grpc.proxy.forwarding` (which follows the REST setting when unset). Without it, fail2ban bans the
+proxy and every customer behind it. See [Running the gRPC API](/platform/operations/grpc#behind-a-proxy).
+</Warning>
 
 ## Fill in the never-ban list first
 
@@ -139,6 +161,10 @@ Off unless you ask for it. It edits host security configuration, and a flag that
 on an upgrade is how an install starts refusing its own customers. It refuses rather than
 half-installing when fail2ban is not present, because jails written for a fail2ban that is not there
 produce a host that looks protected and is not.
+
+From 0.15.9, `update` also refreshes an installed `filter.d/fireflo-gateway.conf` when the release's
+differs — the 0.15.9 filter is the one that ignores `sessionExpired` — and reloads fail2ban. It never
+installs a filter where fail2ban was not set up.
 
 What it writes:
 

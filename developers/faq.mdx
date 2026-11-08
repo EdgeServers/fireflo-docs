@@ -58,7 +58,8 @@ into the next burst, turning a momentary limit into a sustained one.
 
 <Accordion title="How do I know a message was delivered?">
 A [delivery receipt](/developers/receive/delivery-receipts), and only that. Ask for one with
-`"dlr": "yes"` and a `dlr_url`.
+`"dlr": "yes"` and a `dlr_url` — or, where your provider has turned on the gRPC API, with `"dlr": "yes"`
+alone, and collect it from the [gRPC receipt feed](/developers/grpc/receipts).
 
 Wait for a **level 2** receipt. `ACCEPTD` and `BUFFRED` arrive as level 1 and another follows — a
 client treating the first receipt as final reports the wrong outcome permanently.

@@ -40,8 +40,8 @@ runs, so the outcome can only reach you as a
 
 | Field | Type | Default | Notes |
 | :--- | :--- | :--- | :--- |
-| `dlr` | string | `no` | `yes` to receive a receipt. **Requires `dlr_url`.** |
-| `dlr_url` | string | — | Where the receipt is POSTed. Mandatory once `dlr` is `yes`. |
+| `dlr` | string | `no` | `yes` to receive a receipt. **Requires `dlr_url`** — unless the platform runs the gRPC receipt feed, below. |
+| `dlr_url` | string | — | Where the receipt is POSTed. Mandatory once `dlr` is `yes`, except with the gRPC receipt feed. When given, it always wins: the receipts go here and never to the feed. |
 | `dlr_level` | integer | `2` | `1` progress only, `2` the outcome, `3` both. **Level 1 alone does not send the outcome.** |
 | `hex_content` | string | — | Body as hex octets, decoded with the charset for your `coding`. **An odd length is a `400`.** |
 | `validity_period` | integer | — | Minutes the carrier should keep trying. **A whole number, not a duration string.** |
@@ -49,6 +49,16 @@ runs, so the outcome can only reach you as a
 | `product` | string | your login's product | Prices this message on a different product. Only products your operator has allowed for this login — **most logins are allowed none**. |
 | `custom_tlvs` | object | — | Extra SMPP parameters as a JSON **object** — `{"0x1401": "…"}`. Not a list of pairs, not a quoted string. |
 | `client_ref` | string | — | From 0.12.15. Your own reference for this send, 1–64 printable characters. A repeat inside 24 hours is answered with the first send's `messageId` instead of sending again — see [Retrying safely](#retrying-safely-with-client_ref). |
+
+### `dlr` without `dlr_url`: the gRPC receipt feed
+
+From gateway 0.15.9, on a platform where your provider has turned the [gRPC API](/developers/grpc/overview)
+on, `"dlr": "yes"` with **no** `dlr_url` is accepted. The message's receipts wait for your login in a
+durable queue, with the same fields the webhook carries, and you collect them over gRPC — `Subscribe`
+or `Pull`, then `Ack`. See [Delivery receipts over gRPC](/developers/grpc/receipts).
+
+Where gRPC is off, that request is refused as it always was: `400`, `Mandatory argument dlr-url is not
+found.` A `dlr_url`, when you give one, still wins.
 
 ## Retrying safely with `client_ref`
 
@@ -101,7 +111,7 @@ passed to the carrier unchanged, so it chooses how the body is encoded, not mere
 
 | Status | `message` | When |
 | :--- | :--- | :--- |
-| 400 | `Mandatory argument to is not found.` | `to` absent or blank. The same shape names `content`, `dlr_url` and the rest. |
+| 400 | `Mandatory argument to is not found.` | `to` absent or blank. The same shape names `content`, `dlr-url` (on a platform without the gRPC receipt feed) and the rest. |
 | 400 | `Unknown argument: <name>` | A field the API does not have — **including `username` and `password`**, which belong in the header. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Right name, wrong shape — a non-numeric `coding`. |
 | 402 | `Insufficient credit` | Prepaid balance will not cover it. **Nothing sent, nothing charged.** |

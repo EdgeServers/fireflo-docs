@@ -1,0 +1,190 @@
+---
+title: "Delivery receipts over gRPC"
+description: "A durable queue of receipts per login, read with Subscribe or Pull and cleared with Ack: which receipts land there, at-least-once delivery, leases and replay, ordering, and the limits."
+---
+
+Receipts for your messages can wait for you in **one durable queue per HTTP login** until you
+acknowledge them. You read that queue over gRPC in either of two ways — a server stream
+(**`Subscribe`**) or polling (**`Pull`**) — and remove each receipt with **`Ack`**. Both read the same
+queue.
+
+It is the alternative to running a [webhook endpoint](/reference/api/dlr-webhook): nothing to expose
+to the internet, nothing for the gateway to retry against, and receipts kept until you have them.
+
+## Which receipts land in the feed
+
+A receipt is queued for your login when **all** of these hold:
+
+- the message was sent by your HTTP login — over gRPC **or over REST**;
+- it asked for receipts — `dlr: true` on gRPC, `"dlr": "yes"` on REST — and this receipt is one it asked
+  for (`dlr_level`: `1` progress, `2` the outcome, `3` both);
+- it carries **no `dlr_url`**.
+
+**The webhook wins.** A message sent with a `dlr_url` has its receipts sent to that URL and never to
+the feed. Messages sent over SMPP never appear in it — they get their receipts on the bind.
+
+<Note>
+**REST sends can use the feed too.** On a platform with gRPC and the feed switched on, REST accepts
+`"dlr": "yes"` with no `dlr_url`, and those receipts land here. Where gRPC is off, that REST request is
+still refused `400`, because the receipts would have nowhere to go. See
+[`POST /secure/send`](/reference/api/send).
+</Note>
+
+A message that reaches the receipt deadline — 24 hours by default — with no outcome gets one final
+`UNKNOWN` receipt in the feed, as a webhook would.
+
+## The `Receipt` message
+
+The webhook's JSON body, one field per key, plus two delivery fields at the end:
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `id` | string | The `message_id` your send returned. **This is how you correlate.** |
+| `stat` | string | The SMPP state: `DELIVRD`, `UNDELIV`, `EXPIRED`, `REJECTD`, `UNKNOWN`, `ACCEPTD`, `ENROUTE`, … |
+| `level` | int32 | `2` the outcome, `1` progress. **A level 1 receipt is not the outcome** — another follows. |
+| `sub_date` | string | When the message was accepted (ISO-8601, UTC). |
+| `done_date` | string | When this receipt's state was reached (ISO-8601, UTC). |
+| `to`, `from` | string | The message's destination and sender ID. |
+| `operator_msg_id` | string | The carrier's own reference — what to quote in a delivery query. |
+| `account_id`, `system_id` | string | The account billed and the login that sent it. |
+| `parts` | int32 | The number of segments the message was sent as. |
+| `vendor` | string | Absent unless your provider shares it. |
+| `err` | string | The failure code, when one was reported — see [what `err` means](/reference/api/dlr-webhook#what-err-means-and-what-it-does-not). |
+| `ack_token` | string | What `Ack` takes. **Opaque: store it as it is.** |
+| `delivery_count` | int32 | `1` on first delivery. More means this receipt was delivered before and not acknowledged. |
+
+Optional fields are **absent, not empty**, when there is nothing to say. Everything the
+[delivery receipts guide](/developers/receive/delivery-receipts) says about `level`, `stat` and `err`
+applies unchanged.
+
+## Delivery is at least once
+
+<Steps>
+  <Step title="A receipt leaves the queue only when you Ack it">
+    Or when retention removes it — see [Limits and retention](#limits-and-retention).
+  </Step>
+  <Step title="A delivered receipt is leased to you for 120 seconds">
+    Not acknowledged by then, it is delivered again — to whichever `Subscribe` or `Pull` of your login
+    asks next — with `delivery_count` up by one.
+  </Step>
+  <Step title="A stream that ends gives its receipts back at once">
+    When a `Subscribe` stream ends — you cancel, the connection drops, the gateway restarts — the
+    receipts it had delivered and you had not acknowledged are released **immediately**, not after the
+    lease.
+  </Step>
+</Steps>
+
+So after a reconnect you are sent again whatever you had not acknowledged. That is the replay, and it
+is what makes the feed safe across restarts on either side.
+
+<Warning>
+**Make your handling idempotent, and acknowledge after, never before.**
+
+- Key it on **`id` plus `level`** — a progress receipt and an outcome for one message are two receipts.
+- Treat a `delivery_count` above 1 as a possible repeat.
+- `Ack` only **after** you have stored or acted on a receipt. Acknowledging first and then crashing
+  loses it for good.
+</Warning>
+
+## `Ack`
+
+```proto
+rpc Ack(AckRequest) returns (AckResponse);   // ack_tokens: up to 1000 per call
+```
+
+| Answer field | Meaning |
+| :--- | :--- |
+| `acked` | Receipts removed now. |
+| `already_gone` | Tokens that removed nothing — already acknowledged, removed by retention, malformed, or another login's. |
+
+**`already_gone` is not an error.** An `Ack` repeated after a timeout is safe, which is exactly when you
+will repeat one. More than 1000 tokens in one call is `INVALID_ARGUMENT`.
+
+A token works on any gateway node and across restarts, but only for the login it was delivered to.
+Batch your acknowledgements: one `Ack` of 500 tokens is far cheaper than 500 of one.
+
+## `Pull`: polling
+
+```proto
+rpc Pull(PullRequest) returns (PullResponse);  // max 1..1000; wait_seconds 0..20
+```
+
+Returns up to `max` receipts (at most 1000), oldest first.
+
+- With none waiting and **`wait_seconds` above 0**, it waits up to that long — 20 seconds at most — and
+  returns as soon as one arrives. That is a long poll, and it is how you avoid a busy loop.
+- With **`wait_seconds: 0`** it returns at once, possibly empty.
+
+A typical loop:
+
+```
+loop:
+  r = Pull(max = 500, wait_seconds = 20)
+  handle(r.receipts)                       # store / act, idempotently
+  Ack([x.ack_token for x in r.receipts])   # only after handle succeeded
+```
+
+`Pull` suits a batch job, a worker that wakes on a timer, or a language whose streaming support you
+would rather not depend on.
+
+## `Subscribe`: streaming
+
+```proto
+rpc Subscribe(SubscribeRequest) returns (stream Receipt);  // window: unacked receipts in flight
+```
+
+Streams your queue: **what is already waiting first, then new receipts as they arrive.**
+
+`window` bounds how many delivered-but-unacknowledged receipts the stream holds. At the window the
+stream pauses until you `Ack` — on any channel. Unset, or above the gateway's maximum (1000 by
+default), the maximum is used.
+
+<Tip>
+A stream that seems to stop after exactly `window` receipts is waiting for your acknowledgements. Ack
+as you go, or in small batches — not at the end.
+</Tip>
+
+### Several readers share the queue
+
+Several `Subscribe` streams — and `Pull`s — of one login **share** the queue: each receipt goes to
+exactly one of them at a time. Use that to spread receipt handling over several workers. To give
+separate applications separate feeds, give them separate HTTP logins.
+
+## Ordering
+
+**Best effort, by arrival.** There is no ordering guarantee across gateway nodes, and a redelivered
+receipt arrives after newer ones. An outcome can arrive before a progress receipt for the same message.
+
+Order by `level` — `2` is final — and by `done_date`, never by arrival. **Once you hold a `level: 2`
+receipt for a message, ignore any `level: 1` that comes after it.**
+
+## Limits and retention
+
+| Limit | Default | What happens |
+| :--- | :--- | :--- |
+| Lease | 120 seconds | An unacknowledged receipt is delivered again after this. |
+| `Subscribe` window | 1000 | The widest window a stream can ask for. |
+| `Pull` size | 1000 | The most receipts one `Pull` returns. |
+| `Pull` wait | 20 seconds | The longest a `Pull` waits for a receipt to arrive. |
+| `Ack` size | 1000 tokens | More in one call is refused. |
+| Receipts queued per login | 1,000,000 | **Past it, newer receipts are not queued** until you acknowledge some. Each one left out is recorded against its message, so your provider can still see it. |
+| Retention | 7 days | Unacknowledged receipts older than this are deleted. |
+
+Your provider can change each of these.
+
+<Warning>
+**A login that asks for receipts and never reads its feed fills it.** It reaches the cap, and from
+then on new receipts are not queued — the old, unread ones are kept instead. If you switch receipts on
+without a `dlr_url`, run something that reads them. If you never want them, send `dlr: false`.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Examples" icon="code" href="/developers/grpc/examples">
+    Subscribe, Pull and Ack loops in Python, Java and Go.
+  </Card>
+  <Card title="The delivery receipt webhook" icon="webhook" href="/reference/api/dlr-webhook">
+    The same fields, POSTed to your URL instead.
+  </Card>
+</CardGroup>
