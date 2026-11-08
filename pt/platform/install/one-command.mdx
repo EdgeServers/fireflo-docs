@@ -82,6 +82,17 @@ registrada como **UNKNOWN**, não como grátis — entregue, e cobrada de ningu�
 Uma faixa deixa o installer escolher a próxima porta de listener livre, que é o que torna várias
 instâncias em um host práticas. Veja [Várias instâncias](/platform/install/multiple-instances).
 
+A partir da 0.15.9 a API gRPC também tem uma porta, e ela fica **desligada** a menos que você peça:
+
+```bash
+--grpc                                  # porta 8090, em bind em 127.0.0.1
+--grpc-port 8090 --grpc-host 0.0.0.0    # um proxy em outro lugar, ou clientes diretos
+```
+
+Em bind no loopback, ela serve a um proxy no mesmo host e nada é aberto no firewall. Em bind mais
+amplo, o `--firewall` a abre — e um proxy na frente passa a precisar de `smsg.grpc.proxy.forwarding`,
+ou o fail2ban bane o proxy. Veja [Operando a API gRPC](/platform/operations/grpc).
+
 ## Os dois tokens
 
 O installer gera ambos e os escreve no arquivo de ambiente.

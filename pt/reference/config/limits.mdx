@@ -40,7 +40,7 @@ definido.
 
 | Propriedade | Padrão | Descrição |
 | :--- | :--- | :--- |
-| `smsg.restapi.maxRate.default` | `0` | Mensagens por segundo por conta de billing. `0` é ilimitado. |
+| `smsg.restapi.maxRate.default` | `0` | Mensagens por segundo por conta de billing, **REST e gRPC juntos** (a partir da 0.15.9). `0` é ilimitado. |
 | `smsg.restapi.maxRate.<accountId>` | *(não definido)* | Teto para uma conta, sobrescrevendo o padrão. |
 | `quarkus.http.limits.max-body-size` | `1M` | Maior body de requisição aceito. |
 | `quarkus.http.read-timeout` | `60S` | Quanto tempo uma requisição pode levar para chegar. |
@@ -48,6 +48,9 @@ definido.
 
 Chaveado por **conta**, não por credencial: uma conta pode ter vários logins, e uma chave por login
 deixaria um cliente subir o próprio teto criando outro.
+
+A [API gRPC](/platform/operations/grpc) não tem teto próprio, de propósito: seus envios contam contra
+este, então mover tráfego do REST para o gRPC não consegue dobrar o que uma conta pode enviar.
 
 O check roda antes de a mensagem ser tarifada ou cobrada, então uma mensagem recusada nunca é
 cobrada. O chamador recebe `429`, deliberadamente não `403`. Nada na requisição ou na credencial

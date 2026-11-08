@@ -1,0 +1,202 @@
+---
+title: "Enviando mensagens"
+description: "Send para uma mensagem e uma resposta, SendStream para muitas num stream — cada campo ao lado do campo REST que ele espelha, a resposta, e como repetir sem enviar duas vezes."
+---
+
+O `SendService` tem dois métodos. **`Send`** recebe uma mensagem e dá uma resposta, e espelha o
+[`POST /secure/send`](/reference/api/send) campo a campo. **`SendStream`** carrega muitas mensagens num
+stream bidirecional, para volume sustentado.
+
+Os dois precisam do token de sessão do [Login](/developers/grpc/authentication) no metadado
+`authorization`.
+
+## `Send`: uma mensagem
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"to":"61491570006","from":"FireFlo","content":"Hello","client_ref":"order-8841"}' \
+  sms.example.com:8090 fireflo.v1.SendService/Send
+```
+
+```json
+{
+  "messageId": "123e4567-e89b-12d3-a456-426614174000",
+  "price": "0.0500",
+  "currency": "AUD",
+  "segments": 1
+}
+```
+
+<Warning>
+**Aceita significa enfileirada para entrega, não entregue** — exatamente como um `200` no REST. O
+desfecho só te chega como um [recibo de entrega](/developers/grpc/receipts).
+</Warning>
+
+## Campos
+
+Todo campo exceto `to` é `optional`: **um campo que você não define se comporta exatamente como uma
+chave JSON que você deixa de fora de uma requisição REST**, e assume o mesmo padrão. As mesmas
+aprovações, produtos, gramática de TLV e limites se aplicam, porque os dois passam pelas mesmas
+verificações.
+
+| Campo | Tipo | Campo REST | Padrão | Observações |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | `to` | — | **Obrigatório.** Destino, em formato internacional. Uma string vazia é um `to` ausente. |
+| `from` | string | `from` | seu nome de login | Sender ID. Precisa ser aprovado para sua conta. Vazio é o mesmo que não definido. |
+| `content` | string | `content` | — | Texto da mensagem. **Exatamente um entre `content` e `hex_content`.** |
+| `hex_content` | string | `hex_content` | — | O corpo como octetos hex, decodificado com o alfabeto que `coding` indica. Um comprimento ímpar é recusado. |
+| `coding` | int32 | `coding` | `0` | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. Os [mesmos valores](/reference/api/send#coding-values) do REST. |
+| `priority` | int32 | `priority` | `0` | `0`–`3`. `0` e `1` são normal, `2` e `3` alta. |
+| `validity_period` | int32 | `validity_period` | — | Minutos a partir da aceitação. Uma mensagem ainda esperando uma operadora depois disso não é enviada, e é reembolsada. |
+| `sdt` | string | `sdt` | — | Horário de entrega agendada, no formato do REST. |
+| `dlr` | bool | `dlr` | `false` | Pede recibos de entrega. **Nenhum `dlr_url` é necessário** — sem um, os recibos vão para o seu [feed de recibos](/developers/grpc/receipts). |
+| `dlr_level` | int32 | `dlr_level` | `2` | `1` só progresso, `2` o desfecho, `3` os dois. |
+| `dlr_url` | string | `dlr_url` | — | Envia os recibos desta mensagem para este webhook em vez do feed. **O webhook vence.** |
+| `custom_tlvs` | map&lt;string, TlvValue&gt; | `custom_tlvs` | — | Parâmetros SMPP extras. Chaves `"0xTAG"` ou `"0xTAG:Type"`, como no REST — veja [Custom TLVs](/developers/send/custom-tlvs). |
+| `client_ref` | string | `client_ref` | — | Sua referência para este envio, 1–64 caracteres imprimíveis. Uma repetição é respondida com o `message_id` do primeiro envio. Veja [Repetindo com segurança](#repetindo-com-segurança-com-client_ref). |
+| `product` | string | `product` | o produto do seu login | Tarifa esta mensagem em outro produto. Só produtos que seu provedor permitiu para este login. |
+
+`dlr_method` e `tags` do REST não são transportados; os números de campo deles ficam reservados para
+que nunca possam ser reutilizados para outra coisa.
+
+### Valores de `custom_tlvs`
+
+Cada valor é um `TlvValue` contendo exatamente um destes:
+
+| Membro | Tipo | Use para |
+| :--- | :--- | :--- |
+| `string_value` | string | Parâmetros de texto |
+| `int_value` | int64 | Inteiros com sinal |
+| `uint_value` | uint64 | Inteiros sem sinal até 2^64−1 **exatamente** — o que o REST aceita como um número JSON grande, como um entity id do DLT indiano |
+
+**A chave decide a codificação no fio, exatamente como no REST.** `"0x1401:Int8"` com `int_value: 42`
+é o inteiro de 8 bytes 42, como `"0x1401:Int8": 42` é no REST.
+
+```json
+{
+  "to": "919812345678",
+  "content": "Your OTP is 4417.",
+  "custom_tlvs": {
+    "0x1400": { "string_value": "1101234567890123456" },
+    "tmid_0x1402:Int8": { "uint_value": "1102000000000012345" }
+  }
+}
+```
+
+No JSON do proto3 — o que o `grpcurl` lê — um inteiro de 64 bits é escrito como string. Clientes
+gerados recebem um inteiro nativo.
+
+### Recibos: `dlr` e `dlr_url`
+
+| Você envia | Os recibos vão para |
+| :--- | :--- |
+| `dlr: true` com um `dlr_url` | Esse webhook, exatamente como no REST — veja [O webhook de recibo de entrega](/reference/api/dlr-webhook) |
+| `dlr: true`, sem `dlr_url` | O **feed de recibos** do seu login, lido com `Subscribe` ou `Pull` — veja [Recibos de entrega via gRPC](/developers/grpc/receipts) |
+| `dlr` não definido ou `false` | Lugar nenhum. O recibo ainda é registrado, e seu provedor consegue vê-lo. |
+
+**O webhook sempre vence**: uma mensagem com `dlr_url` nunca aparece no feed.
+
+<Note>
+Se seu provedor desligou o feed de recibos, `dlr: true` sem `dlr_url` é recusado com
+`INVALID_ARGUMENT` nomeando `dlr_url` — a mesma recusa que o REST dá — porque os recibos não teriam
+para onde ir.
+</Note>
+
+## A resposta
+
+| Campo | Significado |
+| :--- | :--- |
+| `message_id` | O identificador da mensagem, como o `messageId` do REST. Todo recibo o carrega como `id`. |
+| `duplicate` | `true` quando o `client_ref` repetiu um envio aceito: `message_id` é o do original, e nada foi enviado nem cobrado desta vez. |
+| `price` | Quanto custou a mensagem inteira, como string decimal com 4 casas. Ausente quando a mensagem não foi tarifada. |
+| `currency` | A moeda da conta. |
+| `segments` | Unidades cobradas: segmentos, ou `1` com cobrança por mensagem. |
+| `unrated` | `true` quando nenhuma tarifa casou e a mensagem saiu sem cobrança. |
+
+`price` é uma string de propósito: assim um valor decimal sobrevive inalterado em qualquer linguagem,
+coisa que um número de ponto flutuante não faria.
+
+## Repetindo com segurança com `client_ref`
+
+**Defina `client_ref` em todo envio que você possa repetir.** Uma repetição dentro de 24 horas a partir
+da mesma conta — via gRPC **ou REST**, seja qual for o login que enviou — é respondida com o
+`message_id` do primeiro envio e `duplicate: true`, e nada é enviado nem cobrado de novo.
+
+Um envio que foi **recusado** libera sua referência, então a requisição corrigida pode reutilizá-la. As
+regras são as do REST, descritas por completo em
+[Repetindo com segurança com `client_ref`](/reference/api/send#retrying-safely-with-client_ref) — incluindo a única brecha estreita
+num cluster de gateways.
+
+Isso importa sobretudo para uma resposta em particular: `UNKNOWN` com `OUTCOME_UNKNOWN`, em que a
+mensagem pode estar a caminho. **Repita essa só com o mesmo `client_ref`.** Veja
+[Erros e códigos de status](/developers/grpc/errors#outcome_unknown-retry-only-with-client_ref).
+
+## `SendStream`: muitas mensagens em um stream
+
+Para volume alto e sustentado. Você escreve `SendStreamRequest`s e lê `SendStreamResult`s num stream
+bidirecional.
+
+**Cada requisição** é um `correlation_id` à sua escolha e um `SendRequest` — exatamente a mensagem que
+você passaria para `Send`.
+
+**Cada resultado** é:
+
+| Campo | Significado |
+| :--- | :--- |
+| `correlation_id` | O seu, devolvido. É assim que você casa um resultado com sua requisição. |
+| `code` | O código de status gRPC que o `Send` unário teria retornado, como número: `0` é `OK`. |
+| `response` | Definido quando `code` é `0`: a mesma resposta do `Send`. |
+| `error` | Definido nos demais casos: o mesmo `ErrorDetail` do `Send` — veja [Erros e códigos de status](/developers/grpc/errors). |
+
+`correlation_id` precisa ter 1–64 caracteres. Um vazio ou mais longo é respondido — só para aquela
+requisição — com `INVALID_ARGUMENT` e `field: correlation_id`. Use algo único por requisição no
+stream; seu `client_ref` costuma ser a escolha natural.
+
+### Um resultado por requisição, em qualquer ordem
+
+As requisições são submetidas concorrentemente, então uma rápida ultrapassa uma lenta. **Case pelo
+`correlation_id`, nunca pela posição.**
+
+### Uma recusa é um resultado, não um erro do stream
+
+Um saldo vazio, o limite de taxa ou um campo inválido respondem **àquela requisição**, e o stream
+segue. O próprio stream só termina quando você fecha o seu lado — então com `OK`, depois do último
+resultado — ou quando o gateway para.
+
+### Leia continuamente, ou o stream trava
+
+O gateway segura no máximo **256** das suas requisições ao mesmo tempo num stream — sendo submetidas,
+ou respondidas e esperando você ler o resultado. Além disso, ele para de ler do stream até que um
+resultado seja lido, e o controle de fluxo comum do HTTP/2 segura suas escritas.
+
+Então: escreva tão rápido quanto sua biblioteca permitir, e **leia os resultados continuamente em
+outra thread ou task**. Um cliente que escreve tudo primeiro e lê depois para em 256.
+
+Para mais concorrência, abra mais streams — cada um tem seus próprios 256. Todos compartilham o limite
+de mensagens por segundo da sua conta, então mais streams compram concorrência, não taxa.
+
+### Quando o gateway para
+
+Um gateway sendo reiniciado encerra seus streams de forma limpa:
+
+1. As requisições que já estão sendo submetidas terminam, e seus resultados são enviados.
+2. As requisições recebidas mas ainda não iniciadas são respondidas com `UNAVAILABLE` /
+   `SHUTTING_DOWN` sem serem submetidas.
+3. O stream termina com `UNAVAILABLE` (`SHUTTING_DOWN`).
+
+Reconecte — a outro nó, ou a este quando ele voltar — faça login de novo e **reenvie só o que não tem
+resultado, com o mesmo `client_ref`**, para que nada seja enviado duas vezes.
+
+Uma conexão que cai sem esse encerramento ordenado te deixa com requisições sem resultado. Reenvie
+essas também, com o mesmo `client_ref`: as que foram aceitas voltam com `duplicate: true`.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Exemplos" icon="code" href="/developers/grpc/examples">
+    Send e SendStream em Python, Java e Go.
+  </Card>
+  <Card title="POST /secure/send" icon="book" href="/reference/api/send">
+    O gêmeo REST de cada campo acima.
+  </Card>
+</CardGroup>

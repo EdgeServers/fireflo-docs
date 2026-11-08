@@ -76,6 +76,7 @@ desconhecida em vez de ser interpretado.
 | `--whitelist` / `--no-whitelist` | Se a verificação de sender-ID e conteúdo começa ativada. |
 | `--balance` / `--no-balance` | Se o crédito pré-pago é aplicado. |
 | `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Portas. Uma faixa permite que o instalador escolha a próxima porta de listener livre. |
+| `--grpc` / `--grpc-port N` / `--grpc-host H` | Liga a [API gRPC](/platform/operations/grpc), na 8090 ou na porta `N`, em bind em `H` (padrão `127.0.0.1`, para um proxy no mesmo host). **Desligada a menos que informada.** No `update`, a porta só é escrita quando a flag é passada; uma existente é deixada como está. Uma porta já usada pelo listener SMPP, HTTP ou de gerenciamento desta instalação é recusada. |
 | `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ para o caminho REST. |
 | `--log-backups` / `--log-retain-days` | Retenção de logs, incluindo a regra `tmpfiles.d` que limpa o `httpapi.log`. |
 

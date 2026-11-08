@@ -3,13 +3,17 @@ title: "Envio de SMS com o FireFlo"
 description: "Duas formas de entrada, um mesmo conjunto de regras por trás delas e o punhado de coisas que se comportam diferente de outros gateways."
 ---
 
-Você pode chegar ao FireFlo por duas vias, e a escolha depende principalmente do volume e do que seu
+Você pode chegar ao FireFlo por três vias, e a escolha depende principalmente do volume e do que seu
 stack já fala.
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="REST" icon="code" href="/developers/quickstart">
     JSON sobre HTTPS. Uma chamada, uma mensagem. Comece por aqui, a menos que você tenha um motivo
     para não fazê-lo.
+  </Card>
+  <Card title="gRPC" icon="bolt" href="/developers/grpc/overview">
+    O envio REST sobre HTTP/2 e protobuf, com streaming e um feed de recibos. A partir da 0.15.9,
+    onde seu provedor o ligou.
   </Card>
   <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
     Um bind persistente. Maior throughput, e o que as próprias operadoras falam.
@@ -59,5 +63,6 @@ A única exceção é `custom_tlvs`, que mantém o sublinhado. `custom-tlvs` é 
 | Enviar para várias pessoas de uma vez | [Batches](/developers/send/batches) |
 | Saber por que uma mensagem longa custa três | [Codificação e segmentos](/developers/send/encoding-and-segments) |
 | Receber recibos de entrega | [Recibos de entrega](/developers/receive/delivery-receipts) |
+| Enviar via gRPC, ou coletar recibos sem um endpoint | [API gRPC](/developers/grpc/overview) |
 | Tratar um erro corretamente | [Erros](/developers/errors) |
 | Migrar do Jasmin | [Migrando do Jasmin](/developers/migrating/from-jasmin) |
