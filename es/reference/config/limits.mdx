@@ -39,7 +39,7 @@ profundidad bajo carga normal primero. `router_queue` y el `queue_depth` de cada
 
 | Propiedad | Predeterminado | Descripción |
 | :--- | :--- | :--- |
-| `smsg.restapi.maxRate.default` | `0` | Mensajes por segundo por cuenta de facturación. `0` es ilimitado. |
+| `smsg.restapi.maxRate.default` | `0` | Mensajes por segundo por cuenta de facturación, **REST y gRPC juntos** (desde la 0.15.9). `0` es ilimitado. |
 | `smsg.restapi.maxRate.<accountId>` | *(sin establecer)* | Techo para una cuenta, sobrescribiendo el predeterminado. |
 | `quarkus.http.limits.max-body-size` | `1M` | Cuerpo de petición más grande aceptado. |
 | `quarkus.http.read-timeout` | `60S` | Cuánto puede tardar una petición en llegar. |
@@ -47,6 +47,9 @@ profundidad bajo carga normal primero. `router_queue` y el `queue_depth` de cada
 
 Indexado por **cuenta**, no por credencial: una cuenta puede tener varios logins, y una clave por login
 dejaría que un cliente subiera su propio techo creando otro.
+
+La [API gRPC](/platform/operations/grpc) no tiene un techo propio, deliberadamente: sus envíos cuentan
+contra este, así que pasar tráfico de REST a gRPC no puede duplicar lo que se permite a una cuenta.
 
 La comprobación se ejecuta antes de que el mensaje sea tarificado o cobrado, así que un mensaje rechazado nunca se factura. El
 llamante recibe `429`, deliberadamente no `403`. Nada sobre la petición o la credencial está mal.

@@ -1,0 +1,132 @@
+---
+title: "Authentification et sessions"
+description: "Connectez-vous une fois avec votre login HTTP, portez le jeton de session à chaque appel, et reconnectez-vous quand la passerelle répond SESSION_EXPIRED — ce qu'elle fera, pour des raisons qui ne sont pas de votre fait."
+---
+
+Vous vous connectez **une fois** avec le même **login HTTP** que celui que vous utilisez pour
+l'authentification Basic REST, et vous obtenez un **jeton de session**. Chaque autre appel porte ce
+jeton dans ses métadonnées :
+
+```
+authorization: Bearer ffg1.Jq3…
+```
+
+```bash
+grpcurl -plaintext -d '{"system_id":"acme-http","password":"secret"}' \
+  sms.example.com:8090 fireflo.v1.AuthService/Login
+```
+
+```json
+{
+  "sessionToken": "ffg1.Jq3…",
+  "expiresAt": "2026-11-10T09:12:03Z",
+  "idleTimeoutSeconds": "3600"
+}
+```
+
+`grpcurl` affiche les noms de champs dans le camelCase de JSON ; les noms du proto sont
+`session_token`, `expires_at` et `idle_timeout_seconds`. Traitez le jeton comme opaque, et comme un
+secret : il vaut votre mot de passe jusqu'à son expiration.
+
+## Ce que vérifie Login
+
+Exactement ce que vérifie l'authentification Basic REST :
+
+- le login existe, et c'est un **login HTTP** avec un mot de passe ;
+- le mot de passe correspond ;
+- l'adresse depuis laquelle vous appelez fait partie des adresses autorisées du login, quand il en a.
+
+<Warning>
+**Un system id SMPP ne peut pas se connecter ici**, et le refus ne le dit pas : c'est le même
+`AUTH_FAILED` qu'obtient un mauvais mot de passe. Si un login fonctionne en SMPP et est refusé en
+gRPC, vérifiez son type avant de vérifier son mot de passe.
+</Warning>
+
+## Combien de temps dure un jeton
+
+| Limite | Défaut | Ce qui se passe |
+| :--- | :--- | :--- |
+| **Inactivité** | 1 heure | Sans aucun appel avec le jeton pendant cette durée, il expire. Chaque appel relance le compteur. |
+| **Absolue** | 24 heures | Le jeton expire cette durée après le Login, quelle que soit son activité. `expires_at` dans la réponse est ce moment. |
+| **Par login** | 64 sessions | Un Login au-delà met fin à la session la moins récemment utilisée de ce login. |
+
+Votre fournisseur peut modifier les trois ; `idle_timeout_seconds` dans la réponse de Login est la
+limite d'inactivité en vigueur.
+
+Un jeton est lié à **l'adresse à laquelle il a été émis** : présenté depuis une autre adresse, il est
+refusé. Il n'est pas lié à la connexion, donc un second canal depuis la même adresse peut utiliser le
+même jeton.
+
+## Se reconnecter : `SESSION_EXPIRED`
+
+Les sessions sont conservées dans la mémoire de la passerelle. Un jeton peut donc cesser de
+fonctionner à tout moment pour des raisons qui ne sont pas de votre fait :
+
+- la passerelle a redémarré ;
+- un load balancer a déplacé votre canal vers un autre nœud de passerelle ;
+- le jeton a atteint l'une des limites ci-dessus ;
+- votre login a été modifié ou désactivé.
+
+Chacun de ces cas reçoit la même réponse :
+
+```
+UNAUTHENTICATED, ErrorDetail.code = SESSION_EXPIRED
+```
+
+**Traitez-le en rappelant Login et en réessayant l'appel une fois avec le nouveau jeton.** Faites-le à
+un seul endroit de votre client — un intercepteur, ou un wrapper autour du stub — plutôt qu'à chaque
+point d'appel. Les [exemples](/developers/grpc/examples) montrent le wrapper en Python, Java et Go.
+
+<Note>
+**`SESSION_EXPIRED` n'est jamais compté contre votre adresse.** Des logins refusés à répétition depuis
+une adresse font bloquer cette adresse par votre fournisseur — sur tous les ports, comme pour REST et
+SMPP — mais une session expirée n'est pas un login refusé. Une flotte de clients qui se reconnectent
+après un redémarrage de la passerelle n'est pas bloquée pour cela. Tous les autres refus de cette page
+comptent, exactement comme un login REST échoué.
+</Note>
+
+Si le retry après un nouveau Login est de nouveau refusé, arrêtez : autre chose qu'une session expirée
+ne va pas, et boucler sur Login est ce qui fait bloquer une adresse.
+
+## Se déconnecter
+
+`Logout` met fin à la session immédiatement. C'est facultatif — un jeton inutilisé expire de lui-même —
+mais c'est la chose courtoise à faire pour un processus de courte durée, et cela libère l'un des
+64 emplacements du login.
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  sms.example.com:8090 fireflo.v1.AuthService/Logout
+```
+
+## Refus
+
+| Situation | Code gRPC | `ErrorDetail.code` |
+| :--- | :--- | :--- |
+| Login : mauvais mot de passe, login inconnu, pas un login HTTP, ou aucun mot de passe défini | `UNAUTHENTICATED` | `AUTH_FAILED` |
+| Login, ou tout appel : votre adresse ne fait pas partie des adresses autorisées du login | `PERMISSION_DENIED` | `AUTHORIZATION_FAILED` |
+| Pas de métadonnée `authorization`, ou pas un jeton `Bearer ffg1.…` | `UNAUTHENTICATED` | `MISSING_CREDENTIAL` |
+| Jeton inconnu, expiré, déconnecté, ou le login a depuis été désactivé | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+| Jeton présenté depuis une autre adresse que celle à laquelle il a été émis | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+
+**Les quatre refus de Login de la première ligne sont une seule réponse, à dessein.** Essayer des noms
+n'apprend rien à un appelant sur les logins qui existent.
+
+## Derrière votre propre proxy ou NAT
+
+Le jeton est lié à l'adresse que voit la passerelle. Si votre trafic sortant part par plusieurs
+adresses — un pool de passerelles NAT, par exemple — un jeton émis sur l'une et utilisé depuis une
+autre reçoit `SESSION_EXPIRED`. Soit vous attachez un canal à une seule adresse de sortie, soit vous
+laissez le wrapper de reconnexion s'en charger, en sachant que chaque changement d'adresse coûte un
+Login.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Erreurs et codes de statut" icon="triangle-exclamation" href="/developers/grpc/errors">
+    Chaque refus, et que faire.
+  </Card>
+  <Card title="Authentification REST" icon="key" href="/developers/authentication">
+    Le même login, en HTTP Basic.
+  </Card>
+</CardGroup>

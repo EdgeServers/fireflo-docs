@@ -54,9 +54,12 @@ A porta de gerenciamento carrega seu próprio token, e uma credencial de mensage
 | Porta | Serve |
 | ---: | :--- |
 | 8080 | `/secure/*`, `/ping` — o que os clientes chamam |
+| 8090 | A API gRPC — o que os clientes chamam, a partir da 0.15.9, **só quando você a liga** |
 | 9000 | `/q/metrics` e `/ops/*` |
 
 Mantenha a 9000 numa rede admin e não a publique. O token é uma segunda linha, não a primeira.
+Nunca dê à API gRPC a porta de gerenciamento: as duas precisam ser diferentes, e o installer se recusa
+a torná-las a mesma. Veja [Operando a API gRPC](/platform/operations/grpc).
 
 ## Ausente não é zero
 

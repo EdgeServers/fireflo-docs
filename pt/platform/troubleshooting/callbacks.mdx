@@ -28,8 +28,14 @@ subir o teto de threads.
 
 <Steps>
   <Step title="Uma dlr_url foi fornecida?">
-    Via HTTP ela precisa estar presente e URL-encoded, e `dlr` precisa ser `yes`. Definir um sem o
-    outro não faz nada.
+    Via HTTP ela precisa estar presente e URL-encoded, e `dlr` precisa ser `yes`. Uma `dlr_url` sem
+    `dlr` não faz nada.
+
+    A partir da 0.15.9, com a [API gRPC](/platform/operations/grpc) ligada e seu feed de receipts
+    habilitado (o padrão quando o gRPC está ligado), `dlr=yes` **sem** `dlr_url` é aceito — e seus
+    receipts nunca chegam a um webhook. Eles esperam no feed de receipts gRPC do login que enviou até
+    que o cliente os leia e confirme. Um cliente que esperava um callback e não enviou URL está olhando
+    no lugar errado; o `grpc.receipts` do health mostra quais logins têm receipts esperando.
   </Step>
   <Step title="O endpoint é alcançável a partir do host do gateway?">
     Não do seu laptop. Do host ou container onde o gateway roda. Política de egress, split DNS e

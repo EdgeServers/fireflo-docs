@@ -23,7 +23,7 @@ Everything else has a default. The complete table is on
 | `content` | — | Required unless you send `hex_content`. Never both. |
 | `from` | your login name | Must be approved, or `403`. |
 | `coding` | `0` | `8` for anything outside GSM-7 — halves your capacity. |
-| `dlr` | `no` | `yes` requires `dlr_url`. |
+| `dlr` | `no` | `yes` requires `dlr_url`, unless you collect receipts over [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Where the receipt is POSTed. |
 
 ## Quote the destination
@@ -89,6 +89,13 @@ Two fields, and both are needed — setting one without the other does nothing:
 ```
 
 `dlr_level` chooses which receipts you get: `1` progress only, `2` the outcome (default), `3` both.
+
+<Tip>
+**No endpoint to run?** From gateway 0.15.9, where your provider has turned on the gRPC API, you can
+send `"dlr": "yes"` with no `dlr_url` and collect the receipts from a durable feed over gRPC instead —
+see [Delivery receipts over gRPC](/developers/grpc/receipts). Elsewhere, `dlr` without `dlr_url` is a
+`400`.
+</Tip>
 
 <Warning>
 **Level 1 alone does not send the outcome.** A client asking for `1` and waiting for a final state

@@ -58,7 +58,8 @@ resincroniza en la siguiente ráfaga, convirtiendo un límite momentáneo en uno
 
 <Accordion title="¿Cómo sé si un mensaje se entregó?">
 Con un [acuse de entrega](/developers/receive/delivery-receipts), y solo así. Pida uno con
-`"dlr": "yes"` y un `dlr_url`.
+`"dlr": "yes"` y un `dlr_url`, o bien, donde su proveedor haya activado la API gRPC, solo con
+`"dlr": "yes"`, y recójalo del [feed de acuses de gRPC](/developers/grpc/receipts).
 
 Espere un acuse de **nivel 2**. `ACCEPTD` y `BUFFRED` llegan como nivel 1 y llega otro después.
 Un cliente que trate el primer acuse como final reportará el resultado equivocado de forma

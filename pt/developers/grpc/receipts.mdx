@@ -1,0 +1,193 @@
+---
+title: "Recibos de entrega via gRPC"
+description: "Uma fila durável de recibos por login, lida com Subscribe ou Pull e limpa com Ack: quais recibos chegam lá, entrega pelo menos uma vez, leases e replay, ordenação e os limites."
+---
+
+Os recibos das suas mensagens podem esperar por você em **uma fila durável por login HTTP** até que
+você os confirme. Você lê essa fila via gRPC de um de dois jeitos — um stream do servidor
+(**`Subscribe`**) ou polling (**`Pull`**) — e remove cada recibo com **`Ack`**. Os dois leem a mesma
+fila.
+
+É a alternativa a manter um [endpoint de webhook](/reference/api/dlr-webhook): nada para expor à
+internet, nada contra o que o gateway precise fazer retries, e recibos guardados até você pegá-los.
+
+## Quais recibos chegam ao feed
+
+Um recibo é enfileirado para o seu login quando **todas** estas condições valem:
+
+- a mensagem foi enviada pelo seu login HTTP — via gRPC **ou via REST**;
+- ela pediu recibos — `dlr: true` no gRPC, `"dlr": "yes"` no REST — e este recibo é um dos que ela
+  pediu (`dlr_level`: `1` progresso, `2` o desfecho, `3` os dois);
+- ela **não** traz `dlr_url`.
+
+**O webhook vence.** Uma mensagem enviada com `dlr_url` tem seus recibos enviados para essa URL e nunca
+para o feed. Mensagens enviadas via SMPP nunca aparecem nele — elas recebem seus recibos no bind.
+
+<Note>
+**Envios REST também podem usar o feed.** Numa plataforma com gRPC e o feed ligados, o REST aceita
+`"dlr": "yes"` sem `dlr_url`, e esses recibos chegam aqui. Onde o gRPC está desligado, essa requisição
+REST continua sendo recusada com `400`, porque os recibos não teriam para onde ir. Veja
+[`POST /secure/send`](/reference/api/send).
+</Note>
+
+Uma mensagem que chega ao prazo de recibo — 24 horas por padrão — sem desfecho recebe um último
+recibo `UNKNOWN` no feed, como um webhook receberia.
+
+## A mensagem `Receipt`
+
+O corpo JSON do webhook, um campo por chave, mais dois campos de entrega no final:
+
+| Campo | Tipo | Significado |
+| :--- | :--- | :--- |
+| `id` | string | O `message_id` que seu envio retornou. **É por ele que você correlaciona.** |
+| `stat` | string | O estado SMPP: `DELIVRD`, `UNDELIV`, `EXPIRED`, `REJECTD`, `UNKNOWN`, `ACCEPTD`, `ENROUTE`, … |
+| `level` | int32 | `2` o desfecho, `1` progresso. **Um recibo de nível 1 não é o desfecho** — outro vem em seguida. |
+| `sub_date` | string | Quando a mensagem foi aceita (ISO-8601, UTC). |
+| `done_date` | string | Quando o estado deste recibo foi alcançado (ISO-8601, UTC). |
+| `to`, `from` | string | O destino e o sender ID da mensagem. |
+| `operator_msg_id` | string | A referência da própria operadora — o que citar numa consulta de entrega. |
+| `account_id`, `system_id` | string | A conta cobrada e o login que enviou. |
+| `parts` | int32 | O número de segmentos em que a mensagem foi enviada. |
+| `vendor` | string | Ausente a menos que seu provedor o compartilhe. |
+| `err` | string | O código de falha, quando um foi reportado — veja [o que `err` significa](/reference/api/dlr-webhook#what-err-means-and-what-it-does-not). |
+| `ack_token` | string | O que o `Ack` recebe. **Opaco: guarde-o como está.** |
+| `delivery_count` | int32 | `1` na primeira entrega. Mais significa que este recibo foi entregue antes e não confirmado. |
+
+Campos opcionais ficam **ausentes, não vazios**, quando não há nada a dizer. Tudo o que o
+[guia de recibos de entrega](/developers/receive/delivery-receipts) diz sobre `level`, `stat` e `err`
+vale sem alteração.
+
+## A entrega é pelo menos uma vez
+
+<Steps>
+  <Step title="Um recibo só sai da fila quando você dá Ack nele">
+    Ou quando a retenção o remove — veja [Limites e retenção](#limites-e-retenção).
+  </Step>
+  <Step title="Um recibo entregue fica em lease com você por 120 segundos">
+    Se não for confirmado até lá, ele é entregue de novo — a qualquer `Subscribe` ou `Pull` do seu
+    login que peça em seguida — com `delivery_count` aumentado em um.
+  </Step>
+  <Step title="Um stream que termina devolve seus recibos na hora">
+    Quando um stream `Subscribe` termina — você cancela, a conexão cai, o gateway reinicia — os recibos
+    que ele havia entregado e você não havia confirmado são liberados **imediatamente**, não depois do
+    lease.
+  </Step>
+</Steps>
+
+Então, depois de uma reconexão, você recebe de novo tudo o que não tinha confirmado. Esse é o replay,
+e é o que torna o feed seguro diante de restarts de qualquer um dos lados.
+
+<Warning>
+**Torne seu tratamento idempotente, e confirme depois, nunca antes.**
+
+- Use como chave **`id` mais `level`** — um recibo de progresso e um desfecho para a mesma mensagem são
+  dois recibos.
+- Trate um `delivery_count` acima de 1 como uma possível repetição.
+- Dê `Ack` só **depois** de ter guardado ou agido sobre um recibo. Confirmar primeiro e depois cair o
+  perde para sempre.
+</Warning>
+
+## `Ack`
+
+```proto
+rpc Ack(AckRequest) returns (AckResponse);   // ack_tokens: até 1000 por chamada
+```
+
+| Campo da resposta | Significado |
+| :--- | :--- |
+| `acked` | Recibos removidos agora. |
+| `already_gone` | Tokens que não removeram nada — já confirmados, removidos pela retenção, malformados, ou de outro login. |
+
+**`already_gone` não é um erro.** Um `Ack` repetido depois de um timeout é seguro, e é exatamente
+nesse caso que você vai repetir um. Mais de 1000 tokens numa chamada é `INVALID_ARGUMENT`.
+
+Um token funciona em qualquer nó do gateway e através de restarts, mas só para o login ao qual foi
+entregue. Agrupe suas confirmações: um `Ack` de 500 tokens é muito mais barato que 500 de um.
+
+## `Pull`: polling
+
+```proto
+rpc Pull(PullRequest) returns (PullResponse);  // max 1..1000; wait_seconds 0..20
+```
+
+Retorna até `max` recibos (no máximo 1000), os mais antigos primeiro.
+
+- Sem nenhum esperando e com **`wait_seconds` acima de 0**, ele espera até esse tempo — 20 segundos no
+  máximo — e retorna assim que um chega. Isso é um long poll, e é como você evita um busy loop.
+- Com **`wait_seconds: 0`** ele retorna na hora, possivelmente vazio.
+
+Um loop típico:
+
+```
+loop:
+  r = Pull(max = 500, wait_seconds = 20)
+  handle(r.receipts)                       # guardar / agir, de forma idempotente
+  Ack([x.ack_token for x in r.receipts])   # só depois que handle deu certo
+```
+
+O `Pull` serve para um job em lote, um worker que acorda num timer, ou uma linguagem de cujo suporte
+a streaming você prefere não depender.
+
+## `Subscribe`: streaming
+
+```proto
+rpc Subscribe(SubscribeRequest) returns (stream Receipt);  // window: recibos não confirmados em andamento
+```
+
+Faz stream da sua fila: **primeiro o que já está esperando, depois os novos recibos à medida que
+chegam.**
+
+`window` limita quantos recibos entregues mas não confirmados o stream segura. Ao atingir a janela, o
+stream pausa até você dar `Ack` — em qualquer canal. Não definido, ou acima do máximo do gateway (1000
+por padrão), vale o máximo.
+
+<Tip>
+Um stream que parece parar depois de exatamente `window` recibos está esperando suas confirmações. Dê
+Ack conforme avança, ou em lotes pequenos — não no final.
+</Tip>
+
+### Vários leitores compartilham a fila
+
+Vários streams `Subscribe` — e `Pull`s — de um mesmo login **compartilham** a fila: cada recibo vai
+para exatamente um deles por vez. Use isso para distribuir o tratamento de recibos entre vários
+workers. Para dar feeds separados a aplicações separadas, dê a elas logins HTTP separados.
+
+## Ordenação
+
+**Melhor esforço, por ordem de chegada.** Não há garantia de ordem entre nós do gateway, e um recibo
+reentregue chega depois de outros mais novos. Um desfecho pode chegar antes de um recibo de progresso
+da mesma mensagem.
+
+Ordene por `level` — `2` é final — e por `done_date`, nunca pela chegada. **Quando você já tem um
+recibo `level: 2` de uma mensagem, ignore qualquer `level: 1` que venha depois.**
+
+## Limites e retenção
+
+| Limite | Padrão | O que acontece |
+| :--- | :--- | :--- |
+| Lease | 120 segundos | Um recibo não confirmado é entregue de novo depois disso. |
+| Janela do `Subscribe` | 1000 | A maior janela que um stream pode pedir. |
+| Tamanho do `Pull` | 1000 | O máximo de recibos que um `Pull` retorna. |
+| Espera do `Pull` | 20 segundos | O máximo que um `Pull` espera por um recibo. |
+| Tamanho do `Ack` | 1000 tokens | Mais numa chamada é recusado. |
+| Recibos enfileirados por login | 1.000.000 | **Além disso, recibos mais novos não são enfileirados** até você confirmar alguns. Cada um deixado de fora é registrado na sua mensagem, então seu provedor ainda consegue vê-lo. |
+| Retenção | 7 dias | Recibos não confirmados mais antigos que isso são apagados. |
+
+Seu provedor pode alterar cada um desses.
+
+<Warning>
+**Um login que pede recibos e nunca lê seu feed o enche.** Ele chega ao limite e, daí em diante,
+novos recibos não são enfileirados — os antigos, não lidos, é que ficam. Se você liga os recibos sem
+`dlr_url`, rode algo que os leia. Se você nunca os quer, envie `dlr: false`.
+</Warning>
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Exemplos" icon="code" href="/developers/grpc/examples">
+    Loops de Subscribe, Pull e Ack em Python, Java e Go.
+  </Card>
+  <Card title="O webhook de recibo de entrega" icon="webhook" href="/reference/api/dlr-webhook">
+    Os mesmos campos, enviados via POST para sua URL.
+  </Card>
+</CardGroup>

@@ -22,6 +22,12 @@ awaiting your provider's approval and is **not usable until they approve it**. T
 **gateway 0.9.7**; against anything older they answer `404`.
 </Note>
 
+<Tip>
+**The same send is also available over gRPC** from gateway 0.15.9, where your provider has turned it
+on: the same login, fields and rules, over HTTP/2 and protobuf, with streaming and a receipt feed. See
+[gRPC API](/developers/grpc/overview).
+</Tip>
+
 ## The envelope
 
 Every response is a JSON object with **either** `data` **or** `message` — never both, and never a

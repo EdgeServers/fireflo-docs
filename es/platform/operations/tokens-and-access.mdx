@@ -54,9 +54,12 @@ El puerto de gestión lleva su propio token en su lugar. Y una credencial de men
 | Puerto | Sirve |
 | ---: | :--- |
 | 8080 | `/secure/*`, `/ping`. Lo que llaman los clientes |
+| 8090 | La API gRPC. Lo que llaman los clientes, desde la 0.15.9, **solo cuando la activas** |
 | 9000 | `/q/metrics` y `/ops/*` |
 
 Mantén 9000 en una red admin y no lo publiques. El token es una segunda línea, no la primera.
+Nunca des a la API gRPC el puerto de gestión: los dos deben ser distintos, y el instalador se niega a
+hacerlos iguales. Consulta [Ejecutar la API gRPC](/platform/operations/grpc).
 
 ## Ausente no es cero
 

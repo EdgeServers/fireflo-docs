@@ -6,6 +6,15 @@ description: "What the gateway POSTs to your dlr_url — every field, both forma
 The one direction where **you are the server**. Ask for it with `"dlr": "yes"` and a `dlr_url` on the
 send.
 
+<Note>
+**No `dlr_url`? The gRPC receipt feed.** From gateway 0.15.9, where your provider has turned on the
+[gRPC API](/developers/grpc/overview), a send may say `"dlr": "yes"` with no `dlr_url` — over REST or
+gRPC. Its receipts, with the same fields as the body below, wait for the login that sent it in a durable
+queue read over gRPC: see [Delivery receipts over gRPC](/developers/grpc/receipts). **A `dlr_url`
+always wins**: a message that has one is sent here and never appears in the feed. Without gRPC,
+`"dlr": "yes"` with no `dlr_url` is refused `400`, because its receipts would have nowhere to go.
+</Note>
+
 ## `json` — the default
 
 A `POST` with `Content-Type: application/json`:

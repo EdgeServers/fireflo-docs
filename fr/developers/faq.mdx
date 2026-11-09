@@ -61,7 +61,8 @@ prolongée.
 
 <Accordion title="Comment savoir qu'un message a été livré ?">
 Un [accusé de livraison](/developers/receive/delivery-receipts), et rien d'autre. Demandez-en un
-avec `"dlr": "yes"` et un `dlr_url`.
+avec `"dlr": "yes"` et un `dlr_url` — ou, là où votre fournisseur a activé l'API gRPC, avec
+`"dlr": "yes"` seul, et récupérez-le depuis le [flux d'accusés gRPC](/developers/grpc/receipts).
 
 Attendez un accusé de **niveau 2**. `ACCEPTD` et `BUFFRED` arrivent en niveau 1 et un autre suit.
 Un client qui traite le premier accusé comme final rapportera toujours le mauvais résultat.

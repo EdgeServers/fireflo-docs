@@ -1,0 +1,120 @@
+---
+title: "Errores y códigos de estado"
+description: "Cada rechazo como estado REST, código gRPC y código de ErrorDetail lado a lado, qué hacer con cada uno, y por qué OUTCOME_UNKNOWN es UNKNOWN y no UNAVAILABLE."
+---
+
+Cada rechazo lleva un **`ErrorDetail`** en los detalles del estado, y dice lo que
+[`POST /secure/send`](/reference/api/send) habría respondido a la misma petición. Así que todo lo
+escrito sobre los errores de REST se aplica también aquí: el código gRPC es la forma que tiene el
+transporte de decirlo, y `ErrorDetail` es el detalle.
+
+## Leer `ErrorDetail`
+
+Viaja en el trailer estándar de estado enriquecido (`grpc-status-details-bin`). Léalo con la función
+auxiliar de su biblioteca:
+
+| Lenguaje | Función auxiliar |
+| :--- | :--- |
+| Java | `io.grpc.protobuf.StatusProto.fromThrowable(e)`, y luego desempaquete `fireflo.v1.ErrorDetail` de `getDetailsList()` |
+| Python | `grpc_status.rpc_status.from_call(e)` (paquete `grpcio-status`), y luego `Unpack` de cada detalle |
+| Go | `status.FromError(err)`, y luego recorra `st.Details()` |
+
+En un [`SendStream`](/developers/grpc/sending#sendstream-many-messages-on-one-stream) el mismo
+`ErrorDetail` llega en línea en el campo `error` del resultado, junto al `code` numérico.
+
+| Campo | Significado |
+| :--- | :--- |
+| `http_status` | El estado REST para el mismo rechazo. |
+| `code` | El código de error, como en la tabla siguiente. |
+| `message` | El mensaje de error de REST, palabra por palabra. También es el mensaje de estado gRPC. |
+| `retry_after_seconds` | Cuando reintentar ayuda: cuánto esperar, como el `Retry-After` de REST. |
+| `message_id` | Solo `OUTCOME_UNKNOWN`: el mensaje que puede estar en camino. |
+| `field` | Solo `INVALID_ARGUMENT`: el campo de la petición culpable, con su nombre en el proto. |
+
+**Ramifique según `code`, no según `message`.** El mensaje es para una persona que lee un log y puede
+redactarse de otra forma en una versión posterior; los códigos forman parte del contrato congelado.
+
+Cuando reintentar ayuda, se empaqueta un `google.rpc.RetryInfo` estándar junto a `ErrorDetail` con el
+mismo retardo, para las bibliotecas cliente que lo respetan.
+
+## Envío
+
+| Causa | REST | Código gRPC | `ErrorDetail.code` | Reintentar tras | Qué hacer |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Aceptado | 200 | `OK` | — | — | Guarde `message_id`. |
+| Mismo `client_ref` que un envío aceptado | 200, `duplicate` | `OK`, `duplicate: true` | — | — | No se volvió a enviar ni a cobrar nada. Trátelo como éxito. |
+| Un campo ausente, desconocido o no válido | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, con `field` | — | Corrija la petición. No la reintente sin cambios. |
+| Falta un parámetro SMPP obligatorio | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Añada el parámetro: consulte [TLV personalizados](/developers/send/custom-tlvs). |
+| El saldo no lo cubre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recargue y reintente. No se cobró nada. |
+| Por encima de los mensajes por segundo de su cuenta | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Espere y reintente. |
+| Sender ID no aprobado | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use un sender ID aprobado, o solicite este. |
+| La redacción no coincide con ninguna plantilla aprobada | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envíe una redacción aprobada, o solicite una plantilla. |
+| Producto no vendido / no permitido para el login / sin tarifa | 403 | `PERMISSION_DENIED` | `PRODUCT_NOT_SOLD` / `PRODUCT_NOT_ALLOWED` / `UNRATED` | — | Pregunte a su proveedor. No reintente sin cambios. |
+| No hay ruta para el destino | 403 | `PERMISSION_DENIED` | `NO_ROUTE` | — | Pregunte a su proveedor. No reintente sin cambios. |
+| La pasarela no está aceptando mensajes en este momento | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Reintente tras el retardo. |
+| La pasarela se está reiniciando | 503 | `UNAVAILABLE` | `SHUTTING_DOWN` | 5 s | Reconéctese, inicie sesión, reintente. |
+| El operador del destino está saturado / no conectado | 503 | `UNAVAILABLE` | `VENDOR_BACKLOG` / `VENDOR_UNAVAILABLE` | 30 s | Reintente tras el retardo. |
+| La base de datos de la pasarela no da abasto | 503 | `UNAVAILABLE` | `DB_UNAVAILABLE` | 5 s | Reintente tras el retardo. |
+| **La entrega interna no respondió; puede que el mensaje se haya enviado** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, con `message_id` | 5 s, sin `RetryInfo` | **Reintente solo con el mismo `client_ref`.** Consulte más abajo. |
+| Aceptado y no se pudo encolar | 500 | `INTERNAL` | `CANNOT_SEND` | — | Todo cargo se revierte. Reintente con el mismo `client_ref`. |
+| Un mensaje por encima del límite de tamaño | — | `RESOURCE_EXHAUSTED` | ninguno: lo genera el transporte | — | Envíelo más pequeño. |
+
+**Nada rechazado se cobra, y nada rechazado cuenta para su límite de tasa.**
+
+<Tip>
+`RESOURCE_EXHAUSTED` significa aquí dos cosas distintas. Con un `ErrorDetail` cuyo código es
+`RATE_LIMITED`, vaya más despacio. Sin ningún `ErrorDetail`, la petición era demasiado grande y nunca
+tendrá éxito tal como está.
+</Tip>
+
+## `OUTCOME_UNKNOWN`: reintente solo con `client_ref`
+
+<Warning>
+**`OUTCOME_UNKNOWN` es `UNKNOWN`, no `UNAVAILABLE`, a propósito.** Puede que el mensaje esté en camino
+y ya se haya cobrado. Muchas bibliotecas cliente de gRPC reintentan `UNAVAILABLE` automáticamente, lo
+que aquí lo enviaría dos veces.
+
+Reintente un `UNKNOWN` **solo con el mismo `client_ref`**. Si el primer intento llegó, recibe de vuelta
+su `message_id` con `duplicate: true` y no se vuelve a enviar nada. Si no llegó, el reintento lo envía.
+Sin `client_ref` no hay reintento seguro: el `message_id` del detalle es el que debe vigilar en un acuse.
+</Warning>
+
+Por el mismo motivo, si configura una política de reintentos en su biblioteca cliente (un
+`retryPolicy` en la configuración de servicio de gRPC), incluya en ella `UNAVAILABLE` y
+`RESOURCE_EXHAUSTED` y **nunca** `UNKNOWN`.
+
+## Sesiones y la propia API
+
+| Causa | REST | Código gRPC | `ErrorDetail.code` | Qué hacer |
+| :--- | :--- | :--- | :--- | :--- |
+| Login rechazado: login desconocido, contraseña incorrecta, no es un login HTTP | 403 | `UNAUTHENTICATED` | `AUTH_FAILED` | Compruebe la credencial. No repita en bucle. |
+| Su dirección no está entre las direcciones permitidas del login | 403 | `PERMISSION_DENIED` | `AUTHORIZATION_FAILED` | Llame desde una dirección permitida, o pida a su proveedor que la añada. |
+| Sin token de sesión, o uno mal formado | 401 | `UNAUTHENTICATED` | `MISSING_CREDENTIAL` | Inicie sesión primero, y envíe `authorization: Bearer …`. |
+| Token de sesión caducado, cerrado con Logout, emitido antes de un reinicio, o usado desde otra dirección | — | `UNAUTHENTICATED` | `SESSION_EXPIRED` | **Vuelva a iniciar sesión y reintente la llamada una vez.** Nunca cuenta en contra de su dirección. |
+| gRPC no está activado en esta plataforma | — | `UNAVAILABLE` | `GRPC_DISABLED` | Use REST, o pregunte a su proveedor. Reintentar no servirá. |
+
+`UNAUTHENTICATED` cubre tres situaciones distintas, así que lea `ErrorDetail.code`: solo
+`SESSION_EXPIRED` se resuelve volviendo a iniciar sesión. Consulte
+[Autenticación y sesiones](/developers/grpc/authentication).
+
+## Acuses
+
+| Causa | Código gRPC | `ErrorDetail.code` | Qué hacer |
+| :--- | :--- | :--- | :--- |
+| El feed de acuses está desactivado en esta plataforma | `FAILED_PRECONDITION` | `RECEIPTS_DISABLED` | Envíe con un `dlr_url` y reciba los acuses en un webhook. |
+| Más de 1000 tokens en un solo `Ack` | `INVALID_ARGUMENT` | con `field: ack_tokens` | Divida el `Ack`. |
+| El almacén de acuses no responde | `UNAVAILABLE` | `DB_UNAVAILABLE` | Reintente tras el retardo. |
+
+Un `Ack` que nombra un acuse que ya no existe **no** es un error: se cuenta en `already_gone`. Consulte
+[Acuses de entrega por gRPC](/developers/grpc/receipts#ack).
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Errores de la API REST" icon="triangle-exclamation" href="/reference/api/errors">
+    Los mismos rechazos, como estados HTTP.
+  </Card>
+  <Card title="Gestión de errores" icon="code-branch" href="/developers/errors">
+    Construir para el acuse en lugar de para la respuesta.
+  </Card>
+</CardGroup>

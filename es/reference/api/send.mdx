@@ -40,14 +40,24 @@ antes de que se ejecute el enrutamiento, así que el resultado solo puede llegar
 
 | Campo | Tipo | Por defecto | Notas |
 | :--- | :--- | :--- | :--- |
-| `dlr` | string | `no` | `yes` para recibir un acuse. **Requiere `dlr_url`.** |
-| `dlr_url` | string | — | Dónde se hace POST del acuse. Obligatorio una vez que `dlr` es `yes`. |
+| `dlr` | string | `no` | `yes` para recibir un acuse. **Requiere `dlr_url`**, salvo que la plataforma ejecute el feed de acuses de gRPC, más abajo. |
+| `dlr_url` | string | — | Dónde se hace POST del acuse. Obligatorio una vez que `dlr` es `yes`, salvo con el feed de acuses de gRPC. Cuando se indica, siempre gana: los acuses van aquí y nunca al feed. |
 | `dlr_level` | integer | `2` | `1` solo progreso, `2` el resultado, `3` ambos. **El nivel 1 por sí solo no envía el resultado.** |
 | `hex_content` | string | — | Cuerpo como octetos hex, decodificado con el charset de su `coding`. **Una longitud impar es un `400`.** |
 | `validity_period` | integer | — | Minutos que el operador debería seguir intentando. **Un número entero, no una cadena de duración.** |
 | `sdt` | string | — | Hora de entrega programada, pasada al operador sin cambios y **no validada aquí**. |
 | `product` | string | el producto de su login | Tarifica este mensaje sobre un producto distinto. Solo productos que su operador haya permitido para este login. **La mayoría de logins no tienen ninguno permitido.** |
 | `custom_tlvs` | object | — | Parámetros SMPP extra como **objeto** JSON: `{"0x1401": "…"}`. No una lista de pares, no una cadena entrecomillada. |
+
+### `dlr` sin `dlr_url`: el feed de acuses de gRPC
+
+A partir de la pasarela 0.15.9, en una plataforma donde su proveedor haya activado la
+[API gRPC](/developers/grpc/overview), se acepta `"dlr": "yes"` **sin** `dlr_url`. Los acuses del mensaje
+esperan a su login en una cola duradera, con los mismos campos que lleva el webhook, y usted los recoge
+por gRPC: `Subscribe` o `Pull`, y luego `Ack`. Consulte [Acuses de entrega por gRPC](/developers/grpc/receipts).
+
+Donde gRPC está desactivado, esa petición se rechaza como siempre: `400`, `Mandatory argument dlr-url is not
+found.` Un `dlr_url`, cuando lo indica, sigue ganando.
 
 ## Valores de `coding`
 
@@ -70,7 +80,7 @@ solo cómo se cuenta.
 
 | Estado | `message` | Cuándo |
 | :--- | :--- | :--- |
-| 400 | `Mandatory argument to is not found.` | `to` ausente o en blanco. La misma forma nombra `content`, `dlr_url` y el resto. |
+| 400 | `Mandatory argument to is not found.` | `to` ausente o en blanco. La misma forma nombra `content`, `dlr-url` (en una plataforma sin el feed de acuses de gRPC) y el resto. |
 | 400 | `Unknown argument: <name>` | Un campo que la API no tiene, **incluyendo `username` y `password`**, que pertenecen a la cabecera. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Nombre correcto, forma incorrecta: un `coding` no numérico. |
 | 402 | `Insufficient credit` | El saldo prepago no lo cubrirá. **Nada enviado, nada cobrado.** |

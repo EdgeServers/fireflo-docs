@@ -1,0 +1,120 @@
+---
+title: "Errors and status codes"
+description: "Every refusal as REST status, gRPC code and ErrorDetail code side by side, what to do about each — and why OUTCOME_UNKNOWN is UNKNOWN rather than UNAVAILABLE."
+---
+
+Every refusal carries an **`ErrorDetail`** in the status details, and it says what
+[`POST /secure/send`](/reference/api/send) would have answered for the same request. So everything
+written about REST errors applies here too — the gRPC code is the transport's way of saying it, and
+`ErrorDetail` is the detail.
+
+## Reading `ErrorDetail`
+
+It travels in the standard rich-status trailer (`grpc-status-details-bin`). Read it with your
+library's helper:
+
+| Language | Helper |
+| :--- | :--- |
+| Java | `io.grpc.protobuf.StatusProto.fromThrowable(e)`, then unpack `fireflo.v1.ErrorDetail` from `getDetailsList()` |
+| Python | `grpc_status.rpc_status.from_call(e)` (package `grpcio-status`), then `Unpack` each detail |
+| Go | `status.FromError(err)`, then range over `st.Details()` |
+
+On a [`SendStream`](/developers/grpc/sending#sendstream-many-messages-on-one-stream) the same
+`ErrorDetail` arrives inline in the result's `error` field, beside the numeric `code`.
+
+| Field | Meaning |
+| :--- | :--- |
+| `http_status` | The REST status for the same refusal. |
+| `code` | The error code, as in the table below. |
+| `message` | The REST error message, word for word. It is also the gRPC status message. |
+| `retry_after_seconds` | When a retry helps: how long to wait, as REST's `Retry-After`. |
+| `message_id` | `OUTCOME_UNKNOWN` only: the message that may be on its way. |
+| `field` | `INVALID_ARGUMENT` only: the request field at fault, as named in the proto. |
+
+**Branch on `code`, not on `message`.** The message is for a person reading a log and may be worded
+differently in a later release; the codes are part of the frozen contract.
+
+When a retry helps, a standard `google.rpc.RetryInfo` is packed beside `ErrorDetail` with the same
+delay, for client libraries that honour it.
+
+## Sending
+
+| Cause | REST | gRPC code | `ErrorDetail.code` | Retry after | What to do |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Accepted | 200 | `OK` | — | — | Keep `message_id`. |
+| Same `client_ref` as an accepted send | 200, `duplicate` | `OK`, `duplicate: true` | — | — | Nothing was sent again or charged. Treat as success. |
+| A missing, unknown or invalid field | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, with `field` | — | Fix the request. Do not retry unchanged. |
+| A required SMPP parameter is missing | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Add the parameter — see [Custom TLVs](/developers/send/custom-tlvs). |
+| Balance will not cover it | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Top up, then retry. Nothing was charged. |
+| Over your account's messages per second | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Back off and retry. |
+| Sender ID not approved | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use an approved sender ID, or ask for this one. |
+| Wording matches no approved template | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Send approved wording, or ask for a template. |
+| Product not sold / not allowed for the login / no rate | 403 | `PERMISSION_DENIED` | `PRODUCT_NOT_SOLD` / `PRODUCT_NOT_ALLOWED` / `UNRATED` | — | Ask your provider. Do not retry unchanged. |
+| No route for the destination | 403 | `PERMISSION_DENIED` | `NO_ROUTE` | — | Ask your provider. Do not retry unchanged. |
+| The gateway is not taking messages right now | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Retry after the delay. |
+| The gateway is restarting | 503 | `UNAVAILABLE` | `SHUTTING_DOWN` | 5 s | Reconnect, log in, retry. |
+| The destination's carrier is backed up / not connected | 503 | `UNAVAILABLE` | `VENDOR_BACKLOG` / `VENDOR_UNAVAILABLE` | 30 s | Retry after the delay. |
+| The gateway's database is not keeping up | 503 | `UNAVAILABLE` | `DB_UNAVAILABLE` | 5 s | Retry after the delay. |
+| **The hand-off did not answer; the message may have been sent** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, with `message_id` | 5 s, no `RetryInfo` | **Retry only with the same `client_ref`.** See below. |
+| Accepted and could not be queued | 500 | `INTERNAL` | `CANNOT_SEND` | — | Any charge is reversed. Retry with the same `client_ref`. |
+| A message over the size limit | — | `RESOURCE_EXHAUSTED` | none — raised by the transport | — | Send it smaller. |
+
+**Nothing refused is charged, and nothing refused counts against your rate limit.**
+
+<Tip>
+`RESOURCE_EXHAUSTED` means two different things here. With an `ErrorDetail` whose code is
+`RATE_LIMITED`, slow down. With no `ErrorDetail` at all, the request was too large and will never
+succeed as it is.
+</Tip>
+
+## `OUTCOME_UNKNOWN`: retry only with `client_ref`
+
+<Warning>
+**`OUTCOME_UNKNOWN` is `UNKNOWN`, not `UNAVAILABLE`, on purpose.** The message may be on its way and
+has been charged. Many gRPC client libraries retry `UNAVAILABLE` automatically — which here would
+send it twice.
+
+Retry an `UNKNOWN` **only with the same `client_ref`**. If the first attempt went through, you get its
+`message_id` back with `duplicate: true` and nothing is sent again. If it did not, the retry sends it.
+Without a `client_ref` there is no safe retry: the `message_id` in the detail is the one to watch for
+on a receipt.
+</Warning>
+
+For the same reason, if you configure a retry policy in your client library (a gRPC service config
+`retryPolicy`), list `UNAVAILABLE` and `RESOURCE_EXHAUSTED` in it and **never** `UNKNOWN`.
+
+## Sessions and the API itself
+
+| Cause | REST | gRPC code | `ErrorDetail.code` | What to do |
+| :--- | :--- | :--- | :--- | :--- |
+| Login refused: unknown login, wrong password, not an HTTP login | 403 | `UNAUTHENTICATED` | `AUTH_FAILED` | Check the credential. Do not loop. |
+| Your address is not on the login's allowed addresses | 403 | `PERMISSION_DENIED` | `AUTHORIZATION_FAILED` | Call from an allowed address, or ask your provider to add it. |
+| No session token, or a malformed one | 401 | `UNAUTHENTICATED` | `MISSING_CREDENTIAL` | Log in first, and send `authorization: Bearer …`. |
+| Session token expired, logged out, issued before a restart, or used from another address | — | `UNAUTHENTICATED` | `SESSION_EXPIRED` | **Log in again and retry the call once.** Never counted against your address. |
+| gRPC is not switched on for this platform | — | `UNAVAILABLE` | `GRPC_DISABLED` | Use REST, or ask your provider. Retrying will not help. |
+
+`UNAUTHENTICATED` covers three different situations, so read `ErrorDetail.code`: only
+`SESSION_EXPIRED` is cured by logging in again. See
+[Authentication and sessions](/developers/grpc/authentication).
+
+## Receipts
+
+| Cause | gRPC code | `ErrorDetail.code` | What to do |
+| :--- | :--- | :--- | :--- |
+| The receipt feed is switched off on this platform | `FAILED_PRECONDITION` | `RECEIPTS_DISABLED` | Send with a `dlr_url` and take receipts on a webhook. |
+| More than 1000 tokens in one `Ack` | `INVALID_ARGUMENT` | with `field: ack_tokens` | Split the `Ack`. |
+| The receipt store is not answering | `UNAVAILABLE` | `DB_UNAVAILABLE` | Retry after the delay. |
+
+An `Ack` naming a receipt that is already gone is **not** an error — it is counted in
+`already_gone`. See [Delivery receipts over gRPC](/developers/grpc/receipts#ack).
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="REST API errors" icon="triangle-exclamation" href="/reference/api/errors">
+    The same refusals, as HTTP statuses.
+  </Card>
+  <Card title="Handling errors" icon="code-branch" href="/developers/errors">
+    Building for the receipt rather than the response.
+  </Card>
+</CardGroup>

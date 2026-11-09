@@ -1,0 +1,201 @@
+---
+title: "Sending messages"
+description: "Send for one message and one answer, SendStream for many on one stream — every field beside the REST field it mirrors, the answer, and how to retry without sending twice."
+---
+
+`SendService` has two methods. **`Send`** takes one message and gives one answer, and mirrors
+[`POST /secure/send`](/reference/api/send) field for field. **`SendStream`** carries many messages on
+one bidirectional stream, for sustained volume.
+
+Both need the session token from [Login](/developers/grpc/authentication) in the `authorization`
+metadata.
+
+## `Send`: one message
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  -d '{"to":"61491570006","from":"FireFlo","content":"Hello","client_ref":"order-8841"}' \
+  sms.example.com:8090 fireflo.v1.SendService/Send
+```
+
+```json
+{
+  "messageId": "123e4567-e89b-12d3-a456-426614174000",
+  "price": "0.0500",
+  "currency": "AUD",
+  "segments": 1
+}
+```
+
+<Warning>
+**Accepted means queued for delivery, not delivered** — exactly as a `200` does on REST. The outcome
+reaches you only as a [delivery receipt](/developers/grpc/receipts).
+</Warning>
+
+## Fields
+
+Every field except `to` is `optional`: **a field you do not set behaves exactly as a JSON key you leave
+out of a REST request**, and takes the same default. The same approvals, products, TLV grammar and
+limits apply, because both reach the same checks.
+
+| Field | Type | REST field | Default | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| `to` | string | `to` | — | **Required.** Destination, international format. An empty string is a missing `to`. |
+| `from` | string | `from` | your login name | Sender ID. Must be approved for your account. Empty is the same as unset. |
+| `content` | string | `content` | — | Message text. **Exactly one of `content` and `hex_content`.** |
+| `hex_content` | string | `hex_content` | — | The body as hex octets, decoded with the alphabet `coding` names. An odd length is refused. |
+| `coding` | int32 | `coding` | `0` | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. The [same values](/reference/api/send#coding-values) as REST. |
+| `priority` | int32 | `priority` | `0` | `0`–`3`. `0` and `1` are normal, `2` and `3` high. |
+| `validity_period` | int32 | `validity_period` | — | Minutes from acceptance. A message still waiting for a carrier after it is not sent, and is refunded. |
+| `sdt` | string | `sdt` | — | Scheduled delivery time, in the REST format. |
+| `dlr` | bool | `dlr` | `false` | Ask for delivery receipts. **No `dlr_url` is needed** — without one, receipts go to your [receipt feed](/developers/grpc/receipts). |
+| `dlr_level` | int32 | `dlr_level` | `2` | `1` progress only, `2` the outcome, `3` both. |
+| `dlr_url` | string | `dlr_url` | — | Send this message's receipts to this webhook instead of the feed. **The webhook wins.** |
+| `custom_tlvs` | map&lt;string, TlvValue&gt; | `custom_tlvs` | — | Extra SMPP parameters. Keys `"0xTAG"` or `"0xTAG:Type"`, as on REST — see [Custom TLVs](/developers/send/custom-tlvs). |
+| `client_ref` | string | `client_ref` | — | Your reference for this send, 1–64 printable characters. A repeat is answered with the first send's `message_id`. See [Retrying safely](#retrying-safely-with-client_ref). |
+| `product` | string | `product` | your login's product | Prices this message on another product. Only products your provider has allowed for this login. |
+
+REST's `dlr_method` and `tags` are not carried; their field numbers are reserved so they can never be
+reused for something else.
+
+### `custom_tlvs` values
+
+Each value is a `TlvValue` holding exactly one of:
+
+| Member | Type | Use it for |
+| :--- | :--- | :--- |
+| `string_value` | string | Text parameters |
+| `int_value` | int64 | Signed integers |
+| `uint_value` | uint64 | Unsigned integers up to 2^64−1 **exactly** — what REST accepts as a large JSON number, such as an Indian DLT entity id |
+
+**The key decides the wire encoding, exactly as on REST.** `"0x1401:Int8"` with `int_value: 42` is
+the 8-byte integer 42, as `"0x1401:Int8": 42` is on REST.
+
+```json
+{
+  "to": "919812345678",
+  "content": "Your OTP is 4417.",
+  "custom_tlvs": {
+    "0x1400": { "string_value": "1101234567890123456" },
+    "tmid_0x1402:Int8": { "uint_value": "1102000000000012345" }
+  }
+}
+```
+
+In proto3 JSON — what `grpcurl` reads — a 64-bit integer is written as a string. Generated clients take
+a native integer.
+
+### Receipts: `dlr` and `dlr_url`
+
+| You send | Receipts go to |
+| :--- | :--- |
+| `dlr: true` with a `dlr_url` | That webhook, exactly as REST — see [The delivery receipt webhook](/reference/api/dlr-webhook) |
+| `dlr: true`, no `dlr_url` | Your login's **receipt feed**, read with `Subscribe` or `Pull` — see [Delivery receipts over gRPC](/developers/grpc/receipts) |
+| `dlr` unset or `false` | Nowhere. The receipt is still recorded, and your provider can see it. |
+
+**The webhook always wins**: a message with a `dlr_url` never appears on the feed.
+
+<Note>
+If your provider has switched the receipt feed off, `dlr: true` without a `dlr_url` is refused
+`INVALID_ARGUMENT` naming `dlr_url` — the same refusal REST gives — because the receipts would have
+nowhere to go.
+</Note>
+
+## The answer
+
+| Field | Meaning |
+| :--- | :--- |
+| `message_id` | The message's identifier, as REST's `messageId`. Every receipt carries it as `id`. |
+| `duplicate` | `true` when `client_ref` repeated an accepted send: `message_id` is the original's, and nothing was sent or charged this time. |
+| `price` | What the whole message cost, as a decimal string with 4 places. Absent when the message was not rated. |
+| `currency` | The account's currency. |
+| `segments` | Units charged: segments, or `1` with per-message billing. |
+| `unrated` | `true` when no rate matched and the message went uncharged. |
+
+`price` is a string on purpose: a decimal amount survives every language unchanged that way, where a
+floating-point number would not.
+
+## Retrying safely with `client_ref`
+
+**Set `client_ref` on every send you might retry.** A repeat inside 24 hours from the same account —
+over gRPC **or REST**, whichever login sent it — is answered with the first send's `message_id` and
+`duplicate: true`, and nothing is sent or charged again.
+
+A send that was **refused** frees its reference, so the corrected request may reuse it. The rules
+are REST's, described in full under
+[Retrying safely with `client_ref`](/reference/api/send#retrying-safely-with-client_ref) — including
+the one narrow gap on a gateway cluster.
+
+This matters most for one answer in particular: `UNKNOWN` with `OUTCOME_UNKNOWN`, where the message may
+be on its way. **Retry that only with the same `client_ref`.** See
+[Errors and status codes](/developers/grpc/errors#outcome_unknown-retry-only-with-client_ref).
+
+## `SendStream`: many messages on one stream
+
+For sustained high volume. You write `SendStreamRequest`s and read `SendStreamResult`s on one
+bidirectional stream.
+
+**Each request** is a `correlation_id` of your choosing and a `SendRequest` — exactly the message you
+would pass to `Send`.
+
+**Each result** is:
+
+| Field | Meaning |
+| :--- | :--- |
+| `correlation_id` | Yours, echoed back. This is how you match a result to its request. |
+| `code` | The gRPC status code the unary `Send` would have returned, as its number: `0` is `OK`. |
+| `response` | Set when `code` is `0`: the same answer as `Send`. |
+| `error` | Set otherwise: the same `ErrorDetail` as `Send` — see [Errors and status codes](/developers/grpc/errors). |
+
+`correlation_id` must be 1–64 characters. An empty or longer one is answered — for that request only —
+`INVALID_ARGUMENT` with `field: correlation_id`. Use something unique per request on the stream; your
+`client_ref` is often the natural choice.
+
+### One result per request, in any order
+
+Requests are submitted concurrently, so a quick one overtakes a slow one. **Match on
+`correlation_id`, never on position.**
+
+### A refusal is a result, not a stream error
+
+An empty balance, the rate limit or a bad field answers **that one request**, and the stream carries
+on. The stream itself ends only when you close your side — then with `OK`, after the last result — or
+when the gateway stops.
+
+### Read continuously, or the stream stalls
+
+The gateway holds at most **256** of your requests at once on one stream — being submitted, or
+answered and waiting for you to read the result. Past that it stops reading from the stream until a
+result has been read, and ordinary HTTP/2 flow control holds your writes back.
+
+So: write as fast as your library lets you, and **read results continuously on another thread or
+task**. A client that writes everything first and reads afterwards stops after 256.
+
+For more concurrency, open more streams — each has its own 256. They all share your account's
+messages-per-second limit, so more streams buy concurrency, not rate.
+
+### When the gateway stops
+
+A gateway being restarted ends its streams cleanly:
+
+1. Requests already being submitted finish, and their results are sent.
+2. Requests received but not yet started are answered `UNAVAILABLE` / `SHUTTING_DOWN` without being
+   submitted.
+3. The stream ends with `UNAVAILABLE` (`SHUTTING_DOWN`).
+
+Reconnect — to another node, or to this one when it is back — log in again, and **resend only what has
+no result, with the same `client_ref`**, so nothing is sent twice.
+
+A connection that drops without that orderly end leaves you with requests that have no result. Resend
+those too, with the same `client_ref`: whichever were accepted come back `duplicate: true`.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Examples" icon="code" href="/developers/grpc/examples">
+    Send and SendStream in Python, Java and Go.
+  </Card>
+  <Card title="POST /secure/send" icon="book" href="/reference/api/send">
+    The REST twin of every field above.
+  </Card>
+</CardGroup>

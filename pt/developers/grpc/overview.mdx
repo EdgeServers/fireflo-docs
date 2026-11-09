@@ -1,0 +1,133 @@
+---
+title: "API gRPC"
+description: "O envio REST sobre HTTP/2 e protobuf, numa porta própria: quando escolhê-la, como conectar e como obter o contrato — inclusive direto do gateway."
+---
+
+A partir do **gateway 0.15.9**, o FireFlo também recebe mensagens via gRPC. É o
+[`POST /secure/send`](/reference/api/send) da API REST com um transporte binário: o mesmo login, os
+mesmos campos, a mesma tarifação e cobrança, a mesma aprovação de sender ID e de template, a mesma
+verificação de rota, a mesma regra de retry com `client_ref` e o mesmo limite de taxa por conta.
+**Uma vez aceita, uma mensagem enviada via gRPC é indistinguível de uma enviada via REST.**
+
+Ela acrescenta uma coisa que o REST não tem: um **feed de recibos**. Peça recibos sem informar um
+webhook e eles esperam por você numa fila durável que você lê pela mesma conexão — sem nenhum
+endpoint seu para manter.
+
+<Note>
+**O gRPC fica desligado a menos que seu provedor o ligue.** Um gateway que não foi configurado para
+ele responde toda chamada com `UNAVAILABLE` e o código de erro `GRPC_DISABLED`. Se você vir isso, a
+API existe mas não está habilitada na plataforma que você está chamando — peça ao seu provedor o
+endereço gRPC.
+</Note>
+
+## Quando escolher
+
+| Escolha gRPC quando | Escolha REST quando |
+| :--- | :--- |
+| Você envia em alto volume a partir de um processo de longa duração | Você envia de vez em quando, ou a partir de um script |
+| Você quer muitas chamadas em andamento numa só conexão (HTTP/2) | Sua plataforma só fala HTTP/1.1 |
+| Você quer enviar muitas mensagens em stream sem esperar cada resposta | Uma requisição, uma resposta é tudo de que você precisa |
+| Você prefere buscar os recibos a manter um endpoint de webhook | Você já mantém um webhook de recibos |
+
+Uma requisição tem algumas dezenas de bytes de protobuf em vez de um corpo JSON, e o
+[`SendStream`](/developers/grpc/sending#sendstream-many-messages-on-one-stream) envia muitas
+mensagens num único stream sem esperar cada resposta. Nenhum dos dois muda o que você pode enviar nem
+a que velocidade: **REST e gRPC compartilham o limite de mensagens por segundo da sua conta**, então
+mover tráfego de um para o outro não te dá mais limite.
+
+O SMPP continua sendo a terceira via de entrada, e é separado — veja [Bind](/developers/smpp/binding).
+
+## Três serviços
+
+| Serviço | Métodos | O que faz |
+| :--- | :--- | :--- |
+| `fireflo.v1.AuthService` | `Login`, `Logout` | Troca seu login e senha por um token de sessão. Veja [Autenticação e sessões](/developers/grpc/authentication). |
+| `fireflo.v1.SendService` | `Send`, `SendStream` | Uma mensagem por chamada, ou muitas num stream. Veja [Enviando mensagens](/developers/grpc/sending). |
+| `fireflo.v1.ReceiptService` | `Subscribe`, `Pull`, `Ack` | Coleta os recibos de entrega das suas mensagens. Veja [Recibos de entrega via gRPC](/developers/grpc/receipts). |
+
+## Conectando
+
+Seu provedor te dá um **host e uma porta**. Num gateway sem nada na frente, a porta costuma ser
+**8090**; atrás do proxy TLS de um provedor, muitas vezes é **443**.
+
+| Transporte | O que significa para seu cliente |
+| :--- | :--- |
+| **TLS** | O caso normal na internet pública: o provedor termina o TLS na frente do gateway, ou o próprio gateway fala TLS. Use um canal seguro — e, com `grpcurl`, deixe de fora o `-plaintext`. |
+| **HTTP/2 puro (h2c)** | O listener do próprio gateway sem TLS, para uma rede privada ou uma plataforma de teste. Use um canal inseguro — `grpcurl -plaintext`. |
+
+O gRPC precisa de HTTP/2 o caminho todo. Se as chamadas falham no nível de transporte antes de o
+gateway responder, algo entre você e ele está falando HTTP/1.1.
+
+<Tip>
+**Mantenha o keepalive do seu cliente em 30 segundos ou mais.** O gateway aceita um ping do cliente no
+máximo a cada 20 segundos; um cliente que pinga com mais frequência é desconectado pelo transporte
+(`GOAWAY` com `too_many_pings`). A maioria das bibliotecas não envia pings de keepalive a menos que
+você peça, o que está ótimo.
+</Tip>
+
+## O contrato
+
+**O contrato é um arquivo, `fireflo.proto`, pacote protobuf `fireflo.v1`.** Ele está reproduzido na
+íntegra em [O arquivo proto](/reference/grpc/proto).
+
+Ele está **congelado desde a 0.15.9**, do mesmo jeito que a API REST: números de campo nunca são
+reutilizados nem renumerados, nada é removido, e as adições chegam como novos campos opcionais, novas
+mensagens e novos métodos. Um cliente gerado a partir do arquivo da 0.15.9 continua funcionando com
+todo gateway posterior; ele simplesmente não vê o que foi adicionado depois.
+
+### Obtendo o proto
+
+Qualquer uma destas opções te dá o mesmo arquivo:
+
+- **Do próprio gateway.** A server reflection vem ligada por padrão, então uma ferramenta que a fale
+  não precisa de arquivo nenhum:
+
+  ```bash
+  grpcurl -plaintext sms.example.com:8090 list
+  grpcurl -plaintext sms.example.com:8090 describe fireflo.v1.SendRequest
+  ```
+
+  Seu provedor pode ter desligado a reflection; nesse caso, use uma das outras duas.
+- **Deste site**: [O arquivo proto](/reference/grpc/proto), para copiar ou baixar.
+- **Do seu provedor**, como `fireflo.proto`.
+
+Gere um cliente com as ferramentas usuais da sua linguagem — `protoc` com o plugin gRPC,
+`buf generate`, `python -m grpc_tools.protoc`, ou o plugin protobuf do Gradle ou do Maven. O arquivo
+define `go_package` (`fireflo/v1;fireflov1`) e `csharp_namespace` (`FireFlo.V1`); em Java, as classes
+geradas ficam no pacote `fireflo.v1`. Ele importa apenas `google/protobuf/timestamp.proto`, que toda
+distribuição de protobuf inclui.
+
+## Limites que se aplicam a toda chamada
+
+| Limite | Padrão | O que acontece além dele |
+| :--- | :--- | :--- |
+| Mensagens por segundo | Definido por conta pelo seu provedor; ilimitado a menos que ele defina um | `RESOURCE_EXHAUSTED`, `RATE_LIMITED`, tente de novo após 1 segundo. **Compartilhado com o REST.** |
+| Tamanho da mensagem | 1 MiB por requisição, ou por item do stream | `RESOURCE_EXHAUSTED` vindo do transporte, sem detalhe de erro |
+| Requisições em andamento num `SendStream` | 256 | O gateway para de ler o stream até você ler resultados — veja [SendStream](/developers/grpc/sending#sendstream-many-messages-on-one-stream) |
+| Sessão ociosa / tempo de vida | 1 hora / 24 horas | `UNAUTHENTICATED`, `SESSION_EXPIRED` — faça login de novo |
+| Sessões por login | 64 | Um novo `Login` encerra a sessão usada há mais tempo daquele login |
+
+Seu provedor pode alterar cada um desses; os valores acima são os padrões.
+
+## Para onde ir em seguida
+
+<CardGroup cols={2}>
+  <Card title="Autenticação e sessões" icon="key" href="/developers/grpc/authentication">
+    Faça login uma vez, carregue o token, faça login de novo em SESSION_EXPIRED.
+  </Card>
+  <Card title="Enviando mensagens" icon="paper-plane" href="/developers/grpc/sending">
+    Send e SendStream, cada campo ao lado do seu nome no REST.
+  </Card>
+  <Card title="Erros e códigos de status" icon="triangle-exclamation" href="/developers/grpc/errors">
+    Status REST, código gRPC, código de erro e o que fazer.
+  </Card>
+  <Card title="Recibos de entrega via gRPC" icon="receipt" href="/developers/grpc/receipts">
+    Subscribe, Pull e Ack — pelo menos uma vez.
+  </Card>
+  <Card title="Exemplos" icon="code" href="/developers/grpc/examples">
+    grpcurl, Python, Java e Go.
+  </Card>
+  <Card title="O arquivo proto" icon="file-code" href="/reference/grpc/proto">
+    O contrato inteiro.
+  </Card>
+</CardGroup>

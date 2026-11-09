@@ -87,6 +87,7 @@ rather than parsed.
 | `--whitelist` / `--no-whitelist` | Whether sender-ID and content checking starts on. |
 | `--balance` / `--no-balance` | Whether prepaid credit is enforced. |
 | `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. A range lets the installer pick the next free listener port. |
+| `--grpc` / `--grpc-port N` / `--grpc-host H` | Turn the [gRPC API](/platform/operations/grpc) on, at 8090 or port `N`, bound to `H` (default `127.0.0.1`, for a proxy on the same host). **Off unless given.** On `update`, the port is written only when the flag is passed; an existing one is left alone. A port already used by this install's SMPP, HTTP or management listener is refused. |
 | `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ for the REST path. |
 | `--log-backups` / `--log-retain-days` | Log retention, including the daily timer that reaps `httpapi.log`. |
 | `--with-fail2ban` / `--no-fail2ban` | Whether fail2ban watches this install's refused logins and blocks the addresses behind them. **Off by default.** |

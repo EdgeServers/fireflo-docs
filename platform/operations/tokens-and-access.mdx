@@ -54,9 +54,12 @@ The management port carries its own token instead — and a messaging credential
 | Port | Serves |
 | ---: | :--- |
 | 8080 | `/secure/*`, `/ping` — what customers call |
+| 8090 | The gRPC API — what customers call, from 0.15.9, **only when you turn it on** |
 | 9000 | `/q/metrics` and `/ops/*` |
 
 Keep 9000 on an admin network and do not publish it. The token is a second line, not the first.
+Never give the gRPC API the management port: the two must differ, and the installer refuses to make
+them the same. See [Running the gRPC API](/platform/operations/grpc).
 
 ## Absent is not zero
 

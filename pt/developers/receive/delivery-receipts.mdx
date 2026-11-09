@@ -104,6 +104,19 @@ mensagem, não o fornecedor.
 roda, verifique o que está na frente dele.
 </Warning>
 
+## Sem endpoint? Colete os recibos via gRPC
+
+A partir do gateway 0.15.9, onde seu provedor ligou a [API gRPC](/developers/grpc/overview), você não
+precisa manter endpoint nenhum. Envie `"dlr": "yes"` **sem** `dlr_url` — via REST ou gRPC — e os
+recibos esperam pelo seu login numa fila durável, com os mesmos campos do JSON acima mais um token de
+confirmação. Você os coleta com `Subscribe` ou `Pull` e os limpa com `Ack`.
+
+Nada se perde enquanto você não está olhando: um recibo fica até você confirmá-lo, ou por sete dias.
+Veja [Recibos de entrega via gRPC](/developers/grpc/receipts).
+
+Um `dlr_url` sempre vence — uma mensagem que tem um é enviada via POST para ele e nunca aparece no
+feed. Onde o gRPC está desligado, `dlr` sem `dlr_url` é recusado com `400`.
+
 ## Três segmentos, três recibos
 
 Por padrão, você recebe um recibo por `submit_sm` enviado, cada um citando o id que você recebeu.
@@ -126,5 +139,8 @@ entrega parecerem menores do que em gateways que reportam o primeiro segmento.
   </Card>
   <Card title="Tratamento de erros" icon="code-branch" href="/developers/errors">
     Construindo para o recibo, e não para a resposta.
+  </Card>
+  <Card title="Recibos de entrega via gRPC" icon="receipt" href="/developers/grpc/receipts">
+    Os mesmos recibos a partir de um feed durável, sem precisar de endpoint.
   </Card>
 </CardGroup>

@@ -3,12 +3,16 @@ title: "Sending SMS with FireFlo"
 description: "Two ways in, one set of rules behind them, and the handful of things that behave differently from other gateways."
 ---
 
-You can reach FireFlo two ways, and which you pick is mostly about volume and what your stack already
+You can reach FireFlo three ways, and which you pick is mostly about volume and what your stack already
 speaks.
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="REST" icon="code" href="/developers/quickstart">
     JSON over HTTPS. One call, one message. Start here unless you have a reason not to.
+  </Card>
+  <Card title="gRPC" icon="bolt" href="/developers/grpc/overview">
+    The REST send over HTTP/2 and protobuf, with streaming and a receipt feed. From 0.15.9, where
+    your provider has turned it on.
   </Card>
   <Card title="SMPP" icon="network-wired" href="/developers/smpp/binding">
     A persistent bind. Higher throughput, and what carriers themselves speak.
@@ -59,5 +63,6 @@ argument.
 | Send to many people at once | [Batches](/developers/send/batches) |
 | Know why a long message costs three | [Encoding and segments](/developers/send/encoding-and-segments) |
 | Receive delivery receipts | [Delivery receipts](/developers/receive/delivery-receipts) |
+| Send over gRPC, or collect receipts without an endpoint | [gRPC API](/developers/grpc/overview) |
 | Handle an error properly | [Errors](/developers/errors) |
 | Move from Jasmin | [Migrating from Jasmin](/developers/migrating/from-jasmin) |

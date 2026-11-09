@@ -8,7 +8,10 @@ description: "Ordering, duplicates, missing receipts and the states that look li
 <Accordion title="A receipt never arrived. Where do I start?">
 In this order, because each rules out more than the next:
 
-1. **Did you ask for one?** `dlr: "yes"` *and* `dlr_url`. Either alone does nothing.
+1. **Did you ask for one, and where did it go?** `dlr: "yes"` *and* `dlr_url` for a webhook. A
+   `dlr_url` without `dlr` does nothing. `dlr` without `dlr_url` is a `400` — except on a platform
+   running the gRPC receipt feed, where it is accepted and the receipts wait in your login's
+   [feed](/developers/grpc/receipts) rather than arriving anywhere by themselves.
 2. **Is your endpoint reachable from the gateway host** — not from your laptop?
 3. **Does it return 200–399?** A `401` behind an authenticating proxy is the commonest silent
    failure. Since 0.11 a `302` to a login page is a failure too and is retried; on earlier
@@ -83,6 +86,10 @@ So "I never got a receipt" is always answerable, even when no receipt was forwar
 <Accordion title="Can I see receipts without running an endpoint?">
 Yes — the customer portal shows your messages with their final state and lets you export them. An
 endpoint is how you react in real time; the portal is how you check after the fact.
+
+From gateway 0.15.9 there is a third way, where your provider has turned on the gRPC API: send without
+a `dlr_url` and collect the receipts from a durable feed over gRPC, in real time and without exposing
+an endpoint. See [Delivery receipts over gRPC](/developers/grpc/receipts).
 </Accordion>
 
 </AccordionGroup>

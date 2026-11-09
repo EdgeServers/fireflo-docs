@@ -104,6 +104,19 @@ de un proxy que nunca llegó a su aplicación. Si los acuses "llegan" pero su ma
 ejecuta, compruebe qué hay delante.
 </Warning>
 
+## ¿Sin endpoint? Recoja los acuses por gRPC
+
+A partir de la pasarela 0.15.9, donde su proveedor haya activado la [API gRPC](/developers/grpc/overview),
+no necesita mantener ningún endpoint. Envíe `"dlr": "yes"` **sin** `dlr_url` (por REST o por gRPC) y los
+acuses esperan a su login en una cola duradera, con los mismos campos que el JSON anterior más un token
+de confirmación. Los recoge con `Subscribe` o `Pull` y los elimina con `Ack`.
+
+No se pierde nada mientras no mira: un acuse se conserva hasta que lo confirme, o durante siete días.
+Consulte [Acuses de entrega por gRPC](/developers/grpc/receipts).
+
+Un `dlr_url` siempre gana: un mensaje que lo tiene se envía por POST a esa URL y nunca aparece en el
+feed. Donde gRPC está desactivado, `dlr` sin `dlr_url` se rechaza con `400`.
+
 ## Tres segmentos, tres acuses
 
 Por defecto recibe un acuse por cada `submit_sm` que envió, cada uno citando el id que se le dio.
@@ -126,5 +139,8 @@ tasas de entrega parezcan más bajas que las de pasarelas que reportan el primer
   </Card>
   <Card title="Gestión de errores" icon="code-branch" href="/developers/errors">
     Construir para el acuse en lugar de para la respuesta.
+  </Card>
+  <Card title="Acuses de entrega por gRPC" icon="receipt" href="/developers/grpc/receipts">
+    Los mismos acuses desde un feed duradero, sin necesidad de endpoint.
   </Card>
 </CardGroup>

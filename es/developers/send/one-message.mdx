@@ -23,7 +23,7 @@ Todo lo demás tiene un valor por defecto. La tabla completa está en
 | `content` | — | Obligatorio salvo que envíe `hex_content`. Nunca ambos. |
 | `from` | su nombre de login | Debe estar aprobado, o `403`. |
 | `coding` | `0` | `8` para cualquier cosa fuera de GSM-7. Reduce a la mitad su capacidad. |
-| `dlr` | `no` | `yes` requiere `dlr_url`. |
+| `dlr` | `no` | `yes` requiere `dlr_url`, salvo que recoja los acuses por [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Dónde se hace POST del acuse. |
 
 ## Entrecomille el destino
@@ -91,6 +91,13 @@ Dos campos, y ambos son necesarios: fijar uno sin el otro no hace nada:
 
 `dlr_level` elige qué acuses recibe: `1` solo progreso, `2` el resultado (por defecto), `3`
 ambos.
+
+<Tip>
+**¿Sin endpoint que mantener?** A partir de la pasarela 0.15.9, donde su proveedor haya activado la API
+gRPC, puede enviar `"dlr": "yes"` sin `dlr_url` y recoger los acuses de un feed duradero por gRPC en su
+lugar: consulte [Acuses de entrega por gRPC](/developers/grpc/receipts). En otros casos, `dlr` sin
+`dlr_url` es un `400`.
+</Tip>
 
 <Warning>
 **El nivel 1 por sí solo no envía el resultado.** Un cliente que pida `1` y espere un estado

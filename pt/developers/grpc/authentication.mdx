@@ -1,0 +1,129 @@
+---
+title: "Autenticação e sessões"
+description: "Faça login uma vez com seu login HTTP, carregue o token de sessão em toda chamada e faça login de novo quando o gateway responder SESSION_EXPIRED — o que vai acontecer, por motivos que não são culpa sua."
+---
+
+Você faz login **uma vez** com o mesmo **login HTTP** que usa na autenticação Basic do REST, e recebe
+um **token de sessão**. Toda outra chamada carrega esse token nos seus metadados:
+
+```
+authorization: Bearer ffg1.Jq3…
+```
+
+```bash
+grpcurl -plaintext -d '{"system_id":"acme-http","password":"secret"}' \
+  sms.example.com:8090 fireflo.v1.AuthService/Login
+```
+
+```json
+{
+  "sessionToken": "ffg1.Jq3…",
+  "expiresAt": "2026-11-10T09:12:03Z",
+  "idleTimeoutSeconds": "3600"
+}
+```
+
+O `grpcurl` imprime os nomes de campo no camelCase do JSON; os nomes no proto são `session_token`,
+`expires_at` e `idle_timeout_seconds`. Trate o token como opaco, e como um segredo: ele vale tanto
+quanto sua senha até expirar.
+
+## O que o Login verifica
+
+Exatamente o que a autenticação Basic do REST verifica:
+
+- o login existe, e é um **login HTTP** com senha;
+- a senha confere;
+- o endereço de onde você chama está entre os endereços permitidos do login, quando ele tem algum.
+
+<Warning>
+**Um system id SMPP não consegue fazer login aqui**, e a recusa não diz isso: é o mesmo
+`AUTH_FAILED` que uma senha errada recebe. Se um login funciona via SMPP e é recusado via gRPC,
+verifique o tipo dele antes de verificar a senha.
+</Warning>
+
+## Quanto tempo um token dura
+
+| Limite | Padrão | O que acontece |
+| :--- | :--- | :--- |
+| **Ociosidade** | 1 hora | Sem nenhuma chamada com o token por esse tempo, ele expira. Toda chamada reinicia o relógio. |
+| **Absoluto** | 24 horas | O token expira esse tempo depois do Login, por mais ocupado que esteja. `expires_at` na resposta é esse momento. |
+| **Por login** | 64 sessões | Um Login além disso encerra a sessão usada há mais tempo daquele login. |
+
+Seu provedor pode alterar os três; `idle_timeout_seconds` na resposta do Login é o limite de
+ociosidade em vigor.
+
+Um token fica vinculado **ao endereço para o qual foi emitido**: apresentado a partir de outro
+endereço, ele é recusado. Ele não fica vinculado à conexão, então um segundo canal a partir do mesmo
+endereço pode usar o mesmo token.
+
+## Fazendo login de novo: `SESSION_EXPIRED`
+
+As sessões ficam na memória do gateway. Por isso um token pode parar de funcionar a qualquer momento
+por motivos que não são culpa sua:
+
+- o gateway reiniciou;
+- um load balancer moveu seu canal para outro nó do gateway;
+- o token atingiu um dos limites acima;
+- seu login foi alterado ou desabilitado.
+
+Todos esses casos recebem a mesma resposta:
+
+```
+UNAUTHENTICATED, ErrorDetail.code = SESSION_EXPIRED
+```
+
+**Trate isso chamando Login de novo e repetindo a chamada uma vez com o novo token.** Faça isso num
+único lugar do seu cliente — um interceptor, ou um wrapper em volta do stub — em vez de em cada ponto
+de chamada. Os [exemplos](/developers/grpc/examples) mostram o wrapper em Python, Java e Go.
+
+<Note>
+**`SESSION_EXPIRED` nunca conta contra o seu endereço.** Logins recusados repetidos a partir de um
+endereço fazem seu provedor bloquear esse endereço — em todas as portas, como no REST e no SMPP —
+mas uma sessão expirada não é um login recusado. Uma frota de clientes reconectando depois de um
+restart do gateway não é bloqueada por isso. Toda outra recusa nesta página conta, exatamente como
+um login REST que falhou.
+</Note>
+
+Se o retry depois de um Login novo for recusado de novo, pare: algo diferente de uma sessão expirada
+está errado, e ficar em loop no Login é o que faz um endereço ser bloqueado.
+
+## Fazendo logout
+
+`Logout` encerra a sessão na hora. É opcional — um token sem uso expira sozinho — mas é o que um
+processo de vida curta educadamente deve fazer, e libera um dos 64 slots do login.
+
+```bash
+grpcurl -plaintext -H "authorization: Bearer $TOKEN" \
+  sms.example.com:8090 fireflo.v1.AuthService/Logout
+```
+
+## Recusas
+
+| Situação | Código gRPC | `ErrorDetail.code` |
+| :--- | :--- | :--- |
+| Login: senha errada, login desconhecido, não é um login HTTP, ou sem senha definida | `UNAUTHENTICATED` | `AUTH_FAILED` |
+| Login, ou qualquer chamada: seu endereço não está entre os endereços permitidos do login | `PERMISSION_DENIED` | `AUTHORIZATION_FAILED` |
+| Sem metadado `authorization`, ou não é um token `Bearer ffg1.…` | `UNAUTHENTICATED` | `MISSING_CREDENTIAL` |
+| Token desconhecido, expirado, encerrado com logout, ou o login foi desabilitado desde então | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+| Token apresentado a partir de um endereço diferente daquele para o qual foi emitido | `UNAUTHENTICATED` | `SESSION_EXPIRED` |
+
+**As quatro recusas de Login da primeira linha são uma única resposta de propósito.** Tentar nomes não
+diz a quem chama nada sobre quais logins existem.
+
+## Atrás do seu próprio proxy ou NAT
+
+O token fica vinculado ao endereço que o gateway vê. Se seu tráfego de saída sai por vários
+endereços — um pool de gateways NAT, por exemplo — um token emitido num e usado a partir de outro
+recebe `SESSION_EXPIRED`. Ou fixe um canal num único endereço de saída, ou deixe o wrapper de
+re-login cuidar disso, sabendo que cada troca de endereço custa um Login.
+
+## Relacionados
+
+<CardGroup cols={2}>
+  <Card title="Erros e códigos de status" icon="triangle-exclamation" href="/developers/grpc/errors">
+    Toda recusa, e o que fazer a respeito.
+  </Card>
+  <Card title="Autenticação REST" icon="key" href="/developers/authentication">
+    O mesmo login, via HTTP Basic.
+  </Card>
+</CardGroup>

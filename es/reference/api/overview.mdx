@@ -22,6 +22,12 @@ almacenan a la espera de la aprobación de su proveedor y **no son utilizables h
 apruebe**. Llegaron en la **pasarela 0.9.7**; contra cualquier versión anterior responden `404`.
 </Note>
 
+<Tip>
+**El mismo envío también está disponible por gRPC** a partir de la pasarela 0.15.9, donde su proveedor
+lo haya activado: el mismo login, los mismos campos y las mismas reglas, sobre HTTP/2 y protobuf, con
+streaming y un feed de acuses. Consulte [API gRPC](/developers/grpc/overview).
+</Tip>
+
 ## La envoltura
 
 Cada respuesta es un objeto JSON con **o bien** `data` **o bien** `message`. Nunca ambos, y nunca

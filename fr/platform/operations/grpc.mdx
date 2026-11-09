@@ -1,0 +1,231 @@
+---
+title: "Faire tourner l'API gRPC"
+description: "Activer le port gRPC, le placer derrière un proxy sans faire bannir le proxy, TLS sur le port lui-même, les limites et les réglages du flux d'accusés, et ce qu'il faut surveiller."
+---
+
+À partir de la **passerelle 0.15.9**, les clients peuvent envoyer sur gRPC en plus de REST et SMPP, et
+récupérer leurs accusés de livraison depuis un flux durable au lieu de faire tourner un webhook. Le
+côté client est décrit sous [API gRPC](/developers/grpc/overview) ; cette page est celle de
+l'opérateur.
+
+<Note>
+**gRPC est désactivé tant que vous ne le configurez pas.** Une mise à niveau vers 0.15.9 ne change rien
+de visible pour un client : sans port gRPC, la passerelle répond à chaque appel gRPC `UNAVAILABLE`
+(`GRPC_DISABLED`), et l'API REST se comporte exactement comme avant.
+</Note>
+
+## L'activer
+
+Définissez le port dans le fichier d'environnement et redémarrez :
+
+```bash
+FIREFLO_GRPC_PORT=8090
+```
+
+Ou laissez l'installateur l'écrire, sur une nouvelle installation ou une installation existante :
+
+```bash
+sudo ./scripts/fireflo-install update --grpc                 # port 8090
+sudo ./scripts/fireflo-install update --grpc-port 8443 --grpc-host 0.0.0.0
+```
+
+`update` n'écrit le port que si vous passez `--grpc` ou `--grpc-port` ; sans eux, une valeur existante
+est affichée et laissée telle quelle, et aucune n'est jamais ajoutée.
+
+| Variable | Défaut | Ce qu'elle fait |
+| :--- | :--- | :--- |
+| `FIREFLO_GRPC_PORT` | non définie | Le port gRPC. **C'est la définir qui active gRPC.** Non définie, la passerelle détient quand même un port éphémère sur loopback et répond à chaque appel `GRPC_DISABLED`, pour qu'une mise à niveau n'échoue jamais au démarrage parce qu'un port est pris. `8090` est le choix habituel. |
+| `FIREFLO_GRPC_HOST` | `127.0.0.1` | Adresse de bind. Loopback convient à un proxy sur le même hôte ; `0.0.0.0` pour un proxy ailleurs ou pour des clients qui se connectent directement. |
+| `FIREFLO_GRPC_MAX_MESSAGE_SIZE` | `1048576` | Le plus gros message entrant, en octets : un `Send`, ou un élément de `SendStream`. |
+| `FIREFLO_GRPC_REFLECTION` | `true` | La réflexion serveur, qui permet à `grpcurl list` et aux outils similaires de fonctionner sans le fichier proto. |
+
+<Warning>
+**Ne donnez jamais à gRPC le port de gestion (9000) ni le port REST.** L'installateur refuse un port gRPC
+qui est déjà le port SMPP, HTTP ou de gestion de l'installation.
+</Warning>
+
+Avec `--firewall`, l'installateur n'ouvre le port gRPC que s'il est lié à autre chose que loopback.
+
+### Le vérifier
+
+```bash
+grpcurl -plaintext 127.0.0.1:8090 list
+```
+
+liste `fireflo.v1.AuthService`, `fireflo.v1.SendService` et `fireflo.v1.ReceiptService` (avec la
+réflexion activée). `/ops/health` porte un bloc `grpc` — `enabled`, `host`, `port` tel que lié, `tls`,
+les `sessions` actives sur ce nœud, les `streams` ouverts, et un bloc `receipts` pour le flux.
+
+## Derrière un proxy
+
+gRPC a besoin de **HTTP/2 de bout en bout**. Un `proxy_pass` HTTP/1.1 ne le transporte pas. Avec
+nginx :
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name grpc.example.com;
+    ssl_certificate     /etc/letsencrypt/live/grpc.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/grpc.example.com/privkey.pem;
+
+    location / {
+        grpc_pass grpc://127.0.0.1:8090;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_read_timeout 1h;   # flux de longue durée
+        grpc_send_timeout 1h;
+    }
+}
+```
+
+Sans les deux timeouts, nginx ferme un flux `Subscribe` silencieux au bout de 60 secondes.
+
+### Dites à la passerelle que le proxy est là
+
+<Warning>
+**Derrière un proxy, chaque appel arrive depuis l'adresse du proxy.** Tant que la passerelle ne fait
+pas confiance au `X-Forwarded-For` du proxy, chaque session est liée au proxy, chaque vérification
+d'adresse autorisée voit le proxy, et chaque login refusé est enregistré avec l'adresse du proxy — donc
+fail2ban **bannit le proxy, et tous les clients derrière lui**.
+</Warning>
+
+| Clé | Défaut | Ce qu'elle fait |
+| :--- | :--- | :--- |
+| `smsg.grpc.proxy.forwarding` | suit le réglage REST (`quarkus.http.proxy.proxy-address-forwarding`) | Fait confiance à `X-Forwarded-For` sur le port gRPC. |
+| `smsg.grpc.proxy.hops` | suit `smsg.restapi.proxy.hops` (1) | Quelle entrée, comptée depuis la droite, est le client : le nombre de proxys que vous faites tourner. |
+
+Les deux sont des réglages de plateforme et s'appliquent à l'appel suivant. La passerelle journalise un
+avertissement une fois lorsqu'elle voit un `X-Forwarded-For` venant d'une adresse privée à laquelle
+elle ne fait pas confiance — le signe que ce réglage manque.
+
+## TLS sur le port lui-même
+
+Le listener parle HTTP/2 en clair (h2c) par défaut, pour un proxy qui termine TLS. Pour que la
+passerelle parle TLS elle-même, ajoutez au fichier d'environnement :
+
+```bash
+QUARKUS_GRPC_SERVER_PLAIN_TEXT=false
+QUARKUS_GRPC_SERVER_SSL_CERTIFICATE=/etc/fireflo/tls/grpc.crt
+QUARKUS_GRPC_SERVER_SSL_KEY=/etc/fireflo/tls/grpc.key
+```
+
+Health rapporte alors `grpc.tls: true`, et les clients se connectent avec TLS au lieu de `-plaintext`.
+
+## Logins refusés et fail2ban
+
+gRPC n'a besoin d'aucune jail propre. Un login gRPC refusé est écrit dans le même `auth-failed.log`
+que SMPP et REST, en nommant le listener et le port :
+
+```
+2026-11-09 10:12:03,511 WARN  auth.refused surface=grpc reason=badPassword identity="acme" listener=grpc port=8090 ip=203.0.113.9
+```
+
+**Une session expirée ne bannit jamais.** Les sessions vivent dans la mémoire de la passerelle, donc un
+redémarrage les fait toutes expirer, et chaque client qui se reconnecte est refusé une fois
+(`reason=sessionExpired`) avant de refaire Login. Le filtre fourni ignore cette raison ; un appel sans
+aucun jeton est `missingCredential`, et il est compté. `fireflo-install update` rafraîchit le filtre
+installé de la passerelle quand celui de la version diffère, puis recharge fail2ban. Voir
+[Bloquer les clients abusifs](/platform/operations/blocking-abusive-clients).
+
+## Limites
+
+| Limite | Clé | Défaut | Ce qu'elle limite |
+| :--- | :--- | :--- | :--- |
+| Messages par seconde | `smsg.restapi.maxRate.<accountId>`, puis `smsg.restapi.maxRate.default` | `0` (illimité) | Envois par seconde depuis tous les logins HTTP d'un compte, **REST et gRPC ensemble**, par nœud de passerelle ; s'applique au message suivant. Au-delà : `RESOURCE_EXHAUSTED` / `RATE_LIMITED` (REST `429`). |
+| Taille de message | `FIREFLO_GRPC_MAX_MESSAGE_SIZE` | 1 MiB | Une requête ou un élément de flux ; lu au démarrage. |
+| Inactivité de session | `smsg.grpc.session.idle.seconds` | `3600` | Secondes sans appel avant qu'un jeton expire. |
+| Durée de vie de session | `smsg.grpc.session.max.seconds` | `86400` | Secondes depuis le Login avant qu'un jeton expire quoi qu'il arrive. |
+| Sessions par login | `smsg.grpc.session.max.per.login` | `64` | Jetons actifs par login, par nœud ; un Login au-delà met fin au moins récemment utilisé. |
+| En vol par flux | `smsg.grpc.stream.max.inflight` | `256` (au plus 4096) | Requêtes qu'un `SendStream` détient à la fois ; s'applique aux flux ouverts après un changement. |
+| Keepalive | — | ping serveur après 60 s d'inactivité | Les clients qui pinguent plus souvent que toutes les 20 s sont déconnectés (`GOAWAY too_many_pings`). |
+
+**Il n'y a pas de plafond de débit gRPC séparé, délibérément** : un tel plafond doublerait ce qu'un
+compte a le droit d'envoyer. Les listeners SMPP gardent le leur (`conf.maxRate.*`), comme avant.
+
+## Le flux d'accusés
+
+Un message envoyé par un login HTTP — sur gRPC ou REST — qui demande des accusés **sans** `dlr_url` voit
+ses accusés mis en file pour ce login, jusqu'à ce que le client les acquitte. Un `dlr_url` l'emporte
+toujours. Avec le flux activé, REST accepte aussi `dlr=yes` sans `dlr-url` ; avec le flux désactivé,
+c'est toujours un `400`.
+
+| Clé | Défaut | Ce qu'elle fait |
+| :--- | :--- | :--- |
+| `smsg.grpc.receipts.enabled` | `true` | Si les accusés sont mis en file ou non. Désactivé : les accusés sans `dlr_url` sont abandonnés comme avant 0.15.9, `dlr=yes` en REST exige de nouveau un `dlr-url`, et les appels d'accusés répondent `RECEIPTS_DISABLED`. |
+| `smsg.grpc.receipts.lease.seconds` | `120` | Délai avant qu'un accusé non acquitté soit livré à nouveau. |
+| `smsg.grpc.receipts.window` | `1000` | La fenêtre `Subscribe` la plus large. |
+| `smsg.grpc.receipts.pull.max` | `1000` | Accusés par `Pull`. |
+| `smsg.grpc.receipts.poll.ms` | `250` | La fréquence à laquelle un nœud ayant des lecteurs en attente cherche des accusés mis en file sur d'autres nœuds. |
+| `smsg.grpc.receipts.max.per.login` | `1000000` | Accusés en file par login. Au-delà, les accusés plus récents ne sont pas mis en file tant que certains ne sont pas acquittés — comptés, journalisés une fois par minute, et enregistrés sur le message comme accusé supprimé. |
+| `smsg.grpc.receipts.retention.days` | `smsg.dlr.retention.days` (7) | Les accusés non acquittés plus anciens que cela sont supprimés. |
+
+Tous sont des réglages de plateforme, lus à chaud.
+
+**L'emplacement de la file** suit le stockage des accusés. Sur un nœud unique avec le stockage par
+défaut, elle est conservée sur le disque de ce nœud, à côté du
+[stockage des accusés](/reference/config/webhooks). Là où les accusés sont conservés dans PostgreSQL,
+le flux est aussi dans la base de données, partagé par tous les nœuds, donc un client peut lire sur
+n'importe quel nœud. Un nœud qui s'arrête proprement rend ses baux en s'arrêtant ; ceux d'un nœud qui
+meurt sont libérés par les nœuds survivants, ou expirent après le bail.
+
+<Warning>
+**Un login qui demande des accusés et ne lit jamais son flux le remplit jusqu'au plafond.** Surveillez
+`grpc.receipts.logins_capped` dans health et `fireflo_grpc_receipts_oldest_age_seconds` ; un client au
+plafond a cessé de lire, pas cessé d'envoyer.
+</Warning>
+
+## Métriques
+
+| Métrique | Ce qu'elle compte |
+| :--- | :--- |
+| `fireflo_grpc_receipts_queued_total` | Accusés mis en file dans le flux |
+| `fireflo_grpc_receipts_delivered_total{via="subscribe\|pull"}` | Accusés livrés, par méthode |
+| `fireflo_grpc_receipts_redelivered_total` | Livraisons après l'expiration d'un bail ou la fermeture d'un flux |
+| `fireflo_grpc_receipts_acked_total` | Accusés acquittés |
+| `fireflo_grpc_receipts_expired_total` | Accusés supprimés par la rétention |
+| `fireflo_grpc_receipts_refused_total{reason="cap\|store"}` | Accusés non mis en file |
+| `fireflo_grpc_receipts_depth` | Accusés en attente, tous logins confondus |
+| `fireflo_grpc_receipts_oldest_age_seconds` | Âge du plus ancien accusé non acquitté |
+| `fireflo_grpc_receipts_logins_capped` | Logins au plafond |
+
+Les jauges sont rafraîchies toutes les 10 secondes. Les `SendStream` ouverts et les requêtes qu'ils
+détiennent sont dans le bloc `grpc` de health.
+
+## Quand quelque chose ne va pas
+
+<AccordionGroup>
+
+<Accordion title="Chaque appel répond UNAVAILABLE GRPC_DISABLED">
+`FIREFLO_GRPC_PORT` n'est pas défini dans l'environnement avec lequel la passerelle démarre réellement,
+ou la passerelle n'a pas été redémarrée depuis. `grpc.enabled` dans health dit lequel des deux.
+</Accordion>
+
+<Accordion title="Chaque login refusé, et chaque session, montre l'adresse du proxy">
+`smsg.grpc.proxy.forwarding` est désactivé, ou `hops` ne correspond pas au nombre de proxys. Corrigez-le
+avant que fail2ban compte dix refus venant du proxy et le bannisse.
+</Accordion>
+
+<Accordion title="Les appels échouent au niveau du transport avant que la passerelle réponde">
+Quelque chose sur le chemin parle HTTP/1.1 — un `proxy_pass` au lieu de `grpc_pass`, ou un load
+balancer sans HTTP/2 vers le back-end. Ou bien le client utilise TLS contre le listener en clair, ou
+l'inverse.
+</Accordion>
+
+<Accordion title="Le flux d'un client ne cesse de grossir">
+Il demande des accusés sans `dlr_url` et ne les lit pas, ou les lit sans les acquitter.
+`grpc.receipts` dans health liste les logins les plus chargés ; `redelivered_total` qui grimpe avec
+`acked_total` plat correspond au second cas.
+</Accordion>
+
+</AccordionGroup>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="API gRPC" icon="bolt" href="/developers/grpc/overview">
+    Ce que voient vos clients.
+  </Card>
+  <Card title="Bloquer les clients abusifs" icon="ban" href="/platform/operations/blocking-abusive-clients">
+    L'enregistrement des logins refusés, et les raisons qui ne bannissent jamais.
+  </Card>
+</CardGroup>

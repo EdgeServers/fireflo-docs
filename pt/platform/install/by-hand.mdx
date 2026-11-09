@@ -119,6 +119,7 @@ export FIREFLO_DB_PASSWORD=...
 export FIREFLO_CONFIG_SOURCE=file
 export QUARKUS_HTTP_PORT=8080
 export FIREFLO_OPS_PORT=9000
+# export FIREFLO_GRPC_PORT=8090   # só para ligar a API gRPC (0.15.9)
 ```
 
 <Warning>
@@ -134,7 +135,12 @@ Defina `FIREFLO_CONF_DIR` como um **caminho absoluto**. Um valor relativo — in
 | 8080 | A API REST | Clientes |
 | 27777 | Binds SMPP | Clientes |
 | 9000 | `/ops/*` e `/q/metrics` | **Loopback, ou apenas sua própria rede** |
+| 8090 | A API gRPC, a partir da 0.15.9 — **só quando `FIREFLO_GRPC_PORT` está definida**; em bind no loopback a menos que `FIREFLO_GRPC_HOST` diga outra coisa | Clientes, geralmente através de um proxy TLS |
 | 3000 | O painel de controle | Atrás de TLS |
+
+Sem `FIREFLO_GRPC_PORT`, o gateway não ocupa nenhuma porta gRPC que você consiga alcançar: ele mantém
+uma efêmera no loopback e responde toda chamada com `GRPC_DISABLED`. Veja
+[Operando a API gRPC](/platform/operations/grpc).
 
 ## systemd
 

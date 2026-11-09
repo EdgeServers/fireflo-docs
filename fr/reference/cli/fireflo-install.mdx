@@ -78,6 +78,7 @@ option inconnue plutôt qu'analysé.
 | `--whitelist` / `--no-whitelist` | Si la vérification de l'ID d'expéditeur et du contenu démarre activée. |
 | `--balance` / `--no-balance` | Si le crédit prépayé est imposé. |
 | `--smpp-port` / `--smpp-port-range` / `--http-port` / `--ops-port` | Ports. Une plage laisse l'installateur choisir le prochain port d'écoute libre. |
+| `--grpc` / `--grpc-port N` / `--grpc-host H` | Active l'[API gRPC](/platform/operations/grpc), sur 8090 ou le port `N`, liée à `H` (défaut `127.0.0.1`, pour un proxy sur le même hôte). **Désactivée sauf si indiqué.** Sur `update`, le port n'est écrit que si le drapeau est passé ; un port existant est laissé tel quel. Un port déjà utilisé par le listener SMPP, HTTP ou de gestion de cette installation est refusé. |
 | `--broker-uri` / `--broker-queue` / `--no-broker` | RabbitMQ pour le chemin REST. |
 | `--log-backups` / `--log-retain-days` | Rétention des journaux, y compris la règle `tmpfiles.d` qui moissonne `httpapi.log`. |
 

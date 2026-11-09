@@ -82,6 +82,17 @@ Sin estos, el gateway arranca sin pricing. Un mensaje que no coincide con ningun
 Un rango deja al instalador elegir el siguiente puerto de listener libre, que es lo que hace prácticas varias instancias en
 un host. Consulta [Varias instancias](/platform/install/multiple-instances).
 
+A partir de la 0.15.9 la API gRPC también tiene un puerto, y permanece **desactivada** salvo que la pidas:
+
+```bash
+--grpc                                  # puerto 8090, ligado a 127.0.0.1
+--grpc-port 8090 --grpc-host 0.0.0.0    # un proxy en otro sitio, o clientes directos
+```
+
+Ligada a loopback, es para un proxy en el mismo host y no se abre nada en el firewall. Ligada de forma
+más amplia, `--firewall` la abre, y entonces un proxy delante necesita `smsg.grpc.proxy.forwarding`, o
+fail2ban banea el proxy. Consulta [Ejecutar la API gRPC](/platform/operations/grpc).
+
 ## Los dos tokens
 
 El instalador genera ambos y los escribe al archivo de entorno.

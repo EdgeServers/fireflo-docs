@@ -22,6 +22,12 @@ aguardando a aprovação do seu provedor e **não é utilizável até que ele ap
 **gateway 0.9.7**; contra qualquer versão mais antiga respondem `404`.
 </Note>
 
+<Tip>
+**O mesmo envio também está disponível via gRPC** a partir do gateway 0.15.9, onde seu provedor o
+ligou: o mesmo login, os mesmos campos e as mesmas regras, sobre HTTP/2 e protobuf, com streaming e um
+feed de recibos. Veja [API gRPC](/developers/grpc/overview).
+</Tip>
+
 ## O envelope
 
 Toda resposta é um objeto JSON com **ou** `data` **ou** `message`, nunca os dois, e nunca um valor

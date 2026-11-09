@@ -59,7 +59,8 @@ no próximo pico, transformando um limite momentâneo em um sustentado.
 
 <Accordion title="Como sei que uma mensagem foi entregue?">
 Por um [recibo de entrega](/developers/receive/delivery-receipts), e apenas por ele. Peça um com
-`"dlr": "yes"` e um `dlr_url`.
+`"dlr": "yes"` e um `dlr_url` — ou, onde seu provedor ligou a API gRPC, só com `"dlr": "yes"`, e
+colete-o no [feed de recibos gRPC](/developers/grpc/receipts).
 
 Aguarde um recibo de **nível 2**. `ACCEPTD` e `BUFFRED` chegam como nível 1 e outro vem em seguida.
 Um cliente que trate o primeiro recibo como final reporta o desfecho errado permanentemente.

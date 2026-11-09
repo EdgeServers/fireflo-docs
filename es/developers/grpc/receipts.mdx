@@ -1,0 +1,192 @@
+---
+title: "Acuses de entrega por gRPC"
+description: "Una cola duradera de acuses por login, leída con Subscribe o Pull y vaciada con Ack: qué acuses llegan a ella, entrega al menos una vez, leases y reenvío, orden y límites."
+---
+
+Los acuses de sus mensajes pueden esperarle en **una cola duradera por login HTTP** hasta que los
+confirme. Usted lee esa cola por gRPC de una de dos formas (un stream del servidor, **`Subscribe`**, o
+sondeo, **`Pull`**) y elimina cada acuse con **`Ack`**. Ambas leen la misma cola.
+
+Es la alternativa a mantener un [endpoint de webhook](/reference/api/dlr-webhook): nada que exponer a
+internet, nada contra lo que la pasarela tenga que reintentar, y los acuses se conservan hasta que los
+tenga.
+
+## Qué acuses llegan al feed
+
+Un acuse se encola para su login cuando se cumplen **todas** estas condiciones:
+
+- el mensaje lo envió su login HTTP, por gRPC **o por REST**;
+- pidió acuses (`dlr: true` en gRPC, `"dlr": "yes"` en REST) y este acuse es uno de los que pidió
+  (`dlr_level`: `1` progreso, `2` el resultado, `3` ambos);
+- **no** lleva `dlr_url`.
+
+**El webhook gana.** Un mensaje enviado con `dlr_url` tiene sus acuses enviados a esa URL y nunca al
+feed. Los mensajes enviados por SMPP nunca aparecen en él: reciben sus acuses en el bind.
+
+<Note>
+**Los envíos REST también pueden usar el feed.** En una plataforma con gRPC y el feed activados, REST
+acepta `"dlr": "yes"` sin `dlr_url`, y esos acuses llegan aquí. Donde gRPC está desactivado, esa
+petición REST se sigue rechazando con `400`, porque los acuses no tendrían adónde ir. Consulte
+[`POST /secure/send`](/reference/api/send).
+</Note>
+
+Un mensaje que alcanza el plazo de acuse (24 horas por defecto) sin resultado recibe un último acuse
+`UNKNOWN` en el feed, como lo haría un webhook.
+
+## El mensaje `Receipt`
+
+El cuerpo JSON del webhook, un campo por clave, más dos campos de entrega al final:
+
+| Campo | Tipo | Significado |
+| :--- | :--- | :--- |
+| `id` | string | El `message_id` que devolvió su envío. **Así es como correlaciona.** |
+| `stat` | string | El estado SMPP: `DELIVRD`, `UNDELIV`, `EXPIRED`, `REJECTD`, `UNKNOWN`, `ACCEPTD`, `ENROUTE`, … |
+| `level` | int32 | `2` el resultado, `1` progreso. **Un acuse de nivel 1 no es el resultado**: sigue otro. |
+| `sub_date` | string | Cuándo se aceptó el mensaje (ISO-8601, UTC). |
+| `done_date` | string | Cuándo se alcanzó el estado de este acuse (ISO-8601, UTC). |
+| `to`, `from` | string | El destino y el sender ID del mensaje. |
+| `operator_msg_id` | string | La referencia propia del operador: lo que debe citar en una consulta de entrega. |
+| `account_id`, `system_id` | string | La cuenta facturada y el login que lo envió. |
+| `parts` | int32 | El número de segmentos en que se envió el mensaje. |
+| `vendor` | string | Ausente salvo que su proveedor lo comparta. |
+| `err` | string | El código de fallo, cuando se informó de uno: consulte [qué significa `err`](/reference/api/dlr-webhook#what-err-means-and-what-it-does-not). |
+| `ack_token` | string | Lo que recibe `Ack`. **Opaco: guárdelo tal cual.** |
+| `delivery_count` | int32 | `1` en la primera entrega. Más significa que este acuse se entregó antes y no se confirmó. |
+
+Los campos opcionales están **ausentes, no vacíos**, cuando no hay nada que decir. Todo lo que la
+[guía de acuses de entrega](/developers/receive/delivery-receipts) dice sobre `level`, `stat` y `err`
+se aplica sin cambios.
+
+## La entrega es al menos una vez
+
+<Steps>
+  <Step title="Un acuse sale de la cola solo cuando usted le hace Ack">
+    O cuando la retención lo elimina: consulte [Límites y retención](#límites-y-retención).
+  </Step>
+  <Step title="Un acuse entregado queda reservado para usted durante 120 segundos">
+    Si no se ha confirmado para entonces, se entrega de nuevo (al `Subscribe` o `Pull` de su login que
+    lo pida a continuación) con `delivery_count` incrementado en uno.
+  </Step>
+  <Step title="Un stream que termina devuelve sus acuses de inmediato">
+    Cuando un stream `Subscribe` termina (usted cancela, la conexión se corta, la pasarela se reinicia),
+    los acuses que había entregado y usted no había confirmado se liberan **inmediatamente**, no tras el
+    lease.
+  </Step>
+</Steps>
+
+Así que tras una reconexión se le vuelve a enviar todo lo que no había confirmado. Ese es el reenvío,
+y es lo que hace el feed seguro frente a reinicios en cualquiera de los dos lados.
+
+<Warning>
+**Haga que su procesamiento sea idempotente, y confirme después, nunca antes.**
+
+- Indéxelo por **`id` más `level`**: un acuse de progreso y un resultado para un mismo mensaje son dos
+  acuses.
+- Trate un `delivery_count` mayor que 1 como una posible repetición.
+- Haga `Ack` solo **después** de haber guardado o procesado un acuse. Confirmar primero y luego caerse
+  lo pierde para siempre.
+</Warning>
+
+## `Ack`
+
+```proto
+rpc Ack(AckRequest) returns (AckResponse);   // ack_tokens: hasta 1000 por llamada
+```
+
+| Campo de la respuesta | Significado |
+| :--- | :--- |
+| `acked` | Acuses eliminados ahora. |
+| `already_gone` | Tokens que no eliminaron nada: ya confirmados, eliminados por la retención, mal formados, o de otro login. |
+
+**`already_gone` no es un error.** Un `Ack` repetido tras un timeout es seguro, que es justo cuando lo
+repetirá. Más de 1000 tokens en una llamada es `INVALID_ARGUMENT`.
+
+Un token funciona en cualquier nodo de la pasarela y a través de reinicios, pero solo para el login al
+que se entregó. Agrupe sus confirmaciones: un `Ack` de 500 tokens es mucho más barato que 500 de uno.
+
+## `Pull`: sondeo
+
+```proto
+rpc Pull(PullRequest) returns (PullResponse);  // max 1..1000; wait_seconds 0..20
+```
+
+Devuelve hasta `max` acuses (como mucho 1000), del más antiguo al más reciente.
+
+- Si no hay ninguno esperando y **`wait_seconds` es mayor que 0**, espera hasta ese tiempo (20 segundos
+  como máximo) y vuelve en cuanto llega uno. Eso es un long poll, y es como se evita un bucle activo.
+- Con **`wait_seconds: 0`** vuelve de inmediato, posiblemente vacío.
+
+Un bucle típico:
+
+```
+loop:
+  r = Pull(max = 500, wait_seconds = 20)
+  handle(r.receipts)                       # guardar / actuar, de forma idempotente
+  Ack([x.ack_token for x in r.receipts])   # solo después de que handle haya tenido éxito
+```
+
+`Pull` conviene a un proceso por lotes, a un worker que despierta con un temporizador, o a un lenguaje
+de cuyo soporte de streaming prefiera no depender.
+
+## `Subscribe`: streaming
+
+```proto
+rpc Subscribe(SubscribeRequest) returns (stream Receipt);  // window: acuses sin confirmar en curso
+```
+
+Transmite su cola: **primero lo que ya está esperando, luego los nuevos acuses según llegan.**
+
+`window` limita cuántos acuses entregados pero sin confirmar retiene el stream. Al llegar a la ventana,
+el stream se pausa hasta que usted haga `Ack`, en cualquier canal. Sin establecer, o por encima del
+máximo de la pasarela (1000 por defecto), se usa el máximo.
+
+<Tip>
+Un stream que parece detenerse tras exactamente `window` acuses está esperando sus confirmaciones.
+Confirme sobre la marcha, o en lotes pequeños, no al final.
+</Tip>
+
+### Varios lectores comparten la cola
+
+Varios streams `Subscribe` (y `Pull`) de un mismo login **comparten** la cola: cada acuse va exactamente
+a uno de ellos a la vez. Úselo para repartir el procesamiento de acuses entre varios workers. Para dar
+feeds separados a aplicaciones separadas, deles logins HTTP separados.
+
+## Orden
+
+**Mejor esfuerzo, por llegada.** No hay garantía de orden entre nodos de la pasarela, y un acuse
+reentregado llega después de otros más nuevos. Un resultado puede llegar antes que un acuse de
+progreso del mismo mensaje.
+
+Ordene por `level` (`2` es definitivo) y por `done_date`, nunca por llegada. **Una vez que tiene un
+acuse `level: 2` para un mensaje, ignore cualquier `level: 1` que llegue después.**
+
+## Límites y retención
+
+| Límite | Por defecto | Qué pasa |
+| :--- | :--- | :--- |
+| Lease | 120 segundos | Un acuse sin confirmar se entrega de nuevo pasado este tiempo. |
+| Ventana de `Subscribe` | 1000 | La ventana más amplia que puede pedir un stream. |
+| Tamaño de `Pull` | 1000 | El máximo de acuses que devuelve un `Pull`. |
+| Espera de `Pull` | 20 segundos | Lo máximo que un `Pull` espera a que llegue un acuse. |
+| Tamaño de `Ack` | 1000 tokens | Más en una llamada se rechaza. |
+| Acuses encolados por login | 1.000.000 | **Por encima, los acuses más nuevos no se encolan** hasta que confirme algunos. Cada uno que queda fuera se registra en su mensaje, así que su proveedor puede seguir viéndolo. |
+| Retención | 7 días | Los acuses sin confirmar más antiguos que esto se eliminan. |
+
+Su proveedor puede cambiar cada uno de ellos.
+
+<Warning>
+**Un login que pide acuses y nunca lee su feed lo llena.** Alcanza el tope y, a partir de ahí, los
+nuevos acuses no se encolan: se conservan en su lugar los antiguos sin leer. Si activa los acuses sin
+`dlr_url`, ejecute algo que los lea. Si nunca los quiere, envíe `dlr: false`.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Ejemplos" icon="code" href="/developers/grpc/examples">
+    Bucles de Subscribe, Pull y Ack en Python, Java y Go.
+  </Card>
+  <Card title="El webhook de acuses de entrega" icon="webhook" href="/reference/api/dlr-webhook">
+    Los mismos campos, enviados por POST a su URL.
+  </Card>
+</CardGroup>

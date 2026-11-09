@@ -1,0 +1,197 @@
+---
+title: "Accusés de livraison sur gRPC"
+description: "Une file durable d'accusés par login, lue avec Subscribe ou Pull et vidée avec Ack : quels accusés y arrivent, la livraison au moins une fois, les baux et le rejeu, l'ordre et les limites."
+---
+
+Les accusés de vos messages peuvent vous attendre dans **une file durable par login HTTP** jusqu'à ce
+que vous les acquittiez. Vous lisez cette file sur gRPC de l'une de deux manières — un flux serveur
+(**`Subscribe`**) ou du polling (**`Pull`**) — et retirez chaque accusé avec **`Ack`**. Les deux lisent
+la même file.
+
+C'est l'alternative à un [endpoint webhook](/reference/api/dlr-webhook) : rien à exposer sur internet,
+rien contre quoi la passerelle doit réessayer, et des accusés conservés jusqu'à ce que vous les ayez.
+
+## Quels accusés arrivent dans le flux
+
+Un accusé est mis en file pour votre login quand **toutes** ces conditions sont réunies :
+
+- le message a été envoyé par votre login HTTP — sur gRPC **ou sur REST** ;
+- il a demandé des accusés — `dlr: true` en gRPC, `"dlr": "yes"` en REST — et cet accusé est l'un de
+  ceux qu'il a demandés (`dlr_level` : `1` progression, `2` l'issue, `3` les deux) ;
+- il ne porte **aucun `dlr_url`**.
+
+**Le webhook l'emporte.** Un message envoyé avec un `dlr_url` voit ses accusés envoyés à cette URL et
+jamais au flux. Les messages envoyés en SMPP n'y apparaissent jamais — ils reçoivent leurs accusés sur
+le bind.
+
+<Note>
+**Les envois REST peuvent aussi utiliser le flux.** Sur une plateforme où gRPC et le flux sont activés,
+REST accepte `"dlr": "yes"` sans `dlr_url`, et ces accusés arrivent ici. Là où gRPC est désactivé,
+cette requête REST est toujours refusée `400`, parce que les accusés n'auraient nulle part où aller.
+Voir [`POST /secure/send`](/reference/api/send).
+</Note>
+
+Un message qui atteint l'échéance des accusés — 24 heures par défaut — sans issue reçoit un dernier
+accusé `UNKNOWN` dans le flux, comme le ferait un webhook.
+
+## Le message `Receipt`
+
+Le corps JSON du webhook, un champ par clé, plus deux champs de livraison à la fin :
+
+| Champ | Type | Signification |
+| :--- | :--- | :--- |
+| `id` | string | Le `message_id` renvoyé par votre envoi. **C'est ainsi que vous corrélez.** |
+| `stat` | string | L'état SMPP : `DELIVRD`, `UNDELIV`, `EXPIRED`, `REJECTD`, `UNKNOWN`, `ACCEPTD`, `ENROUTE`, … |
+| `level` | int32 | `2` l'issue, `1` la progression. **Un accusé de niveau 1 n'est pas l'issue** — un autre suit. |
+| `sub_date` | string | Quand le message a été accepté (ISO-8601, UTC). |
+| `done_date` | string | Quand l'état de cet accusé a été atteint (ISO-8601, UTC). |
+| `to`, `from` | string | La destination et le sender ID du message. |
+| `operator_msg_id` | string | La référence propre de l'opérateur — ce que vous citez lors d'une requête de livraison. |
+| `account_id`, `system_id` | string | Le compte facturé et le login qui l'a envoyé. |
+| `parts` | int32 | Le nombre de segments sous lesquels le message a été envoyé. |
+| `vendor` | string | Absent sauf si votre fournisseur le partage. |
+| `err` | string | Le code d'échec, quand un code a été rapporté — voir [ce que signifie `err`](/reference/api/dlr-webhook#what-err-means-and-what-it-does-not). |
+| `ack_token` | string | Ce que prend `Ack`. **Opaque : stockez-le tel quel.** |
+| `delivery_count` | int32 | `1` à la première livraison. Plus signifie que cet accusé a déjà été livré sans être acquitté. |
+
+Les champs optionnels sont **absents, pas vides**, quand il n'y a rien à dire. Tout ce que le
+[guide des accusés de livraison](/developers/receive/delivery-receipts) dit de `level`, `stat` et `err`
+s'applique sans changement.
+
+## La livraison est au moins une fois
+
+<Steps>
+  <Step title="Un accusé ne quitte la file que lorsque vous l'acquittez avec Ack">
+    Ou lorsque la rétention le supprime — voir [Limites et rétention](#limites-et-rétention).
+  </Step>
+  <Step title="Un accusé livré vous est loué pour 120 secondes">
+    S'il n'est pas acquitté d'ici là, il est livré à nouveau — au `Subscribe` ou au `Pull` de votre login
+    qui demande ensuite — avec `delivery_count` augmenté de un.
+  </Step>
+  <Step title="Un flux qui se termine rend ses accusés immédiatement">
+    Quand un flux `Subscribe` se termine — vous annulez, la connexion tombe, la passerelle redémarre —
+    les accusés qu'il avait livrés et que vous n'aviez pas acquittés sont libérés **immédiatement**, pas
+    après le bail.
+  </Step>
+</Steps>
+
+Donc après une reconnexion, on vous renvoie tout ce que vous n'aviez pas acquitté. C'est le rejeu, et
+c'est ce qui rend le flux sûr à travers les redémarrages des deux côtés.
+
+<Warning>
+**Rendez votre traitement idempotent, et acquittez après, jamais avant.**
+
+- Indexez-le sur **`id` plus `level`** — un accusé de progression et une issue pour un même message
+  sont deux accusés.
+- Traitez un `delivery_count` supérieur à 1 comme une répétition possible.
+- N'appelez `Ack` qu'**après** avoir stocké un accusé ou agi dessus. Acquitter d'abord puis planter le
+  perd définitivement.
+</Warning>
+
+## `Ack`
+
+```proto
+rpc Ack(AckRequest) returns (AckResponse);   // ack_tokens : jusqu'à 1000 par appel
+```
+
+| Champ de réponse | Signification |
+| :--- | :--- |
+| `acked` | Accusés retirés maintenant. |
+| `already_gone` | Jetons qui n'ont rien retiré — déjà acquittés, supprimés par la rétention, mal formés, ou appartenant à un autre login. |
+
+**`already_gone` n'est pas une erreur.** Un `Ack` répété après un timeout est sûr, et c'est exactement
+dans ce cas que vous en répéterez un. Plus de 1000 jetons dans un seul appel est un `INVALID_ARGUMENT`.
+
+Un jeton fonctionne sur n'importe quel nœud de passerelle et à travers les redémarrages, mais seulement
+pour le login auquel il a été livré. Groupez vos acquittements : un `Ack` de 500 jetons coûte bien moins
+que 500 `Ack` d'un jeton.
+
+## `Pull`, le polling
+
+```proto
+rpc Pull(PullRequest) returns (PullResponse);  // max 1..1000; wait_seconds 0..20
+```
+
+Renvoie jusqu'à `max` accusés (au plus 1000), les plus anciens d'abord.
+
+- S'il n'y en a aucun en attente et que **`wait_seconds` est supérieur à 0**, il attend jusqu'à cette
+  durée — 20 secondes au plus — et revient dès qu'un accusé arrive. C'est un long poll, et c'est ainsi
+  que vous évitez une boucle active.
+- Avec **`wait_seconds: 0`**, il revient immédiatement, éventuellement vide.
+
+Une boucle typique :
+
+```
+loop:
+  r = Pull(max = 500, wait_seconds = 20)
+  handle(r.receipts)                       # stocker / agir, de façon idempotente
+  Ack([x.ack_token for x in r.receipts])   # seulement après la réussite de handle
+```
+
+`Pull` convient à un job batch, à un worker qui se réveille sur un minuteur, ou à un langage dont vous
+préférez ne pas dépendre du support du streaming.
+
+## `Subscribe`, le streaming
+
+```proto
+rpc Subscribe(SubscribeRequest) returns (stream Receipt);  // window : accusés non acquittés en vol
+```
+
+Diffuse votre file : **ce qui attend déjà d'abord, puis les nouveaux accusés à mesure qu'ils
+arrivent.**
+
+`window` borne le nombre d'accusés livrés mais non acquittés que le flux détient. À la limite de la
+fenêtre, le flux se met en pause jusqu'à ce que vous appeliez `Ack` — sur n'importe quel canal. Non
+défini, ou au-dessus du maximum de la passerelle (1000 par défaut), c'est le maximum qui est utilisé.
+
+<Tip>
+Un flux qui semble s'arrêter après exactement `window` accusés attend vos acquittements. Acquittez au
+fur et à mesure, ou par petits lots — pas à la fin.
+</Tip>
+
+### Plusieurs lecteurs partagent la file
+
+Plusieurs flux `Subscribe` — et `Pull` — d'un même login **partagent** la file : chaque accusé va à
+exactement l'un d'eux à la fois. Utilisez cela pour répartir le traitement des accusés sur plusieurs
+workers. Pour donner des flux séparés à des applications séparées, donnez-leur des logins HTTP séparés.
+
+## Ordre
+
+**Au mieux, par ordre d'arrivée.** Il n'y a aucune garantie d'ordre entre nœuds de passerelle, et un
+accusé relivré arrive après des accusés plus récents. Une issue peut arriver avant un accusé de
+progression pour le même message.
+
+Ordonnez par `level` — `2` est final — et par `done_date`, jamais par ordre d'arrivée. **Une fois que
+vous détenez un accusé `level: 2` pour un message, ignorez tout `level: 1` qui arrive après.**
+
+## Limites et rétention
+
+| Limite | Défaut | Ce qui se passe |
+| :--- | :--- | :--- |
+| Bail | 120 secondes | Un accusé non acquitté est livré à nouveau après ce délai. |
+| Fenêtre `Subscribe` | 1000 | La fenêtre la plus large qu'un flux peut demander. |
+| Taille de `Pull` | 1000 | Le plus grand nombre d'accusés que renvoie un `Pull`. |
+| Attente de `Pull` | 20 secondes | Le plus longtemps qu'un `Pull` attend l'arrivée d'un accusé. |
+| Taille d'`Ack` | 1000 jetons | Davantage dans un seul appel est refusé. |
+| Accusés en file par login | 1 000 000 | **Au-delà, les accusés plus récents ne sont pas mis en file** tant que vous n'en acquittez pas. Chaque accusé laissé de côté est enregistré sur son message, donc votre fournisseur peut toujours le voir. |
+| Rétention | 7 jours | Les accusés non acquittés plus anciens que cela sont supprimés. |
+
+Votre fournisseur peut modifier chacune de ces valeurs.
+
+<Warning>
+**Un login qui demande des accusés et ne lit jamais son flux le remplit.** Il atteint le plafond, et à
+partir de là les nouveaux accusés ne sont pas mis en file — les anciens, non lus, sont conservés à la
+place. Si vous activez les accusés sans `dlr_url`, faites tourner quelque chose qui les lit. Si vous
+n'en voulez jamais, envoyez `dlr: false`.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Exemples" icon="code" href="/developers/grpc/examples">
+    Boucles Subscribe, Pull et Ack en Python, Java et Go.
+  </Card>
+  <Card title="Le webhook d'accusé de livraison" icon="webhook" href="/reference/api/dlr-webhook">
+    Les mêmes champs, POSTés vers votre URL.
+  </Card>
+</CardGroup>

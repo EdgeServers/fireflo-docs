@@ -129,6 +129,19 @@ A `2xx` from a proxy that never reached your application **still** counts as suc
 can see past it. If receipts "arrive" but your handler never runs, check what is in front of it.
 </Warning>
 
+## No endpoint? Collect receipts over gRPC
+
+From gateway 0.15.9, where your provider has turned on the [gRPC API](/developers/grpc/overview), you
+do not have to run an endpoint at all. Send `"dlr": "yes"` **without** a `dlr_url` — over REST or gRPC —
+and the receipts wait for your login in a durable queue, with the same fields as the JSON above plus
+an acknowledgement token. You collect them with `Subscribe` or `Pull` and clear them with `Ack`.
+
+Nothing is lost while you are not looking: a receipt stays until you acknowledge it, or for seven days.
+See [Delivery receipts over gRPC](/developers/grpc/receipts).
+
+A `dlr_url` always wins — a message that has one is POSTed to it and never appears in the feed. Where
+gRPC is off, `dlr` without `dlr_url` is refused `400`.
+
 ## Three segments, three receipts
 
 By default you get one receipt per `submit_sm` you sent, each quoting the id you were given. Your
@@ -151,5 +164,8 @@ lower than gateways that report the first segment.
   </Card>
   <Card title="Handling errors" icon="code-branch" href="/developers/errors">
     Building for the receipt rather than the response.
+  </Card>
+  <Card title="Delivery receipts over gRPC" icon="receipt" href="/developers/grpc/receipts">
+    The same receipts from a durable feed, no endpoint needed.
   </Card>
 </CardGroup>

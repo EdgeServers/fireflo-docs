@@ -40,14 +40,25 @@ antes do roteamento rodar, então o desfecho só te chega como um
 
 | Campo | Tipo | Padrão | Observações |
 | :--- | :--- | :--- | :--- |
-| `dlr` | string | `no` | `yes` para receber um recibo. **Requer `dlr_url`.** |
-| `dlr_url` | string | — | Para onde o recibo é enviado via POST. Obrigatório quando `dlr` é `yes`. |
+| `dlr` | string | `no` | `yes` para receber um recibo. **Requer `dlr_url`** — a menos que a plataforma rode o feed de recibos gRPC, abaixo. |
+| `dlr_url` | string | — | Para onde o recibo é enviado via POST. Obrigatório quando `dlr` é `yes`, exceto com o feed de recibos gRPC. Quando informado, sempre vence: os recibos vão para cá e nunca para o feed. |
 | `dlr_level` | integer | `2` | `1` só progresso, `2` o desfecho, `3` os dois. **Nível 1 sozinho não envia o desfecho.** |
 | `hex_content` | string | — | Corpo como octetos hex, decodificado com o charset do seu `coding`. **Um comprimento ímpar é `400`.** |
 | `validity_period` | integer | — | Minutos que a operadora deve continuar tentando. **Um inteiro, não uma string de duração.** |
 | `sdt` | string | — | Horário de entrega agendada, passado à operadora sem alteração e **não validado aqui**. |
 | `product` | string | o produto do seu login | Tarifa esta mensagem em um produto diferente. Só produtos que seu operador permitiu para este login. **A maioria dos logins não tem nenhum permitido.** |
 | `custom_tlvs` | object | — | Parâmetros SMPP extras como **objeto** JSON — `{"0x1401": "…"}`. Não é uma lista de pares, não é uma string entre aspas. |
+
+### `dlr` sem `dlr_url`: o feed de recibos gRPC
+
+A partir do gateway 0.15.9, numa plataforma em que seu provedor ligou a
+[API gRPC](/developers/grpc/overview), `"dlr": "yes"` **sem** `dlr_url` é aceito. Os recibos da
+mensagem esperam pelo seu login numa fila durável, com os mesmos campos que o webhook traz, e você os
+coleta via gRPC — `Subscribe` ou `Pull`, depois `Ack`. Veja
+[Recibos de entrega via gRPC](/developers/grpc/receipts).
+
+Onde o gRPC está desligado, essa requisição é recusada como sempre foi: `400`, `Mandatory argument
+dlr-url is not found.` Um `dlr_url`, quando você informa um, continua vencendo.
 
 ## Valores de `coding`
 
@@ -70,7 +81,7 @@ contado.
 
 | Status | `message` | Quando |
 | :--- | :--- | :--- |
-| 400 | `Mandatory argument to is not found.` | `to` ausente ou em branco. A mesma forma nomeia `content`, `dlr_url` e os demais. |
+| 400 | `Mandatory argument to is not found.` | `to` ausente ou em branco. A mesma forma nomeia `content`, `dlr-url` (numa plataforma sem o feed de recibos gRPC) e os demais. |
 | 400 | `Unknown argument: <name>` | Um campo que a API não tem, **incluindo `username` e `password`**, que pertencem ao cabeçalho. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Nome certo, formato errado. Um `coding` não numérico. |
 | 402 | `Insufficient credit` | O saldo pré-pago não cobre. **Nada enviado, nada cobrado.** |

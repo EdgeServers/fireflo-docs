@@ -8,7 +8,10 @@ description: "Ordenação, duplicidades, recibos faltando e os estados que parec
 <Accordion title="Um recibo nunca chegou. Por onde eu começo?">
 Nesta ordem, porque cada passo descarta mais do que o próximo:
 
-1. **Você pediu?** `dlr: "yes"` *e* `dlr_url`. Um sem o outro não faz nada.
+1. **Você pediu, e para onde ele foi?** `dlr: "yes"` *e* `dlr_url` para um webhook. Um `dlr_url`
+   sem `dlr` não faz nada. `dlr` sem `dlr_url` é um `400` — exceto numa plataforma que roda o feed
+   de recibos gRPC, onde é aceito e os recibos esperam no [feed](/developers/grpc/receipts) do seu
+   login em vez de chegarem sozinhos a algum lugar.
 2. **Seu endpoint é alcançável a partir do host do gateway**, não do seu laptop?
 3. **Ele retorna 200–399?** Um `401` atrás de um proxy autenticador é a falha silenciosa mais
    comum, e um `302` para uma página de login *conta como sucesso* e engole o recibo.
@@ -84,6 +87,10 @@ Então "eu nunca recebi um recibo" é sempre respondível, mesmo quando nenhum r
 <Accordion title="Posso ver recibos sem rodar um endpoint?">
 Sim. O portal do cliente mostra suas mensagens com o estado final e permite exportá-las. Um endpoint
 é como você reage em tempo real; o portal é como você checa depois.
+
+A partir do gateway 0.15.9 existe uma terceira forma, onde seu provedor ligou a API gRPC: envie sem
+`dlr_url` e colete os recibos de um feed durável via gRPC, em tempo real e sem expor um endpoint. Veja
+[Recibos de entrega via gRPC](/developers/grpc/receipts).
 </Accordion>
 
 </AccordionGroup>

@@ -6,6 +6,16 @@ description: "Ce que la passerelle POSTe vers votre dlr_url. Chaque champ, les d
 La seule direction où **vous êtes le serveur**. Demandez-le avec `"dlr": "yes"` et un `dlr_url` sur
 l'envoi.
 
+<Note>
+**Pas de `dlr_url` ? Le flux d'accusés gRPC.** À partir de la passerelle 0.15.9, là où votre
+fournisseur a activé l'[API gRPC](/developers/grpc/overview), un envoi peut indiquer `"dlr": "yes"`
+sans `dlr_url` — sur REST ou gRPC. Ses accusés, avec les mêmes champs que le corps ci-dessous, attendent
+le login qui l'a envoyé dans une file durable lue sur gRPC : voir
+[Accusés de livraison sur gRPC](/developers/grpc/receipts). **Un `dlr_url` l'emporte toujours** : un
+message qui en a un est envoyé ici et n'apparaît jamais dans le flux. Sans gRPC, `"dlr": "yes"` sans
+`dlr_url` est refusé `400`, parce que ses accusés n'auraient nulle part où aller.
+</Note>
+
 ## `json` — le défaut
 
 Un `POST` avec `Content-Type: application/json` :

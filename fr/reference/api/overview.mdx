@@ -23,6 +23,12 @@ qu'il ne l'a pas approuvé**. Ils sont arrivés avec la **passerelle 0.9.7** ; c
 plus ancienne ils répondent `404`.
 </Note>
 
+<Tip>
+**Le même envoi est aussi disponible sur gRPC** à partir de la passerelle 0.15.9, là où votre
+fournisseur l'a activé : le même login, les mêmes champs et les mêmes règles, sur HTTP/2 et protobuf,
+avec streaming et un flux d'accusés. Voir [API gRPC](/developers/grpc/overview).
+</Tip>
+
 ## L'enveloppe
 
 Chaque réponse est un objet JSON avec **soit** `data` **soit** `message`, jamais les deux, et
