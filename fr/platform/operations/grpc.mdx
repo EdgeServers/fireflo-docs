@@ -174,6 +174,22 @@ meurt sont libérés par les nœuds survivants, ou expirent après le bail.
 plafond a cessé de lire, pas cessé d'envoyer.
 </Warning>
 
+## Plateformes
+
+Depuis **la passerelle 0.15.10**, une plateforme qui provisionne des comptes avec le jeton de gestion
+de la passerelle (OMNI, par exemple) peut utiliser le port gRPC sans le mot de passe d'aucun compte :
+`PlatformLogin` est signé avec le jeton de gestion exactement comme les requêtes de l'API de gestion,
+et la session obtenue envoie au nom des comptes dont le ref commence par le `ref` de la session (un préfixe terminé par
+`/`, comme `omni:<install>/<tenant>/`) — et lit
+leurs accusés de réception —, et d'aucun autre. Rien d'autre à activer que le port gRPC et le jeton de
+gestion déjà configuré ; sans le jeton, `PlatformLogin` répond `UNAVAILABLE` (`MANAGEMENT_DISABLED`).
+Les règles du jeton de gestion s'appliquent comme sur l'API de gestion : `FIREFLO_MANAGEMENT_ALLOWED_IPS`
+si vous la définissez, et TLS — sur le port ou sur un proxy de confiance — sauf si la plateforme se
+connecte en loopback. Les envois comptent dans le plafond de débit de chaque compte ; il n'y a pas de
+limite par plateforme. Une signature invalide, périmée ou rejouée est un refus `surface=grpc`
+bannissable qui nomme `platform:<ref>`, et `grpc.sessions_platform` dans health indique combien de
+sessions de plateforme un nœud détient. La capacité est `grpc_platform`.
+
 ## Métriques
 
 | Métrique | Ce qu'elle compte |

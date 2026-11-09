@@ -172,6 +172,21 @@ liberados pelos nós sobreviventes, ou expiram depois do lease.
 limite parou de ler, não parou de enviar.
 </Warning>
 
+## Plataformas
+
+A partir do **gateway 0.15.10**, uma plataforma que provisiona contas com o token de gestão do gateway
+(o OMNI, por exemplo) pode usar a porta gRPC sem a senha de nenhuma conta: `PlatformLogin` é assinado
+com o token de gestão exatamente como as requisições da API de gestão, e a sessão que ele devolve envia
+em nome das contas cujo ref começa com o `ref` da sessão (um prefixo terminado em `/`, como
+`omni:<install>/<tenant>/`) — e lê os recibos de entrega delas —, e de
+nenhuma outra. Não há nada a ativar além da porta gRPC e do token de gestão que você já configurou; sem
+o token, `PlatformLogin` responde `UNAVAILABLE` (`MANAGEMENT_DISABLED`). As regras do token de gestão
+valem como na API de gestão: `FIREFLO_MANAGEMENT_ALLOWED_IPS` se você a definir, e TLS — na porta ou
+em um proxy confiável — a menos que a plataforma se conecte por loopback. Os envios contam no limite
+de taxa de cada conta; não há limite por plataforma. Uma assinatura inválida, expirada ou repetida é
+uma recusa `surface=grpc` passível de banimento que nomeia `platform:<ref>`, e `grpc.sessions_platform`
+no health mostra quantas sessões de plataforma um nó mantém. A capacidade é `grpc_platform`.
+
 ## Métricas
 
 | Métrica | O que conta |

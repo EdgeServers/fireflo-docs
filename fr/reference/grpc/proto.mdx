@@ -25,6 +25,10 @@ y compris directement depuis la passerelle par réflexion serveur.
   `FireFlo.V1`, et les classes Java sont générées dans le package `fireflo.v1` sous forme de fichiers
   séparés.
 
+La passerelle 0.15.10 a ajouté `AuthService.PlatformLogin`, `PlatformLoginRequest` et `SendRequest.account`
+(champ 17) pour les plateformes qui provisionnent des comptes avec le jeton de gestion ; un client
+généré à partir du fichier de la 0.15.9 continue de fonctionner sans changement.
+
 Les champs 15 et 16 de `SendRequest` sont réservés pour `dlr_method` et `tags` de REST, qui ne sont pas
 transportés sur gRPC.
 
@@ -50,6 +54,11 @@ import "google/protobuf/timestamp.proto";
 service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // A platform session (from 0.15.10): for a platform that provisions accounts with
+  // the gateway's management token and sends on their behalf. No password; the call
+  // is signed with the management token instead (see PlatformLoginRequest). The
+  // token returned is used exactly as a Login token.
+  rpc PlatformLogin(PlatformLoginRequest) returns (LoginResponse);
 }
 
 message LoginRequest {
@@ -63,6 +72,22 @@ message LoginResponse {
 }
 message LogoutRequest {}
 message LogoutResponse {}
+
+// Signed, not passworded. The call carries three metadata entries:
+//   x-fireflo-timestamp  Unix time in seconds, within 60 s of the gateway's clock
+//   x-fireflo-nonce      1..128 characters, unique per call; a nonce is accepted once
+//   x-fireflo-signature  hex HMAC-SHA256, keyed by the management token, of these
+//                        five lines joined by "\n", with no trailing newline:
+//                          POST
+//                          /fireflo.v1.AuthService/PlatformLogin
+//                          <the timestamp, as sent>
+//                          <the nonce, as sent>
+//                          <lowercase hex SHA-256 of this message's serialized bytes>
+// The session acts for the accounts whose ref (the marker the platform provisioned
+// them with) starts with this ref, and for no other.
+message PlatformLoginRequest {
+  optional string ref = 1;   // required: a prefix of the accounts' refs, ending in "/"
+}
 
 // ---------------------------------------------------------------- Send
 service SendService {
@@ -92,6 +117,10 @@ message SendRequest {
   optional string product = 13;
   optional string dlr_url = 14;          // if set, receipts go to this webhook and NOT the feed
   reserved 15, 16;                       // dlr_method, tags (REST/Jasmin compatibility; not carried)
+  // Platform sessions only, and required on them: the account to send as. The
+  // message runs under that account's enabled HTTP login, with its prices, limits
+  // and receipt feed. Refused on a Login session.
+  optional string account = 17;
 }
 
 message TlvValue {
@@ -138,6 +167,9 @@ message ErrorDetail {
 // One durable queue per HTTP login. Subscribe and Pull draw from the same queue.
 // Delivery is at least once: a receipt is removed only by Ack. An unacked receipt
 // is redelivered after its lease (default 120 s) or as soon as its stream closes.
+// On a platform session the three calls read the receipts of every account the
+// platform owns; account_id and system_id say whose each one is. An ack token is
+// accepted only by the kind of session (login or platform) it was delivered to.
 service ReceiptService {
   rpc Subscribe(SubscribeRequest) returns (stream Receipt);
   rpc Pull(PullRequest) returns (PullResponse);
@@ -186,7 +218,7 @@ message Receipt {
 
 | Partie | Page |
 | :--- | :--- |
-| `AuthService`, `LoginResponse` | [Authentification et sessions](/developers/grpc/authentication) |
+| `AuthService`, `LoginResponse`, `PlatformLoginRequest` | [Authentification et sessions](/developers/grpc/authentication) |
 | `SendService`, `SendRequest`, `TlvValue`, `SendResponse`, `SendStreamRequest`, `SendStreamResult` | [Envoyer des messages](/developers/grpc/sending) |
 | `ErrorDetail` | [Erreurs et codes de statut](/developers/grpc/errors) |
 | `ReceiptService`, `Receipt`, `PullRequest`, `SubscribeRequest`, `AckRequest`, `AckResponse` | [Accusés de livraison sur gRPC](/developers/grpc/receipts) |
