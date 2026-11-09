@@ -80,9 +80,10 @@ message LogoutResponse {}
 //                          <the timestamp, as sent>
 //                          <the nonce, as sent>
 //                          <lowercase hex SHA-256 of this message's serialized bytes>
-// The session acts for the accounts provisioned with this ref, and for no other.
+// The session acts for the accounts whose ref (the marker the platform provisioned
+// them with) starts with this ref, and for no other.
 message PlatformLoginRequest {
-  optional string ref = 1;   // the ref the platform provisioned its accounts with; required
+  optional string ref = 1;   // required: a prefix of the accounts' refs, ending in "/"
 }
 
 // ---------------------------------------------------------------- Send

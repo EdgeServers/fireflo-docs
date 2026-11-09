@@ -179,7 +179,8 @@ plafond a cessé de lire, pas cessé d'envoyer.
 Depuis **la passerelle 0.15.10**, une plateforme qui provisionne des comptes avec le jeton de gestion
 de la passerelle (OMNI, par exemple) peut utiliser le port gRPC sans le mot de passe d'aucun compte :
 `PlatformLogin` est signé avec le jeton de gestion exactement comme les requêtes de l'API de gestion,
-et la session obtenue envoie au nom des comptes provisionnés avec le `ref` de la plateforme — et lit
+et la session obtenue envoie au nom des comptes dont le ref commence par le `ref` de la session (un préfixe terminé par
+`/`, comme `omni:<install>/<tenant>/`) — et lit
 leurs accusés de réception —, et d'aucun autre. Rien d'autre à activer que le port gRPC et le jeton de
 gestion déjà configuré ; sans le jeton, `PlatformLogin` répond `UNAVAILABLE` (`MANAGEMENT_DISABLED`).
 Les règles du jeton de gestion s'appliquent comme sur l'API de gestion : `FIREFLO_MANAGEMENT_ALLOWED_IPS`

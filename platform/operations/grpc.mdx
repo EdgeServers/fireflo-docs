@@ -175,7 +175,8 @@ the cap has stopped reading, not stopped sending.
 From **gateway 0.15.10** a platform that provisions accounts with the gateway's management token (OMNI,
 for one) can use the gRPC port without any account's password: `PlatformLogin` is signed with the
 management token exactly as the management API's requests are, and the session it returns sends as —
-and reads the delivery receipts of — the accounts provisioned with the platform's `ref`, and no others.
+and reads the delivery receipts of — the accounts whose ref starts with the session's `ref` — a prefix ending in `/`, such as
+`omni:<install>/<tenant>/` — and no others.
 Nothing needs turning on beyond the gRPC port and the management token you already set; without the
 token, `PlatformLogin` answers `UNAVAILABLE` (`MANAGEMENT_DISABLED`). The management token's rules
 apply as on the management API: `FIREFLO_MANAGEMENT_ALLOWED_IPS` if you set it, and TLS — on the port

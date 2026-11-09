@@ -177,7 +177,8 @@ limite parou de ler, não parou de enviar.
 A partir do **gateway 0.15.10**, uma plataforma que provisiona contas com o token de gestão do gateway
 (o OMNI, por exemplo) pode usar a porta gRPC sem a senha de nenhuma conta: `PlatformLogin` é assinado
 com o token de gestão exatamente como as requisições da API de gestão, e a sessão que ele devolve envia
-em nome das contas provisionadas com o `ref` da plataforma — e lê os recibos de entrega delas —, e de
+em nome das contas cujo ref começa com o `ref` da sessão (um prefixo terminado em `/`, como
+`omni:<install>/<tenant>/`) — e lê os recibos de entrega delas —, e de
 nenhuma outra. Não há nada a ativar além da porta gRPC e do token de gestão que você já configurou; sem
 o token, `PlatformLogin` responde `UNAVAILABLE` (`MANAGEMENT_DISABLED`). As regras do token de gestão
 valem como na API de gestão: `FIREFLO_MANAGEMENT_ALLOWED_IPS` se você a definir, e TLS — na porta ou

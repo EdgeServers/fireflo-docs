@@ -178,7 +178,8 @@ tope ha dejado de leer, no de enviar.
 Desde **el gateway 0.15.10** una plataforma que aprovisiona cuentas con el token de gestión del gateway
 (OMNI, por ejemplo) puede usar el puerto gRPC sin la contraseña de ninguna cuenta: `PlatformLogin` se
 firma con el token de gestión igual que las peticiones de la API de gestión, y la sesión que devuelve
-envía como las cuentas aprovisionadas con el `ref` de la plataforma —y lee sus recibos de entrega—, y
+envía como las cuentas cuyo ref empieza por el `ref` de la sesión (un prefijo que termina en `/`,
+como `omni:<install>/<tenant>/`) —y lee sus recibos de entrega—, y
 como ninguna otra. No hay nada más que activar aparte del puerto gRPC y el token de gestión que ya
 tiene; sin el token, `PlatformLogin` responde `UNAVAILABLE` (`MANAGEMENT_DISABLED`). Se aplican las
 reglas del token de gestión, como en la API de gestión: `FIREFLO_MANAGEMENT_ALLOWED_IPS` si lo
