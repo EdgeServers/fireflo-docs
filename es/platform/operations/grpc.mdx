@@ -173,6 +173,21 @@ tras el lease.
 tope ha dejado de leer, no de enviar.
 </Warning>
 
+## Plataformas
+
+Desde **el gateway 0.15.10** una plataforma que aprovisiona cuentas con el token de gestión del gateway
+(OMNI, por ejemplo) puede usar el puerto gRPC sin la contraseña de ninguna cuenta: `PlatformLogin` se
+firma con el token de gestión igual que las peticiones de la API de gestión, y la sesión que devuelve
+envía como las cuentas aprovisionadas con el `ref` de la plataforma —y lee sus recibos de entrega—, y
+como ninguna otra. No hay nada más que activar aparte del puerto gRPC y el token de gestión que ya
+tiene; sin el token, `PlatformLogin` responde `UNAVAILABLE` (`MANAGEMENT_DISABLED`). Se aplican las
+reglas del token de gestión, como en la API de gestión: `FIREFLO_MANAGEMENT_ALLOWED_IPS` si lo
+define, y TLS —en el puerto o en un proxy de confianza— salvo que la plataforma se conecte por
+loopback. Los envíos cuentan contra el límite de velocidad de cada cuenta; no hay límite por
+plataforma. Una firma incorrecta, caducada o repetida es un rechazo `surface=grpc` sancionable que
+nombra `platform:<ref>`, y `grpc.sessions_platform` en health muestra cuántas sesiones de plataforma
+tiene un nodo. La capacidad es `grpc_platform`.
+
 ## Métricas
 
 | Métrica | Qué cuenta |
