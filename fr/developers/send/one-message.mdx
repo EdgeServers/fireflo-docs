@@ -22,7 +22,7 @@ Tout le reste a une valeur par défaut. Le tableau complet est sur
 | `to` | — | **Requis.** Format international, entre guillemets. |
 | `content` | — | Requis sauf si vous envoyez `hex_content`. Jamais les deux. |
 | `from` | votre nom de login | Doit être approuvé, sinon `403`. |
-| `coding` | `0` | `8` pour tout ce qui sort du GSM-7. Divise votre capacité par deux. |
+| `coding` | choisi d'après le texte | Omettez-le : à partir de la passerelle 0.16.2, un texte hors GSM-7 part de lui-même en `8` (UCS-2), ce qui divise votre capacité par deux. Nommez-le pour imposer un alphabet. |
 | `dlr` | `no` | `yes` nécessite `dlr_url`, sauf si vous récupérez les accusés via [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Où l'accusé est POSTé. |
 
@@ -50,9 +50,11 @@ Voir [Sender IDs](/developers/send/sender-ids).
 </Accordion>
 
 <Accordion title="coding — ce que ça coûte">
-`0` vous donne 160 caractères. `8` vous en donne 70. Une seule apostrophe typographique dans votre
-texte force l'UCS-2 de toute façon, donc régler `coding` ne vous protège pas du coût. Normaliser
-votre ponctuation, si.
+`0` vous donne 160 caractères. `8` vous en donne 70. Sans `coding`, une seule apostrophe
+typographique dans votre texte fait envoyer l'UCS-2 par la passerelle (à partir de 0.16.2), donc le
+coût vient du texte : c'est normaliser votre ponctuation qui vous protège. Nommer `coding: 0`
+conserve les 160, mais les caractères que le GSM-7 ne peut pas porter arrivent alors sous forme de
+points d'interrogation.
 
 Voir [Encodage et segments](/developers/send/encoding-and-segments).
 </Accordion>

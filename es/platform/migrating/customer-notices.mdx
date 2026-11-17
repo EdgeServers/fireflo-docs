@@ -68,6 +68,48 @@ cuyos reintentos están concentrados en una ruta cara ve una subida de dinero ma
 
 `part_no = 1` porque el dinero vive enteramente en la parte 1 de un mensaje concatenado.
 
+## 0.16.2: Unicode enviado sin `coding`
+
+**A quién afecta:** a los clientes que envían por la API HTTP o por gRPC **sin** `coding`, con texto
+que GSM-7 no puede llevar: hindi y otras escrituras de la India, árabe, chino, cirílico, un emoji,
+un apóstrofo curvo. Los clientes SMPP y quien indique un `coding` no están afectados.
+
+| Un mensaje sin `coding`, cuyo texto… | Hasta la 0.16.1 | Desde la 0.16.2 |
+| :--- | :--- | :--- |
+| cabe en GSM-7 | data coding 0, 160 / 153 caracteres por segmento | sin cambios |
+| tiene un carácter que GSM-7 no puede llevar | data coding 0: esos caracteres llegan como `?`; 160 / 153 por segmento | data coding 8: llega legible; **70 / 67 por segmento, así que más segmentos y un cargo mayor** |
+| lo mismo, con `coding: 0` indicado | data coding 0, como se pidió | sin cambios |
+
+**El número, la dirección, la fecha:** un mensaje en hindi de 100 caracteres era 1 segmento y pasa
+a ser 2; uno de 160 caracteres era 1 y pasa a ser 3. Los cargos de esos mensajes **suben**, desde el
+día en que actualices.
+
+Los candidatos, es decir, las cuentas cuyo tráfico HTTP o gRPC salió como data coding 0 en los
+últimos 30 días:
+
+```sql
+SELECT account_id,
+       count(*)                                                 AS http_messages_dcs0,
+       count(*) FILTER (WHERE body IS NOT NULL)                 AS with_text_recorded,
+       count(*) FILTER (WHERE body ~ '[^\x01-\x7E\n\r]')        AS text_beyond_ascii
+  FROM cdr_submit_all
+ WHERE part_no = 1
+   AND ingress = 'http'
+   AND dcs = 0
+   AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id
+ ORDER BY http_messages_dcs0 DESC;
+```
+
+**Son candidatos, no la lista de afectados.** El registro guarda la codificación, no si el texto
+cabía en ella; `text_beyond_ascii` la acota solo donde se guarda el texto del mensaje, y además
+cuenta caracteres que GSM-7 sí tiene, como `é` y `£`. Donde no se guarda el texto, pregunta al
+cliente o avisa a todas las cuentas de la lista: para una que solo envía en inglés, el aviso no
+hace daño.
+
+Si necesitas tiempo, actualiza, desactiva **Send Unicode automatically** en la página Gateway
+settings (`smsg.restapi.coding.autodetect`), avisa a tus clientes y luego actívalo.
+
 ## Dos frases que no deben suavizarse
 
 Cualquiera que sea la reescritura para adecuar a la voz de tu plataforma, estas sobreviven intactas:

@@ -33,7 +33,7 @@ antes do roteamento rodar, então o desfecho só te chega como um
 | `to` | string | **sim** | — | Formato internacional. **Coloque entre aspas** — um número sem aspas perde zeros à esquerda. |
 | `content` | string | um dos dois | — | O texto da mensagem. Envie este ou `hex_content`, nunca os dois. |
 | `from` | string | não | seu nome de login | Precisa ser aprovado para sua conta, ou `403`. |
-| `coding` | integer | não | `0` | SMPP `data_coding`. `8` para qualquer coisa fora de GSM-7. Reduz o comprimento do segmento pela metade. |
+| `coding` | integer | não | escolhido a partir do texto | SMPP `data_coding`. Deixado de fora, o gateway envia `0` quando o texto cabe em GSM-7 e `8` (UCS-2, metade do comprimento do segmento) quando não cabe — a partir da 0.16.2; antes disso, sempre `0`. Um valor que você indica é usado como foi dado. |
 | `priority` | integer | não | `0` | `0`–`3`. O gateway tem dois níveis, então 0–1 são normal e 2–3 são alta. |
 
 ### Avançados

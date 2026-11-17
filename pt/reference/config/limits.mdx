@@ -42,6 +42,7 @@ definido.
 | :--- | :--- | :--- |
 | `smsg.restapi.maxRate.default` | `0` | Mensagens por segundo por conta de billing, **REST e gRPC juntos** (a partir da 0.15.9). `0` é ilimitado. |
 | `smsg.restapi.maxRate.<accountId>` | *(não definido)* | Teto para uma conta, sobrescrevendo o padrão. |
+| `smsg.restapi.coding.autodetect` | `true` | A partir da 0.16.2. Um envio pela API HTTP, por gRPC ou pela API da plataforma que não indica `coding` sai como UCS-2 (coding 8) quando o seu texto tem um caractere que o GSM-7 não comporta, e é contado a 70 / 67 caracteres por segmento. Vale para toda a plataforma, lido a cada envio. Um `coding` indicado no envio, ou nos `globals` de um batch, sempre prevalece. `false` restaura o comportamento anterior à 0.16.2: alfabeto padrão, `?` para o que ele não comporta. SMPP não é afetado. |
 | `quarkus.http.limits.max-body-size` | `1M` | Maior body de requisição aceito. |
 | `quarkus.http.read-timeout` | `60S` | Quanto tempo uma requisição pode levar para chegar. |
 | `quarkus.http.idle-timeout` | `30M` | Quanto tempo uma conexão ociosa é mantida. |

@@ -49,6 +49,24 @@ trois fois plus cher.
 Normalisez la ponctuation avant l'envoi si votre contenu vient d'un endroit où un humain a tapé.
 </Warning>
 
+## Qui choisit l'encodage
+
+**À partir de la passerelle 0.16.2, c'est la passerelle**, quand vous n'envoyez pas de `coding` : un
+texte qui tient en GSM-7 part en GSM-7, et un texte avec tout autre caractère part en UCS-2. Un
+`coding` que vous nommez est toujours utilisé tel quel.
+
+<Warning>
+**Avant 0.16.2, un envoi sans `coding` partait toujours dans l'alphabet par défaut.** Les caractères
+qu'il ne peut pas porter — une autre écriture, un emoji, un guillemet typographique — arrivaient sur
+le combiné sous forme de points d'interrogation, et le message était compté à 160 caractères par
+segment au lieu de 70. Si votre plateforme fait tourner une passerelle plus ancienne, envoyez
+vous-même `coding: 8` pour un tel texte.
+
+Sur 0.16.2, le même message arrive lisible et est compté en UCS-2, donc il prend plus de segments
+qu'il ne semblait en prendre auparavant. Un opérateur peut désactiver le choix automatique avec
+`smsg.restapi.coding.autodetect` ; voir [Limites et refus](/reference/config/limits).
+</Warning>
+
 ## Vérifiez le prix avant d'envoyer
 
 `/secure/rate` renvoie le nombre de segments sans rien envoyer :

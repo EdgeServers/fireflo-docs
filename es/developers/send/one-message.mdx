@@ -22,7 +22,7 @@ Todo lo demás tiene un valor por defecto. La tabla completa está en
 | `to` | — | **Obligatorio.** Formato internacional, entrecomillado. |
 | `content` | — | Obligatorio salvo que envíe `hex_content`. Nunca ambos. |
 | `from` | su nombre de login | Debe estar aprobado, o `403`. |
-| `coding` | `0` | `8` para cualquier cosa fuera de GSM-7. Reduce a la mitad su capacidad. |
+| `coding` | elegido según el texto | Omítalo: desde la pasarela 0.16.2, el texto fuera de GSM-7 sale como `8` (UCS-2) por sí solo, lo que reduce a la mitad su capacidad. Indíquelo para forzar un alfabeto. |
 | `dlr` | `no` | `yes` requiere `dlr_url`, salvo que recoja los acuses por [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Dónde se hace POST del acuse. |
 
@@ -49,8 +49,10 @@ Véase [Sender IDs](/developers/send/sender-ids).
 </Accordion>
 
 <Accordion title="coding — lo que cuesta">
-`0` le da 160 caracteres. `8` le da 70. Una comilla curva en su texto fuerza UCS-2 de todos
-modos, así que fijar `coding` no le protege del coste. Normalizar la puntuación sí.
+`0` le da 160 caracteres. `8` le da 70. Sin `coding`, una sola comilla curva en su texto hace que
+la pasarela envíe UCS-2 (desde la 0.16.2), así que el coste viene del texto: lo que le protege es
+normalizar la puntuación. Indicar `coding: 0` mantiene los 160, pero los caracteres que GSM-7 no
+puede llevar llegan entonces como signos de interrogación.
 
 Véase [Codificación y segmentos](/developers/send/encoding-and-segments).
 </Accordion>

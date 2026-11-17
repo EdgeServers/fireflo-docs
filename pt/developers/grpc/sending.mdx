@@ -45,7 +45,7 @@ verificações.
 | `from` | string | `from` | seu nome de login | Sender ID. Precisa ser aprovado para sua conta. Vazio é o mesmo que não definido. |
 | `content` | string | `content` | — | Texto da mensagem. **Exatamente um entre `content` e `hex_content`.** |
 | `hex_content` | string | `hex_content` | — | O corpo como octetos hex, decodificado com o alfabeto que `coding` indica. Um comprimento ímpar é recusado. |
-| `coding` | int32 | `coding` | `0` | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. Os [mesmos valores](/reference/api/send#coding-values) do REST. |
+| `coding` | int32 | `coding` | escolhido a partir do texto | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. Os [mesmos valores](/reference/api/send#coding-values) do REST. Sem valor, o gateway escolhe `0` ou `8` a partir do texto (0.16.2). |
 | `priority` | int32 | `priority` | `0` | `0`–`3`. `0` e `1` são normal, `2` e `3` alta. |
 | `validity_period` | int32 | `validity_period` | — | Minutos a partir da aceitação. Uma mensagem ainda esperando uma operadora depois disso não é enviada, e é reembolsada. |
 | `sdt` | string | `sdt` | — | Horário de entrega agendada, no formato do REST. |

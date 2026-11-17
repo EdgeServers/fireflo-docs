@@ -44,7 +44,7 @@ limits apply, because both reach the same checks.
 | `from` | string | `from` | your login name | Sender ID. Must be approved for your account. Empty is the same as unset. |
 | `content` | string | `content` | — | Message text. **Exactly one of `content` and `hex_content`.** |
 | `hex_content` | string | `hex_content` | — | The body as hex octets, decoded with the alphabet `coding` names. An odd length is refused. |
-| `coding` | int32 | `coding` | `0` | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. The [same values](/reference/api/send#coding-values) as REST. |
+| `coding` | int32 | `coding` | chosen from the text | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. The [same values](/reference/api/send#coding-values) as REST. Unset, the gateway picks `0` or `8` from the text (0.16.2). |
 | `priority` | int32 | `priority` | `0` | `0`–`3`. `0` and `1` are normal, `2` and `3` high. |
 | `validity_period` | int32 | `validity_period` | — | Minutes from acceptance. A message still waiting for a carrier after it is not sent, and is refunded. |
 | `sdt` | string | `sdt` | — | Scheduled delivery time, in the REST format. |

@@ -48,6 +48,23 @@ nada no caminho de envio sinaliza. A mensagem sai correta, só que três vezes m
 Normalize a pontuação antes de enviar se seu conteúdo vem de qualquer lugar em que um humano digitou.
 </Warning>
 
+## Quem escolhe a codificação
+
+**A partir do gateway 0.16.2, o gateway escolhe**, quando você não envia `coding`: texto que cabe em
+GSM-7 sai como GSM-7, e texto com qualquer outro caractere sai como UCS-2. Um `coding` que você
+indica é sempre usado como foi dado.
+
+<Warning>
+**Antes da 0.16.2, um envio sem `coding` era sempre enviado no alfabeto padrão.** Os caracteres que
+ele não comporta — outra escrita, um emoji, uma aspa tipográfica — chegavam ao aparelho como pontos
+de interrogação, e a mensagem era contada a 160 caracteres por segmento em vez de 70. Se a sua
+plataforma roda um gateway mais antigo, envie você mesmo `coding: 8` para esse tipo de texto.
+
+Na 0.16.2 a mesma mensagem chega legível e é contada como UCS-2, então ocupa mais segmentos do que
+parecia antes. Um operador pode desligar a escolha automática com
+`smsg.restapi.coding.autodetect`; veja [Limites e recusas](/reference/config/limits).
+</Warning>
+
 ## Confira o preço antes de enviar
 
 `/secure/rate` retorna a contagem de segmentos sem enviar nada:

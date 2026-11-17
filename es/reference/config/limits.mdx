@@ -41,6 +41,7 @@ profundidad bajo carga normal primero. `router_queue` y el `queue_depth` de cada
 | :--- | :--- | :--- |
 | `smsg.restapi.maxRate.default` | `0` | Mensajes por segundo por cuenta de facturación, **REST y gRPC juntos** (desde la 0.15.9). `0` es ilimitado. |
 | `smsg.restapi.maxRate.<accountId>` | *(sin establecer)* | Techo para una cuenta, sobrescribiendo el predeterminado. |
+| `smsg.restapi.coding.autodetect` | `true` | Desde la 0.16.2. Un envío por la API HTTP, gRPC o la API de la plataforma que no indica `coding` sale como UCS-2 (coding 8) cuando su texto tiene un carácter que GSM-7 no puede llevar, y se cuenta a 70 / 67 caracteres por segmento. Para toda la plataforma, leído en cada envío. Un `coding` indicado en el envío, o en los `globals` de un lote, siempre gana. `false` restaura el comportamiento anterior a la 0.16.2: alfabeto por defecto, `?` para lo que no puede llevar. SMPP no está afectado. |
 | `quarkus.http.limits.max-body-size` | `1M` | Cuerpo de petición más grande aceptado. |
 | `quarkus.http.read-timeout` | `60S` | Cuánto puede tardar una petición en llegar. |
 | `quarkus.http.idle-timeout` | `30M` | Cuánto se mantiene una conexión inactiva. |

@@ -50,6 +50,24 @@ Normalice la puntuación antes de enviar si su contenido viene de cualquier siti
 tecleado una persona.
 </Warning>
 
+## Quién elige la codificación
+
+**Desde la pasarela 0.16.2, la elige la pasarela** cuando usted no envía `coding`: el texto que cabe
+en GSM-7 sale como GSM-7, y el texto con cualquier otro carácter sale como UCS-2. Un `coding` que
+usted indique se usa siempre tal cual.
+
+<Warning>
+**Antes de la 0.16.2, un envío sin `coding` salía siempre en el alfabeto por defecto.** Los
+caracteres que este no puede llevar —otra escritura, un emoji, una comilla curva— llegaban al
+teléfono como signos de interrogación, y el mensaje se contaba a 160 caracteres por segmento en
+lugar de 70. Si su plataforma ejecuta una pasarela anterior, envíe usted mismo `coding: 8` para ese
+texto.
+
+En la 0.16.2 el mismo mensaje llega legible y se cuenta como UCS-2, así que ocupa más segmentos de
+los que parecía ocupar antes. Un operador puede desactivar la elección automática con
+`smsg.restapi.coding.autodetect`; véase [Límites y rechazos](/reference/config/limits).
+</Warning>
+
 ## Compruebe el precio antes de enviar
 
 `/secure/rate` devuelve el número de segmentos sin enviar nada:

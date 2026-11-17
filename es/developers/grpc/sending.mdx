@@ -45,7 +45,7 @@ comprobaciones.
 | `from` | string | `from` | su nombre de login | Sender ID. Debe estar aprobado para su cuenta. Vacío equivale a no establecido. |
 | `content` | string | `content` | — | Texto del mensaje. **Exactamente uno de `content` y `hex_content`.** |
 | `hex_content` | string | `hex_content` | — | El cuerpo como octetos hex, decodificado con el alfabeto que indica `coding`. Una longitud impar se rechaza. |
-| `coding` | int32 | `coding` | `0` | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. Los [mismos valores](/reference/api/send#coding-values) que en REST. |
+| `coding` | int32 | `coding` | elegido según el texto | SMPP `data_coding`: `0` GSM-7, `3` Latin-1, `8` UCS-2. Los [mismos valores](/reference/api/send#coding-values) que en REST. Sin establecer, la pasarela elige `0` u `8` según el texto (0.16.2). |
 | `priority` | int32 | `priority` | `0` | `0`–`3`. `0` y `1` son normales, `2` y `3` altas. |
 | `validity_period` | int32 | `validity_period` | — | Minutos desde la aceptación. Un mensaje que pasado ese tiempo sigue esperando a un operador no se envía, y se reembolsa. |
 | `sdt` | string | `sdt` | — | Hora de entrega programada, en el formato de REST. |

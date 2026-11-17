@@ -29,7 +29,7 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
 | :--- | :--- | :--- | :--- | :--- |
 | `to` | string | **sí** | — | El precio varía por país y red, así que esto no es opcional. |
 | `content` | string | no | — | Aquí solo importa su longitud: decide el número de segmentos. |
-| `coding` | integer | no | `0` | Cambia cuántos segmentos ocupa el mismo texto, así que cambia el precio. |
+| `coding` | integer | no | elegido según el texto | Cambia cuántos segmentos ocupa el mismo texto, así que cambia el precio. Si se omite, se elige como la elegiría un envío (0.16.2). |
 | `product` | string | no | el producto de su login | Tarifica contra un producto distinto, desde la misma lista permitida que usa un envío. |
 | `from` | string | no | — | **Aceptado, y no afecta al precio.** |
 

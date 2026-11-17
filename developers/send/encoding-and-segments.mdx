@@ -48,6 +48,22 @@ flags it — the message goes out correctly, just three times more expensively.
 Normalise punctuation before sending if your content comes from anywhere a human typed it.
 </Warning>
 
+## Who picks the encoding
+
+**From gateway 0.16.2, the gateway does**, when you send no `coding`: text that fits GSM-7 goes as
+GSM-7, and text with any other character goes as UCS-2. A `coding` you name is always used as given.
+
+<Warning>
+**Before 0.16.2 a send with no `coding` was always sent in the default alphabet.** Characters it
+cannot carry — another script, an emoji, a curly quote — reached the handset as question marks, and
+the message was counted at 160 characters a segment instead of 70. If your platform runs an older
+gateway, send `coding: 8` yourself for such text.
+
+On 0.16.2 the same message arrives readable and is counted as UCS-2, so it takes more segments than
+it appeared to before. An operator can switch the automatic choice off with
+`smsg.restapi.coding.autodetect`; see [Limits](/reference/config/limits).
+</Warning>
+
 ## Check the price before you send
 
 `/secure/rate` returns the segment count without sending anything:

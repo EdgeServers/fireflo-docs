@@ -33,7 +33,7 @@ l'exécution du routage, donc l'issue ne peut vous parvenir que sous forme d'un
 | `to` | string | **oui** | — | Format international. **Entre guillemets** — un numéro sans guillemets perd ses zéros initiaux. |
 | `content` | string | l'un ou l'autre | — | Le texte du message. Donnez celui-ci ou `hex_content`, jamais les deux. |
 | `from` | string | non | votre nom de login | Doit être approuvé pour votre compte, sinon `403`. |
-| `coding` | integer | non | `0` | SMPP `data_coding`. `8` pour tout ce qui sort du GSM-7 — divise la taille de segment par deux. |
+| `coding` | integer | non | choisi d'après le texte | SMPP `data_coding`. Omis, la passerelle envoie `0` quand le texte tient en GSM-7 et `8` (UCS-2, la moitié de la taille de segment) quand il n'y tient pas — à partir de 0.16.2 ; avant, toujours `0`. Une valeur que vous nommez est utilisée telle quelle. |
 | `priority` | integer | non | `0` | `0`–`3`. La passerelle a deux niveaux, donc 0–1 sont normaux et 2–3 sont hauts. |
 
 ### Avancés

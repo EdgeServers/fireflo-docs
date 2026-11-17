@@ -33,7 +33,7 @@ antes de que se ejecute el enrutamiento, así que el resultado solo puede llegar
 | `to` | string | **sí** | — | Formato internacional. **Entrecomíllelo**: un número sin entrecomillar pierde ceros iniciales. |
 | `content` | string | uno u otro | — | El texto del mensaje. Dé este o `hex_content`, nunca ambos. |
 | `from` | string | no | su nombre de login | Debe estar aprobado para su cuenta, o `403`. |
-| `coding` | integer | no | `0` | SMPP `data_coding`. `8` para cualquier cosa fuera de GSM-7: reduce a la mitad la longitud del segmento. |
+| `coding` | integer | no | elegido según el texto | SMPP `data_coding`. Si se omite, la pasarela envía `0` cuando el texto cabe en GSM-7 y `8` (UCS-2, la mitad de longitud de segmento) cuando no, desde la 0.16.2; antes, siempre `0`. Un valor que usted indique se usa tal cual. |
 | `priority` | integer | no | `0` | `0`–`3`. La pasarela tiene dos niveles, así que 0–1 son normales y 2–3 son altas. |
 
 ### Avanzados

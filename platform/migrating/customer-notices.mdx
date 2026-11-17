@@ -68,6 +68,45 @@ whose retries are concentrated on an expensive route sees a bigger money rise th
 
 `part_no = 1` because the money lives entirely on part 1 of a concatenated message.
 
+## 0.16.2: Unicode sent without a `coding`
+
+**Who:** customers who send over the HTTP API or gRPC **without** `coding`, with text GSM-7 cannot
+carry: Hindi and other Indian scripts, Arabic, Chinese, Cyrillic, an emoji, a curly apostrophe. SMPP
+customers and anyone who names a `coding` are not affected.
+
+| A message with no `coding`, whose text… | Up to 0.16.1 | From 0.16.2 |
+| :--- | :--- | :--- |
+| fits GSM-7 | data coding 0, 160 / 153 characters a segment | unchanged |
+| has a character GSM-7 cannot carry | data coding 0: those characters arrive as `?`; 160 / 153 a segment | data coding 8: arrives readable; **70 / 67 a segment, so more segments and a higher charge** |
+| the same, with `coding: 0` named | data coding 0, as asked | unchanged |
+
+**The number, the direction, the date:** a 100-character Hindi message was 1 segment and is 2; a
+160-character one was 1 and is 3. Charges for such messages go **up**, from the day you update.
+
+The candidates — accounts whose HTTP or gRPC traffic went out as data coding 0 in the last 30 days:
+
+```sql
+SELECT account_id,
+       count(*)                                                 AS http_messages_dcs0,
+       count(*) FILTER (WHERE body IS NOT NULL)                 AS with_text_recorded,
+       count(*) FILTER (WHERE body ~ '[^\x01-\x7E\n\r]')        AS text_beyond_ascii
+  FROM cdr_submit_all
+ WHERE part_no = 1
+   AND ingress = 'http'
+   AND dcs = 0
+   AND submitted_at >= now() - interval '30 days'
+ GROUP BY account_id
+ ORDER BY http_messages_dcs0 DESC;
+```
+
+**These are candidates, not the affected list.** The record keeps the coding, not whether the text
+fitted it; `text_beyond_ascii` narrows it only where message text is recorded, and it also counts
+characters GSM-7 does have, such as `é` and `£`. Where text is not recorded, ask the customer or tell
+every account listed: for one that sends only English the notice is harmless.
+
+If you need time, update, switch **Send Unicode automatically** off on the Gateway settings page
+(`smsg.restapi.coding.autodetect`), tell your customers, then switch it on.
+
 ## Two sentences that must not be softened
 
 Whatever else is rewritten to suit your platform's voice, these survive intact:

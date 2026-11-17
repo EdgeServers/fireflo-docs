@@ -33,7 +33,7 @@ runs, so the outcome can only reach you as a
 | `to` | string | **yes** | — | International format. **Quote it** — an unquoted number loses leading zeros. |
 | `content` | string | either | — | The message text. Give this or `hex_content`, never both. |
 | `from` | string | no | your login name | Must be approved for your account, or `403`. |
-| `coding` | integer | no | `0` | SMPP `data_coding`. `8` for anything outside GSM-7 — halves the segment length. |
+| `coding` | integer | no | chosen from the text | SMPP `data_coding`. Left out, the gateway sends `0` when the text fits GSM-7 and `8` (UCS-2, half the segment length) when it does not — from 0.16.2; before that, always `0`. A value you name is used as given. |
 | `priority` | integer | no | `0` | `0`–`3`. The gateway has two levels, so 0–1 are normal and 2–3 are high. |
 
 ### Advanced

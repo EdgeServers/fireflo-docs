@@ -22,7 +22,7 @@ Everything else has a default. The complete table is on
 | `to` | — | **Required.** International format, quoted. |
 | `content` | — | Required unless you send `hex_content`. Never both. |
 | `from` | your login name | Must be approved, or `403`. |
-| `coding` | `0` | `8` for anything outside GSM-7 — halves your capacity. |
+| `coding` | chosen from the text | Leave it out: from gateway 0.16.2, text outside GSM-7 goes as `8` (UCS-2) by itself, which halves your capacity. Name it to force an alphabet. |
 | `dlr` | `no` | `yes` requires `dlr_url`, unless you collect receipts over [gRPC](/developers/grpc/receipts). |
 | `dlr_url` | — | Where the receipt is POSTed. |
 
@@ -48,8 +48,10 @@ See [Sender IDs](/developers/send/sender-ids).
 </Accordion>
 
 <Accordion title="coding — what it costs">
-`0` gives you 160 characters. `8` gives you 70. One curly apostrophe in your text forces UCS-2
-anyway, so setting `coding` does not protect you from the cost — normalising your punctuation does.
+`0` gives you 160 characters. `8` gives you 70. With no `coding`, one curly apostrophe in your text
+makes the gateway send UCS-2 (from 0.16.2), so the cost comes from the text — normalising your
+punctuation is what protects you. Naming `coding: 0` keeps the 160, but the characters GSM-7 cannot
+carry then arrive as question marks.
 
 See [Encoding and segments](/developers/send/encoding-and-segments).
 </Accordion>
