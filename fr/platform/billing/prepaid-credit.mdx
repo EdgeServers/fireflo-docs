@@ -128,6 +128,9 @@ Un compte sans crédit obtient le statut `submit_sm_resp` **`0x402`**, HTTP **40
 `ESME_RTHROTTLED` n'est délibérément pas utilisé : cela signifie autre chose, et ferait qu'un
 client recule et retente une condition que seul un rechargement peut lever.
 
+Un [compte à unités](/platform/billing/units-accounts) qui épuise ses propres unités est un refus
+distinct, `noUnits` (`0x403`). Quand c'est son parent qui n'a plus d'argent, ses logins obtiennent celui-ci.
+
 ## Remboursements
 
 Un message débité puis abandonné pendant le routage voit son crédit restitué **exactement une

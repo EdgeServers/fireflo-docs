@@ -10,6 +10,7 @@ la liste.**
 | :--- | :--- | :--- |
 | `0xC3` | `ESME_RMISSINGOPTPARAM` | Un TLV listé dans le `mandatory.tlvs.submit` du listener ne portait aucune valeur après application des défauts du credential et de tout tampon de whitelist. |
 | `0x402` | `STATUS_INSUFFICIENT_CREDIT` | Le compte a un crédit insuffisant — solde prépayé épuisé, ou limite de crédit postpayée atteinte. |
+| `0x403` | `STATUS_NO_UNITS` | À partir de 0.16.0. Un login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit. Rien n'a été facturé. La valeur par défaut de `conf.status.noUnits`, réglable par listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Refusé au **bind**, pas à la soumission : le produit résolu est vide, ou ne nomme aucune ligne activée dans `app_product`. Uniquement quand `conf.product.required` est activé. |
 | `0x418` | `STATUS_NO_RATE` | Le message n'a correspondu à aucune règle de tarif vente. Uniquement quand `smsg.rating.unrated.refuse` est activé ; sinon il est accepté et rien n'est facturé. |
 | `0x14` | `ESME_RMSGQFUL` | La file du routeur ou la file entrante de ce listener est à sa limite. Uniquement quand `smsg.queue.capacity` ou `inQueue.capacity` est réglé ; les deux valent illimité par défaut. |
@@ -25,6 +26,10 @@ Prépayé et postpayé refusent **à l'identique**. `0x402` sur SMPP, `402` avec
 sur HTTP, quel que soit le mode dans lequel se trouve le compte. L'intégration d'un client n'a pas
 besoin de savoir dans lequel il se trouve.
 </Note>
+
+**`0x403` n'est pas `0x402`.** Un compte à unités qui épuise ses propres unités est une condition
+différente de son fournisseur à court d'argent, et seul celui qui lui donne des unités peut la lever.
+Pour un login à unités, `0x402` signifie que le crédit de son **parent** est épuisé ; l'unité prise est rendue.
 
 **`0x14` est un signal de contre-pression bien élevé.** Un ESME qui le respecte fait un back-off et
 réessaie. C'est le seul refus ici qu'un client *devrait* réessayer.

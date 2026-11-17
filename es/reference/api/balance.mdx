@@ -23,7 +23,7 @@ Sin parámetros.
 | Campo | Significado |
 | :--- | :--- |
 | `balance` | Dinero en la cuenta a la que este login factura. `"ND"` cuando el crédito prepago no está habilitado. |
-| `sms_count` | **Siempre `"ND"`**: no determinado. |
+| `sms_count` | `"ND"` (no determinado) para todo login que factura a dinero. Un [login de unidades](#un-login-de-unidades) es la excepción. |
 
 <Tip>
 **`sms_count` es `"ND"` por diseño, no por omisión.** Jasmin reporta una cuota de mensajes
@@ -32,6 +32,24 @@ depende de a dónde vayan.
 
 En lugar de inventar un número, el campo dice que no está determinado.
 </Tip>
+
+## Un login de unidades
+
+Desde 0.16.0, un login de una [cuenta de unidades](/platform/billing/units-accounts) tiene unidades de
+mensaje y no dinero. Su respuesta trata de sus propias unidades, nunca del dinero de su cuenta padre:
+
+| Campo | Significado |
+| :--- | :--- |
+| `balance` | `"ND"`. Una cuenta de unidades no tiene dinero propio. |
+| `sms_count` | Unidades del propio producto del login que aún se pueden enviar. |
+| `units` | Una entrada por cada producto que tiene la cuenta: `left`, `free`, `reserved`, `used`. `left` es `free + reserved`. Ausente en cualquier otro login. |
+
+```json
+{"data": {"balance": "ND", "sms_count": 4995, "units": [{"product": "otp", "left": 4995, "free": 4980, "reserved": 15, "used": 5}]}}
+```
+
+`reserved` son unidades que una pasarela en marcha mantiene listas para gastar. Siguen siendo suyas para
+enviar, y por eso `left` las incluye.
 
 ## Qué cuenta
 

@@ -21,11 +21,13 @@ requête qui les a produites.
 | `templateNotMatched` | Le corps ne correspondait à aucun template approuvé | `0x412` / `403` | Approuvez le libellé, ou corrigez le template |
 | `missingMandatoryTlv` | Un tag requis s'est résolu en rien | `0xC3` / `403` | Fournissez-le quelque part — voir [TLVs](/platform/connections/tlvs) |
 | `insufficientCredit` | Le solde prépayé ne le couvrait pas | `0x402` / `402` | Rechargez |
+| `noUnits` | Un login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit | `0x403` / `402` `NO_UNITS` | Donnez-lui des unités, depuis la plateforme qui le gère |
+| `unitsPending` | Ses unités étaient retenues un instant par un autre nœud | `0x14` / `503` `UNITS_PENDING` | Rien : une nouvelle tentative passe |
 
 La colonne SMPP est ce que le `submit_sm_resp` du client transportait ; la colonne HTTP est
-l'équivalent REST. Trois des quatre sont des codes **spécifiques au fournisseur** dans la plage
-`0x4xx` plutôt que des codes SMPP standard. `0xC3` est l'exception, étant `ESME_RMISSINGOPTPARAM` de
-la spécification. Le client SMPP d'un customer n'aura pas de noms pour les valeurs `0x4xx`, donc
+l'équivalent REST. La plupart sont des codes **spécifiques au fournisseur** dans la plage
+`0x4xx` plutôt que des codes SMPP standard. Les exceptions sont `0xC3`, qui est `ESME_RMISSINGOPTPARAM`
+de la spécification, et `0x14`. Le client SMPP d'un customer n'aura pas de noms pour les valeurs `0x4xx`, donc
 citez-lui le mot-clé de la raison, pas le nombre.
 | `filtered` | Un filtre l'a refusé | varie | Lisez le filtre |
 | `maxAttempts` | **Pas un refus.** Le routage a abandonné | rien à la soumission | [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered) |

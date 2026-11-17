@@ -23,7 +23,7 @@ No parameters.
 | Field | Meaning |
 | :--- | :--- |
 | `balance` | Money on the account this login bills to. `"ND"` when prepaid credit is not enabled. |
-| `sms_count` | **Always `"ND"`** — not determined. |
+| `sms_count` | `"ND"` — not determined — for every login that bills to money. A [units login](#a-units-login) is the exception. |
 
 <Tip>
 **`sms_count` is `"ND"` by design, not by omission.** Jasmin reports a prepaid message quota; FireFlo
@@ -32,6 +32,24 @@ going.
 
 Rather than invent a number, the field says it is not determined.
 </Tip>
+
+## A units login
+
+From 0.16.0, a login of a [units account](/platform/billing/units-accounts) holds message units and no
+money. Its answer is about its own units, never its parent's money:
+
+| Field | Meaning |
+| :--- | :--- |
+| `balance` | `"ND"`. A units account has no money of its own. |
+| `sms_count` | Units of the login's own product that can still be sent. |
+| `units` | One entry per product the account holds: `left`, `free`, `reserved`, `used`. `left` is `free + reserved`. Absent for every other login. |
+
+```json
+{"data": {"balance": "ND", "sms_count": 4995, "units": [{"product": "otp", "left": 4995, "free": 4980, "reserved": 15, "used": 5}]}}
+```
+
+`reserved` is units a running gateway holds ready to spend. They are still yours to send, which is why
+`left` includes them.
 
 ## Which account
 

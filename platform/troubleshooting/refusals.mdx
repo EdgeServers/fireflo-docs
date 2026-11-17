@@ -21,10 +21,13 @@ request that produced them.
 | `templateNotMatched` | The body matched no approved template | `0x412` / `403` | Approve the wording, or fix the template |
 | `missingMandatoryTlv` | A required tag resolved to nothing | `0xC3` / `403` | Supply it somewhere — see [TLVs](/platform/connections/tlvs) |
 | `insufficientCredit` | Prepaid balance would not cover it | `0x402` / `402` | Top up |
+| `noUnits` | A login of a [units account](/platform/billing/units-accounts) has no units of its product left | `0x403` / `402` `NO_UNITS` | Give it units, from the platform that manages it |
+| `unitsPending` | Its units were held by another node for a moment | `0x14` / `503` `UNITS_PENDING` | Nothing: a retry goes through |
 
 The SMPP column is what the customer's `submit_sm_resp` carried; the HTTP column is the REST
-equivalent. Three of the four are **vendor-specific** codes in the `0x4xx` range rather than SMPP
-standard ones — `0xC3` is the exception, being `ESME_RMISSINGOPTPARAM` from the specification. A
+equivalent. Most are **vendor-specific** codes in the `0x4xx` range rather than SMPP
+standard ones — the exceptions are `0xC3`, which is `ESME_RMISSINGOPTPARAM` from the specification,
+and `0x14`. A
 customer's SMPP client will not have names for the `0x4xx` values, so quote the reason word to them,
 not the number.
 | `filtered` | A filter refused it | varies | Read the filter |

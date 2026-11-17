@@ -122,6 +122,9 @@ Uma account sem crédito recebe `submit_sm_resp` status **`0x402`**, HTTP **402*
 `ESME_RTHROTTLED` é deliberadamente não usado: significa outra coisa, e faria um cliente recuar e
 retentar uma condição que apenas um top-up pode resolver.
 
+Uma [conta de unidades](/platform/billing/units-accounts) que fica sem suas próprias unidades é uma
+recusa separada, `noUnits` (`0x403`). Quando a conta-pai dela fica sem dinheiro, os logins dela recebem esta.
+
 ## Reembolsos
 
 Uma mensagem cobrada e depois descartada durante o roteamento tem seu crédito devolvido **exatamente

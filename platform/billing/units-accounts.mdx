@@ -1,0 +1,143 @@
+---
+title: "Units accounts"
+description: "An account that holds message units instead of money: who pays for its messages, how units are counted, what a customer sees when they run out, and how fast it may send."
+---
+
+From **0.16.0** a child account can be a **units account**. It holds message units per product and no
+money. Its messages are charged, in money, to its parent.
+
+It exists for a reseller that sells a customer "5,000 SMS" rather than an amount of credit: the
+customer can send exactly what it was given, over SMPP and the HTTP API alike, and the gateway counts
+it as the messages are sent.
+
+## Who pays, and who is limited
+
+| | The units account | Its parent |
+| :--- | :--- | :--- |
+| **Holds** | Units, per product. Never money | Money: a prepaid balance or a postpaid limit |
+| **Prices** | None of its own | The parent's tariff prices every message |
+| **Each message part** | Takes **one unit** of the login's product | Is charged at the parent's price |
+| **Billing records** | Named beside the message, as its units account | Is the account the message is billed to |
+
+A send needs both: a unit on the units account **and** credit on the parent. Units are a limit, not
+prepaid money. A three-part message takes three units.
+
+A units account is always a direct child of an account that holds money. A units account cannot have
+children of its own.
+
+## How units are counted
+
+Units are counted by the same engine that counts [prepaid credit](/platform/billing/prepaid-credit):
+each gateway node reserves a block, spends it from memory with no database call per message, and
+settles what was spent. The count is exact after a crash.
+
+- **A refunded message gives its unit back**, once: a vendor refusal, an expiry, a drop, a message
+  that could not be queued.
+- **Small allowances are shared fairly.** A node never reserves more than its share of what is free,
+  and hands back a block it has not used for a few seconds, so five units on a two-node gateway are
+  five sendable messages, whichever node the customer reaches.
+- Units are enforced wherever prepaid credit is. On a gateway with prepaid enforcement off, a units
+  account's logins are not loaded and cannot bind or send: nothing would be counting them.
+
+## What a customer sees when it runs out
+
+| Situation | Reason recorded | SMPP | HTTP API | gRPC |
+| :--- | :--- | :--- | :--- | :--- |
+| No units of its product left | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, code `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
+| Its units are held by another node for a moment | `unitsPending` | `0x14` | `503`, code `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
+| It has units, its parent has no credit | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+
+Nothing is charged for any of the three, and in the third the unit is given back.
+
+`0x403` is deliberately not the no-credit `0x402`: a customer can tell "I am out of units" from "my
+provider is out of money". The status is set per listener with `conf.status.noUnits`, in hex or
+decimal; the default is `0x00000403`.
+
+`unitsPending` is the only one worth retrying: units held elsewhere come back within seconds.
+
+## Where units accounts come from
+
+A units account is created, given units and taken units from by **the platform that manages it**
+(FireFlo OMNI, for example) over the gateway's management API. The control panel shows units accounts
+and their ledger; it does not create them or move units.
+
+Every give, take-back and move is written to an append-only unit ledger under a reference, and a
+repeat with the same reference changes nothing. For every account and product, free + reserved + used
+equals the sum of its ledger.
+
+A platform can create units accounts only while prepaid enforcement is on **and every running gateway
+node is 0.16.0 or newer**. During a rolling upgrade that begins once the last older node is gone.
+
+An existing account is never converted. A money account stays a money account; a units account is a
+new account under the parent.
+
+Money cannot be moved to or from a units account: top-ups, debits and credit transfers naming one are
+refused.
+
+## What a units login cannot do
+
+A units login is not its parent on the self-service API.
+
+- **Balance** answers its own units, never the parent's money — see
+  [Balance](/reference/api/balance#a-units-login).
+- An accepted send does not show the parent's price.
+- The rate quote, credit transfers, sender ID and template registrations and the batch list answer
+  `403` with code `UNITS_LOGIN`. Those belong to the account that pays.
+
+## How fast it may send
+
+A units account can have a speed limit of its own, on top of its parent's. The platform that manages
+it sets it; two values, either of which may be left unset.
+
+| | SMPP | HTTP (REST, gRPC) |
+| :--- | :--- | :--- |
+| **Key** | `conf.maxRate.<units account>` | `smsg.restapi.maxRate.<units account>` |
+| **Scope** | Per listener; in a cluster each node enforces its share | Per node, its share of the cluster |
+| **What it limits** | Submits a second from every session of every login of the units account. Each part of a long message is one | Send requests a second by the units account's logins. One per message |
+| **Over the limit** | `0x58` (`ESME_RTHROTTLED`) | `429`, code `RATE_LIMITED` |
+
+**Precedence.** A submit is checked against the units account's own limit first. Over it, the submit is
+refused without drawing on the parent's limit, so one customer sending too fast does not use up its
+reseller's allowance. Within it, the parent's limits apply as they always did: the parent's own
+`conf.maxRate`, the listener's default and the port's budget. A login with a faster limit of its own is
+still held to its units account's limit.
+
+`0x58` means "slow down"; `0x14` means "try again shortly". Empty or `0` means the units account has
+no limit of its own, and only the parent's apply.
+
+A units login's binds count against its parent's connection limit. There is no separate bind limit per
+units account.
+
+## In the control panel
+
+A units account's page says **units** in place of a balance and names the account it is charged to.
+Its **Billing** tab shows units left and used per product, its logins, units used this month and by
+day, its speed limits and the unit ledger. The Tariff and Statement tabs are not shown: prices and the
+statement are the parent's. No money action is offered.
+
+A parent's **Billing** tab lists its sub-accounts, with units left per product and a "no units" state.
+If units accounts cannot be used yet, because a node is older than 0.16.0 or prepaid enforcement is
+off, the tab says which.
+
+Refused messages appear on [Refused](/platform/control-panel/refused) under **No units left** and
+**Units being reserved; try again**. The account shown there is the parent, which pays; the login is
+the units account's.
+
+## Upgrading to 0.16.0
+
+The schema moves from 1.129.0 to 1.131.0, so update with `--migrate`. It adds empty unit tables and one
+nullable column on the call record. An installation with no units accounts behaves as it did on
+0.15.13. One key is new, `conf.status.noUnits`; nothing has to be set.
+
+Update the control panel with the gateway: an older panel reports the schema as newer than it expects.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Prepaid credit" icon="wallet" href="/platform/billing/prepaid-credit">
+    The engine units are counted by.
+  </Card>
+  <Card title="Status codes" icon="hashtag" href="/reference/smpp/status-codes">
+    `0x403`, and what it is deliberately not.
+  </Card>
+</CardGroup>

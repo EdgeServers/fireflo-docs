@@ -1,0 +1,152 @@
+---
+title: "Cuentas de unidades"
+description: "Una cuenta que tiene unidades de mensaje en lugar de dinero: quién paga sus mensajes, cómo se cuentan las unidades, qué ve un cliente cuando se le acaban y a qué velocidad puede enviar."
+---
+
+Desde **0.16.0** una cuenta hija puede ser una **cuenta de unidades**. Tiene unidades de mensaje por
+producto y nada de dinero. Sus mensajes se cobran, en dinero, a su cuenta padre.
+
+Existe para un revendedor que vende a un cliente "5.000 SMS" en lugar de un importe de crédito: el
+cliente puede enviar exactamente lo que se le dio, por SMPP y por la API HTTP por igual, y la pasarela
+lo cuenta a medida que se envían los mensajes.
+
+## Quién paga y quién queda limitado
+
+| | La cuenta de unidades | Su cuenta padre |
+| :--- | :--- | :--- |
+| **Tiene** | Unidades, por producto. Nunca dinero | Dinero: un saldo prepago o un límite postpago |
+| **Precios** | Ninguno propio | La tarifa de la cuenta padre pone precio a cada mensaje |
+| **Cada parte de mensaje** | Toma **una unidad** del producto del login | Se cobra al precio de la cuenta padre |
+| **Registros de facturación** | Aparece junto al mensaje, como su cuenta de unidades | Es la cuenta a la que se factura el mensaje |
+
+Un envío necesita ambas cosas: una unidad en la cuenta de unidades **y** crédito en la cuenta padre. Las
+unidades son un límite, no dinero prepago. Un mensaje de tres partes toma tres unidades.
+
+Una cuenta de unidades es siempre hija directa de una cuenta que tiene dinero. Una cuenta de unidades no
+puede tener hijas propias.
+
+## Cómo se cuentan las unidades
+
+Las unidades las cuenta el mismo motor que cuenta el [crédito prepago](/platform/billing/prepaid-credit):
+cada nodo de la pasarela reserva un bloque, lo gasta desde memoria sin ninguna llamada a la base de datos
+por mensaje y liquida lo gastado. El recuento es exacto tras una caída.
+
+- **Un mensaje reembolsado devuelve su unidad**, una sola vez: un rechazo del proveedor, una
+  expiración, un descarte, un mensaje que no se pudo encolar.
+- **Las asignaciones pequeñas se reparten de forma justa.** Un nodo nunca reserva más de su parte de lo
+  que está libre, y devuelve un bloque que no ha usado durante unos segundos, así que cinco unidades en
+  una pasarela de dos nodos son cinco mensajes enviables, llegue el cliente al nodo que llegue.
+- Las unidades se aplican allí donde se aplica el crédito prepago. En una pasarela con la aplicación del
+  prepago desactivada, los logins de una cuenta de unidades no se cargan y no pueden hacer bind ni
+  enviar: nada los estaría contando.
+
+## Qué ve un cliente cuando se le acaban
+
+| Situación | Motivo registrado | SMPP | API HTTP | gRPC |
+| :--- | :--- | :--- | :--- | :--- |
+| No le quedan unidades de su producto | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, código `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
+| Sus unidades están retenidas por otro nodo por un momento | `unitsPending` | `0x14` | `503`, código `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
+| Tiene unidades, su cuenta padre no tiene crédito | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+
+No se cobra nada en ninguno de los tres casos, y en el tercero la unidad se devuelve.
+
+`0x403` deliberadamente no es el `0x402` de falta de crédito: un cliente puede distinguir "me he quedado
+sin unidades" de "mi proveedor se ha quedado sin dinero". El estado se establece por listener con
+`conf.status.noUnits`, en hexadecimal o decimal; el valor por defecto es `0x00000403`.
+
+`unitsPending` es el único que vale la pena reintentar: las unidades retenidas en otro sitio vuelven en
+cuestión de segundos.
+
+## De dónde vienen las cuentas de unidades
+
+Una cuenta de unidades la crea, le da unidades y se las retira **la plataforma que la gestiona**
+(FireFlo OMNI, por ejemplo) a través de la API de gestión de la pasarela. El panel de control muestra las
+cuentas de unidades y su libro; no las crea ni mueve unidades.
+
+Cada entrega, retirada y movimiento se escribe en un libro de unidades de solo anexado bajo una
+referencia, y una repetición con la misma referencia no cambia nada. Para cada cuenta y producto, libres
++ reservadas + usadas es igual a la suma de su libro.
+
+Una plataforma puede crear cuentas de unidades solo mientras la aplicación del prepago está activada **y
+cada nodo de la pasarela en marcha es 0.16.0 o posterior**. Durante una actualización escalonada, eso
+empieza en cuanto desaparece el último nodo antiguo.
+
+Una cuenta existente nunca se convierte. Una cuenta de dinero sigue siendo una cuenta de dinero; una
+cuenta de unidades es una cuenta nueva bajo la cuenta padre.
+
+No se puede mover dinero hacia o desde una cuenta de unidades: las recargas, los débitos y las
+transferencias de crédito que nombren una se rechazan.
+
+## Lo que un login de unidades no puede hacer
+
+Un login de unidades no es su cuenta padre en la API de autoservicio.
+
+- **Balance** responde con sus propias unidades, nunca con el dinero de la cuenta padre. Consulte
+  [Saldo](/reference/api/balance#a-units-login).
+- Un envío aceptado no muestra el precio de la cuenta padre.
+- La cotización de tarifa, las transferencias de crédito, los registros de sender ID y de plantillas y
+  la lista de lotes responden `403` con el código `UNITS_LOGIN`. Esas cosas pertenecen a la cuenta que
+  paga.
+
+## A qué velocidad puede enviar
+
+Una cuenta de unidades puede tener un límite de velocidad propio, además del de su cuenta padre. Lo
+establece la plataforma que la gestiona; son dos valores, y cualquiera de ellos puede dejarse sin
+establecer.
+
+| | SMPP | HTTP (REST, gRPC) |
+| :--- | :--- | :--- |
+| **Clave** | `conf.maxRate.<cuenta de unidades>` | `smsg.restapi.maxRate.<cuenta de unidades>` |
+| **Alcance** | Por listener; en un clúster cada nodo aplica su parte | Por nodo, su parte del clúster |
+| **Qué limita** | Submits por segundo desde cada sesión de cada login de la cuenta de unidades. Cada parte de un mensaje largo cuenta como uno | Peticiones de envío por segundo de los logins de la cuenta de unidades. Una por mensaje |
+| **Por encima del límite** | `0x58` (`ESME_RTHROTTLED`) | `429`, código `RATE_LIMITED` |
+
+**Precedencia.** Un submit se comprueba primero contra el límite propio de la cuenta de unidades. Si lo
+supera, el submit se rechaza sin consumir el límite de la cuenta padre, así que un cliente que envía
+demasiado rápido no agota la asignación de su revendedor. Dentro de él, se aplican los límites de la
+cuenta padre como siempre: el `conf.maxRate` propio de la cuenta padre, el valor por defecto del listener
+y el presupuesto del puerto. Un login con un límite propio más rápido sigue sujeto al límite de su
+cuenta de unidades.
+
+`0x58` significa "vaya más despacio"; `0x14` significa "inténtelo de nuevo en breve". Vacío o `0`
+significa que la cuenta de unidades no tiene límite propio, y solo se aplican los de la cuenta padre.
+
+Los binds de un login de unidades cuentan contra el límite de conexiones de su cuenta padre. No hay un
+límite de binds aparte por cuenta de unidades.
+
+## En el panel de control
+
+La página de una cuenta de unidades dice **units** en lugar de un saldo y nombra la cuenta a la que se
+cobra. Su pestaña **Billing** muestra las unidades restantes y usadas por producto, sus logins, las
+unidades usadas este mes y por día, sus límites de velocidad y el libro de unidades. Las pestañas Tariff
+y Statement no se muestran: los precios y el extracto son los de la cuenta padre. No se ofrece ninguna
+acción con dinero.
+
+La pestaña **Billing** de una cuenta padre lista sus subcuentas, con las unidades restantes por producto
+y un estado "no units". Si las cuentas de unidades aún no se pueden usar, porque un nodo es anterior a
+0.16.0 o la aplicación del prepago está desactivada, la pestaña indica cuál es el motivo.
+
+Los mensajes rechazados aparecen en [Refused](/platform/control-panel/refused) bajo **No units left** y
+**Units being reserved; try again**. La cuenta que se muestra allí es la cuenta padre, que paga; el login
+es el de la cuenta de unidades.
+
+## Actualizar a 0.16.0
+
+El esquema pasa de 1.129.0 a 1.131.0, así que actualice con `--migrate`. Añade tablas de unidades vacías
+y una columna que admite nulos en el registro de llamada. Una instalación sin cuentas de unidades se
+comporta como lo hacía en 0.15.13. Hay una clave nueva, `conf.status.noUnits`; no hace falta establecer
+nada.
+
+Actualice el panel de control junto con la pasarela: un panel más antiguo informa de que el esquema es
+más nuevo de lo que espera.
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Crédito prepago" icon="wallet" href="/platform/billing/prepaid-credit">
+    El motor con el que se cuentan las unidades.
+  </Card>
+  <Card title="Códigos de estado" icon="hashtag" href="/reference/smpp/status-codes">
+    `0x403`, y lo que deliberadamente no es.
+  </Card>
+</CardGroup>

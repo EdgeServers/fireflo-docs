@@ -46,6 +46,8 @@ delay, for client libraries that honour it.
 | A missing, unknown or invalid field | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, with `field` | — | Fix the request. Do not retry unchanged. |
 | A required SMPP parameter is missing | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Add the parameter — see [Custom TLVs](/developers/send/custom-tlvs). |
 | Balance will not cover it | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Top up, then retry. Nothing was charged. |
+| No units of your product left (a units account, from 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Ask your provider for more units. Nothing was charged. |
+| Your units are held elsewhere for a moment | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Retry after the delay. Nothing was charged. |
 | Over your account's messages per second | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Back off and retry. |
 | Sender ID not approved | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use an approved sender ID, or ask for this one. |
 | Wording matches no approved template | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Send approved wording, or ask for a template. |

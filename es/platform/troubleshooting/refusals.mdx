@@ -21,10 +21,13 @@ petición que las produjo.
 | `templateNotMatched` | El cuerpo no coincidió con ninguna plantilla aprobada | `0x412` / `403` | Aprueba el texto, o corrige la plantilla |
 | `missingMandatoryTlv` | Un tag requerido no resolvió a nada | `0xC3` / `403` | Suminístralo en algún sitio. Consulta [TLVs](/platform/connections/tlvs) |
 | `insufficientCredit` | El saldo prepago no lo cubriría | `0x402` / `402` | Recarga |
+| `noUnits` | A un login de una [cuenta de unidades](/platform/billing/units-accounts) no le quedan unidades de su producto | `0x403` / `402` `NO_UNITS` | Dale unidades, desde la plataforma que la gestiona |
+| `unitsPending` | Sus unidades estuvieron retenidas por otro nodo por un momento | `0x14` / `503` `UNITS_PENDING` | Nada: un reintento pasa |
 
 La columna SMPP es lo que el `submit_sm_resp` del cliente llevó; la columna HTTP es el equivalente
-REST. Tres de las cuatro son códigos **específicos del proveedor** en el rango `0x4xx` en lugar de códigos SMPP
-estándar. `0xC3` es la excepción, siendo `ESME_RMISSINGOPTPARAM` de la especificación. El
+REST. La mayoría son códigos **específicos del proveedor** en el rango `0x4xx` en lugar de códigos SMPP
+estándar. Las excepciones son `0xC3`, que es `ESME_RMISSINGOPTPARAM` de la especificación,
+y `0x14`. El
 cliente SMPP del cliente no tendrá nombres para los valores `0x4xx`, así que cítale la palabra de la razón,
 no el número.
 | `filtered` | Un filtro lo rechazó | varía | Lee el filtro |

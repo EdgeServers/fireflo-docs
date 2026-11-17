@@ -23,7 +23,7 @@ Aucun paramètre.
 | Champ | Signification |
 | :--- | :--- |
 | `balance` | Argent sur le compte que ce login facture. `"ND"` quand le crédit prépayé n'est pas activé. |
-| `sms_count` | **Toujours `"ND"`** — non déterminé. |
+| `sms_count` | `"ND"` — non déterminé — pour tout login qui facture de l'argent. Un [login à unités](#un-login-à-unités) est l'exception. |
 
 <Tip>
 **`sms_count` vaut `"ND"` par conception, pas par omission.** Jasmin rapporte un quota de messages
@@ -32,6 +32,24 @@ messages qu'il achète dépend de leur destination.
 
 Plutôt que d'inventer un nombre, le champ dit qu'il n'est pas déterminé.
 </Tip>
+
+## Un login à unités
+
+À partir de 0.16.0, un login d'un [compte à unités](/platform/billing/units-accounts) détient des unités
+de message et pas d'argent. Sa réponse porte sur ses propres unités, jamais sur l'argent de son parent :
+
+| Champ | Signification |
+| :--- | :--- |
+| `balance` | `"ND"`. Un compte à unités n'a pas d'argent à lui. |
+| `sms_count` | Unités du produit propre au login qui peuvent encore être envoyées. |
+| `units` | Une entrée par produit que détient le compte : `left`, `free`, `reserved`, `used`. `left` vaut `free + reserved`. Absent pour tout autre login. |
+
+```json
+{"data": {"balance": "ND", "sms_count": 4995, "units": [{"product": "otp", "left": 4995, "free": 4980, "reserved": 15, "used": 5}]}}
+```
+
+`reserved` correspond aux unités qu'une passerelle en marche tient prêtes à dépenser. Elles restent les
+vôtres à envoyer, c'est pourquoi `left` les inclut.
 
 ## Quel compte
 

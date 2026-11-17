@@ -21,10 +21,12 @@ que as produziu.
 | `templateNotMatched` | O body não bateu com nenhum template aprovado | `0x412` / `403` | Aprovar o texto, ou corrigir o template |
 | `missingMandatoryTlv` | Uma tag obrigatória resolveu para nada | `0xC3` / `403` | Forneça em algum lugar. Veja [TLVs](/platform/connections/tlvs) |
 | `insufficientCredit` | Saldo pré-pago não cobriria | `0x402` / `402` | Faça top up |
+| `noUnits` | Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto | `0x403` / `402` `NO_UNITS` | Dê unidades a ela, pela plataforma que a gerencia |
+| `unitsPending` | As unidades dela estavam retidas por outro nó por um momento | `0x14` / `503` `UNITS_PENDING` | Nada: um retry passa |
 
 A coluna SMPP é o que o `submit_sm_resp` do cliente carregou; a coluna HTTP é o equivalente REST.
-Três dos quatro são códigos **específicos do fornecedor** na faixa `0x4xx`, e não os SMPP padrão.
-`0xC3` é a exceção, sendo `ESME_RMISSINGOPTPARAM` da especificação. O cliente SMPP do cliente não vai
+A maioria são códigos **específicos do fornecedor** na faixa `0x4xx`, e não os SMPP padrão. As
+exceções são `0xC3`, que é `ESME_RMISSINGOPTPARAM` da especificação, e `0x14`. O cliente SMPP do cliente não vai
 ter nomes para os valores `0x4xx`, então cite a palavra da razão, não o número.
 | `filtered` | Um filtro recusou | varia | Leia o filtro |
 | `maxAttempts` | **Não é uma recusa.** O roteamento desistiu | nada na hora do submit | [Nada é entregue](/platform/troubleshooting/nothing-is-delivered) |

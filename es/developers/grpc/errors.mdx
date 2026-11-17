@@ -46,6 +46,8 @@ mismo retardo, para las bibliotecas cliente que lo respetan.
 | Un campo ausente, desconocido o no válido | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, con `field` | — | Corrija la petición. No la reintente sin cambios. |
 | Falta un parámetro SMPP obligatorio | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Añada el parámetro: consulte [TLV personalizados](/developers/send/custom-tlvs). |
 | El saldo no lo cubre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recargue y reintente. No se cobró nada. |
+| No le quedan unidades de su producto (una cuenta de unidades, desde 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Pida más unidades a su proveedor. No se cobró nada. |
+| Sus unidades están retenidas en otro sitio por un momento | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Reintente tras el retardo. No se cobró nada. |
 | Por encima de los mensajes por segundo de su cuenta | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Espere y reintente. |
 | Sender ID no aprobado | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use un sender ID aprobado, o solicite este. |
 | La redacción no coincide con ninguna plantilla aprobada | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envíe una redacción aprobada, o solicite una plantilla. |

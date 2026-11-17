@@ -1,0 +1,150 @@
+---
+title: "Comptes à unités"
+description: "Un compte qui détient des unités de message au lieu d'argent : qui paie ses messages, comment les unités sont décomptées, ce que voit un client quand il n'en a plus, et à quelle vitesse il peut envoyer."
+---
+
+À partir de **0.16.0**, un compte enfant peut être un **compte à unités**. Il détient des unités de
+message par produit et pas d'argent. Ses messages sont facturés, en argent, à son parent.
+
+Il existe pour un revendeur qui vend à un client « 5 000 SMS » plutôt qu'un montant de crédit : le
+client peut envoyer exactement ce qui lui a été donné, sur SMPP comme sur l'API HTTP, et la passerelle
+le décompte à mesure que les messages partent.
+
+## Qui paie, et qui est limité
+
+| | Le compte à unités | Son parent |
+| :--- | :--- | :--- |
+| **Détient** | Des unités, par produit. Jamais d'argent | De l'argent : un solde prépayé ou une limite postpayée |
+| **Prix** | Aucun qui lui soit propre | Le tarif du parent fixe le prix de chaque message |
+| **Chaque partie de message** | Prend **une unité** du produit du login | Est facturée au prix du parent |
+| **Enregistrements de facturation** | Nommé à côté du message, comme son compte à unités | Est le compte auquel le message est facturé |
+
+Un envoi a besoin des deux : une unité sur le compte à unités **et** du crédit sur le parent. Les unités
+sont une limite, pas de l'argent prépayé. Un message en trois parties prend trois unités.
+
+Un compte à unités est toujours un enfant direct d'un compte qui détient de l'argent. Un compte à
+unités ne peut pas avoir d'enfants à lui.
+
+## Comment les unités sont décomptées
+
+Les unités sont décomptées par le même moteur que le [crédit prépayé](/platform/billing/prepaid-credit) :
+chaque nœud de la passerelle réserve un bloc, le dépense depuis la mémoire sans appel à la base de
+données par message, et règle ce qui a été dépensé. Le décompte est exact après un crash.
+
+- **Un message remboursé rend son unité**, une fois : un refus du fournisseur, une expiration, un
+  abandon, un message qui n'a pas pu être mis en file.
+- **Les petites allocations sont partagées équitablement.** Un nœud ne réserve jamais plus que sa part
+  de ce qui est libre, et restitue un bloc qu'il n'a pas utilisé depuis quelques secondes ; ainsi cinq
+  unités sur une passerelle à deux nœuds sont cinq messages envoyables, quel que soit le nœud que le
+  client atteint.
+- Les unités sont appliquées partout où le crédit prépayé l'est. Sur une passerelle où l'application
+  du prépayé est désactivée, les logins d'un compte à unités ne sont pas chargés et ne peuvent ni faire
+  de bind ni envoyer : rien ne les décompterait.
+
+## Ce que voit un client quand il n'en a plus
+
+| Situation | Raison enregistrée | SMPP | API HTTP | gRPC |
+| :--- | :--- | :--- | :--- | :--- |
+| Plus aucune unité de son produit | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, code `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
+| Ses unités sont retenues un instant par un autre nœud | `unitsPending` | `0x14` | `503`, code `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
+| Il a des unités, son parent n'a pas de crédit | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+
+Rien n'est facturé pour aucun des trois, et dans le troisième l'unité est rendue.
+
+`0x403` n'est délibérément pas le `0x402` de l'absence de crédit : un client peut distinguer « je n'ai
+plus d'unités » de « mon fournisseur n'a plus d'argent ». Le statut se règle par listener avec
+`conf.status.noUnits`, en hexadécimal ou en décimal ; la valeur par défaut est `0x00000403`.
+
+`unitsPending` est le seul qui vaille la peine d'être réessayé : des unités retenues ailleurs reviennent
+en quelques secondes.
+
+## D'où viennent les comptes à unités
+
+Un compte à unités est créé, doté d'unités et privé d'unités par **la plateforme qui le gère** (FireFlo
+OMNI, par exemple) via l'API de gestion de la passerelle. Le control panel affiche les comptes à unités
+et leur grand livre ; il ne les crée pas et ne déplace pas d'unités.
+
+Chaque dotation, reprise et transfert est écrit dans un grand livre d'unités en ajout seul sous une
+référence, et une répétition avec la même référence ne change rien. Pour chaque compte et chaque
+produit, free + reserved + used est égal à la somme de son grand livre.
+
+Une plateforme ne peut créer des comptes à unités que tant que l'application du prépayé est activée
+**et que chaque nœud de passerelle en marche est en 0.16.0 ou plus récent**. Pendant une mise à niveau
+progressive, cela commence une fois le dernier nœud plus ancien disparu.
+
+Un compte existant n'est jamais converti. Un compte en argent reste un compte en argent ; un compte à
+unités est un nouveau compte sous le parent.
+
+L'argent ne peut pas être déplacé vers ou depuis un compte à unités : les rechargements, débits et
+transferts de crédit qui en nomment un sont refusés.
+
+## Ce qu'un login à unités ne peut pas faire
+
+Un login à unités n'est pas son parent sur l'API en libre-service.
+
+- **Balance** répond sur ses propres unités, jamais sur l'argent du parent — voir
+  [Balance](/reference/api/balance#a-units-login).
+- Un envoi accepté n'affiche pas le prix du parent.
+- Le devis de tarif, les transferts de crédit, les enregistrements de sender ID et de template et la
+  liste des batches répondent `403` avec le code `UNITS_LOGIN`. Ils appartiennent au compte qui paie.
+
+## À quelle vitesse il peut envoyer
+
+Un compte à unités peut avoir sa propre limite de vitesse, en plus de celle de son parent. La plateforme
+qui le gère la règle ; deux valeurs, chacune pouvant rester non réglée.
+
+| | SMPP | HTTP (REST, gRPC) |
+| :--- | :--- | :--- |
+| **Clé** | `conf.maxRate.<compte à unités>` | `smsg.restapi.maxRate.<compte à unités>` |
+| **Portée** | Par listener ; dans un cluster, chaque nœud applique sa part | Par nœud, sa part du cluster |
+| **Ce qu'elle limite** | Les submits par seconde de chaque session de chaque login du compte à unités. Chaque partie d'un message long compte pour un | Les requêtes d'envoi par seconde des logins du compte à unités. Une par message |
+| **Au-delà de la limite** | `0x58` (`ESME_RTHROTTLED`) | `429`, code `RATE_LIMITED` |
+
+**Précédence.** Un submit est d'abord vérifié contre la limite propre du compte à unités. Au-delà, le
+submit est refusé sans puiser dans la limite du parent, de sorte qu'un client qui envoie trop vite
+n'épuise pas l'allocation de son revendeur. En deçà, les limites du parent s'appliquent comme
+toujours : le `conf.maxRate` propre au parent, la valeur par défaut du listener et le budget du port.
+Un login doté d'une limite propre plus rapide reste tenu à la limite de son compte à unités.
+
+`0x58` signifie « ralentissez » ; `0x14` signifie « réessayez sous peu ». Vide ou `0` signifie que le
+compte à unités n'a pas de limite propre, et seules celles du parent s'appliquent.
+
+Les binds d'un login à unités comptent dans la limite de connexions de son parent. Il n'y a pas de
+limite de binds distincte par compte à unités.
+
+## Dans le control panel
+
+La page d'un compte à unités indique **units** à la place d'un solde et nomme le compte auquel il est
+facturé. Son onglet **Billing** affiche les unités restantes et utilisées par produit, ses logins, les
+unités utilisées ce mois-ci et par jour, ses limites de vitesse et le grand livre d'unités. Les onglets
+Tariff et Statement ne sont pas affichés : les prix et le relevé sont ceux du parent. Aucune action
+sur l'argent n'est proposée.
+
+L'onglet **Billing** d'un parent liste ses sous-comptes, avec les unités restantes par produit et un
+état « no units ». Si les comptes à unités ne peuvent pas encore être utilisés, parce qu'un nœud est
+plus ancien que 0.16.0 ou que l'application du prépayé est désactivée, l'onglet dit lequel.
+
+Les messages refusés apparaissent sur [Refused](/platform/control-panel/refused) sous **No units left**
+et **Units being reserved; try again**. Le compte qui y est affiché est le parent, qui paie ; le login
+est celui du compte à unités.
+
+## Mise à niveau vers 0.16.0
+
+Le schéma passe de 1.129.0 à 1.131.0 ; mettez donc à jour avec `--migrate`. Cela ajoute des tables
+d'unités vides et une colonne nullable sur l'enregistrement d'appel. Une installation sans comptes à
+unités se comporte comme en 0.15.13. Une clé est nouvelle, `conf.status.noUnits` ; rien n'a besoin
+d'être réglé.
+
+Mettez à jour le control panel avec la passerelle : un panel plus ancien signale le schéma comme plus
+récent que ce qu'il attend.
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Crédit prépayé" icon="wallet" href="/platform/billing/prepaid-credit">
+    Le moteur qui décompte les unités.
+  </Card>
+  <Card title="Codes de statut" icon="hashtag" href="/reference/smpp/status-codes">
+    `0x403`, et ce qu'il n'est délibérément pas.
+  </Card>
+</CardGroup>

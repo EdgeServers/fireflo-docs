@@ -95,10 +95,13 @@ retry either.
 | Status | `message` | When |
 | :--- | :--- | :--- |
 | 402 | `Insufficient credit` | The prepaid balance will not cover it. Nothing was sent and nothing was charged. |
+| 402 | code `NO_UNITS` | From 0.16.0. A login of a [units account](/platform/billing/units-accounts) has no units of its product left. Nothing was sent and nothing was charged. |
+| 403 | code `UNITS_LOGIN` | A units login asked for something that belongs to the account that pays: a rate quote, a credit transfer, a sender ID or template registration, the batch list. |
 | 403 | `'<id>' is not an approved sender ID for this account.` | The `from` has not been approved. |
 | 403 | `The message content does not match any approved template for this account.` | The account sends only approved wording and this body matched none. |
 | 429 | `Rate limit exceeded` | Over the account's messages per second. |
 | 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
+| 503 | code `UNITS_PENDING` | A units login's units are held by another gateway node for a moment. Carries `Retry-After: 5`. Nothing was charged. |
 
 <Warning>
 **There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A
@@ -110,10 +113,11 @@ fixed-interval retry from many workers re-synchronises into the next burst.
 | | Retry | Why |
 | :--- | :--- | :--- |
 | 401, 403, 412, 400 | **No** | Permanent. The same request will fail identically forever. |
-| 402 | **No** | Retrying cannot add credit. Alert instead. |
+| 402 | **No** | Retrying cannot add credit, or units. Alert instead. |
 | 415 | **No** | Fix the header. |
 | 429 | **Yes**, backed off | Transient by definition. |
 | 500 | **Yes**, once or twice | The charge was reversed, so a retry is not a double-charge. |
+| 503 with code `UNITS_PENDING` | **Yes**, after `Retry-After` | The units come back within seconds. |
 | 502, 503, 504 | **Yes** | Not from the gateway — a proxy in front of it. |
 
 <Tip>

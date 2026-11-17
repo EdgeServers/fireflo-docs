@@ -46,6 +46,8 @@ même délai, pour les bibliothèques clientes qui le respectent.
 | Un champ absent, inconnu ou invalide | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, avec `field` | — | Corrigez la requête. Ne réessayez pas à l'identique. |
 | Un paramètre SMPP requis est absent | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Ajoutez le paramètre — voir [TLVs personnalisés](/developers/send/custom-tlvs). |
 | Le solde ne couvrira pas | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Rechargez, puis réessayez. Rien n'a été débité. |
+| Plus aucune unité de votre produit (un compte à unités, à partir de 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Demandez des unités supplémentaires à votre fournisseur. Rien n'a été débité. |
+| Vos unités sont retenues ailleurs pour un instant | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Réessayez après le délai. Rien n'a été débité. |
 | Au-delà des messages par seconde de votre compte | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Ralentissez et réessayez. |
 | Sender ID non approuvé | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Utilisez un sender ID approuvé, ou demandez celui-ci. |
 | Le libellé ne correspond à aucun modèle approuvé | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envoyez un libellé approuvé, ou demandez un modèle. |

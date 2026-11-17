@@ -35,6 +35,8 @@ describe the recent shape rather than an exact total, and the table beneath is s
 | **Sender ID not approved** | The sender is not on the account's approved list for that product |
 | **Content not approved** | The body matched no approved template — one changed word is enough |
 | **Out of credit** | Prepaid credit would not cover it |
+| **No units left** | From 0.16.0. A login of a [units account](/platform/billing/units-accounts) has no units of its product left. The account shown is the parent that pays |
+| **Units being reserved; try again** | A units account's units were held by another node for a moment. A retry goes through |
 | **Required parameter missing** | A TLV the ingress requires was absent, and nothing supplied it |
 | **Rate limit exceeded** | Over the account's messages per second |
 | **Product not sold** | The login named a product with no enabled catalogue row |

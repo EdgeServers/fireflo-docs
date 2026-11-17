@@ -10,6 +10,7 @@ inteira.**
 | :--- | :--- | :--- |
 | `0xC3` | `ESME_RMISSINGOPTPARAM` | Um TLV listado em `mandatory.tlvs.submit` do listener não teve valor depois de defaults de credencial e de qualquer stamp de whitelist ser aplicado. |
 | `0x402` | `STATUS_INSUFFICIENT_CREDIT` | A conta tem crédito insuficiente. Saldo pré-pago exaurido, ou um limite de crédito pós-pago alcançado. |
+| `0x403` | `STATUS_NO_UNITS` | A partir da 0.16.0. Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto. Nada foi cobrado. O padrão de `conf.status.noUnits`, configurável por listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Recusado no **bind**, não no submit: o produto resolvido está em branco, ou nomeia nenhuma linha habilitada em `app_product`. Só quando `conf.product.required` está on. |
 | `0x418` | `STATUS_NO_RATE` | A mensagem não casou com nenhuma regra de tarifa do lado de venda. Só quando `smsg.rating.unrated.refuse` está on; caso contrário é aceita e não cobra nada. |
 | `0x14` | `ESME_RMSGQFUL` | A fila do roteador ou a fila de entrada deste listener está no limite. Só quando `smsg.queue.capacity` ou `inQueue.capacity` está setado; ambos padrão ilimitado. |
@@ -25,6 +26,11 @@ Pré-pago e pós-pago recusam de forma **idêntica**. `0x402` em SMPP, `402` com
 em HTTP, seja qual for o modo em que a conta está. A integração de um cliente não precisa saber em
 qual está.
 </Note>
+
+**`0x403` não é `0x402`.** Uma conta de unidades que fica sem suas próprias unidades é uma condição
+diferente de o seu provedor ficar sem dinheiro, e só quem lhe dá unidades pode resolvê-la. Para um
+login de unidades, `0x402` significa que acabou o crédito da sua **conta-pai**; a unidade que ele
+consumiu é devolvida.
 
 **`0x14` é um sinal de backpressure bem-comportado.** Um ESME que o respeita faz backoff e retenta.
 Esta é a única recusa aqui que um cliente *deve* retentar.

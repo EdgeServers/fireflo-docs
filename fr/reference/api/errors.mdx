@@ -98,10 +98,13 @@ réseau. Les deux sont permanentes, ne réessayez ni l'une ni l'autre.
 | Statut | `message` | Quand |
 | :--- | :--- | :--- |
 | 402 | `Insufficient credit` | Le solde prépayé ne couvrira pas. Rien n'a été envoyé et rien n'a été débité. |
+| 402 | code `NO_UNITS` | À partir de 0.16.0. Un login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit. Rien n'a été envoyé et rien n'a été débité. |
+| 403 | code `UNITS_LOGIN` | Un login à unités a demandé quelque chose qui appartient au compte qui paie : un devis de tarif, un transfert de crédit, un enregistrement de sender ID ou de template, la liste des batches. |
 | 403 | `'<id>' is not an approved sender ID for this account.` | Le `from` n'a pas été approuvé. |
 | 403 | `The message content does not match any approved template for this account.` | Le compte n'envoie que des libellés approuvés et ce corps ne correspond à aucun. |
 | 429 | `Rate limit exceeded` | Au-dessus de la limite messages-par-seconde du compte. |
 | 500 | `Cannot send message` | Accepté et n'a pas pu être mis en file. **Tout débit est inversé.** |
+| 503 | code `UNITS_PENDING` | Les unités d'un login à unités sont retenues un instant par un autre nœud de la passerelle. Porte `Retry-After: 5`. Rien n'a été débité. |
 
 <Warning>
 **Il n'y a pas de `Retry-After` sur un `429`.** Faites votre propre backoff — exponentiel, avec du
@@ -114,10 +117,11 @@ suivante.
 | | Réessayer | Pourquoi |
 | :--- | :--- | :--- |
 | 401, 403, 412, 400 | **Non** | Permanent. La même requête échouera à l'identique pour toujours. |
-| 402 | **Non** | Un retry ne peut pas ajouter de crédit. Alertez plutôt. |
+| 402 | **Non** | Un retry ne peut pas ajouter de crédit, ni d'unités. Alertez plutôt. |
 | 415 | **Non** | Corrigez l'en-tête. |
 | 429 | **Oui**, avec backoff | Transitoire par définition. |
 | 500 | **Oui**, une ou deux fois | Le débit a été inversé, donc un retry n'est pas un double débit. |
+| 503 avec le code `UNITS_PENDING` | **Oui**, après `Retry-After` | Les unités reviennent en quelques secondes. |
 | 502, 503, 504 | **Oui** | Pas depuis la passerelle. Un proxy en amont. |
 
 <Tip>

@@ -98,10 +98,13 @@ son permanentes: no reintente ninguno.
 | Estado | `message` | Cuándo |
 | :--- | :--- | :--- |
 | 402 | `Insufficient credit` | El saldo prepago no lo cubrirá. No se envió nada y no se cobró nada. |
+| 402 | código `NO_UNITS` | Desde 0.16.0. A un login de una [cuenta de unidades](/platform/billing/units-accounts) no le quedan unidades de su producto. No se envió nada y no se cobró nada. |
+| 403 | código `UNITS_LOGIN` | Un login de unidades pidió algo que pertenece a la cuenta que paga: una cotización de tarifa, una transferencia de crédito, un registro de sender ID o de plantilla, la lista de lotes. |
 | 403 | `'<id>' is not an approved sender ID for this account.` | El `from` no se ha aprobado. |
 | 403 | `The message content does not match any approved template for this account.` | La cuenta envía solo redacciones aprobadas y este cuerpo no coincidió con ninguna. |
 | 429 | `Rate limit exceeded` | Por encima del límite de mensajes por segundo de la cuenta. |
 | 500 | `Cannot send message` | Aceptado y no se pudo encolar. **Todo cargo se revierte.** |
+| 503 | código `UNITS_PENDING` | Las unidades de un login de unidades están retenidas por otro nodo de la pasarela por un momento. Lleva `Retry-After: 5`. No se cobró nada. |
 
 <Warning>
 **No hay `Retry-After` en un `429`.** Aplique backoff propio: exponencial, con jitter. Un
@@ -113,10 +116,11 @@ reintento con intervalo fijo desde muchos workers se resincroniza en la siguient
 | | Reintentar | Por qué |
 | :--- | :--- | :--- |
 | 401, 403, 412, 400 | **No** | Permanentes. La misma petición fallará idénticamente para siempre. |
-| 402 | **No** | Reintentar no añade saldo. Alerte en su lugar. |
+| 402 | **No** | Reintentar no añade saldo, ni unidades. Alerte en su lugar. |
 | 415 | **No** | Corrija la cabecera. |
 | 429 | **Sí**, con backoff | Transitorio por definición. |
 | 500 | **Sí**, una o dos veces | El cargo se revirtió, así que un reintento no es un doble cargo. |
+| 503 con código `UNITS_PENDING` | **Sí**, tras `Retry-After` | Las unidades vuelven en cuestión de segundos. |
 | 502, 503, 504 | **Sí** | No provienen de la pasarela, sino de un proxy delante. |
 
 <Tip>

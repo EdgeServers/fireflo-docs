@@ -9,6 +9,7 @@ Statuses FireFlo returns on `submit_sm_resp` beyond the standard SMPP set. **Thi
 | :--- | :--- | :--- |
 | `0xC3` | `ESME_RMISSINGOPTPARAM` | A TLV listed in the listener's `mandatory.tlvs.submit` held no value after credential defaults and any whitelist stamp were applied. |
 | `0x402` | `STATUS_INSUFFICIENT_CREDIT` | The account has insufficient credit — prepaid balance exhausted, or a postpaid credit limit reached. |
+| `0x403` | `STATUS_NO_UNITS` | From 0.16.0. A login of a [units account](/platform/billing/units-accounts) has no units of its product left. Nothing was charged. The default of `conf.status.noUnits`, settable per listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Refused at **bind**, not at submit: the resolved product is blank, or names no enabled row in `app_product`. Only when `conf.product.required` is on. |
 | `0x418` | `STATUS_NO_RATE` | The message matched no sell-side rate rule. Only when `smsg.rating.unrated.refuse` is on; otherwise it is accepted and charged nothing. |
 | `0x14` | `ESME_RMSGQFUL` | The router queue or this listener's inbound queue is at its limit. Only when `smsg.queue.capacity` or `inQueue.capacity` is set; both default to unbounded. |
@@ -24,6 +25,10 @@ Prepaid and postpaid refuse **identically**. `0x402` over SMPP, `402` with `insu
 HTTP, whichever mode the account is in. A customer's integration does not need to know which they are
 on.
 </Note>
+
+**`0x403` is not `0x402`.** A units account running out of its own units is a different condition from
+its provider running out of money, and only whoever gives it units can clear it. For a units login,
+`0x402` means its **parent's** credit ran out; the unit it took is given back.
 
 **`0x14` is a well-behaved backpressure signal.** An ESME that respects it backs off and retries. This
 is the one refusal here that a client *should* retry.

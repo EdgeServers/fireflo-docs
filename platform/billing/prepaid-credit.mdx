@@ -122,6 +122,9 @@ An account with no credit gets `submit_sm_resp` status **`0x402`**, HTTP **402**
 `ESME_RTHROTTLED` is deliberately not used: it means something else, and would make a client back off
 and retry a condition that only a top-up can clear.
 
+A [units account](/platform/billing/units-accounts) running out of its own units is a separate refusal,
+`noUnits` (`0x403`). When its parent runs out of money, its logins get this one.
+
 ## Refunds
 
 A message charged and then dropped during routing has its credit returned **exactly once**. An

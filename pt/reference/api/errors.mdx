@@ -95,10 +95,13 @@ dois são permanentes. Não repita nenhum.
 | Status | `message` | Quando |
 | :--- | :--- | :--- |
 | 402 | `Insufficient credit` | O saldo pré-pago não cobre. Nada foi enviado e nada foi cobrado. |
+| 402 | código `NO_UNITS` | A partir da 0.16.0. Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto. Nada foi enviado e nada foi cobrado. |
+| 403 | código `UNITS_LOGIN` | Um login de unidades pediu algo que pertence à conta que paga: uma cotação de tarifa, uma transferência de crédito, um registro de sender ID ou de template, a lista de lotes. |
 | 403 | `'<id>' is not an approved sender ID for this account.` | O `from` não foi aprovado. |
 | 403 | `The message content does not match any approved template for this account.` | A conta envia só texto aprovado e este corpo não bate com nenhum. |
 | 429 | `Rate limit exceeded` | Acima do limite de mensagens por segundo da conta. |
 | 500 | `Cannot send message` | Aceito e não foi possível enfileirar. **Qualquer cobrança é revertida.** |
+| 503 | código `UNITS_PENDING` | As unidades de um login de unidades estão retidas por outro nó do gateway por um momento. Traz `Retry-After: 5`. Nada foi cobrado. |
 
 <Warning>
 **Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com
@@ -110,10 +113,11 @@ jitter. Um retry em intervalo fixo em muitos workers os ressincroniza no próxim
 | | Repetir | Por quê |
 | :--- | :--- | :--- |
 | 401, 403, 412, 400 | **Não** | Permanente. A mesma requisição vai falhar identicamente para sempre. |
-| 402 | **Não** | Repetir não adiciona crédito. Alerte. |
+| 402 | **Não** | Repetir não adiciona crédito, nem unidades. Alerte. |
 | 415 | **Não** | Corrija o cabeçalho. |
 | 429 | **Sim**, com backoff | Transitório por definição. |
 | 500 | **Sim**, uma ou duas vezes | A cobrança foi revertida, então um retry não é cobrança dobrada. |
+| 503 com código `UNITS_PENDING` | **Sim**, após o `Retry-After` | As unidades voltam em segundos. |
 | 502, 503, 504 | **Sim** | Não vem do gateway. É um proxy na frente. |
 
 <Tip>
