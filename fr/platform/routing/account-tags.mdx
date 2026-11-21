@@ -1,0 +1,175 @@
+---
+title: "Étiquettes de compte"
+description: "Des noms que l'opérateur met sur les comptes, pour que les règles de routage, les prix et les filtres disent à qui ils s'appliquent sans lister les comptes un par un."
+---
+
+À partir de **0.17.0** (control panel 0.17.0.0), l'opérateur peut mettre des **étiquettes** (tags) sur
+les comptes : des noms courts comme `otp`, `premium` ou `bank`. Un compte peut en porter plusieurs. Une
+règle de routage, une règle de prix ou un filtre nommé peut alors tester l'étiquette au lieu de nommer
+des comptes, et une étiquette peut avoir ses propres prix.
+
+Rien ne change tant qu'une étiquette n'est pas créée, mise sur un compte et nommée par une règle ou un
+prix.
+
+## Qui les pose, et qui les voit
+
+- **L'opérateur seulement.** Les étiquettes se posent dans le control panel ou depuis la plateforme qui
+  gère les comptes. Les revendeurs et les clients ne les voient ni ne les changent jamais, ni dans le
+  portail ni dans aucune API qu'ils utilisent.
+- **Un compte à unités porte aussi les étiquettes de son parent.** Étiqueter un revendeur couvre ses
+  clients. Un compte à unités peut aussi porter ses propres étiquettes. Voir
+  [Comptes à unités](/platform/billing/units-accounts).
+- **Configuration en base de données uniquement.** Avec la configuration en fichiers il n'y a pas de
+  comptes à étiqueter, donc une règle qui teste une étiquette ne correspond à rien. Voir
+  [Choisir une source de configuration](/platform/install/configuration-source).
+
+## La condition « Account tag »
+
+Les règles de routage, les règles de prix et les filtres nommés ont une condition sur les étiquettes du
+compte. Comme elle fonctionne dans les règles de routage, une règle qui confie des messages à un
+préprocesseur peut aussi l'utiliser.
+
+| Dans le control panel | Dans une règle | Correspond quand le compte |
+| :--- | :--- | :--- |
+| **has** | `tag:equals:otp` | porte `otp` |
+| **has all of** | `tag:equals:otp,bank` | porte toutes les étiquettes de la liste |
+| **has any of** | `tag:startsWithAny:otp,bank` | porte au moins une étiquette de la liste |
+| **has none of** | `tag:!startsWithAny:otp,bank` | ne porte aucune étiquette de la liste |
+| **has no tag** | `tag:isNull` | ne porte aucune étiquette, ni la sienne ni celle d'un parent |
+
+Chaque forme peut être niée par un `!` en tête. Les noms sont comparés exactement. **Tout autre
+opérateur sur `tag` est refusé au chargement de la règle**, et la passerelle garde sa configuration
+précédente.
+
+Le compte testé est le compte à unités du message quand il en a un, sinon le compte auquel il est
+facturé. Une étiquette désactivée est traitée comme absente. Un message n'enregistre pas les étiquettes
+de son compte : la condition lit les étiquettes que le compte a au moment où le message est routé ou
+tarifé.
+
+Dans le control panel, « Account tag » fait partie des conditions guidées de l'assistant de filtres, de
+l'éditeur de règles de route et de l'éditeur de règles de prix. Choisir une étiquette là où une règle
+choisit ses filtres ajoute la condition pour vous.
+
+## Prix par étiquette
+
+La tarification a un niveau **Tag prices** entre les prix propres d'un compte et le défaut. Dans une
+table de tarifs, c'est le scope `tag:<nom>`. Le prix d'un message est cherché dans cet ordre, et la
+première correspondance gagne :
+
+1. **Les prix propres du compte.**
+2. **Les prix de ses étiquettes**, dans l'ordre de la liste Tags. Quand un compte a plusieurs étiquettes
+   avec des prix, celle qui est la plus haute dans la liste gagne.
+3. **Le défaut**, `*`.
+
+Un compte à unités est tarifé comme son parent, qui paie : les prix propres du parent, puis ceux de ses
+étiquettes, puis le défaut. Le devis et le testeur de messages le tarifent de la même façon.
+
+Le devis, le testeur et la page de tarif d'un compte montrent quel prix s'applique et pourquoi. Un scope
+`tag:` qui nomme une étiquette inconnue ou désactivée se charge, ne tarife personne et est journalisé une
+fois sous `rates.tagScope.unreachable`.
+
+Voir [Comment fonctionne le pricing](/platform/billing/how-pricing-works) pour les scopes et le
+défaut.
+
+## Filtrer les listes et les rapports par étiquette
+
+La liste des comptes a une colonne **Tags** et un filtre par étiquette. **Usage** et **Messages** ont un
+filtre **Tag**.
+
+<Note>
+**Le filtre lit les étiquettes que les comptes ont maintenant.** Un message n'enregistre pas les
+étiquettes qu'avait son compte quand il a été envoyé, donc une période passée est lue avec les
+étiquettes d'aujourd'hui. Le filtre montre les comptes qui portent l'étiquette eux-mêmes, pas par un
+parent. Sur Messages, il demande une période autre que tout l'historique.
+</Note>
+
+## Quand un changement prend effet
+
+Un changement d'étiquette, ou des comptes qui la portent, est adopté au prochain sondage de
+configuration, **en 30 secondes au plus**. Le routage et la tarification sont reconstruits ensemble, et
+les sessions SMPP connectées sont retarifées : un client déjà connecté n'a pas à refaire de bind. Un
+changement fait par l'API est adopté immédiatement sur le nœud qui a reçu l'appel.
+
+Sur une passerelle dont la licence n'est pas à jour, les changements de configuration sont gelés, ceux
+des étiquettes compris.
+
+## La page Tags
+
+**Tags** se trouve à côté de **Filters** dans le control panel. Pour chaque étiquette elle montre :
+
+| | |
+| :--- | :--- |
+| **Nom** | Lettres minuscules, chiffres, `-` et `_`, commençant par une lettre ou un chiffre, 40 caractères au plus. Les règles, les filtres et les prix désignent l'étiquette par son nom, elle ne peut donc pas être renommée. |
+| **Label** et **description** | À quoi sert l'étiquette. Facultatifs, pour l'affichage seulement. Une description fait 200 caractères au plus. |
+| **Couleur** | Une parmi neuf, toujours affichée à côté du nom. |
+| **Ordre** | Montée et descendue dans la liste. Il décide quel prix gagne. |
+| **Activée** | Allumée ou éteinte. |
+| **Comptes** | Combien de comptes la portent eux-mêmes. |
+| **Utilisée dans** | Quelles règles de routage, règles de prix, filtres et prix par étiquette la nomment. |
+
+- **Une étiquette qu'une règle, un filtre ou une liste de prix nomme encore ne peut pas être
+  supprimée**, seulement éteinte. Une règle nommant une étiquette disparue cesserait de correspondre sans
+  que rien ne le dise.
+- **Une étiquette désactivée ne correspond à rien et ne tarife rien**, mais reste sur ses comptes. Une
+  fois rallumée, elle s'applique de nouveau.
+- Supprimer une étiquette que rien ne nomme la retire de tous les comptes.
+
+Les étiquettes se posent sur un compte dans son onglet **Settings**. Un compte à unités y affiche les
+étiquettes de son parent, en lecture seule.
+
+## Pour les intégrations
+
+### API plateforme
+
+La passerelle annonce la capacité **`account_tags`** quand sa configuration est en base de données.
+
+| | |
+| :--- | :--- |
+| `tags` | Toutes les étiquettes définies par l'opérateur, activées ou non, dans l'ordre de la liste Tags : `name`, `label`, `description`, `color`, `seq`, `enabled`. |
+| `Account.tags` | Les étiquettes propres du compte, activées ou non. |
+| `Account.effectiveTags` | Ce que voient les règles et les prix : ses propres étiquettes activées et, pour un compte à unités, celles de son parent. |
+| `accounts(tag:)` | Seulement les comptes qui portent l'étiquette eux-mêmes, pas par un parent. |
+| `setAccountTags` | Ajoute et retire des étiquettes. **Elle ne remplace jamais la liste** : les étiquettes non nommées restent. Une étiquette que la passerelle ne définit pas répond `UNKNOWN_TAG` et rien ne change. Répéter un appel ne change rien. |
+| `ProvisionInput.tags` | Étiquettes données **uniquement quand l'appel crée le compte**. Ignorées pour un compte qui existe déjà. Une étiquette inconnue répond `UNKNOWN_TAG` et aucun compte n'est créé. |
+
+### API de gestion
+
+- `GET /manage/accounts/{id}` inclut `tags`, les étiquettes propres du compte.
+- `PUT /manage/accounts/{id}/tags` prend `add` et `remove`, deux listes, et répond avec le compte et ses
+  étiquettes après le changement. Il ne remplace jamais la liste. Une étiquette que la passerelle ne
+  définit pas, ou une étiquette à la fois ajoutée et retirée, répond `400`.
+
+### API revendeur
+
+Inchangée. Les revendeurs ne voient pas les étiquettes.
+
+## Mise à niveau vers 0.17.0
+
+Le schéma passe de 1.132.0 à 1.133.0, avec deux nouvelles tables vides : mettez à jour avec `--migrate`.
+Le control panel 0.17.0.0 attend 1.133.0 : mettez d'abord la passerelle à jour. Aucune nouvelle clé de
+configuration. Revenir en arrière, c'est reprendre la passerelle et le control panel précédents ; les
+deux tables peuvent rester.
+
+<Warning>
+**Une étape manuelle quand le control panel écrit avec son propre rôle de base de données.** La
+migration n'accorde rien aux rôles du panel, car leurs noms sont propres à chaque installation. Après la
+mise à jour, en tant que propriétaire des tables :
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_tag, app_account_tag TO <le rôle d'écriture du panel>;
+```
+
+Un panel qui se connecte comme propriétaire des tables n'a besoin de rien. Sans ce droit, la page Tags
+affiche une erreur de permission ; les messages ne sont pas affectés.
+</Warning>
+
+## Voir aussi
+
+<CardGroup cols={2}>
+  <Card title="Filtres" icon="filter" href="/platform/routing/filters">
+    Des conditions nommées partagées par le routage et la tarification.
+  </Card>
+  <Card title="Comment fonctionne le pricing" icon="tag" href="/platform/billing/how-pricing-works">
+    Les scopes, le défaut et l'ordre des prix.
+  </Card>
+</CardGroup>

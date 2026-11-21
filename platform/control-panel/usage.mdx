@@ -50,6 +50,10 @@ Heaviest sender first: **Account · Sent · Delivered · Failed · Pending · Ra
 
 Each account links through to that customer, where the same question is answered for them alone.
 
+From 0.17.0 a **Tag** filter narrows the page to accounts that carry an [account tag](/platform/routing/account-tags)
+themselves. It reads the tags accounts have now: a message does not record its account's tags, so a past
+period is read with today's.
+
 Traffic that named no account appears as a greyed **no account** — not an error, and not an account
 whose name is empty. It is traffic that arrived without one, which usually means a login with no
 account attached, and is worth chasing because it prices and bills differently.

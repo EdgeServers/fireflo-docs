@@ -1,0 +1,161 @@
+---
+title: "Account tags"
+description: "Names the operator puts on accounts, so routing rules, prices and filters can say who they apply to without listing accounts one by one."
+---
+
+From **0.17.0** (control panel 0.17.0.0) the operator can put **tags** on accounts: short names such
+as `otp`, `premium` or `bank`. An account can carry several. A routing rule, a price rule or a named
+filter can then test the tag instead of naming accounts, and a tag can have prices of its own.
+
+Nothing behaves differently until a tag is made, put on an account and named by a rule or a price.
+
+## Who sets them, and who sees them
+
+- **Only the operator.** Tags are set in the control panel or by the platform that manages the
+  accounts. Resellers and customers never see or change them, in the portal or in any API they use.
+- **A units account also carries its parent's tags.** Tagging a reseller covers its customers. A units
+  account can carry tags of its own as well. See [Units accounts](/platform/billing/units-accounts).
+- **Database configuration only.** With configuration in files there are no accounts to tag, so a rule
+  that tests a tag matches nothing. See [Configuration source](/platform/install/configuration-source).
+
+## The "Account tag" condition
+
+Routing rules, price rules and named filters have a condition on the account's tags. Because it works
+in routing rules, a rule that hands messages to a preprocessor can use it too.
+
+| In the control panel | In a rule | Matches when the account |
+| :--- | :--- | :--- |
+| **has** | `tag:equals:otp` | carries `otp` |
+| **has all of** | `tag:equals:otp,bank` | carries every listed tag |
+| **has any of** | `tag:startsWithAny:otp,bank` | carries at least one listed tag |
+| **has none of** | `tag:!startsWithAny:otp,bank` | carries none of the listed tags |
+| **has no tag** | `tag:isNull` | carries no tag at all, its own or a parent's |
+
+Each form can be negated with a leading `!`. Tag names are compared exactly. **Any other operator on
+`tag` is refused when the rule loads**, and the gateway keeps its previous configuration.
+
+The account tested is the message's units account when it has one, otherwise the account it is billed
+to. A disabled tag is treated as absent. A message does not record its account's tags: the condition
+reads the tags the account has when the message is routed or priced.
+
+In the control panel, "Account tag" is one of the guided conditions in the filter wizard, the route
+rule editor and the price rule editor. Picking a tag where a rule chooses its filters adds the
+condition for you.
+
+## Tag prices
+
+Pricing has a **Tag prices** level between an account's own prices and the default. In a rate table it
+is the scope `tag:<name>`. A message's price is looked for in this order, and the first match wins:
+
+1. **The account's own prices.**
+2. **Its tags' prices**, in the order of the Tags list. When an account has several tags with prices,
+   the tag higher in the list wins.
+3. **The default**, `*`.
+
+A units account is priced as its parent, which pays: its parent's own prices, then its parent's tag
+prices, then the default. The rate quote and the message tester price it the same way.
+
+The rate quote, the tester and an account's tariff page show which price applies and why. A `tag:`
+scope that names an unknown or disabled tag loads, prices nobody, and is logged once as
+`rates.tagScope.unreachable`.
+
+See [How pricing works](/platform/billing/how-pricing-works) for scopes and the default.
+
+## Filtering lists and reports by tag
+
+The accounts list has a **Tags** column and a tag filter. **Usage** and **Messages** have a **Tag**
+filter.
+
+<Note>
+**The filter reads the tags accounts have now.** A message does not record the tags its account had
+when it was sent, so a past period is read with today's tags. The filter shows accounts that carry the
+tag themselves, not through a parent. On Messages it needs a period other than all time.
+</Note>
+
+## When a change takes effect
+
+A change to a tag, or to which accounts carry it, is adopted at the next configuration poll, **within
+30 seconds**. Routing and pricing are rebuilt together, and bound SMPP sessions are re-priced: a client
+already bound does not have to rebind. A change made through the API is adopted at once on the node
+that took the call.
+
+On a gateway whose licence is not current, configuration changes are frozen, tag changes included.
+
+## The Tags page
+
+**Tags** sits beside **Filters** in the control panel. For each tag it shows:
+
+| | |
+| :--- | :--- |
+| **Name** | Lower-case letters, digits, `-` and `_`, starting with a letter or digit, at most 40 characters. Rules, filters and prices refer to the tag by its name, so it cannot be renamed. |
+| **Label** and **description** | What the tag is for. Optional, for display only. A description is at most 200 characters. |
+| **Colour** | One of nine, always shown beside the name. |
+| **Order** | Moved up and down in the list. It decides whose price wins. |
+| **Enabled** | Switched on or off. |
+| **Accounts** | How many accounts carry it themselves. |
+| **Used in** | Which routing rules, price rules, filters and tag prices name it. |
+
+- **A tag that a rule, a filter or a price list still names cannot be deleted**, only switched off. A
+  rule naming a missing tag would stop matching without anything saying so.
+- **A disabled tag matches nothing and prices nothing**, but stays on its accounts. Switch it back on
+  and it applies again.
+- Deleting a tag that nothing names takes it off every account.
+
+Tags are put on an account on its **Settings** tab. A units account lists its parent's tags there,
+read only.
+
+## For integrations
+
+### Platform API
+
+The gateway announces the capability **`account_tags`** when its configuration is in the database.
+
+| | |
+| :--- | :--- |
+| `tags` | Every tag the operator defined, enabled or not, in the Tags list's order: `name`, `label`, `description`, `color`, `seq`, `enabled`. |
+| `Account.tags` | The account's own tags, enabled or not. |
+| `Account.effectiveTags` | What rules and prices see: its own enabled tags plus, for a units account, its parent's. |
+| `accounts(tag:)` | Only accounts that carry the tag themselves, not through a parent. |
+| `setAccountTags` | Adds and removes tags. **It never replaces the list**: tags not named stay. A tag the gateway does not define answers `UNKNOWN_TAG` and nothing changes. Repeating a call changes nothing. |
+| `ProvisionInput.tags` | Tags given **only when the call creates the account**. Ignored for an account that already exists. An unknown tag answers `UNKNOWN_TAG` and no account is made. |
+
+### Management API
+
+- `GET /manage/accounts/{id}` includes `tags`, the account's own tags.
+- `PUT /manage/accounts/{id}/tags` takes `add` and `remove`, both lists, and answers the account with
+  its tags afterwards. It never replaces the list. A tag the gateway does not define, or one both added
+  and removed, answers `400`.
+
+### Reseller API
+
+Unchanged. Resellers do not see tags.
+
+## Upgrading to 0.17.0
+
+The schema moves from 1.132.0 to 1.133.0, two new empty tables, so update with `--migrate`. Control
+panel 0.17.0.0 expects 1.133.0: update the gateway first. No new configuration key. Rolling back is the
+previous gateway and control panel; the two tables can stay.
+
+<Warning>
+**One manual step when the control panel writes through a database role of its own.** The migration
+grants the panel's roles nothing, because their names are an installation's own. After the update, as
+the owner of the tables:
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_tag, app_account_tag TO <the panel's writing role>;
+```
+
+A panel that connects as the tables' owner needs nothing. Without the grant the Tags page shows a
+permission error; messages are not affected.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/platform/routing/filters">
+    Named conditions shared by routing and pricing.
+  </Card>
+  <Card title="How pricing works" icon="tag" href="/platform/billing/how-pricing-works">
+    Scopes, the default, and the price order.
+  </Card>
+</CardGroup>

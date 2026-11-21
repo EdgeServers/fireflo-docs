@@ -93,6 +93,7 @@ téléphone compare des chaînes.
 | `owner_id` | Le `accountId` du credential, retombant sur son `systemId`. Sur l'API HTTP, un paramètre `account` explicite le surcharge. |
 | `systemId` | Le `systemId` du credential — le client bindé spécifique, quand plusieurs partagent un compte. |
 | `product` | Le `system_type` sur le bind SMPP du client, retombant sur le `product` du credential. Les appelants HTTP n'ont pas de bind, ils utilisent donc toujours la valeur du credential. |
+| `tag` | À partir de 0.17.0, les étiquettes du compte : les siennes et, pour un compte à unités, celles de son parent. Seulement `equals` (porte l'étiquette ; une liste séparée par des virgules les exige toutes), `startsWithAny` (porte l'une d'une liste) et `isNull` (n'en porte aucune), chacun pouvant être nié. Configuration en base de données uniquement. Voir [Étiquettes de compte](/platform/routing/account-tags). |
 
 `product` est la façon dont un client sélectionne le routage par session : le même credential se
 bindant avec `system_type=premium` et `system_type=bulk` produit deux sessions qui routent

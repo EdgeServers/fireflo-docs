@@ -18,6 +18,10 @@ intacto, así que establecer `*` para `promo` no puede perturbar `*` para nada m
 El editor de ámbito completo en la página *Precios* sigue reemplazando un ámbito por completo, lo
 cual es correcto ahí, porque le muestra todo.
 
+Desde 0.17.0 la página *Precios* también muestra **Tag prices**: una lista de precios por
+[etiqueta de cuenta](/platform/routing/account-tags), probada después de los precios propios de una
+cuenta y antes del valor por defecto, en el orden de la lista Tags.
+
 <Warning>
 Las reglas propias de una cuenta se prueban primero y **gana la primera coincidencia**, por lo que
 cualquier cosa que lleve la cuenta vence al valor por defecto, **incluido un catch-all desnudo**.
@@ -25,6 +29,7 @@ cualquier cosa que lleve la cuenta vence al valor por defecto, **incluido un cat
 Eso es lo que hace de una tarifa negociada un override en lugar de una sugerencia. También significa
 que un catch-all a nivel de cuenta desactiva silenciosamente todos los valores por defecto que
 establezca después.
+Lo mismo vale para los precios por etiqueta: el catch-all propio de una cuenta también los vence.
 </Warning>
 
 ## Dos identidades, no una

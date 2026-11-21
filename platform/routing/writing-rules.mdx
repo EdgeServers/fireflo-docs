@@ -122,6 +122,7 @@ strings.
 | `owner_id` | The credential's `accountId`, falling back to its `systemId`. On the HTTP API an explicit `account` parameter overrides it. |
 | `systemId` | The credential's `systemId` — the specific bound client, where several share one account. |
 | `product` | The `system_type` on the client's SMPP bind when the login may name it (from 0.12.16; its own product or one on its allowed list), falling back to the credential's `product`. HTTP callers have no bind, so they use the credential value or an allowed `product` field. |
+| `tag` | From 0.17.0, the account's tags: its own and, for a units account, its parent's. Only `equals` (has the tag; a comma list means all of them), `startsWithAny` (has any of a list) and `isNull` (has no tag), each negatable. Database configuration only. See [Account tags](/platform/routing/account-tags). |
 
 `product` is how one customer selects routing per session: the same credential binding with
 `system_type=premium` and `system_type=bulk` produces two sessions that route differently, once

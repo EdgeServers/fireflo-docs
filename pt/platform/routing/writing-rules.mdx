@@ -90,6 +90,7 @@ telefone compara strings.
 | `owner_id` | O `accountId` da credencial, caindo de volta para o `systemId`. Na HTTP API um parâmetro `account` explícito sobrescreve. |
 | `systemId` | O `systemId` da credencial — o cliente bound específico, quando vários compartilham uma conta. |
 | `product` | O `system_type` no bind SMPP do cliente, caindo de volta para o `product` da credencial. Chamadores HTTP não têm bind, então sempre usam o valor da credencial. |
+| `tag` | A partir da 0.17.0, as tags da conta: as próprias e, para uma conta de unidades, as da conta-pai. Só `equals` (tem a tag; uma lista separada por vírgulas exige todas), `startsWithAny` (tem alguma de uma lista) e `isNull` (não tem nenhuma), cada um negável. Só com a configuração no banco de dados. Veja [Tags de conta](/platform/routing/account-tags). |
 
 `product` é como um cliente seleciona roteamento por sessão: a mesma credencial fazendo bind com
 `system_type=premium` e `system_type=bulk` produz duas sessões que roteiam de formas diferentes. Veja

@@ -87,6 +87,19 @@ desconhecida, e nada informaria isso.
 
 `*` é reservado: nenhuma account ou vendor pode ser nomeada assim.
 
+## Preços por tag
+
+A partir da 0.17.0 um scope também pode ser **uma tag**, escrita `tag:<nome>`: o preço para toda conta
+que tenha essa tag. O preço de uma mensagem é então procurado nesta ordem, e o primeiro que casar vence:
+
+1. O scope próprio da conta.
+2. Os scopes das suas tags, na ordem da lista Tags. Quando uma conta tem várias tags com preços, vence a
+   que está mais acima na lista.
+3. O default, `*`.
+
+A cotação, o testador e a página de tarifa de uma conta dizem qual dos três a precificou. Tags precisam
+da configuração no banco de dados. Veja [Tags de conta](/platform/routing/account-tags).
+
 ## Desconhecido não é zero
 
 **Uma regra que não casa com nada deixa o valor desconhecido, nunca zero.** Zero é um preço real

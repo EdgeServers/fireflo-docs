@@ -41,6 +41,13 @@ C'est le cas qui vaut la peine d'être connu : une règle qui *ressemblait* au c
 
 Un vrai catch-all est une règle sans conditions **et sans filtres**, placée en dernier.
 
+<Tip>
+**Un filtre peut tester par étiquette qui a envoyé le message.** À partir de 0.17.0, la condition
+« Account tag » (has, has all of, has any of, has none of, has no tag) fonctionne dans un filtre comme
+dans une règle, si bien qu'un filtre peut représenter tous les comptes étiquetés `otp`. Voir
+[Étiquettes de compte](/platform/routing/account-tags).
+</Tip>
+
 ## Un filtre vide compte comme désactivé
 
 Un filtre sans conditions s'enregistre et se charge, ce qui permet d'en construire un condition par condition. La réponse de la passerelle à ce cas n'est pas non plus l'intuitive : un filtre vide est ajouté à l'ensemble des filtres *désactivés*, donc toute règle qui le référence est ignorée.

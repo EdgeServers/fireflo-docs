@@ -90,6 +90,21 @@ computarían como cero en lugar de desconocido, y nada lo diría.
 
 `*` está reservado: ninguna cuenta o vendor puede llamarse así.
 
+## Precios por etiqueta
+
+Desde 0.17.0 un ámbito también puede ser **una etiqueta**, escrita `tag:<nombre>`: el precio para toda
+cuenta que lleve esa etiqueta. El precio de un mensaje se busca entonces en este orden, y gana la
+primera coincidencia:
+
+1. El ámbito propio de la cuenta.
+2. Los ámbitos de sus etiquetas, en el orden de la lista Tags. Cuando una cuenta tiene varias etiquetas
+   con precios, gana la que está más arriba en la lista.
+3. El valor por defecto, `*`.
+
+La cotización, el probador y la página de tarifa de una cuenta dicen cuál de los tres la tarificó. Las
+etiquetas necesitan la configuración en la base de datos. Consulta
+[Etiquetas de cuenta](/platform/routing/account-tags).
+
 ## Desconocido no es cero
 
 **Una regla que no coincide con nada deja el importe desconocido, nunca cero.** Cero es un precio

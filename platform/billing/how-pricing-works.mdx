@@ -96,6 +96,19 @@ nothing would say so.
 
 `*` is reserved: no account or vendor may be named it.
 
+## Tag prices
+
+From 0.17.0 a scope can also be **a tag**, written `tag:<name>`: the price for every account that
+carries that tag. A message's price is then looked for in this order, and the first match wins:
+
+1. The account's own scope.
+2. Its tags' scopes, in the order of the Tags list. When an account has several tags with prices, the
+   tag higher in the list wins.
+3. The default, `*`.
+
+The rate quote, the tester and an account's tariff page say which of the three priced it. Tags need
+configuration in the database. See [Account tags](/platform/routing/account-tags).
+
 ## When a change takes effect
 
 A saved price is picked up within thirty seconds, and applies to messages submitted from then on — a

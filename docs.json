@@ -103,6 +103,7 @@
                   "platform/routing/writing-rules",
                   "platform/routing/least-cost",
                   "platform/routing/filters",
+                  "platform/routing/account-tags",
                   "platform/routing/queues-and-retries",
                   "platform/routing/faq"
                 ]
@@ -409,6 +410,7 @@
                   "fr/platform/routing/writing-rules",
                   "fr/platform/routing/least-cost",
                   "fr/platform/routing/filters",
+                  "fr/platform/routing/account-tags",
                   "fr/platform/routing/queues-and-retries",
                   "fr/platform/routing/faq"
                 ]
@@ -713,6 +715,7 @@
                   "es/platform/routing/writing-rules",
                   "es/platform/routing/least-cost",
                   "es/platform/routing/filters",
+                  "es/platform/routing/account-tags",
                   "es/platform/routing/queues-and-retries",
                   "es/platform/routing/faq"
                 ]
@@ -1017,6 +1020,7 @@
                   "pt/platform/routing/writing-rules",
                   "pt/platform/routing/least-cost",
                   "pt/platform/routing/filters",
+                  "pt/platform/routing/account-tags",
                   "pt/platform/routing/queues-and-retries",
                   "pt/platform/routing/faq"
                 ]

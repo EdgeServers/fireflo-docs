@@ -45,6 +45,10 @@ Remetente mais pesado primeiro: **Account · Sent · Delivered · Failed · Pend
 
 Cada account leva através para aquele cliente, onde a mesma pergunta é respondida apenas para eles.
 
+A partir da 0.17.0 um filtro **Tag** limita a página às contas que têm elas mesmas uma
+[tag de conta](/platform/routing/account-tags). Ele lê as tags que as contas têm agora: uma mensagem não
+registra as tags da sua conta, então um período passado é lido com as de hoje.
+
 Tráfego que não nomeou uma account aparece como um **no account** acinzentado — não é erro, e não
 é uma account cujo nome está vazio. É tráfego que chegou sem uma, o que geralmente significa um
 login sem account anexada, e vale a pena investigar porque precifica e fatura diferentemente.

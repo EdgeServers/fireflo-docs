@@ -18,12 +18,17 @@ portanto configurar `*` para `promo` não perturba `*` para nada mais.
 O editor de scope inteiro na página *Pricing* ainda substitui um scope por completo. E isso está
 correto ali, porque mostra tudo dele.
 
+A partir da 0.17.0 a página *Pricing* também lista **Tag prices**: uma lista de preços por
+[tag de conta](/platform/routing/account-tags), tentada depois dos preços próprios de uma conta e antes
+do default, na ordem da lista Tags.
+
 <Warning>
 As regras próprias de uma account são tentadas primeiro e **a primeira que casar vence**, portanto
 qualquer coisa que a account carregue bate o default. **Inclusive um catch-all puro.**
 
 É isso que faz de uma tarifa negociada um override em vez de uma sugestão. Também significa que um
 catch-all no nível da account desabilita silenciosamente todos os defaults que você configurar depois.
+O mesmo vale para os preços por tag: o catch-all próprio de uma conta também os vence.
 </Warning>
 
 ## Duas identidades, não uma

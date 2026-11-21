@@ -88,6 +88,7 @@ cadenas.
 | `owner_id` | El `accountId` de la credencial, recurriendo a su `systemId`. En la API HTTP un parámetro `account` explícito lo sobrescribe. |
 | `systemId` | El `systemId` de la credencial: el cliente específico conectado, donde varios comparten una cuenta. |
 | `product` | El `system_type` en la conexión SMPP del cliente, recurriendo al `product` de la credencial. Los llamantes HTTP no tienen conexión, así que siempre usan el valor de la credencial. |
+| `tag` | Desde 0.17.0, las etiquetas de la cuenta: las suyas y, para una cuenta de unidades, las de su cuenta padre. Solo `equals` (tiene la etiqueta; una lista separada por comas exige todas), `startsWithAny` (tiene alguna de una lista) e `isNull` (no tiene ninguna), cada uno negable. Solo con la configuración en la base de datos. Consulta [Etiquetas de cuenta](/platform/routing/account-tags). |
 
 `product` es como un cliente selecciona el enrutamiento por sesión: la misma credencial conectándose con
 `system_type=premium` y `system_type=bulk` produce dos sesiones que se enrutan de forma diferente. Consulta

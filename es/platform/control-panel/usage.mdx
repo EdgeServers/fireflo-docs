@@ -47,6 +47,11 @@ El remitente más pesado primero: **Account · Sent · Delivered · Failed · Pe
 
 Cada cuenta enlaza a ese cliente, donde la misma pregunta se responde solo para él.
 
+Desde 0.17.0 un filtro **Tag** limita la página a las cuentas que llevan una
+[etiqueta de cuenta](/platform/routing/account-tags) ellas mismas. Lee las etiquetas que las cuentas
+tienen ahora: un mensaje no guarda las etiquetas de su cuenta, así que un periodo pasado se lee con las
+de hoy.
+
 El tráfico que no nombró ninguna cuenta aparece como un **no account** en gris: no es un error, y no
 es una cuenta con nombre vacío. Es tráfico que llegó sin una, que normalmente significa un login
 sin cuenta adjuntada, y vale la pena perseguirlo porque tarifica y factura de forma distinta.

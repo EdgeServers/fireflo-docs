@@ -56,6 +56,12 @@ table is reported under `no-catch-all` on `/ops/health`; see
 
 A real catch-all is a rule with no conditions **and no filters**, placed last.
 
+<Tip>
+**A filter can test who sent the message by tag.** From 0.17.0 the "Account tag" condition (has, has all
+of, has any of, has none of, has no tag) works in a filter as it does in a rule, so one filter can stand
+for every account tagged `otp`. See [Account tags](/platform/routing/account-tags).
+</Tip>
+
 ## An empty filter counts as disabled
 
 A filter with no conditions saves and loads, which is what lets one be built up a condition at a time.

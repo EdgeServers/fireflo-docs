@@ -58,6 +58,12 @@ descartadas. A tabela é reportada sob `no-catch-all` em `/ops/health`; veja
 
 Um catch-all real é uma regra sem condições **e sem filtros**, colocada por último.
 
+<Tip>
+**Um filtro pode testar por tag quem enviou a mensagem.** A partir da 0.17.0 a condição "Account tag"
+(has, has all of, has any of, has none of, has no tag) funciona num filtro como numa regra, então um
+filtro pode representar todas as contas com a tag `otp`. Veja [Tags de conta](/platform/routing/account-tags).
+</Tip>
+
 ## Um filtro vazio conta como desabilitado
 
 Um filtro sem condições salva e carrega, o que permite que um seja construído uma condição por vez. A

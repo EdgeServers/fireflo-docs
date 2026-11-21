@@ -48,6 +48,11 @@ Billed**.
 
 Chaque compte mène à ce client, où la même question est répondue pour lui seul.
 
+À partir de 0.17.0, un filtre **Tag** limite la page aux comptes qui portent eux-mêmes une
+[étiquette de compte](/platform/routing/account-tags). Il lit les étiquettes que les comptes ont
+maintenant : un message n'enregistre pas les étiquettes de son compte, donc une période passée est lue
+avec celles d'aujourd'hui.
+
 Le trafic qui n'a nommé aucun compte apparaît comme un **no account** grisé — pas une erreur, et
 pas un compte dont le nom est vide. C'est du trafic qui est arrivé sans, ce qui signifie
 habituellement un login sans compte attaché, et cela vaut la peine d'être poursuivi parce qu'il

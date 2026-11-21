@@ -1,0 +1,172 @@
+---
+title: "Etiquetas de cuenta"
+description: "Nombres que el operador pone a las cuentas, para que reglas de enrutamiento, precios y filters digan a quién se aplican sin enumerar las cuentas una por una."
+---
+
+Desde **0.17.0** (panel de control 0.17.0.0) el operador puede poner **etiquetas** (tags) a las
+cuentas: nombres cortos como `otp`, `premium` o `bank`. Una cuenta puede llevar varias. Una regla de
+enrutamiento, una regla de precio o un filter con nombre puede entonces comprobar la etiqueta en lugar
+de nombrar cuentas, y una etiqueta puede tener precios propios.
+
+Nada cambia hasta que se crea una etiqueta, se pone en una cuenta y una regla o un precio la nombra.
+
+## Quién las pone y quién las ve
+
+- **Solo el operador.** Las etiquetas se ponen en el panel de control o desde la plataforma que
+  gestiona las cuentas. Los revendedores y los clientes nunca las ven ni las cambian, ni en el portal
+  ni en ninguna API que usen.
+- **Una cuenta de unidades también lleva las etiquetas de su cuenta padre.** Etiquetar a un revendedor
+  cubre a sus clientes. Una cuenta de unidades puede llevar además etiquetas propias. Consulta
+  [Cuentas de unidades](/platform/billing/units-accounts).
+- **Solo con la configuración en la base de datos.** Con la configuración en archivos no hay cuentas
+  que etiquetar, así que una regla que comprueba una etiqueta no coincide con nada. Consulta
+  [Elegir una fuente de configuración](/platform/install/configuration-source).
+
+## La condición "Account tag"
+
+Las reglas de enrutamiento, las reglas de precio y los filters con nombre tienen una condición sobre
+las etiquetas de la cuenta. Como funciona en las reglas de enrutamiento, una regla que pasa mensajes a
+un preprocesador también puede usarla.
+
+| En el panel de control | En una regla | Coincide cuando la cuenta |
+| :--- | :--- | :--- |
+| **has** | `tag:equals:otp` | lleva `otp` |
+| **has all of** | `tag:equals:otp,bank` | lleva todas las etiquetas de la lista |
+| **has any of** | `tag:startsWithAny:otp,bank` | lleva al menos una de la lista |
+| **has none of** | `tag:!startsWithAny:otp,bank` | no lleva ninguna de la lista |
+| **has no tag** | `tag:isNull` | no lleva ninguna etiqueta, ni propia ni de su cuenta padre |
+
+Cada forma se puede negar con un `!` delante. Los nombres se comparan exactamente. **Cualquier otro
+operador sobre `tag` se rechaza al cargar la regla**, y la pasarela conserva su configuración anterior.
+
+La cuenta que se comprueba es la cuenta de unidades del mensaje cuando la tiene; si no, la cuenta a la
+que se factura. Una etiqueta deshabilitada se trata como ausente. Un mensaje no guarda las etiquetas de
+su cuenta: la condición lee las etiquetas que la cuenta tiene cuando el mensaje se enruta o se tarifica.
+
+En el panel de control, "Account tag" es una de las condiciones guiadas del asistente de filters, del
+editor de reglas de ruta y del editor de reglas de precio. Elegir una etiqueta donde una regla elige
+sus filters añade la condición por ti.
+
+## Precios por etiqueta
+
+Los precios tienen un nivel **Tag prices** entre los precios propios de una cuenta y el valor por
+defecto. En una tabla de tarifas es el ámbito `tag:<nombre>`. El precio de un mensaje se busca en este
+orden, y gana la primera coincidencia:
+
+1. **Los precios propios de la cuenta.**
+2. **Los precios de sus etiquetas**, en el orden de la lista Tags. Cuando una cuenta tiene varias
+   etiquetas con precios, gana la que está más arriba en la lista.
+3. **El valor por defecto**, `*`.
+
+Una cuenta de unidades se tarifica como su cuenta padre, que es quien paga: los precios propios de la
+cuenta padre, luego los de sus etiquetas, luego el valor por defecto. La cotización y el probador de
+mensajes la tarifican igual.
+
+La cotización, el probador y la página de tarifa de una cuenta muestran qué precio se aplica y por qué.
+Un ámbito `tag:` que nombra una etiqueta desconocida o deshabilitada se carga, no tarifica a nadie y se
+registra una vez como `rates.tagScope.unreachable`.
+
+Consulta [Cómo funciona la tarificación](/platform/billing/how-pricing-works) para los ámbitos y el valor
+por defecto.
+
+## Filtrar listas e informes por etiqueta
+
+La lista de cuentas tiene una columna **Tags** y un filtro por etiqueta. **Usage** y **Messages** tienen
+un filtro **Tag**.
+
+<Note>
+**El filtro lee las etiquetas que las cuentas tienen ahora.** Un mensaje no guarda las etiquetas que
+tenía su cuenta cuando se envió, así que un periodo pasado se lee con las etiquetas de hoy. El filtro
+muestra las cuentas que llevan la etiqueta ellas mismas, no a través de una cuenta padre. En Messages
+necesita un periodo distinto de todo el historial.
+</Note>
+
+## Cuándo se aplica un cambio
+
+Un cambio en una etiqueta, o en qué cuentas la llevan, se adopta en el siguiente sondeo de
+configuración, **en 30 segundos como mucho**. El enrutamiento y los precios se reconstruyen juntos, y
+las sesiones SMPP conectadas se vuelven a tarificar: un cliente ya conectado no tiene que volver a
+hacer bind. Un cambio hecho por la API se adopta al instante en el nodo que recibió la llamada.
+
+En una pasarela cuya licencia no está al día, los cambios de configuración quedan congelados, también
+los de etiquetas.
+
+## La página Tags
+
+**Tags** está junto a **Filters** en el panel de control. Para cada etiqueta muestra:
+
+| | |
+| :--- | :--- |
+| **Nombre** | Minúsculas, dígitos, `-` y `_`, empezando por una letra o un dígito, 40 caracteres como mucho. Las reglas, los filters y los precios se refieren a la etiqueta por su nombre, así que no se puede renombrar. |
+| **Label** y **descripción** | Para qué sirve. Opcionales, solo para mostrar. La descripción tiene 200 caracteres como mucho. |
+| **Color** | Uno de nueve, siempre junto al nombre. |
+| **Orden** | Se sube y se baja en la lista. Decide qué precio gana. |
+| **Habilitada** | Encendida o apagada. |
+| **Cuentas** | Cuántas cuentas la llevan ellas mismas. |
+| **Usada en** | Qué reglas de enrutamiento, reglas de precio, filters y precios por etiqueta la nombran. |
+
+- **Una etiqueta que todavía nombra una regla, un filter o una lista de precios no se puede borrar**,
+  solo apagar. Una regla que nombrara una etiqueta inexistente dejaría de coincidir sin que nada lo
+  dijera.
+- **Una etiqueta deshabilitada no coincide con nada ni tarifica nada**, pero sigue en sus cuentas. Al
+  volver a encenderla se aplica de nuevo.
+- Borrar una etiqueta que nada nombra la quita de todas las cuentas.
+
+Las etiquetas se ponen a una cuenta en su pestaña **Settings**. Una cuenta de unidades muestra ahí las
+etiquetas de su cuenta padre, solo para leer.
+
+## Para integraciones
+
+### API de plataforma
+
+La pasarela anuncia la capacidad **`account_tags`** cuando su configuración está en la base de datos.
+
+| | |
+| :--- | :--- |
+| `tags` | Todas las etiquetas definidas por el operador, habilitadas o no, en el orden de la lista Tags: `name`, `label`, `description`, `color`, `seq`, `enabled`. |
+| `Account.tags` | Las etiquetas propias de la cuenta, habilitadas o no. |
+| `Account.effectiveTags` | Lo que ven las reglas y los precios: sus etiquetas propias habilitadas y, para una cuenta de unidades, las de su cuenta padre. |
+| `accounts(tag:)` | Solo las cuentas que llevan la etiqueta ellas mismas, no a través de una cuenta padre. |
+| `setAccountTags` | Añade y quita etiquetas. **Nunca reemplaza la lista**: las que no se nombran se quedan. Una etiqueta que la pasarela no define responde `UNKNOWN_TAG` y nada cambia. Repetir una llamada no cambia nada. |
+| `ProvisionInput.tags` | Etiquetas que se dan **solo cuando la llamada crea la cuenta**. Se ignoran para una cuenta que ya existe. Una etiqueta desconocida responde `UNKNOWN_TAG` y no se crea ninguna cuenta. |
+
+### API de gestión
+
+- `GET /manage/accounts/{id}` incluye `tags`, las etiquetas propias de la cuenta.
+- `PUT /manage/accounts/{id}/tags` recibe `add` y `remove`, ambas listas, y responde con la cuenta y sus
+  etiquetas después del cambio. Nunca reemplaza la lista. Una etiqueta que la pasarela no define, o una
+  que se añade y se quita a la vez, responde `400`.
+
+### API de revendedores
+
+Sin cambios. Los revendedores no ven las etiquetas.
+
+## Actualizar a 0.17.0
+
+El esquema pasa de 1.132.0 a 1.133.0, con dos tablas nuevas y vacías, así que actualiza con
+`--migrate`. El panel de control 0.17.0.0 espera 1.133.0: actualiza primero la pasarela. No hay clave de
+configuración nueva. Volver atrás es la pasarela y el panel anteriores; las dos tablas pueden quedarse.
+
+<Warning>
+**Un paso manual cuando el panel de control escribe con un rol de base de datos propio.** La migración
+no da nada a los roles del panel, porque sus nombres son propios de cada instalación. Después de la
+actualización, como propietario de las tablas:
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON app_tag, app_account_tag TO <el rol de escritura del panel>;
+```
+
+Un panel que se conecta como propietario de las tablas no necesita nada. Sin el permiso, la página Tags
+muestra un error de permisos; los mensajes no se ven afectados.
+</Warning>
+
+## Relacionado
+
+<CardGroup cols={2}>
+  <Card title="Filters" icon="filter" href="/platform/routing/filters">
+    Condiciones con nombre compartidas por el enrutamiento y los precios.
+  </Card>
+  <Card title="Cómo funciona la tarificación" icon="tag" href="/platform/billing/how-pricing-works">
+    Ámbitos, el valor por defecto y el orden de los precios.
+  </Card>
+</CardGroup>

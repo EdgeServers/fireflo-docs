@@ -16,6 +16,10 @@ La ligne toujours visible : **Period**, **Outcome**, **To number** (correspond d
 **Message id** (exact), et **Message text** (contient). **More filters** ajoute compte, nom de
 bind, vendor, product, ingress, et from-number.
 
+À partir de 0.17.0, il propose aussi **Tag** : les messages des comptes qui portent eux-mêmes
+cette [étiquette de compte](/platform/routing/account-tags) maintenant. Un message n'enregistre pas les
+étiquettes de son compte, et le filtre demande une période autre que tout l'historique.
+
 **Awaiting a receipt** est listé en premier parmi les résultats plutôt qu'alphabétiquement. Sur un
 gateway actif en bonne santé, c'est le plus grand groupe, et c'est ce que les gens cherchent
 généralement.

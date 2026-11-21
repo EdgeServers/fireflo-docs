@@ -90,6 +90,20 @@ d'inconnu, et rien ne le dirait.
 
 `*` est réservé : aucun compte ni vendor ne peut être nommé ainsi.
 
+## Prix par étiquette
+
+À partir de 0.17.0, un scope peut aussi être **une étiquette**, écrit `tag:<nom>` : le prix de tout
+compte qui porte cette étiquette. Le prix d'un message est alors cherché dans cet ordre, et la première
+correspondance gagne :
+
+1. Le scope propre du compte.
+2. Les scopes de ses étiquettes, dans l'ordre de la liste Tags. Quand un compte a plusieurs étiquettes
+   avec des prix, celle qui est la plus haute dans la liste gagne.
+3. Le défaut, `*`.
+
+Le devis, le testeur et la page de tarif d'un compte disent lequel des trois l'a tarifé. Les étiquettes
+demandent la configuration en base de données. Voir [Étiquettes de compte](/platform/routing/account-tags).
+
 ## Inconnu n'est pas zéro
 
 **Une règle qui ne correspond à rien laisse le montant inconnu, jamais zéro.** Zéro est un vrai

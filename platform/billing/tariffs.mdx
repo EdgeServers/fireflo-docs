@@ -18,12 +18,16 @@ setting `*` for `promo` cannot disturb `*` for anything else.
 The whole-scope editor on the *Pricing* page still replaces a scope wholesale — which is correct
 there, because it shows you all of it.
 
+From 0.17.0 the *Pricing* page also lists **Tag prices**: a price list per [account tag](/platform/routing/account-tags),
+tried after an account's own prices and before the default, in the order of the Tags list.
+
 <Warning>
 An account's own rules are tried first and **the first match wins**, so anything the account carries
 beats the default — **including a bare catch-all**.
 
 That is what makes a negotiated tariff an override rather than a suggestion. It also means an
-account-level catch-all silently disables every default you set afterwards.
+account-level catch-all silently disables every default you set afterwards. The same holds for tag prices: an
+account's own catch-all beats them too.
 </Warning>
 
 ## Two identities, not one
