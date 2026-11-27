@@ -62,8 +62,10 @@ one account all report the same balance, and all spend the same credit.
 Credit is reserved in **blocks** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
 twenty messages' worth by default — and refills are **asynchronous**.
 
-So a message arriving while the next reservation is being taken gets `402` even though this endpoint
-reports a positive balance. **It is transient; the retry succeeds.**
+So a message can arrive while the next reservation is being taken. It waits for it, and is refused
+only if the credit is still not confirmed after the wait — from 0.17.x as `503` with code
+`CREDIT_PENDING` and `Retry-After: 2`, not `402`, even though this endpoint reports a positive balance.
+**It is transient; the retry succeeds.**
 
 The block size does not strand credit: a reservation falls back through the block, the floor, and
 finally the single message that asked, so an account spends every unit it holds.

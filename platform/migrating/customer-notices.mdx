@@ -107,6 +107,53 @@ every account listed: for one that sends only English the notice is harmless.
 If you need time, update, switch **Send Unicode automatically** off on the Gateway settings page
 (`smsg.restapi.coding.autodetect`), tell your customers, then switch it on.
 
+## 0.17.x: credit not confirmed in time
+
+**Who:** customers of a prepaid account whose messages were refused because their credit could not be
+reserved in time, and any platform reading the platform API's send status. Nobody's charges change:
+these messages were never charged, before or after.
+
+| A message whose credit is not in hand | Up to 0.17.1 | From 0.17.x |
+| :--- | :--- | :--- |
+| How long it waits | at most 2 seconds; refused at once if the reservation failed | up to `smsg.balance.park.seconds` (10 seconds by default) over SMPP, at most 5 over the API; a failed reservation is retried |
+| SMPP answer when the wait runs out | `0x14` (`ESME_RMSGQFUL`), the same as a full queue | `0x58` (`ESME_RTHROTTLED`), the listener's `conf.status.creditPending` |
+| REST answer | `503` with no `code`, recorded `queueFull` | `503`, code `CREDIT_PENDING`, `Retry-After: 2`, recorded `creditPending` |
+| gRPC answer | `UNAVAILABLE`, `QUEUE_FULL` | `UNAVAILABLE`, `CREDIT_PENDING`, retry after 2 seconds |
+| Platform API send status | `QUEUE_FULL` | `CREDIT_PENDING` |
+
+**The number, the direction, the date:** from the day you update, far fewer of these refusals — most
+messages that were refused now wait and are sent — and the ones that remain carry a new code. A real
+full queue is unchanged: `0x14`, recorded `queueFull`.
+
+What each kind of customer needs to do:
+
+- **SMPP customers whose client tells refusals apart by code** see `0x58` where they saw `0x14` for this
+  case. A client that resends on `0x58` — most do, as it is the standard "slow down" status — needs
+  nothing. One that treats `0x58` as permanent must be changed, or you set `conf.status.creditPending`
+  to `0x14` on their listener to keep the old answer.
+- **Platform API clients** must accept the new send status `CREDIT_PENDING` and treat it as "try again".
+- **REST clients** get a `code` (`CREDIT_PENDING`) and a `Retry-After` on this `503`, where it had
+  neither. A client that retries any `503` needs nothing.
+
+The candidates — accounts refused for credit in the last 30 days, by ingress:
+
+```sql
+SELECT account_id, ingress,
+       count(*)          AS refused_credit_pending,
+       max(rejected_at)  AS last_seen
+  FROM cdr_rejected
+ WHERE reason = 'creditPending'
+   AND rejected_at >= now() - interval '30 days'
+ GROUP BY account_id, ingress
+ ORDER BY refused_credit_pending DESC;
+```
+
+Over REST and gRPC, gateways before 0.17.x recorded these as `queueFull`, which is also a real full
+queue: for those, any account listed under `queueFull` in the same window is a candidate.
+
+**Say that nothing was charged.** A customer told about a refusal code assumes the refused messages
+were billed; none were.
+
 ## Two sentences that must not be softened
 
 Whatever else is rewritten to suit your platform's voice, these survive intact:

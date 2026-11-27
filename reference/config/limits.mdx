@@ -25,6 +25,10 @@ that session rather than slow it down:
 | SMPP | `submit_sm_resp` with `ESME_RMSGQFUL` (`0x14`). Nothing is charged — the refusal happens before the message is accepted. |
 | REST | `503` with `queueFull` in `cdr_rejected`. Anything already charged is refunded, because the REST path charges before it publishes. |
 
+A message refused because its **credit** was not confirmed is not a full queue, and from 0.17.x it is
+not recorded or answered as one — see the next section. Before 0.17.x it answered `0x14` over SMPP and
+was recorded `queueFull` over REST and gRPC.
+
 <Note>
 **Choosing a number.** There is no default because a limit is a statement about your own traffic and
 your own heap. Too low refuses messages that would have been delivered; too high and it never fires
@@ -34,6 +38,34 @@ Start from how many messages you are willing to hold for a vendor that has gone 
 depth under normal load first — `router_queue` and each worker's `queue_depth` are on
 [`/ops/health`](/reference/management/endpoints), with the limit beside them once one is set.
 </Note>
+
+## Waiting for credit
+
+On a prepaid gateway a message that finds no credit in hand waits for the account's next credit block
+rather than being refused. These bound that wait. From 0.17.x.
+
+| Property | Scope | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.balance.park.seconds` | global | `10` | How long a message waits for its credit before it is refused `creditPending`, uncharged. 1 to 30, read on every use. Over SMPP the whole wait; over the HTTP API, gRPC and the platform API at most 5 seconds of it. |
+| `conf.status.creditPending` | per listener | `0x00000058` | The `submit_sm_resp` status for that refusal. Hex or decimal; a value that is not a number falls back to the default with a warning. Default `ESME_RTHROTTLED`, which clients resend; set `0x14` to keep the answer before 0.17.x. |
+
+**What it limits.** The time between a submit arriving and the gateway answering it, while its credit
+is being reserved. Nothing is charged or sent before the credit is reserved, so the wait holds the
+answer, not the money. A reservation that fails because the database is slow or not answering is
+retried during the wait.
+
+<Warning>
+**Keep `smsg.balance.park.seconds` below your customers' SMPP response timeout.** A client that stops
+waiting before the gateway answers resends the submit, and if the first is then accepted, both are
+sent. The default of 10 seconds is below the usual client defaults.
+</Warning>
+
+Two fixed caps stop the wait becoming a heap problem of its own: when **10,000** of one account's
+messages, or **100,000** across the gateway, are already waiting, the next is refused at once as
+`creditQueueFull` — `0x14` over SMPP, a full-queue `503` over the API — uncharged.
+
+The answers, the causes and what to look at are in
+[Refusals](/platform/troubleshooting/refusals#credit-not-confirmed-in-time).
 
 ## HTTP ingress limits
 
@@ -92,7 +124,7 @@ refused.**
 </Warning>
 
 **Why they exist.** An unset product is a supported state that sends messages for free.
-`RateSnapshot.rulesFor` short-circuits a null product to the any-product bucket alone, so a
+Rating looks up a message with no product in the any-product rules alone, so a
 product-less message can never reach a product-scoped rule. Nothing matches, the message is left
 unrated, and the credit charge returns early. On an account whose rate rules all carry a product, that
 is the whole bill.

@@ -42,16 +42,19 @@ describe the recent shape rather than an exact total, and the table beneath is s
 | **Product not sold** | The login named a product with no enabled catalogue row |
 | **No price configured** | No sell-side rate matched, and the gateway refuses rather than send unbilled |
 | **Product not allowed for this login** | The login may not name that product |
-| **Queue full** | The router queue was at capacity and refused rather than growing the heap |
+| **Credit not confirmed in time; resend** | From 0.17.x (`creditPending`). A funded account's credit was not confirmed within `smsg.balance.park.seconds`, usually because the database was slow or not answering. Nothing charged; a resend goes through — see [Refusals](/platform/troubleshooting/refusals#credit-not-confirmed-in-time) |
+| **Too many waiting for credit; resend** | From 0.17.x (`creditQueueFull`). 10,000 of the account's messages, or 100,000 on the gateway, were already waiting for credit. Same cause as the above, at volume |
+| **Queue full** | The router queue was at capacity and refused rather than growing the heap. Before 0.17.x, REST and gRPC sends refused for credit not confirmed in time were also counted here |
 | **Could not be queued** | Accepted by the checks, but could not be handed on — usually the broker |
 | **Never routed** | *After acceptance.* No enabled rule matched; refunded |
 | **Vendor refused it** | *After acceptance.* The carrier rejected the submit; refunded |
 | **Dropped by a filter** | *After acceptance.* A routing filter stopped it; refunded |
 
 <Note>
-**"Out of credit" immediately after a gateway restart can appear on a funded account**, while credit
-is being reserved for the first time. One message reports it and the next succeeds. Persisting past
-the first few sends is a real shortage.
+**A funded account's messages wait for their credit** after a restart, or whenever its block runs out,
+rather than being refused. Many **Credit not confirmed in time** refusals across accounts in the same
+minutes point at the database. **Out of credit** on a funded account that persists is a real shortage,
+or credit held in `reserved`.
 </Note>
 
 Two reasons deserve their own note. **Content not approved** is an exact comparison outside the

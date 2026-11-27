@@ -6,18 +6,25 @@ description: "The questions operators ask once money is moving — discrepancies
 <AccordionGroup>
 
 <Accordion title="An account is refusing messages and has money on it">
-Almost always a **refill in flight**, not stranded credit.
+Look at the reason first. With money on the account it is almost always **`creditPending`**, not
+stranded credit.
 
-Credit is reserved in blocks, and refills are asynchronous by design — so a message arriving while the
-next reservation is being taken can be refused with money still on the account. Retrying succeeds.
+Credit is reserved in blocks, and refills are asynchronous by design — so a message can arrive while
+the next reservation is being taken. It **waits** for it, up to `smsg.balance.park.seconds` (10 seconds
+by default, gateway-wide; 5 at most for API sends), and is charged when the block lands. Only if the
+credit is still not confirmed by then — usually because the database was slow or not answering — is it
+refused `creditPending`: `0x58` over SMPP (`conf.status.creditPending`), `503` `CREDIT_PENDING` over
+REST. Nothing is charged, and resending succeeds. See
+[Refusals](/platform/troubleshooting/refusals#credit-not-confirmed-in-time).
 
 **The block floor does not strand anything.** A reservation tries the full block, then the
 message-denominated floor, then just the single message that asked, so an account spends every unit it
 holds. One funded for three messages sends three.
 
-If this happens on a **well-funded** account, the cause is different and historic: the floor used to
-be a currency amount, which could size a block at exactly one message for an expensive destination.
-That is what `smsg.balance.block.min.messages` exists to prevent.
+If a **well-funded** account is refused `insufficientCredit`, the cause is different: credit held in
+`reserved`, or — historically — the floor being a currency amount, which could size a block at exactly
+one message for an expensive destination. That is what `smsg.balance.block.min.messages` exists to
+prevent.
 </Accordion>
 
 <Accordion title="A top-up did not arrive">

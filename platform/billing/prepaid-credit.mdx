@@ -110,17 +110,50 @@ exists to keep busy accounts off the database. An account funded for three messa
 **What it costs:** an actively sending account holds up to twenty messages' worth in `reserved` that
 nothing else can spend — returned by a clean shutdown, and by `credit release` after an unclean one.
 
-**What you will still see near the end:** refills are asynchronous by design, so a message arriving
-while the next reservation is in flight can be refused even though credit remains. That refusal is
-transient and the retry succeeds. It is not stranded credit.
+**What you will still see near the end:** refills are asynchronous by design, so a message can arrive
+while the next reservation is in flight. It waits for it rather than being refused — see below.
+
+## Waiting for credit
+
+A message that finds no credit in hand — the block spent, the next one not yet reserved — **waits**
+for the reservation and is charged as soon as it lands, in the order the messages arrived. A
+reservation that fails because the database is slow or not answering is tried again while the
+messages wait. Nothing is charged before its credit is reserved, so the balance never goes below zero.
+
+The wait is `smsg.balance.park.seconds`: gateway-wide, **10 seconds** by default, 1 to 30, read on
+every use. Sends over the HTTP API, gRPC and the platform API wait at most 5 seconds of it.
+
+If the credit is still not confirmed when the wait runs out, the message is refused **`creditPending`**,
+uncharged:
+
+| Ingress | Answer |
+| :--- | :--- |
+| SMPP | `0x58` (`ESME_RTHROTTLED`) by default, set per listener with `conf.status.creditPending` |
+| REST | `503`, code `CREDIT_PENDING`, `Retry-After: 2` |
+| gRPC | `UNAVAILABLE`, `CREDIT_PENDING`, retry after 2 seconds |
+| Platform API | send status `CREDIT_PENDING` |
+
+A resend goes through once the database answers. When 10,000 of one account's messages, or 100,000
+across the gateway, are already waiting, the next is refused at once as `creditQueueFull` (`0x14`, or
+a full-queue `503`), also uncharged.
+
+<Note>
+**Up to 0.15.6** such a message was refused at once. **From 0.15.9 to 0.17.1** it waited at most
+2 seconds, and a reservation that failed refused the waiting messages at once; SMPP answered `0x14`
+and REST and gRPC recorded the refusal as `queueFull`. The wait limit, the retry and the separate
+`creditPending` answers are from 0.17.x. `smsg.balance.block.seconds` no longer sets the wait.
+</Note>
+
+See [Refusals](/platform/troubleshooting/refusals#credit-not-confirmed-in-time) for answering a
+customer who sees these.
 
 ## Refusal
 
 An account with no credit gets `submit_sm_resp` status **`0x402`**, HTTP **402**, reason
 `insufficientCredit`.
 
-`ESME_RTHROTTLED` is deliberately not used: it means something else, and would make a client back off
-and retry a condition that only a top-up can clear.
+`ESME_RTHROTTLED` is deliberately not used for this: it tells a client to back off and resend, which is
+right for `creditPending` and wrong for a condition that only a top-up can clear.
 
 A [units account](/platform/billing/units-accounts) running out of its own units is a separate refusal,
 `noUnits` (`0x403`). When its parent runs out of money, its logins get this one.
@@ -131,8 +164,8 @@ A message charged and then dropped during routing has its credit returned **exac
 unrated message is never charged at all.
 
 Refill triggers on a watermark while credit remains, on a background thread. **If traffic outruns it
-the message is refused immediately** rather than the SMPP thread waiting on a database — a stalled
-ingress thread is worse than a refused message.
+the message waits for the refill** — without holding an SMPP thread, which goes on to the next submit —
+and is refused `creditPending` only if the wait runs out.
 
 ## Properties
 
@@ -144,6 +177,7 @@ ingress thread is worse than a refused message.
 | `smsg.balance.block.max` | `10000000` | Ceiling on a single reservation |
 | `smsg.balance.refill.watermark.percent` | `20` | Refill triggers here |
 | `smsg.balance.recharge.poll.seconds` | `30` | How soon a top-up lands |
+| `smsg.balance.park.seconds` | `10` | From 0.17.x. How long a message with no credit in hand waits for its block before it is refused `creditPending`. Gateway-wide, 1 to 30; API sends wait at most 5 |
 
 ## Related
 
@@ -152,6 +186,6 @@ ingress thread is worse than a refused message.
     Credit limits, and exact bills from approximate enforcement.
   </Card>
   <Card title="Refusals" icon="ban" href="/platform/troubleshooting/refusals">
-    Reading `insufficientCredit` against a positive balance.
+    `creditPending`, and `insufficientCredit` against a positive balance.
   </Card>
 </CardGroup>

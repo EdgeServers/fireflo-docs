@@ -66,11 +66,14 @@ Credit is **reserved in blocks, not per message** — around twenty messages' wo
 what keeps the send path off the database.
 
 <Warning>
-**You can see a `402` with money still on the account.** Refills are asynchronous, so a message
-arriving while the next reservation is being taken is refused. **Retrying succeeds**, and this is the
-one `402` worth a retry.
+**A message arriving while the next reservation is being taken waits for it** rather than being
+refused. Only if the credit is still not confirmed after the wait — usually the gateway's database
+being slow for a moment — is it refused, and from 0.17.x that refusal has its own answer: `503` with
+code `CREDIT_PENDING` and `Retry-After: 2` over REST, `0x58` over SMPP. Nothing is charged. **Retrying
+succeeds.**
 
-A *persistent* `402` with a healthy balance is a different matter — raise it with your provider.
+A `402` means the balance will not cover the message. A *persistent* `402` with a healthy balance is a
+different matter — raise it with your provider.
 </Warning>
 
 **The block size does not strand your credit.** A reservation falls back through the full block, then

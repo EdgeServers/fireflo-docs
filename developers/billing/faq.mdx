@@ -24,8 +24,10 @@ are the gap, and your provider can list them.
 </Accordion>
 
 <Accordion title="Why am I being refused when I have money on the account?">
-Almost always a **refill in flight**. Credit is reserved in blocks and refills are asynchronous, so a
-message arriving mid-reservation is refused with money still there. Retrying succeeds.
+Almost always a **refill that took too long**. Credit is reserved in blocks and refills are
+asynchronous; a message arriving mid-reservation waits for it, and is refused only if the credit is
+still not confirmed after the wait. From 0.17.x that refusal is `503` with code `CREDIT_PENDING` over
+REST and `0x58` over SMPP. Nothing is charged, and retrying succeeds.
 
 **The block size does not strand credit** — a reservation falls back to the single message that asked
 if that is all the balance covers, so you spend every unit you hold.

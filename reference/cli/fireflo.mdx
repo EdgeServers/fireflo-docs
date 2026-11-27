@@ -189,8 +189,9 @@ first bind, so set the customer's allowed IPs before running it from the gateway
 | `--json`, `--yes` | off | The summary as one JSON object on stdout; no confirmation |
 
 Every 10 seconds it prints a progress line; at the end, a summary: offered and accepted, refusals by
-status — `0x58` (a TPS ceiling: the login's or the account's), `0x14` (a full queue, credit being
-reserved, or a vendor backlog), `0x45`, other — a verdict (`held`, `throttled`, `queue-full`,
+status — `0x58` (a TPS ceiling: the login's or the account's; from 0.17.x also credit not confirmed
+in time), `0x14` (a full queue, credit being reserved on gateways before 0.17.x, too many messages
+waiting for credit, or a vendor backlog), `0x45`, other — a verdict (`held`, `throttled`, `queue-full`,
 `refused`, `unanswered`, `generator-behind`, `transport-failed`), p50/p95/p99 response time, and
 receipts split into delivered, failed, other and MO. The cost is "see the account statement": the
 gateway returns no price on a submit.

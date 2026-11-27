@@ -12,13 +12,18 @@ Statuses FireFlo returns on `submit_sm_resp` beyond the standard SMPP set. **Thi
 | `0x403` | `STATUS_NO_UNITS` | From 0.16.0. A login of a [units account](/platform/billing/units-accounts) has no units of its product left. Nothing was charged. The default of `conf.status.noUnits`, settable per listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Refused at **bind**, not at submit: the resolved product is blank, or names no enabled row in `app_product`. Only when `conf.product.required` is on. |
 | `0x418` | `STATUS_NO_RATE` | The message matched no sell-side rate rule. Only when `smsg.rating.unrated.refuse` is on; otherwise it is accepted and charged nothing. |
-| `0x14` | `ESME_RMSGQFUL` | The router queue or this listener's inbound queue is at its limit. Only when `smsg.queue.capacity` or `inQueue.capacity` is set; both default to unbounded. |
+| `0x14` | `ESME_RMSGQFUL` | The router queue or this listener's inbound queue is at its limit (only when `smsg.queue.capacity` or `inQueue.capacity` is set; both default to unbounded). From 0.17.x, also too many of the account's messages already waiting for their credit (`creditQueueFull`: 10,000 per account, 100,000 per gateway). Nothing was charged. |
+| `0x58` | `ESME_RTHROTTLED` | Over a messages-per-second ceiling, the login's or the account's. From 0.17.x, also a funded account whose credit was not confirmed within the wait limit (`creditPending`, see [Prepaid credit](/platform/billing/prepaid-credit#waiting-for-credit)). Nothing was charged. The credit case is the default of `conf.status.creditPending`, settable per listener; before 0.17.x it answered `0x14`. |
 
 ## What each is deliberately not
 
 **`0x402` is not `ESME_RTHROTTLED`.** Throttled tells a client to back off and retry, which is exactly
 wrong for a condition only a top-up or an invoice can clear. A client that retries a credit refusal
 burns its own capacity achieving nothing.
+
+**`0x58` for credit not confirmed in time is the opposite case.** The account has money; its credit
+could not be confirmed within `smsg.balance.park.seconds`, usually because the database was slow or not
+answering. A resend a moment later goes through, which is what a client does on `0x58`.
 
 <Note>
 Prepaid and postpaid refuse **identically**. `0x402` over SMPP, `402` with `insufficientCredit` over
@@ -30,8 +35,9 @@ on.
 its provider running out of money, and only whoever gives it units can clear it. For a units login,
 `0x402` means its **parent's** credit ran out; the unit it took is given back.
 
-**`0x14` is a well-behaved backpressure signal.** An ESME that respects it backs off and retries. This
-is the one refusal here that a client *should* retry.
+**`0x14` and `0x58` are well-behaved backpressure signals.** An ESME that respects them backs off and
+resends. They are the refusals here that a client *should* retry: a full queue, a full credit-waiting
+queue, a rate ceiling and credit not confirmed in time all clear by themselves.
 
 **`0x40F` carries one code and two distinct WARN lines** — blank product versus unknown name. The
 client only ever sees the number, so the log is where those are told apart.

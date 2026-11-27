@@ -102,8 +102,13 @@ reseller's allowance. Within it, the parent's limits apply as they always did: t
 `conf.maxRate`, the listener's default and the port's budget. A login with a faster limit of its own is
 still held to its units account's limit.
 
-`0x58` means "slow down"; `0x14` means "try again shortly". Empty or `0` means the units account has
-no limit of its own, and only the parent's apply.
+`0x58` means "slow down"; `0x14` means "try again shortly". Both are resent by a well-behaved client.
+`0x58` is not only the speed limit: from 0.17.x a money account's message whose credit was not
+confirmed in time (`creditPending`) answers `0x58` too, by default — see
+[Status codes](/reference/smpp/status-codes). A units login's own refusals are unchanged: `noUnits` is
+`0x403` and `unitsPending` is `0x14`.
+
+Empty or `0` means the units account has no limit of its own, and only the parent's apply.
 
 A units login's binds count against its parent's connection limit. There is no separate bind limit per
 units account.

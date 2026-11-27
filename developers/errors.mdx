@@ -3,7 +3,9 @@ title: "Handling errors"
 description: "What to retry, what to never retry, and why a 500 is the safe one."
 ---
 
-Every failure is a JSON object with a single `message`. The status is the machine-readable part.
+Every failure is a JSON object with a `message`. The status is the machine-readable part; some
+refusals also carry a `code` that names the cause, and those that clear by themselves a `Retry-After`
+header.
 
 ```json
 {"message":"Insufficient credit"}
@@ -22,7 +24,9 @@ should *do*.
 | `415` | **Never** | Fix the `Accept` header. |
 | `429` | **Yes**, backed off | Transient by definition. |
 | `500` | **Yes**, once or twice | The charge was reversed — see below. |
-| `502`, `503`, `504` | **Yes** | Not from the gateway; a proxy in front of it. |
+| `503` with a `code` | **Yes**, after `Retry-After` | The gateway's own: `CREDIT_PENDING` (from 0.17.x, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` and others. Nothing was charged. |
+| `503` with only a `message` | **Yes**, backed off | The gateway's own too: a full queue, or (from 0.17.x) too many of your messages already waiting for credit. Nothing was charged. |
+| `502`, `504`, or a `503` without a FireFlo JSON body | **Yes** | Not from the gateway; a proxy in front of it. |
 
 <Warning>
 **There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A
@@ -82,13 +86,14 @@ usually this.
 word, an added full stop, or a variable in a different position is.
 </Accordion>
 
-<Accordion title="402 with money still on the account">
-Credit is reserved in blocks, not per message — around twenty messages' worth at a time — and refills
-are asynchronous. A message arriving while the next reservation is in flight is refused even though
-credit remains.
+<Accordion title="503 CREDIT_PENDING with money still on the account">
+Credit is reserved in blocks, not per message, and a send that finds none in hand waits for the next
+block — up to 5 seconds on the API. From 0.17.x, a send whose credit is still not confirmed after that
+is refused `503` with code `CREDIT_PENDING` and `Retry-After: 2`. Nothing was charged. It usually means
+the gateway's database was slow or not answering for a moment.
 
-**That one is transient: retry it.** A `402` that persists with a healthy balance is not, and is worth
-raising.
+**That one is transient: retry it after the delay.** A `402` is different: the balance will not cover
+the message, and retrying cannot change that.
 </Accordion>
 
 <Accordion title="400 — Unknown argument: custom-tlvs">

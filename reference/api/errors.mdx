@@ -3,8 +3,9 @@ title: "API errors"
 description: "Every status the REST API returns, what provokes it, and the order the checks run in — which decides which error you actually see."
 ---
 
-Every failure is a JSON object with a single `message`. The HTTP status is the machine-readable part;
-the string is for a person reading a log.
+Every failure is a JSON object with a `message`. The HTTP status is the machine-readable part;
+the string is for a person reading a log. Some refusals also carry a `code` naming the cause, and
+those that clear by themselves a `Retry-After` header.
 
 ```json
 {"message":"Authentication failure"}
@@ -102,6 +103,8 @@ retry either.
 | 429 | `Rate limit exceeded` | Over the account's messages per second. |
 | 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
 | 503 | code `UNITS_PENDING` | A units login's units are held by another gateway node for a moment. Carries `Retry-After: 5`. Nothing was charged. |
+| 503 | code `CREDIT_PENDING` | From 0.17.x. The account is funded, but its credit was not confirmed within 5 seconds — usually the gateway's database was slow or not answering. Carries `Retry-After: 2`. Nothing was charged. Before 0.17.x this case answered as a full queue. |
+| 503 | a queue-full message, no `code` | The gateway's queue is at its limit, or (from 0.17.x) too many of the account's messages are already waiting for their credit. Nothing was charged, or the charge was reversed. |
 
 <Warning>
 **There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A
@@ -118,7 +121,9 @@ fixed-interval retry from many workers re-synchronises into the next burst.
 | 429 | **Yes**, backed off | Transient by definition. |
 | 500 | **Yes**, once or twice | The charge was reversed, so a retry is not a double-charge. |
 | 503 with code `UNITS_PENDING` | **Yes**, after `Retry-After` | The units come back within seconds. |
-| 502, 503, 504 | **Yes** | Not from the gateway — a proxy in front of it. |
+| 503 with code `CREDIT_PENDING` | **Yes**, after `Retry-After` | The credit is confirmed as soon as the database answers. |
+| 503 with another `code`, or a queue-full message | **Yes**, backed off | The gateway's own; it clears when the gateway drains. |
+| 502, 504, or a 503 without a FireFlo JSON body | **Yes** | Not from the gateway — a proxy in front of it. |
 
 <Tip>
 **A `500` is safe to retry precisely because the charge is reversed.** That is a deliberate property
