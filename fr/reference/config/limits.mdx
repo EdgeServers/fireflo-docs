@@ -27,7 +27,7 @@ maintient une connexion ouverte, donc attendre bloquerait cette session plutôt 
 | REST | `503` avec `queueFull` dans `cdr_rejected`. Tout ce qui a été déjà facturé est remboursé, car le chemin REST facture avant de publier. |
 
 Un message refusé parce que son **crédit** n'a pas été confirmé n'est pas une file pleine, et à partir
-de 0.17.x il n'est ni enregistré ni répondu comme tel — voir la section suivante. Avant 0.17.x, il
+de 0.17.2 il n'est ni enregistré ni répondu comme tel — voir la section suivante. Avant 0.17.2, il
 répondait `0x14` en SMPP et était enregistré `queueFull` en REST et en gRPC.
 
 <Note>
@@ -44,12 +44,12 @@ fois qu'elle est fixée.
 ## Attente de crédit
 
 Sur une passerelle prépayée, un message qui ne trouve pas de crédit en main attend le bloc de crédit
-suivant du compte au lieu d'être refusé. Ces propriétés bornent cette attente. À partir de 0.17.x.
+suivant du compte au lieu d'être refusé. Ces propriétés bornent cette attente. À partir de 0.17.2.
 
 | Propriété | Portée | Défaut | Description |
 | :--- | :--- | :--- | :--- |
 | `smsg.balance.park.seconds` | globale | `10` | Combien de temps un message attend son crédit avant d'être refusé `creditPending`, non facturé. De 1 à 30, lu à chaque usage. En SMPP, toute l'attente ; sur l'API HTTP, gRPC et l'API plateforme, au plus 5 secondes de celle-ci. |
-| `conf.status.creditPending` | par listener | `0x00000058` | Le statut `submit_sm_resp` de ce refus. Hexadécimal ou décimal ; une valeur qui n'est pas un nombre retombe sur le défaut avec un avertissement. Défaut `ESME_RTHROTTLED`, que les clients renvoient ; mettez `0x14` pour garder la réponse d'avant 0.17.x. |
+| `conf.status.creditPending` | par listener | `0x00000058` | Le statut `submit_sm_resp` de ce refus. Hexadécimal ou décimal ; une valeur qui n'est pas un nombre retombe sur le défaut avec un avertissement. Défaut `ESME_RTHROTTLED`, que les clients renvoient ; mettez `0x14` pour garder la réponse d'avant 0.17.2. |
 
 **Ce qu'elle limite.** Le temps entre l'arrivée d'une soumission et la réponse de la passerelle,
 pendant que son crédit est réservé. Rien n'est facturé ni envoyé avant que le crédit soit réservé,

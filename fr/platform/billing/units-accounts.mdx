@@ -48,7 +48,7 @@ données par message, et règle ce qui a été dépensé. Le décompte est exact
 | Plus aucune unité de son produit | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, code `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | Ses unités sont retenues un instant par un autre nœud | `unitsPending` | `0x14` | `503`, code `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | Il a des unités, son parent n'a pas de crédit | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
-| Il a des unités, le crédit de son parent n'est pas confirmé à temps (0.17.x ; un nouvel essai passe) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
+| Il a des unités, le crédit de son parent n'est pas confirmé à temps (0.17.2 ; un nouvel essai passe) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 Rien n'est facturé pour aucun des trois, et dans le troisième l'unité est rendue.
 
@@ -108,7 +108,7 @@ toujours : le `conf.maxRate` propre au parent, la valeur par défaut du listener
 Un login doté d'une limite propre plus rapide reste tenu à la limite de son compte à unités.
 
 `0x58` signifie « ralentissez » ; `0x14` signifie « réessayez sous peu ». Un client bien élevé
-renvoie dans les deux cas. `0x58` n'est pas seulement la limite de vitesse : à partir de 0.17.x, un
+renvoie dans les deux cas. `0x58` n'est pas seulement la limite de vitesse : à partir de 0.17.2, un
 message d'un compte à argent dont le crédit n'a pas été confirmé à temps (`creditPending`) répond
 `0x58` lui aussi, par défaut — voir [Codes de statut](/reference/smpp/status-codes). Les refus propres
 à un login à unités ne changent pas : `noUnits` est `0x403` et `unitsPending` est `0x14`.

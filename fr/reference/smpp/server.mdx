@@ -115,7 +115,7 @@ que chaque port client peut changer quand ses clients sont prêts.
 | :--- | :--- | :--- |
 | `conf.status.insufficientCredit` | `0x402` | Le crédit du compte ne couvre pas le message (`insufficientCredit`). `0x401` ou `0x402` ; toute autre valeur répond `0x402` avec un avertissement. |
 | `conf.status.noUnits` | `0x00000403` | À partir de 0.16.0. Le login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit (`noUnits`). Hexadécimal ou décimal. |
-| `conf.status.creditPending` | `0x00000058` | À partir de 0.17.x. Le crédit d'un compte approvisionné n'a pas été confirmé dans `smsg.balance.park.seconds` (`creditPending`). Hexadécimal ou décimal. Avant 0.17.x, ce refus répondait `0x14`. |
+| `conf.status.creditPending` | `0x00000058` | À partir de 0.17.2. Le crédit d'un compte approvisionné n'a pas été confirmé dans `smsg.balance.park.seconds` (`creditPending`). Hexadécimal ou décimal. Avant 0.17.2, ce refus répondait `0x14`. |
 
 Voir [Codes de statut](/reference/smpp/status-codes) et [Limites](/reference/config/limits#attente-de-crédit).
 

@@ -131,8 +131,8 @@ gateway.
 | `--json`, `--yes` | no | El resumen como un objeto JSON en stdout; sin confirmación |
 
 Cada 10 segundos, una línea de progreso; al final, un resumen: enviados y aceptados, rechazos por
-estado — `0x58` (un techo de TPS: del login o de la cuenta; desde 0.17.x también crédito no
-confirmado a tiempo), `0x14` (una cola llena, crédito en reserva en pasarelas anteriores a 0.17.x,
+estado — `0x58` (un techo de TPS: del login o de la cuenta; desde 0.17.2 también crédito no
+confirmado a tiempo), `0x14` (una cola llena, crédito en reserva en pasarelas anteriores a 0.17.2,
 demasiados mensajes esperando crédito o el atraso de un proveedor), `0x45`, otros — un veredicto (`held`, `throttled`,
 `queue-full`, `refused`, `unanswered`, `generator-behind`, `transport-failed`), tiempos de respuesta
 p50/p95/p99, y los acuses divididos en entregados, fallidos, otros y MO. El costo es "see the account

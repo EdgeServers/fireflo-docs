@@ -63,7 +63,7 @@ El saldo se reserva en **bloques**: `max(smsg.balance.block.min, price × smsg.b
 unos veinte mensajes por defecto. Y las recargas son **asíncronas**.
 
 Así que un mensaje puede llegar mientras se está tomando la siguiente reserva. La espera, y solo
-se rechaza si el saldo sigue sin confirmarse tras la espera: desde 0.17.x como `503` con código
+se rechaza si el saldo sigue sin confirmarse tras la espera: desde 0.17.2 como `503` con código
 `CREDIT_PENDING` y `Retry-After: 2`, no `402`, aunque este endpoint reporte un saldo positivo. **Es
 transitorio; el reintento tiene éxito.**
 

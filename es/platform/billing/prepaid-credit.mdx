@@ -147,7 +147,7 @@ un `503` de cola llena), también sin cargo.
 **Hasta 0.15.6** un mensaje así se rechazaba de inmediato. **De 0.15.9 a 0.17.1** esperaba como
 máximo 2 segundos, y una reserva fallida rechazaba de inmediato los mensajes en espera; SMPP
 respondía `0x14` y REST y gRPC registraban el rechazo como `queueFull`. El límite de espera, el
-reintento y las respuestas propias de `creditPending` son de 0.17.x. `smsg.balance.block.seconds` ya
+reintento y las respuestas propias de `creditPending` son de 0.17.2. `smsg.balance.block.seconds` ya
 no fija la espera.
 </Note>
 
@@ -184,7 +184,7 @@ solo se rechaza como `creditPending` si se agota la espera.
 | `smsg.balance.block.max` | `10000000` | Techo en una reserva individual |
 | `smsg.balance.refill.watermark.percent` | `20` | La recarga se dispara aquí |
 | `smsg.balance.recharge.poll.seconds` | `30` | Cuán pronto aterriza una recarga |
-| `smsg.balance.park.seconds` | `10` | Desde 0.17.x. Cuánto espera a su bloque un mensaje sin crédito a mano antes de rechazarse como `creditPending`. Para toda la pasarela, de 1 a 30; los envíos por API esperan como máximo 5 |
+| `smsg.balance.park.seconds` | `10` | Desde 0.17.2. Cuánto espera a su bloque un mensaje sin crédito a mano antes de rechazarse como `creditPending`. Para toda la pasarela, de 1 a 30; los envíos por API esperan como máximo 5 |
 
 ## Relacionado
 

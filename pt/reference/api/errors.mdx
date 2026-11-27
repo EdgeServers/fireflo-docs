@@ -103,8 +103,8 @@ dois são permanentes. Não repita nenhum.
 | 429 | `Rate limit exceeded` | Acima do limite de mensagens por segundo da conta. |
 | 500 | `Cannot send message` | Aceito e não foi possível enfileirar. **Qualquer cobrança é revertida.** |
 | 503 | código `UNITS_PENDING` | As unidades de um login de unidades estão retidas por outro nó do gateway por um momento. Traz `Retry-After: 5`. Nada foi cobrado. |
-| 503 | código `CREDIT_PENDING` | A partir da 0.17.x. A conta tem fundos, mas seu crédito não foi confirmado em 5 segundos; geralmente o banco de dados do gateway estava lento ou sem responder. Traz `Retry-After: 2`. Nada foi cobrado. Antes da 0.17.x este caso respondia como uma fila cheia. |
-| 503 | uma mensagem de fila cheia, sem `code` | A fila do gateway está no limite, ou (a partir da 0.17.x) mensagens demais da conta já estão esperando pelo seu crédito. Nada foi cobrado, ou a cobrança foi revertida. |
+| 503 | código `CREDIT_PENDING` | A partir da 0.17.2. A conta tem fundos, mas seu crédito não foi confirmado em 5 segundos; geralmente o banco de dados do gateway estava lento ou sem responder. Traz `Retry-After: 2`. Nada foi cobrado. Antes da 0.17.2 este caso respondia como uma fila cheia. |
+| 503 | uma mensagem de fila cheia, sem `code` | A fila do gateway está no limite, ou (a partir da 0.17.2) mensagens demais da conta já estão esperando pelo seu crédito. Nada foi cobrado, ou a cobrança foi revertida. |
 
 <Warning>
 **Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com

@@ -23,8 +23,8 @@ que as produziu.
 | `insufficientCredit` | Saldo pré-pago não cobriria | `0x402` / `402` | Faça top up |
 | `noUnits` | Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto | `0x403` / `402` `NO_UNITS` | Dê unidades a ela, pela plataforma que a gerencia |
 | `unitsPending` | As unidades dela estavam retidas por outro nó por um momento | `0x14` / `503` `UNITS_PENDING` | Nada: um retry passa |
-| `creditPending` | A partir da 0.17.x. O crédito de uma conta fundeada não foi confirmado dentro do limite de espera | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nada para o cliente: um reenvio passa. Olhe o banco de dados; veja [abaixo](#crédito-não-confirmado-a-tempo) |
-| `creditQueueFull` | A partir da 0.17.x. Mensagens demais da conta já estavam esperando pelo seu crédito | `0x14` / `503`, como uma fila cheia | A mesma causa de `creditPending`, em volume |
+| `creditPending` | A partir da 0.17.2. O crédito de uma conta fundeada não foi confirmado dentro do limite de espera | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nada para o cliente: um reenvio passa. Olhe o banco de dados; veja [abaixo](#crédito-não-confirmado-a-tempo) |
+| `creditQueueFull` | A partir da 0.17.2. Mensagens demais da conta já estavam esperando pelo seu crédito | `0x14` / `503`, como uma fila cheia | A mesma causa de `creditPending`, em volume |
 | `queueFull` | A fila do router estava no limite | `0x14` / `503` | Descubra por que a fila não está escoando; geralmente um fornecedor |
 | `filtered` | Um filtro recusou | varia | Leia o filtro |
 | `maxAttempts` | **Não é uma recusa.** O roteamento desistiu | nada na hora do submit | [Nada é entregue](/platform/troubleshooting/nothing-is-delivered) |
@@ -109,9 +109,9 @@ Só quando a espera acaba a mensagem é recusada, como `creditPending`:
 
 | Como foi enviada | O que o remetente recebe |
 | :--- | :--- |
-| SMPP | `submit_sm_resp` com `0x58` (`ESME_RTHROTTLED`), o `conf.status.creditPending` do listener. Antes da 0.17.x era `0x14`. |
-| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2`. Antes da 0.17.x um `503` sem código, registrado como `queueFull`. |
-| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, repetir após 2 segundos. Antes da 0.17.x `QUEUE_FULL`, registrado como `queueFull`. |
+| SMPP | `submit_sm_resp` com `0x58` (`ESME_RTHROTTLED`), o `conf.status.creditPending` do listener. Antes da 0.17.2 era `0x14`. |
+| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2`. Antes da 0.17.2 um `503` sem código, registrado como `queueFull`. |
+| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, repetir após 2 segundos. Antes da 0.17.2 `QUEUE_FULL`, registrado como `queueFull`. |
 | API da plataforma | Status de envio `CREDIT_PENDING`. |
 
 **Nada é cobrado**, e **reenviar funciona**: tanto `0x58` quanto um `503` dizem a um cliente para
@@ -126,13 +126,13 @@ timeout do próprio chamador geralmente não é muito maior. Veja
 
 1. **O banco de dados do gateway está lento, ou não está respondendo.** Um bloco não pode ser
    reservado até que ele responda. Todas as contas do gateway que ficam sem bloco durante a parada
-   esperam juntas, então essas recusas vêm em grupo, em muitas contas. Antes da 0.17.x uma reserva
+   esperam juntas, então essas recusas vêm em grupo, em muitas contas. Antes da 0.17.2 uma reserva
    que falhava recusava as mensagens em espera de imediato, e a espera era de no máximo 2 segundos.
 2. **Em gateways antes da 0.15.9, várias mensagens chegando juntas após um período quieto.** Essas
    versões recusavam de imediato uma mensagem que não encontrava bloco em mãos, então um cliente
    enviando em rajadas (um lote a cada meio minuto, digamos) tinha parte de cada rajada recusada
    enquanto o próximo bloco era reservado. A 0.15.9 fez essa mensagem esperar (no máximo 2 segundos),
-   e a 0.17.x tornou a espera configurável e a reserva repetida.
+   e a 0.17.2 tornou a espera configurável e a reserva repetida.
 
 `creditQueueFull` é a mesma causa em volume: quando **10,000** mensagens de uma conta, ou **100,000**
 em todo o gateway, já estão esperando crédito, a próxima é recusada de imediato (`0x14` via SMPP, um

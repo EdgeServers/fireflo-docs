@@ -48,13 +48,13 @@ même délai, pour les bibliothèques clientes qui le respectent.
 | Le solde ne couvrira pas | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Rechargez, puis réessayez. Rien n'a été débité. |
 | Plus aucune unité de votre produit (un compte à unités, à partir de 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Demandez des unités supplémentaires à votre fournisseur. Rien n'a été débité. |
 | Vos unités sont retenues ailleurs pour un instant | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Réessayez après le délai. Rien n'a été débité. |
-| Votre crédit n'a pas pu être confirmé à temps (à partir de 0.17.x) | 503 | `UNAVAILABLE` | `CREDIT_PENDING` | 2 s | Réessayez après le délai. Rien n'a été débité. Le compte a de l'argent ; la passerelle a attendu son crédit jusqu'à 5 s puis a abandonné. |
+| Votre crédit n'a pas pu être confirmé à temps (à partir de 0.17.2) | 503 | `UNAVAILABLE` | `CREDIT_PENDING` | 2 s | Réessayez après le délai. Rien n'a été débité. Le compte a de l'argent ; la passerelle a attendu son crédit jusqu'à 5 s puis a abandonné. |
 | Au-delà des messages par seconde de votre compte | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Ralentissez et réessayez. |
 | Sender ID non approuvé | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Utilisez un sender ID approuvé, ou demandez celui-ci. |
 | Le libellé ne correspond à aucun modèle approuvé | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envoyez un libellé approuvé, ou demandez un modèle. |
 | Produit non vendu / non autorisé pour le login / sans tarif | 403 | `PERMISSION_DENIED` | `PRODUCT_NOT_SOLD` / `PRODUCT_NOT_ALLOWED` / `UNRATED` | — | Demandez à votre fournisseur. Ne réessayez pas à l'identique. |
 | Aucune route pour la destination | 403 | `PERMISSION_DENIED` | `NO_ROUTE` | — | Demandez à votre fournisseur. Ne réessayez pas à l'identique. |
-| La passerelle ne prend pas de messages en ce moment, ou (à partir de 0.17.x) trop de vos messages attendent déjà leur crédit | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Réessayez après le délai. Rien n'a été débité. |
+| La passerelle ne prend pas de messages en ce moment, ou (à partir de 0.17.2) trop de vos messages attendent déjà leur crédit | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Réessayez après le délai. Rien n'a été débité. |
 | La passerelle redémarre | 503 | `UNAVAILABLE` | `SHUTTING_DOWN` | 5 s | Reconnectez-vous, refaites Login, réessayez. |
 | L'opérateur de la destination est engorgé / non connecté | 503 | `UNAVAILABLE` | `VENDOR_BACKLOG` / `VENDOR_UNAVAILABLE` | 30 s | Réessayez après le délai. |
 | La base de données de la passerelle ne suit pas | 503 | `UNAVAILABLE` | `DB_UNAVAILABLE` | 5 s | Réessayez après le délai. |

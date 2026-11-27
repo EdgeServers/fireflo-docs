@@ -27,7 +27,7 @@ distintas.** Los rechazos son la diferencia, y su proveedor puede listarlos.
 <Accordion title="¿Por qué me rechazan si tengo dinero en la cuenta?">
 Casi siempre una **recarga que tardó demasiado**. El saldo se reserva en bloques y las recargas son
 asíncronas; un mensaje que llega en mitad de una reserva la espera, y solo se rechaza si el saldo
-sigue sin confirmarse tras la espera. Desde 0.17.x ese rechazo es `503` con código `CREDIT_PENDING`
+sigue sin confirmarse tras la espera. Desde 0.17.2 ese rechazo es `503` con código `CREDIT_PENDING`
 por REST y `0x58` por SMPP. No se cobra nada, y reintentar funciona.
 
 **El tamaño de bloque no deja saldo varado.** Una reserva baja hasta el único mensaje que lo

@@ -103,8 +103,8 @@ retry either.
 | 429 | `Rate limit exceeded` | Over the account's messages per second. |
 | 500 | `Cannot send message` | Accepted and could not be queued. **Any charge is reversed.** |
 | 503 | code `UNITS_PENDING` | A units login's units are held by another gateway node for a moment. Carries `Retry-After: 5`. Nothing was charged. |
-| 503 | code `CREDIT_PENDING` | From 0.17.x. The account is funded, but its credit was not confirmed within 5 seconds — usually the gateway's database was slow or not answering. Carries `Retry-After: 2`. Nothing was charged. Before 0.17.x this case answered as a full queue. |
-| 503 | a queue-full message, no `code` | The gateway's queue is at its limit, or (from 0.17.x) too many of the account's messages are already waiting for their credit. Nothing was charged, or the charge was reversed. |
+| 503 | code `CREDIT_PENDING` | From 0.17.2. The account is funded, but its credit was not confirmed within 5 seconds — usually the gateway's database was slow or not answering. Carries `Retry-After: 2`. Nothing was charged. Before 0.17.2 this case answered as a full queue. |
+| 503 | a queue-full message, no `code` | The gateway's queue is at its limit, or (from 0.17.2) too many of the account's messages are already waiting for their credit. Nothing was charged, or the charge was reversed. |
 
 <Warning>
 **There is no `Retry-After` on a `429`.** Back off on your own schedule — exponential, with jitter. A

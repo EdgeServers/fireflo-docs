@@ -68,7 +68,7 @@ what keeps the send path off the database.
 <Warning>
 **A message arriving while the next reservation is being taken waits for it** rather than being
 refused. Only if the credit is still not confirmed after the wait — usually the gateway's database
-being slow for a moment — is it refused, and from 0.17.x that refusal has its own answer: `503` with
+being slow for a moment — is it refused, and from 0.17.2 that refusal has its own answer: `503` with
 code `CREDIT_PENDING` and `Retry-After: 2` over REST, `0x58` over SMPP. Nothing is charged. **Retrying
 succeeds.**
 

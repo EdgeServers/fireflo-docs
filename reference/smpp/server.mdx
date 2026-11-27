@@ -115,7 +115,7 @@ customer port can move when its clients are ready.
 | :--- | :--- | :--- |
 | `conf.status.insufficientCredit` | `0x402` | The account's credit will not cover the message (`insufficientCredit`). `0x401` or `0x402`; anything else answers `0x402` with a warning. |
 | `conf.status.noUnits` | `0x00000403` | From 0.16.0. A [units account](/platform/billing/units-accounts)'s login has no units of its product left (`noUnits`). Hex or decimal. |
-| `conf.status.creditPending` | `0x00000058` | From 0.17.x. A funded account's credit was not confirmed within `smsg.balance.park.seconds` (`creditPending`). Hex or decimal. Before 0.17.x this refusal answered `0x14`. |
+| `conf.status.creditPending` | `0x00000058` | From 0.17.2. A funded account's credit was not confirmed within `smsg.balance.park.seconds` (`creditPending`). Hex or decimal. Before 0.17.2 this refusal answered `0x14`. |
 
 See [Status codes](/reference/smpp/status-codes) and [Limits](/reference/config/limits#waiting-for-credit).
 

@@ -106,8 +106,8 @@ réseau. Les deux sont permanentes, ne réessayez ni l'une ni l'autre.
 | 429 | `Rate limit exceeded` | Au-dessus de la limite messages-par-seconde du compte. |
 | 500 | `Cannot send message` | Accepté et n'a pas pu être mis en file. **Tout débit est inversé.** |
 | 503 | code `UNITS_PENDING` | Les unités d'un login à unités sont retenues un instant par un autre nœud de la passerelle. Porte `Retry-After: 5`. Rien n'a été débité. |
-| 503 | code `CREDIT_PENDING` | À partir de 0.17.x. Le compte est approvisionné, mais son crédit n'a pas été confirmé en 5 secondes, le plus souvent parce que la base de la passerelle était lente ou ne répondait pas. Porte `Retry-After: 2`. Rien n'a été débité. Avant 0.17.x, ce cas répondait comme une file pleine. |
-| 503 | un message de file pleine, sans `code` | La file de la passerelle est à sa limite, ou (à partir de 0.17.x) trop de messages du compte attendent déjà leur crédit. Rien n'a été débité, ou le débit a été remboursé. |
+| 503 | code `CREDIT_PENDING` | À partir de 0.17.2. Le compte est approvisionné, mais son crédit n'a pas été confirmé en 5 secondes, le plus souvent parce que la base de la passerelle était lente ou ne répondait pas. Porte `Retry-After: 2`. Rien n'a été débité. Avant 0.17.2, ce cas répondait comme une file pleine. |
+| 503 | un message de file pleine, sans `code` | La file de la passerelle est à sa limite, ou (à partir de 0.17.2) trop de messages du compte attendent déjà leur crédit. Rien n'a été débité, ou le débit a été remboursé. |
 
 <Warning>
 **Il n'y a pas de `Retry-After` sur un `429`.** Faites votre propre backoff — exponentiel, avec du

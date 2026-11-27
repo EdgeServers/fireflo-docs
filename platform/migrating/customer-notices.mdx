@@ -107,13 +107,13 @@ every account listed: for one that sends only English the notice is harmless.
 If you need time, update, switch **Send Unicode automatically** off on the Gateway settings page
 (`smsg.restapi.coding.autodetect`), tell your customers, then switch it on.
 
-## 0.17.x: credit not confirmed in time
+## 0.17.2: credit not confirmed in time
 
 **Who:** customers of a prepaid account whose messages were refused because their credit could not be
 reserved in time, and any platform reading the platform API's send status. Nobody's charges change:
 these messages were never charged, before or after.
 
-| A message whose credit is not in hand | Up to 0.17.1 | From 0.17.x |
+| A message whose credit is not in hand | Up to 0.17.1 | From 0.17.2 |
 | :--- | :--- | :--- |
 | How long it waits | at most 2 seconds; refused at once if the reservation failed | up to `smsg.balance.park.seconds` (10 seconds by default) over SMPP, at most 5 over the API; a failed reservation is retried |
 | SMPP answer when the wait runs out | `0x14` (`ESME_RMSGQFUL`), the same as a full queue | `0x58` (`ESME_RTHROTTLED`), the listener's `conf.status.creditPending` |
@@ -148,7 +148,7 @@ SELECT account_id, ingress,
  ORDER BY refused_credit_pending DESC;
 ```
 
-Over REST and gRPC, gateways before 0.17.x recorded these as `queueFull`, which is also a real full
+Over REST and gRPC, gateways before 0.17.2 recorded these as `queueFull`, which is also a real full
 queue: for those, any account listed under `queueFull` in the same window is a candidate.
 
 **Say that nothing was charged.** A customer told about a refusal code assumes the refused messages

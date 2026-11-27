@@ -63,7 +63,7 @@ Le crédit est réservé en **blocs** — `max(smsg.balance.block.min, price × 
 l'équivalent de vingt messages par défaut — et les recharges sont **asynchrones**.
 
 Donc un message peut arriver pendant que la réservation suivante est prise. Il l'attend, et n'est
-refusé que si le crédit n'est toujours pas confirmé après l'attente : à partir de 0.17.x en `503` avec
+refusé que si le crédit n'est toujours pas confirmé après l'attente : à partir de 0.17.2 en `503` avec
 le code `CREDIT_PENDING` et `Retry-After: 2`, pas en `402`, alors même que cet endpoint rapporte un
 solde positif. **C'est transitoire ; le retry réussit.**
 

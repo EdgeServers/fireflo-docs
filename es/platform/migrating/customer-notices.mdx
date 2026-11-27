@@ -110,13 +110,13 @@ hace daño.
 Si necesitas tiempo, actualiza, desactiva **Send Unicode automatically** en la página Gateway
 settings (`smsg.restapi.coding.autodetect`), avisa a tus clientes y luego actívalo.
 
-## 0.17.x: crédito no confirmado a tiempo
+## 0.17.2: crédito no confirmado a tiempo
 
 **A quién afecta:** a los clientes de una cuenta prepago cuyos mensajes se rechazaron porque su
 crédito no pudo reservarse a tiempo, y a cualquier plataforma que lea el estado de envío de la API de
 plataforma. Los cargos de nadie cambian: esos mensajes nunca se cobraron, ni antes ni después.
 
-| Un mensaje cuyo crédito no está a mano | Hasta la 0.17.1 | Desde la 0.17.x |
+| Un mensaje cuyo crédito no está a mano | Hasta la 0.17.1 | Desde la 0.17.2 |
 | :--- | :--- | :--- |
 | Cuánto espera | como máximo 2 segundos; rechazado de inmediato si la reserva fallaba | hasta `smsg.balance.park.seconds` (10 segundos por defecto) por SMPP, como máximo 5 por la API; una reserva fallida se reintenta |
 | Respuesta SMPP cuando se agota la espera | `0x14` (`ESME_RMSGQFUL`), la misma que una cola llena | `0x58` (`ESME_RTHROTTLED`), el `conf.status.creditPending` del listener |
@@ -152,7 +152,7 @@ SELECT account_id, ingress,
  ORDER BY refused_credit_pending DESC;
 ```
 
-Por REST y gRPC, las pasarelas anteriores a la 0.17.x registraban estos como `queueFull`, que también
+Por REST y gRPC, las pasarelas anteriores a la 0.17.2 registraban estos como `queueFull`, que también
 es una cola realmente llena: para ellas, cualquier cuenta listada bajo `queueFull` en la misma ventana
 es candidata.
 

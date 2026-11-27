@@ -106,8 +106,8 @@ son permanentes: no reintente ninguno.
 | 429 | `Rate limit exceeded` | Por encima del límite de mensajes por segundo de la cuenta. |
 | 500 | `Cannot send message` | Aceptado y no se pudo encolar. **Todo cargo se revierte.** |
 | 503 | código `UNITS_PENDING` | Las unidades de un login de unidades están retenidas por otro nodo de la pasarela por un momento. Lleva `Retry-After: 5`. No se cobró nada. |
-| 503 | código `CREDIT_PENDING` | Desde 0.17.x. La cuenta tiene fondos, pero su saldo no se confirmó en 5 segundos; normalmente la base de datos de la pasarela iba lenta o no respondía. Lleva `Retry-After: 2`. No se cobró nada. Antes de 0.17.x este caso respondía como una cola llena. |
-| 503 | un mensaje de cola llena, sin `code` | La cola de la pasarela está en su límite o (desde 0.17.x) demasiados mensajes de la cuenta esperan ya su saldo. No se cobró nada, o el cargo se revirtió. |
+| 503 | código `CREDIT_PENDING` | Desde 0.17.2. La cuenta tiene fondos, pero su saldo no se confirmó en 5 segundos; normalmente la base de datos de la pasarela iba lenta o no respondía. Lleva `Retry-After: 2`. No se cobró nada. Antes de 0.17.2 este caso respondía como una cola llena. |
+| 503 | un mensaje de cola llena, sin `code` | La cola de la pasarela está en su límite o (desde 0.17.2) demasiados mensajes de la cuenta esperan ya su saldo. No se cobró nada, o el cargo se revirtió. |
 
 <Warning>
 **No hay `Retry-After` en un `429`.** Aplique backoff propio: exponencial, con jitter. Un

@@ -63,7 +63,7 @@ Credit is reserved in **blocks** — `max(smsg.balance.block.min, price × smsg.
 twenty messages' worth by default — and refills are **asynchronous**.
 
 So a message can arrive while the next reservation is being taken. It waits for it, and is refused
-only if the credit is still not confirmed after the wait — from 0.17.x as `503` with code
+only if the credit is still not confirmed after the wait — from 0.17.2 as `503` with code
 `CREDIT_PENDING` and `Retry-After: 2`, not `402`, even though this endpoint reports a positive balance.
 **It is transient; the retry succeeds.**
 

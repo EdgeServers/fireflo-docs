@@ -108,13 +108,13 @@ avise todas as contas listadas: para uma que só envia em inglês, o aviso é in
 Se você precisar de tempo, atualize, desligue **Send Unicode automatically** na página Gateway
 settings (`smsg.restapi.coding.autodetect`), avise seus clientes e então ligue-a.
 
-## 0.17.x: crédito não confirmado a tempo
+## 0.17.2: crédito não confirmado a tempo
 
 **Quem:** clientes de uma conta prepaid cujas mensagens foram recusadas porque o crédito não pôde ser
 reservado a tempo, e qualquer plataforma que leia o status de envio da API da plataforma. As
 cobranças de ninguém mudam: essas mensagens nunca foram cobradas, antes ou depois.
 
-| Uma mensagem cujo crédito não está em mãos | Até a 0.17.1 | A partir da 0.17.x |
+| Uma mensagem cujo crédito não está em mãos | Até a 0.17.1 | A partir da 0.17.2 |
 | :--- | :--- | :--- |
 | Quanto tempo ela espera | no máximo 2 segundos; recusada de imediato se a reserva falhava | até `smsg.balance.park.seconds` (10 segundos por padrão) via SMPP, no máximo 5 via API; uma reserva que falha é tentada de novo |
 | Resposta SMPP quando a espera acaba | `0x14` (`ESME_RMSGQFUL`), a mesma de uma fila cheia | `0x58` (`ESME_RTHROTTLED`), o `conf.status.creditPending` do listener |
@@ -150,7 +150,7 @@ SELECT account_id, ingress,
  ORDER BY refused_credit_pending DESC;
 ```
 
-Via REST e gRPC, gateways antes da 0.17.x registravam essas recusas como `queueFull`, que também é
+Via REST e gRPC, gateways antes da 0.17.2 registravam essas recusas como `queueFull`, que também é
 uma fila realmente cheia: para elas, qualquer conta listada sob `queueFull` na mesma janela é
 candidata.
 

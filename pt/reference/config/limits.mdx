@@ -26,7 +26,7 @@ então esperar travaria essa sessão em vez de apenas reduzir a velocidade:
 | REST | `503` com `queueFull` em `cdr_rejected`. Qualquer valor já cobrado é reembolsado, porque o caminho REST cobra antes de publicar. |
 
 Uma mensagem recusada porque seu **crédito** não foi confirmado não é uma fila cheia, e a partir da
-0.17.x não é registrada nem respondida como uma. Veja a próxima seção. Antes da 0.17.x ela respondia
+0.17.2 não é registrada nem respondida como uma. Veja a próxima seção. Antes da 0.17.2 ela respondia
 `0x14` via SMPP e era registrada `queueFull` via REST e gRPC.
 
 <Note>
@@ -43,12 +43,12 @@ definido.
 ## Aguardando crédito
 
 Em um gateway pré-pago, uma mensagem que não encontra crédito em mãos espera pelo próximo bloco de
-crédito da conta em vez de ser recusada. Estas propriedades limitam essa espera. A partir da 0.17.x.
+crédito da conta em vez de ser recusada. Estas propriedades limitam essa espera. A partir da 0.17.2.
 
 | Propriedade | Escopo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- |
 | `smsg.balance.park.seconds` | global | `10` | Quanto tempo uma mensagem espera pelo seu crédito antes de ser recusada `creditPending`, sem cobrança. De 1 a 30, lida a cada uso. Via SMPP a espera inteira; via API HTTP, gRPC e API da plataforma no máximo 5 segundos dela. |
-| `conf.status.creditPending` | por listener | `0x00000058` | O status de `submit_sm_resp` para essa recusa. Hex ou decimal; um valor que não é número volta ao padrão com um aviso. Padrão `ESME_RTHROTTLED`, que os clientes reenviam; defina `0x14` para manter a resposta de antes da 0.17.x. |
+| `conf.status.creditPending` | por listener | `0x00000058` | O status de `submit_sm_resp` para essa recusa. Hex ou decimal; um valor que não é número volta ao padrão com um aviso. Padrão `ESME_RTHROTTLED`, que os clientes reenviam; defina `0x14` para manter a resposta de antes da 0.17.2. |
 
 **O que limita.** O tempo entre a chegada de um submit e a resposta do gateway a ele, enquanto seu
 crédito está sendo reservado. Nada é cobrado nem enviado antes de o crédito ser reservado, então a

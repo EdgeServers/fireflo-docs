@@ -23,8 +23,8 @@ petición que las produjo.
 | `insufficientCredit` | El saldo prepago no lo cubriría | `0x402` / `402` | Recarga |
 | `noUnits` | A un login de una [cuenta de unidades](/platform/billing/units-accounts) no le quedan unidades de su producto | `0x403` / `402` `NO_UNITS` | Dale unidades, desde la plataforma que la gestiona |
 | `unitsPending` | Sus unidades estuvieron retenidas por otro nodo por un momento | `0x14` / `503` `UNITS_PENDING` | Nada: un reintento pasa |
-| `creditPending` | Desde 0.17.x. El crédito de una cuenta con fondos no se confirmó dentro del límite de espera | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nada por parte del cliente: un reenvío pasa. Mira la base de datos; consulta [más abajo](#crédito-no-confirmado-a-tiempo) |
-| `creditQueueFull` | Desde 0.17.x. Demasiados mensajes de la cuenta esperaban ya su crédito | `0x14` / `503`, como una cola llena | La misma causa que `creditPending`, a volumen |
+| `creditPending` | Desde 0.17.2. El crédito de una cuenta con fondos no se confirmó dentro del límite de espera | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nada por parte del cliente: un reenvío pasa. Mira la base de datos; consulta [más abajo](#crédito-no-confirmado-a-tiempo) |
+| `creditQueueFull` | Desde 0.17.2. Demasiados mensajes de la cuenta esperaban ya su crédito | `0x14` / `503`, como una cola llena | La misma causa que `creditPending`, a volumen |
 | `queueFull` | La cola del enrutador estaba en su límite | `0x14` / `503` | Averigua por qué la cola no se vacía; normalmente un proveedor |
 | `filtered` | Un filtro lo rechazó | varía | Lee el filtro |
 | `maxAttempts` | **No es un rechazo.** El enrutamiento se rindió | nada al enviar | [Nada se entrega](/platform/troubleshooting/nothing-is-delivered) |
@@ -108,9 +108,9 @@ Solo cuando se agota la espera se rechaza el mensaje, como `creditPending`:
 
 | Cómo se envió | Qué recibe el remitente |
 | :--- | :--- |
-| SMPP | `submit_sm_resp` con `0x58` (`ESME_RTHROTTLED`), el `conf.status.creditPending` del listener. Antes de 0.17.x era `0x14`. |
-| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2`. Antes de 0.17.x un `503` sin código, registrado como `queueFull`. |
-| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, reintentar tras 2 segundos. Antes de 0.17.x `QUEUE_FULL`, registrado como `queueFull`. |
+| SMPP | `submit_sm_resp` con `0x58` (`ESME_RTHROTTLED`), el `conf.status.creditPending` del listener. Antes de 0.17.2 era `0x14`. |
+| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2`. Antes de 0.17.2 un `503` sin código, registrado como `queueFull`. |
+| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, reintentar tras 2 segundos. Antes de 0.17.2 `QUEUE_FULL`, registrado como `queueFull`. |
 | API de plataforma | Estado de envío `CREDIT_PENDING`. |
 
 **No se cobra nada**, y **reenviar funciona**: tanto `0x58` como un `503` le dicen a un cliente que
@@ -125,13 +125,13 @@ porque el timeout del propio llamante no suele ser mucho más largo. Consulta
 
 1. **La base de datos de la pasarela va lenta, o no responde.** No se puede reservar un bloque hasta
    que responda. Todas las cuentas de la pasarela que agotan su bloque durante el atasco esperan
-   juntas, así que estos rechazos llegan en grupo en muchas cuentas. Antes de 0.17.x una reserva que
+   juntas, así que estos rechazos llegan en grupo en muchas cuentas. Antes de 0.17.2 una reserva que
    fallaba rechazaba de inmediato los mensajes en espera, y la espera era como máximo de 2 segundos.
 2. **En pasarelas anteriores a 0.15.9, varios mensajes que llegan juntos tras un periodo tranquilo.**
    Esas versiones rechazaban de inmediato un mensaje que no encontraba bloque a mano, así que a un
    cliente que envía en ráfagas —un lote cada medio minuto, por ejemplo— se le rechazaba parte de
    cada ráfaga mientras se reservaba el siguiente bloque. 0.15.9 hizo que ese mensaje esperara (como
-   máximo 2 segundos), y 0.17.x hizo la espera configurable y la reserva reintentada.
+   máximo 2 segundos), y 0.17.2 hizo la espera configurable y la reserva reintentada.
 
 `creditQueueFull` es la misma causa a volumen: cuando ya esperan crédito **10 000** mensajes de una
 cuenta, o **100 000** en toda la pasarela, el siguiente se rechaza de inmediato —`0x14` por SMPP, un

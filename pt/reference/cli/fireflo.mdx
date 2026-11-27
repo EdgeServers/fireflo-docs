@@ -131,8 +131,8 @@ primeira conexão: defina os IPs permitidos do cliente antes de rodar o comando 
 | `--json`, `--yes` | não | O resumo como um objeto JSON no stdout; sem confirmação |
 
 A cada 10 segundos, uma linha de progresso; no fim, um resumo: enviados e aceitos, recusas por status
-— `0x58` (um teto de TPS: do login ou da conta; a partir da 0.17.x também crédito não confirmado a
-tempo), `0x14` (uma fila cheia, crédito sendo reservado em gateways antes da 0.17.x, mensagens demais
+— `0x58` (um teto de TPS: do login ou da conta; a partir da 0.17.2 também crédito não confirmado a
+tempo), `0x14` (uma fila cheia, crédito sendo reservado em gateways antes da 0.17.2, mensagens demais
 esperando crédito ou backlog do fornecedor), `0x45`, outros — um veredito (`held`, `throttled`, `queue-full`, `refused`,
 `unanswered`, `generator-behind`, `transport-failed`), tempos de resposta p50/p95/p99, e os recibos
 divididos em entregues, falhos, outros e MO. O custo é "see the account statement": o gateway não

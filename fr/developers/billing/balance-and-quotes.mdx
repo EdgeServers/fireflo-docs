@@ -68,7 +68,7 @@ fois, ce qui évite à la voie d'envoi de toucher la base.
 <Warning>
 **Un message qui arrive pendant que la réservation suivante est en cours l'attend** au lieu d'être
 refusé. Ce n'est que si le crédit n'est toujours pas confirmé après l'attente (le plus souvent parce
-que la base du gateway est lente un instant) qu'il est refusé, et à partir de 0.17.x ce refus a sa
+que la base du gateway est lente un instant) qu'il est refusé, et à partir de 0.17.2 ce refus a sa
 propre réponse : `503` avec le code `CREDIT_PENDING` et `Retry-After: 2` en REST, `0x58` en SMPP. Rien
 n'est débité. **Un retry réussit.**
 

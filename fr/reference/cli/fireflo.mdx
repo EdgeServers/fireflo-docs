@@ -136,9 +136,9 @@ client avant de lancer la commande depuis la machine de la passerelle.
 | `--json`, `--yes` | non | Le résumé en un objet JSON sur stdout ; pas de confirmation |
 
 Toutes les 10 secondes, une ligne de progression ; à la fin, un résumé : soumis et acceptés, refus
-par statut — `0x58` (un plafond TPS : celui de l'identifiant ou du compte ; à partir de 0.17.x
+par statut — `0x58` (un plafond TPS : celui de l'identifiant ou du compte ; à partir de 0.17.2
 aussi un crédit non confirmé à temps), `0x14` (une file pleine, du crédit en cours de réservation sur
-les passerelles antérieures à 0.17.x, trop de messages en attente de crédit, ou un arriéré
+les passerelles antérieures à 0.17.2, trop de messages en attente de crédit, ou un arriéré
 fournisseur), `0x45`, autres — un verdict (`held`,
 `throttled`, `queue-full`, `refused`, `unanswered`, `generator-behind`, `transport-failed`), les
 temps de réponse p50/p95/p99, et les accusés répartis en délivrés, échoués, autres et MO. Le coût

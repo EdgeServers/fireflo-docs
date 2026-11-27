@@ -47,7 +47,7 @@ liquida o que foi gasto. A contagem é exata após um crash.
 | Não restam unidades do seu produto | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, código `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | As unidades dela estão retidas por outro nó por um momento | `unitsPending` | `0x14` | `503`, código `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | Ela tem unidades, a conta-pai não tem crédito | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
-| Ela tem unidades, o crédito da conta-pai não é confirmado a tempo (0.17.x; uma nova tentativa passa) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
+| Ela tem unidades, o crédito da conta-pai não é confirmado a tempo (0.17.2; uma nova tentativa passa) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 Nada é cobrado em nenhum dos três, e no terceiro a unidade é devolvida.
 
@@ -106,7 +106,7 @@ não esgota a franquia do seu reseller. Dentro dele, os limites da conta-pai se 
 limite próprio mais rápido continua preso ao limite da sua conta de unidades.
 
 `0x58` significa "vá mais devagar"; `0x14` significa "tente de novo em instantes". Ambos são
-reenviados por um cliente bem-comportado. `0x58` não é só o limite de velocidade: a partir da 0.17.x
+reenviados por um cliente bem-comportado. `0x58` não é só o limite de velocidade: a partir da 0.17.2
 a mensagem de uma conta em dinheiro cujo crédito não foi confirmado a tempo (`creditPending`) também
 responde `0x58`, por padrão; veja [Códigos de status](/reference/smpp/status-codes). As recusas
 próprias de um login de unidades não mudam: `noUnits` é `0x403` e `unitsPending` é `0x14`.

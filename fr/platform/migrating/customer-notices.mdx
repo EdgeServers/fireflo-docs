@@ -88,11 +88,11 @@ SELECT account_id,
 
 S'il vous faut du temps, mettez à jour, désactivez **Send Unicode automatically** sur la page Gateway settings (`smsg.restapi.coding.autodetect`), prévenez vos clients, puis réactivez-le.
 
-## 0.17.x : crédit non confirmé à temps
+## 0.17.2 : crédit non confirmé à temps
 
 **Qui :** les clients d'un compte prépayé dont les messages ont été refusés parce que leur crédit n'a pas pu être réservé à temps, et toute plateforme qui lit le statut d'envoi de l'API plateforme. La facturation de personne ne change : ces messages n'ont jamais été facturés, ni avant ni après.
 
-| Un message dont le crédit n'est pas en main | Jusqu'à 0.17.1 | À partir de 0.17.x |
+| Un message dont le crédit n'est pas en main | Jusqu'à 0.17.1 | À partir de 0.17.2 |
 | :--- | :--- | :--- |
 | Combien de temps il attend | au plus 2 secondes ; refusé aussitôt si la réservation a échoué | jusqu'à `smsg.balance.park.seconds` (10 secondes par défaut) en SMPP, au plus 5 sur l'API ; une réservation échouée est retentée |
 | Réponse SMPP quand l'attente expire | `0x14` (`ESME_RMSGQFUL`), comme une file pleine | `0x58` (`ESME_RTHROTTLED`), le `conf.status.creditPending` du listener |
@@ -121,7 +121,7 @@ SELECT account_id, ingress,
  ORDER BY refused_credit_pending DESC;
 ```
 
-En REST et gRPC, les passerelles antérieures à 0.17.x enregistraient ces refus comme `queueFull`, qui est aussi une vraie file pleine : pour celles-ci, tout compte listé sous `queueFull` dans la même fenêtre est un candidat.
+En REST et gRPC, les passerelles antérieures à 0.17.2 enregistraient ces refus comme `queueFull`, qui est aussi une vraie file pleine : pour celles-ci, tout compte listé sous `queueFull` dans la même fenêtre est un candidat.
 
 **Dites que rien n'a été facturé.** Un client à qui l'on parle d'un code de refus suppose que les messages refusés ont été facturés ; aucun ne l'a été.
 

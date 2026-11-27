@@ -40,9 +40,9 @@ se movem enquanto você pagina, e clicar em um filtra para ele.
 | **Product not sold** | O login nomeou um product sem linha habilitada no catálogo |
 | **No price configured** | Nenhum rate do lado de venda casou, e o gateway recusa em vez de enviar sem faturar |
 | **Product not allowed for this login** | O login não pode nomear aquele product |
-| **Credit not confirmed in time; resend** | A partir da 0.17.x (`creditPending`). O crédito de uma account fundeada não foi confirmado dentro de `smsg.balance.park.seconds`, geralmente porque o banco de dados estava lento ou sem responder. Nada cobrado; um reenvio passa. Veja [Recusas](/platform/troubleshooting/refusals#crédito-não-confirmado-a-tempo) |
-| **Too many waiting for credit; resend** | A partir da 0.17.x (`creditQueueFull`). 10,000 mensagens da account, ou 100,000 no gateway, já estavam esperando crédito. A mesma causa da anterior, em volume |
-| **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap. Antes da 0.17.x, envios REST e gRPC recusados por crédito não confirmado a tempo também eram contados aqui |
+| **Credit not confirmed in time; resend** | A partir da 0.17.2 (`creditPending`). O crédito de uma account fundeada não foi confirmado dentro de `smsg.balance.park.seconds`, geralmente porque o banco de dados estava lento ou sem responder. Nada cobrado; um reenvio passa. Veja [Recusas](/platform/troubleshooting/refusals#crédito-não-confirmado-a-tempo) |
+| **Too many waiting for credit; resend** | A partir da 0.17.2 (`creditQueueFull`). 10,000 mensagens da account, ou 100,000 no gateway, já estavam esperando crédito. A mesma causa da anterior, em volume |
+| **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap. Antes da 0.17.2, envios REST e gRPC recusados por crédito não confirmado a tempo também eram contados aqui |
 | **Could not be queued** | Aceita pelas verificações, mas não pôde ser entregue — geralmente o broker |
 | **Never routed** | *Após aceitação.* Nenhuma regra habilitada casou; reembolsado |
 | **Vendor refused it** | *Após aceitação.* A operadora rejeitou o submit; reembolsado |

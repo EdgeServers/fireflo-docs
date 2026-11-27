@@ -24,8 +24,8 @@ ce que votre client doit *faire*.
 | `415` | **Jamais** | Corrigez l'en-tête `Accept`. |
 | `429` | **Oui**, avec backoff | Transitoire par définition. |
 | `500` | **Oui**, une ou deux fois | Le débit a été inversé. Voir ci-dessous. |
-| `503` avec un `code` | **Oui**, après `Retry-After` | Celui de la passerelle elle-même : `CREDIT_PENDING` (à partir de 0.17.x, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` et d'autres. Rien n'a été débité. |
-| `503` avec seulement un `message` | **Oui**, avec backoff | Celui de la passerelle aussi : une file pleine, ou (à partir de 0.17.x) trop de vos messages qui attendent déjà leur crédit. Rien n'a été débité. |
+| `503` avec un `code` | **Oui**, après `Retry-After` | Celui de la passerelle elle-même : `CREDIT_PENDING` (à partir de 0.17.2, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` et d'autres. Rien n'a été débité. |
+| `503` avec seulement un `message` | **Oui**, avec backoff | Celui de la passerelle aussi : une file pleine, ou (à partir de 0.17.2) trop de vos messages qui attendent déjà leur crédit. Rien n'a été débité. |
 | `502`, `504`, ou un `503` sans corps JSON FireFlo | **Oui** | Pas depuis la passerelle. C'est un proxy en amont. |
 
 <Warning>
@@ -90,7 +90,7 @@ différemment le sont.
 
 <Accordion title="503 CREDIT_PENDING avec de l'argent encore sur le compte">
 Le crédit est réservé par blocs, pas par message, et un envoi qui n'en trouve aucun en main attend le
-bloc suivant, jusqu'à 5 secondes sur l'API. À partir de 0.17.x, un envoi dont le crédit n'est
+bloc suivant, jusqu'à 5 secondes sur l'API. À partir de 0.17.2, un envoi dont le crédit n'est
 toujours pas confirmé après cela est refusé en `503` avec le code `CREDIT_PENDING` et
 `Retry-After: 2`. Rien n'a été débité. Le plus souvent, la base de la passerelle était lente ou ne
 répondait pas pendant un instant.

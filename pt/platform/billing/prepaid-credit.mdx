@@ -144,7 +144,7 @@ Um reenvio passa assim que o banco de dados responde. Quando 10,000 mensagens de
 **Até a 0.15.6** tal mensagem era recusada de imediato. **Da 0.15.9 à 0.17.1** ela esperava no
 máximo 2 segundos, e uma reserva que falhava recusava as mensagens em espera de imediato; o SMPP
 respondia `0x14` e REST e gRPC registravam a recusa como `queueFull`. O limite de espera, a nova
-tentativa e as respostas `creditPending` separadas são da 0.17.x. `smsg.balance.block.seconds` não
+tentativa e as respostas `creditPending` separadas são da 0.17.2. `smsg.balance.block.seconds` não
 define mais a espera.
 </Note>
 
@@ -182,7 +182,7 @@ próximo submit, e só é recusada `creditPending` se a espera acabar.
 | `smsg.balance.block.max` | `10000000` | Teto de uma única reserva |
 | `smsg.balance.refill.watermark.percent` | `20` | Refill dispara aqui |
 | `smsg.balance.recharge.poll.seconds` | `30` | Em quanto tempo um top-up cai |
-| `smsg.balance.park.seconds` | `10` | A partir da 0.17.x. Quanto tempo uma mensagem sem crédito em mãos espera pelo seu bloco antes de ser recusada `creditPending`. Para todo o gateway, de 1 a 30; envios pela API esperam no máximo 5 |
+| `smsg.balance.park.seconds` | `10` | A partir da 0.17.2. Quanto tempo uma mensagem sem crédito em mãos espera pelo seu bloco antes de ser recusada `creditPending`. Para todo o gateway, de 1 a 30; envios pela API esperam no máximo 5 |
 
 ## Relacionado
 

@@ -23,8 +23,8 @@ request that produced them.
 | `insufficientCredit` | Prepaid balance would not cover it | `0x402` / `402` | Top up |
 | `noUnits` | A login of a [units account](/platform/billing/units-accounts) has no units of its product left | `0x403` / `402` `NO_UNITS` | Give it units, from the platform that manages it |
 | `unitsPending` | Its units were held by another node for a moment | `0x14` / `503` `UNITS_PENDING` | Nothing: a retry goes through |
-| `creditPending` | From 0.17.x. A funded account's credit was not confirmed within the wait limit | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nothing for the customer: a resend goes through. Look at the database — see [below](#credit-not-confirmed-in-time) |
-| `creditQueueFull` | From 0.17.x. Too many of the account's messages were already waiting for their credit | `0x14` / `503`, as a full queue | The same cause as `creditPending`, at volume |
+| `creditPending` | From 0.17.2. A funded account's credit was not confirmed within the wait limit | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nothing for the customer: a resend goes through. Look at the database — see [below](#credit-not-confirmed-in-time) |
+| `creditQueueFull` | From 0.17.2. Too many of the account's messages were already waiting for their credit | `0x14` / `503`, as a full queue | The same cause as `creditPending`, at volume |
 | `queueFull` | The router queue was at its limit | `0x14` / `503` | Find why the queue is not draining — usually a vendor |
 | `filtered` | A filter refused it | varies | Read the filter |
 | `maxAttempts` | **Not a refusal.** Routing gave up | nothing at submit time | [Nothing is delivered](/platform/troubleshooting/nothing-is-delivered) |
@@ -108,9 +108,9 @@ Only when the wait runs out is the message refused, as `creditPending`:
 
 | How it was sent | What the sender receives |
 | :--- | :--- |
-| SMPP | `submit_sm_resp` with `0x58` (`ESME_RTHROTTLED`) — the listener's `conf.status.creditPending`. Before 0.17.x it was `0x14`. |
-| REST | `503`, code `CREDIT_PENDING`, `Retry-After: 2`. Before 0.17.x a `503` with no code, recorded as `queueFull`. |
-| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, retry after 2 seconds. Before 0.17.x `QUEUE_FULL`, recorded as `queueFull`. |
+| SMPP | `submit_sm_resp` with `0x58` (`ESME_RTHROTTLED`) — the listener's `conf.status.creditPending`. Before 0.17.2 it was `0x14`. |
+| REST | `503`, code `CREDIT_PENDING`, `Retry-After: 2`. Before 0.17.2 a `503` with no code, recorded as `queueFull`. |
+| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, retry after 2 seconds. Before 0.17.2 `QUEUE_FULL`, recorded as `queueFull`. |
 | Platform API | Send status `CREDIT_PENDING`. |
 
 **Nothing is charged**, and **resending works**: both `0x58` and a `503` tell a client to wait and send
@@ -124,12 +124,12 @@ timeout is usually not much longer. See [Limits](/reference/config/limits#waitin
 
 1. **The gateway's database is slow, or is not answering.** A block cannot be reserved until it does.
    Every account on the gateway that runs out of block during the stall waits together, so these
-   refusals come in a cluster across many accounts. Before 0.17.x a reservation that failed refused
+   refusals come in a cluster across many accounts. Before 0.17.2 a reservation that failed refused
    the waiting messages at once, and the wait was at most 2 seconds.
 2. **On gateways before 0.15.9, several messages arriving together after a quiet period.** Those
    versions refused a message that found no block in hand at once, so a customer sending in bursts —
    a batch every half minute, say — was refused part of every burst while the next block was
-   reserved. 0.15.9 made such a message wait (at most 2 seconds), and 0.17.x made the wait settable
+   reserved. 0.15.9 made such a message wait (at most 2 seconds), and 0.17.2 made the wait settable
    and the reservation retried.
 
 `creditQueueFull` is the same cause at volume: when **10,000** of one account's messages, or

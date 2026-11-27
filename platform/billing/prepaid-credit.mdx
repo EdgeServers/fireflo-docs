@@ -141,7 +141,7 @@ a full-queue `503`), also uncharged.
 **Up to 0.15.6** such a message was refused at once. **From 0.15.9 to 0.17.1** it waited at most
 2 seconds, and a reservation that failed refused the waiting messages at once; SMPP answered `0x14`
 and REST and gRPC recorded the refusal as `queueFull`. The wait limit, the retry and the separate
-`creditPending` answers are from 0.17.x. `smsg.balance.block.seconds` no longer sets the wait.
+`creditPending` answers are from 0.17.2. `smsg.balance.block.seconds` no longer sets the wait.
 </Note>
 
 See [Refusals](/platform/troubleshooting/refusals#credit-not-confirmed-in-time) for answering a
@@ -177,7 +177,7 @@ and is refused `creditPending` only if the wait runs out.
 | `smsg.balance.block.max` | `10000000` | Ceiling on a single reservation |
 | `smsg.balance.refill.watermark.percent` | `20` | Refill triggers here |
 | `smsg.balance.recharge.poll.seconds` | `30` | How soon a top-up lands |
-| `smsg.balance.park.seconds` | `10` | From 0.17.x. How long a message with no credit in hand waits for its block before it is refused `creditPending`. Gateway-wide, 1 to 30; API sends wait at most 5 |
+| `smsg.balance.park.seconds` | `10` | From 0.17.2. How long a message with no credit in hand waits for its block before it is refused `creditPending`. Gateway-wide, 1 to 30; API sends wait at most 5 |
 
 ## Related
 

@@ -149,7 +149,7 @@ passerelle, attendent déjà, le suivant est refusé aussitôt comme `creditQueu
 **Jusqu'à 0.15.6**, un tel message était refusé aussitôt. **De 0.15.9 à 0.17.1**, il attendait au
 plus 2 secondes, et une réservation qui échouait refusait aussitôt les messages en attente ; SMPP
 répondait `0x14` et REST et gRPC enregistraient le refus comme `queueFull`. La limite d'attente, la
-nouvelle tentative et les réponses `creditPending` distinctes datent de 0.17.x.
+nouvelle tentative et les réponses `creditPending` distinctes datent de 0.17.2.
 `smsg.balance.block.seconds` ne règle plus l'attente.
 </Note>
 
@@ -187,7 +187,7 @@ passe à la soumission suivante — et n'est refusé `creditPending` que si l'at
 | `smsg.balance.block.max` | `10000000` | Plafond sur une seule réservation |
 | `smsg.balance.refill.watermark.percent` | `20` | Le rechargement se déclenche ici |
 | `smsg.balance.recharge.poll.seconds` | `30` | Combien de temps met un rechargement à atterrir |
-| `smsg.balance.park.seconds` | `10` | À partir de 0.17.x. Combien de temps un message sans crédit en main attend son bloc avant d'être refusé `creditPending`. Pour toute la passerelle, de 1 à 30 ; les envois API attendent au plus 5 |
+| `smsg.balance.park.seconds` | `10` | À partir de 0.17.2. Combien de temps un message sans crédit en main attend son bloc avant d'être refusé `creditPending`. Pour toute la passerelle, de 1 à 30 ; les envois API attendent au plus 5 |
 
 ## En lien
 

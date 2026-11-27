@@ -68,7 +68,7 @@ mantiene la ruta de envío al margen de la base de datos.
 <Warning>
 **Un mensaje que llega mientras se está tomando la siguiente reserva la espera** en lugar de
 rechazarse. Solo si el saldo sigue sin confirmarse tras la espera —normalmente porque la base de
-datos de la pasarela va lenta un momento— se rechaza, y desde 0.17.x ese rechazo tiene su propia
+datos de la pasarela va lenta un momento— se rechaza, y desde 0.17.2 ese rechazo tiene su propia
 respuesta: `503` con código `CREDIT_PENDING` y `Retry-After: 2` por REST, `0x58` por SMPP. No se
 cobra nada. **Reintentar funciona.**
 

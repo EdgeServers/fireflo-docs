@@ -24,8 +24,8 @@ que su cliente debería *hacer*.
 | `415` | **Nunca** | Corrija la cabecera `Accept`. |
 | `429` | **Sí**, con backoff | Transitorio por definición. |
 | `500` | **Sí**, una o dos veces | El cargo se revirtió: véase más abajo. |
-| `503` con un `code` | **Sí**, tras `Retry-After` | Propios de la pasarela: `CREDIT_PENDING` (desde 0.17.x, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` y otros. No se cobró nada. |
-| `503` con solo un `message` | **Sí**, con backoff | También propio de la pasarela: una cola llena o (desde 0.17.x) demasiados mensajes suyos esperando ya saldo. No se cobró nada. |
+| `503` con un `code` | **Sí**, tras `Retry-After` | Propios de la pasarela: `CREDIT_PENDING` (desde 0.17.2, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` y otros. No se cobró nada. |
+| `503` con solo un `message` | **Sí**, con backoff | También propio de la pasarela: una cola llena o (desde 0.17.2) demasiados mensajes suyos esperando ya saldo. No se cobró nada. |
 | `502`, `504`, o un `503` sin cuerpo JSON de FireFlo | **Sí** | No provienen de la pasarela, sino de un proxy delante. |
 
 <Warning>
@@ -90,7 +90,7 @@ posición sí lo son.
 
 <Accordion title="503 CREDIT_PENDING con dinero todavía en la cuenta">
 El saldo se reserva en bloques, no por mensaje, y un envío que no encuentra saldo a mano espera al
-siguiente bloque: hasta 5 segundos en la API. Desde 0.17.x, un envío cuyo saldo sigue sin
+siguiente bloque: hasta 5 segundos en la API. Desde 0.17.2, un envío cuyo saldo sigue sin
 confirmarse tras eso se rechaza con `503`, código `CREDIT_PENDING` y `Retry-After: 2`. No se cobró
 nada. Normalmente significa que la base de datos de la pasarela iba lenta o no respondía en ese
 momento.

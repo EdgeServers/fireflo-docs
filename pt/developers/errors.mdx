@@ -24,8 +24,8 @@ cliente *deve fazer*.
 | `415` | **Nunca** | Corrija o cabeçalho `Accept`. |
 | `429` | **Sim**, com backoff | Transitório por definição. |
 | `500` | **Sim**, uma ou duas vezes | A cobrança foi revertida. Veja abaixo. |
-| `503` com um `code` | **Sim**, depois do `Retry-After` | Do próprio gateway: `CREDIT_PENDING` (a partir da 0.17.x, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` e outros. Nada foi cobrado. |
-| `503` só com um `message` | **Sim**, com backoff | Também do próprio gateway: uma fila cheia, ou (a partir da 0.17.x) mensagens suas demais já esperando crédito. Nada foi cobrado. |
+| `503` com um `code` | **Sim**, depois do `Retry-After` | Do próprio gateway: `CREDIT_PENDING` (a partir da 0.17.2, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` e outros. Nada foi cobrado. |
+| `503` só com um `message` | **Sim**, com backoff | Também do próprio gateway: uma fila cheia, ou (a partir da 0.17.2) mensagens suas demais já esperando crédito. Nada foi cobrado. |
 | `502`, `504`, ou um `503` sem corpo JSON do FireFlo | **Sim** | Não vem do gateway; vem de um proxy à frente dele. |
 
 <Warning>
@@ -90,7 +90,7 @@ não são a causa. Uma palavra trocada, um ponto final adicionado ou uma variáv
 
 <Accordion title="503 CREDIT_PENDING com saldo ainda na conta">
 O crédito é reservado em blocos, não por mensagem, e um envio que não encontra crédito em mãos
-espera pelo próximo bloco, até 5 segundos na API. A partir da 0.17.x, um envio cujo crédito ainda
+espera pelo próximo bloco, até 5 segundos na API. A partir da 0.17.2, um envio cujo crédito ainda
 não está confirmado depois disso é recusado com `503`, código `CREDIT_PENDING` e `Retry-After: 2`.
 Nada foi cobrado. Geralmente significa que o banco de dados do gateway ficou lento ou sem responder
 por um momento.

@@ -68,7 +68,7 @@ mantém o caminho de envio fora do banco de dados.
 <Warning>
 **Uma mensagem que chega enquanto a próxima reserva está sendo feita espera por ela** em vez de ser
 recusada. Só se o crédito ainda não estiver confirmado depois da espera (geralmente o banco de dados
-do gateway lento por um momento) ela é recusada, e a partir da 0.17.x essa recusa tem resposta
+do gateway lento por um momento) ela é recusada, e a partir da 0.17.2 essa recusa tem resposta
 própria: `503` com código `CREDIT_PENDING` e `Retry-After: 2` via REST, `0x58` via SMPP. Nada é
 cobrado. **Repetir tem sucesso.**
 
