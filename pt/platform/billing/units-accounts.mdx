@@ -47,6 +47,7 @@ liquida o que foi gasto. A contagem é exata após um crash.
 | Não restam unidades do seu produto | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, código `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | As unidades dela estão retidas por outro nó por um momento | `unitsPending` | `0x14` | `503`, código `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | Ela tem unidades, a conta-pai não tem crédito | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+| Ela tem unidades, o crédito da conta-pai não é confirmado a tempo (0.17.x; uma nova tentativa passa) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 Nada é cobrado em nenhum dos três, e no terceiro a unidade é devolvida.
 

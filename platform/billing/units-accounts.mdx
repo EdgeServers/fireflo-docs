@@ -46,6 +46,7 @@ settles what was spent. The count is exact after a crash.
 | No units of its product left | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, code `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | Its units are held by another node for a moment | `unitsPending` | `0x14` | `503`, code `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | It has units, its parent has no credit | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+| It has units, its parent's credit is not confirmed in time (0.17.x; a retry goes through) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 Nothing is charged for any of the three, and in the third the unit is given back.
 

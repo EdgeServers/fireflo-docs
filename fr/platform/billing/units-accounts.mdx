@@ -48,6 +48,7 @@ données par message, et règle ce qui a été dépensé. Le décompte est exact
 | Plus aucune unité de son produit | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, code `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | Ses unités sont retenues un instant par un autre nœud | `unitsPending` | `0x14` | `503`, code `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | Il a des unités, son parent n'a pas de crédit | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+| Il a des unités, le crédit de son parent n'est pas confirmé à temps (0.17.x ; un nouvel essai passe) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 Rien n'est facturé pour aucun des trois, et dans le troisième l'unité est rendue.
 

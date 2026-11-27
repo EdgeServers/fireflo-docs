@@ -47,6 +47,7 @@ por mensaje y liquida lo gastado. El recuento es exacto tras una caída.
 | No le quedan unidades de su producto | `noUnits` | `0x403` (`conf.status.noUnits`) | `402`, código `NO_UNITS` | `FAILED_PRECONDITION`, `NO_UNITS` |
 | Sus unidades están retenidas por otro nodo por un momento | `unitsPending` | `0x14` | `503`, código `UNITS_PENDING`, `Retry-After: 5` | `UNAVAILABLE`, `UNITS_PENDING` |
 | Tiene unidades, su cuenta padre no tiene crédito | `insufficientCredit` | `0x402` | `402` | `FAILED_PRECONDITION`, `INSUFFICIENT_CREDIT` |
+| Tiene unidades, el crédito de su cuenta padre no se confirma a tiempo (0.17.x; un reintento pasa) | `creditPending` | `0x58` | `503`, code `CREDIT_PENDING`, `Retry-After: 2` | `UNAVAILABLE`, `CREDIT_PENDING` |
 
 No se cobra nada en ninguno de los tres casos, y en el tercero la unidad se devuelve.
 
