@@ -66,11 +66,14 @@ O crédito é **reservado em blocos, não por mensagem**. Cerca de vinte mensage
 mantém o caminho de envio fora do banco de dados.
 
 <Warning>
-**Você pode ver um `402` com saldo ainda na conta.** As recargas são assíncronas, então uma mensagem
-que chega enquanto a próxima reserva está sendo feita é recusada. **Repetir tem sucesso**, e esse é
-o único `402` que vale um retry.
+**Uma mensagem que chega enquanto a próxima reserva está sendo feita espera por ela** em vez de ser
+recusada. Só se o crédito ainda não estiver confirmado depois da espera (geralmente o banco de dados
+do gateway lento por um momento) ela é recusada, e a partir da 0.17.x essa recusa tem resposta
+própria: `503` com código `CREDIT_PENDING` e `Retry-After: 2` via REST, `0x58` via SMPP. Nada é
+cobrado. **Repetir tem sucesso.**
 
-Um `402` *persistente* com saldo saudável é outra coisa. Reporte ao seu provedor.
+Um `402` significa que o saldo não cobre a mensagem. Um `402` *persistente* com saldo saudável é
+outra coisa. Reporte ao seu provedor.
 </Warning>
 
 **O tamanho do bloco não deixa crédito preso.** Uma reserva cai do bloco cheio para o piso, e depois

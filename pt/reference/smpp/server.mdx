@@ -105,6 +105,19 @@ desaparece em silêncio a menos que você observe essa linha de log.
 
 Veja [Whitelisting](/reference/config/whitelisting) e [Limites](/reference/config/limits).
 
+## Status de recusa
+
+O status de `submit_sm_resp` que este listener responde para uma recusa ligada a dinheiro. Por
+listener, então cada porta de cliente pode mudar quando os clientes dela estiverem prontos.
+
+| Chave | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `conf.status.insufficientCredit` | `0x402` | O crédito da conta não cobre a mensagem (`insufficientCredit`). `0x401` ou `0x402`; qualquer outro valor responde `0x402` com um aviso. |
+| `conf.status.noUnits` | `0x00000403` | A partir da 0.16.0. O login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto (`noUnits`). Hex ou decimal. |
+| `conf.status.creditPending` | `0x00000058` | A partir da 0.17.x. O crédito de uma conta fundeada não foi confirmado dentro de `smsg.balance.park.seconds` (`creditPending`). Hex ou decimal. Antes da 0.17.x esta recusa respondia `0x14`. |
+
+Veja [Códigos de status](/reference/smpp/status-codes) e [Limites](/reference/config/limits#aguardando-crédito).
+
 ## Threads
 
 | Chave | Padrão | Descrição |

@@ -3,7 +3,9 @@ title: "Tratamento de erros"
 description: "O que repetir, o que nunca repetir e por que um 500 é o seguro."
 ---
 
-Toda falha é um objeto JSON com um único `message`. O status é a parte legível por máquina.
+Toda falha é um objeto JSON com um `message`. O status é a parte legível por máquina; algumas
+recusas também trazem um `code` que nomeia a causa, e as que se resolvem sozinhas, um cabeçalho
+`Retry-After`.
 
 ```json
 {"message":"Insufficient credit"}
@@ -22,7 +24,9 @@ cliente *deve fazer*.
 | `415` | **Nunca** | Corrija o cabeçalho `Accept`. |
 | `429` | **Sim**, com backoff | Transitório por definição. |
 | `500` | **Sim**, uma ou duas vezes | A cobrança foi revertida. Veja abaixo. |
-| `502`, `503`, `504` | **Sim** | Não vem do gateway; vem de um proxy à frente dele. |
+| `503` com um `code` | **Sim**, depois do `Retry-After` | Do próprio gateway: `CREDIT_PENDING` (a partir da 0.17.x, `Retry-After: 2`), `UNITS_PENDING`, `SHUTTING_DOWN` e outros. Nada foi cobrado. |
+| `503` só com um `message` | **Sim**, com backoff | Também do próprio gateway: uma fila cheia, ou (a partir da 0.17.x) mensagens suas demais já esperando crédito. Nada foi cobrado. |
+| `502`, `504`, ou um `503` sem corpo JSON do FireFlo | **Sim** | Não vem do gateway; vem de um proxy à frente dele. |
 
 <Warning>
 **Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com
@@ -84,12 +88,15 @@ não são a causa. Uma palavra trocada, um ponto final adicionado ou uma variáv
 é.
 </Accordion>
 
-<Accordion title="402 com saldo ainda na conta">
-O crédito é reservado em blocos, não por mensagem. Cerca de vinte mensagens por vez, e as recargas
-são assíncronas. Uma mensagem que chega enquanto a próxima reserva está em andamento é recusada
-mesmo com saldo remanescente.
+<Accordion title="503 CREDIT_PENDING com saldo ainda na conta">
+O crédito é reservado em blocos, não por mensagem, e um envio que não encontra crédito em mãos
+espera pelo próximo bloco, até 5 segundos na API. A partir da 0.17.x, um envio cujo crédito ainda
+não está confirmado depois disso é recusado com `503`, código `CREDIT_PENDING` e `Retry-After: 2`.
+Nada foi cobrado. Geralmente significa que o banco de dados do gateway ficou lento ou sem responder
+por um momento.
 
-**Esse é transitório: repita.** Um `402` que persiste com saldo saudável não é, e vale reportar.
+**Esse é transitório: repita depois do intervalo.** Um `402` é diferente: o saldo não cobre a
+mensagem, e repetir não muda isso.
 </Accordion>
 
 <Accordion title="400 — Unknown argument: custom-tlvs">

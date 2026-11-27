@@ -6,19 +6,25 @@ description: "Las preguntas que hacen los operadores una vez el dinero se mueve:
 <AccordionGroup>
 
 <Accordion title="Una cuenta rechaza mensajes y tiene dinero encima">
-Casi siempre es una **recarga en vuelo**, no crédito varado.
+Mire primero la razón. Con dinero en la cuenta casi siempre es **`creditPending`**, no crédito
+varado.
 
-El crédito se reserva en bloques y las recargas son asíncronas por diseño, así que un mensaje que
-llega mientras se toma la siguiente reserva puede ser rechazado con dinero aún en la cuenta.
-Reintentar tiene éxito.
+El crédito se reserva en bloques y las recargas son asíncronas por diseño, así que un mensaje puede
+llegar mientras se toma la siguiente reserva. **Espera** a que llegue, hasta
+`smsg.balance.park.seconds` (10 segundos por defecto, para toda la pasarela; 5 como máximo para los
+envíos por API), y se cobra cuando el bloque aterriza. Solo si el crédito sigue sin confirmarse para
+entonces —normalmente porque la base de datos iba lenta o no respondía— se rechaza como
+`creditPending`: `0x58` por SMPP (`conf.status.creditPending`), `503` `CREDIT_PENDING` por REST. No se
+cobra nada, y reenviar tiene éxito. Véase
+[Rechazos](/platform/troubleshooting/refusals#crédito-no-confirmado-a-tiempo).
 
 **El suelo del bloque no vara nada.** Una reserva intenta el bloque completo, luego el suelo
 denominado en mensajes y por último el único mensaje que lo pidió, por lo que una cuenta gasta cada
 unidad que tiene. Una financiada para tres mensajes envía tres.
 
-Si esto ocurre en una cuenta **bien financiada**, la causa es distinta e histórica: el suelo solía
-ser un importe monetario, que podía dimensionar un bloque en exactamente un mensaje para un destino
-caro. Eso es lo que `smsg.balance.block.min.messages` existe para evitar.
+Si una cuenta **bien financiada** se rechaza como `insufficientCredit`, la causa es distinta: crédito
+retenido en `reserved` o, históricamente, que el suelo fuera un importe monetario, que podía
+dimensionar un bloque en exactamente un mensaje para un destino caro. Eso es lo que `smsg.balance.block.min.messages` existe para evitar.
 </Accordion>
 
 <Accordion title="Una recarga no llegó">

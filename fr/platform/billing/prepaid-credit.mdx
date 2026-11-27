@@ -116,17 +116,54 @@ que rien d'autre ne peut dépenser — restitués par un arrêt propre, et par `
 un arrêt non propre.
 
 **Ce que vous verrez encore vers la fin :** les rechargements sont asynchrones par conception,
-donc un message arrivant pendant que la prochaine réservation est en vol peut être refusé même si
-du crédit reste. Ce refus est transitoire et la nouvelle tentative réussit. Ce n'est pas du crédit
-bloqué.
+donc un message peut arriver pendant que la prochaine réservation est en vol. Il l'attend au lieu
+d'être refusé — voir plus bas.
+
+## Attente de crédit
+
+Un message qui ne trouve pas de crédit en main — le bloc dépensé, le suivant pas encore réservé —
+**attend** la réservation et est débité dès qu'elle atterrit, dans l'ordre d'arrivée des messages.
+Une réservation qui échoue parce que la base est lente ou ne répond pas est retentée pendant que les
+messages attendent. Rien n'est débité avant que son crédit soit réservé, donc le solde ne passe
+jamais sous zéro.
+
+L'attente est `smsg.balance.park.seconds` : pour toute la passerelle, **10 secondes** par défaut, de
+1 à 30, lue à chaque usage. Les envois par l'API HTTP, gRPC et l'API plateforme en attendent au plus
+5 secondes.
+
+Si le crédit n'est toujours pas confirmé quand l'attente expire, le message est refusé
+**`creditPending`**, non débité :
+
+| Entrée | Réponse |
+| :--- | :--- |
+| SMPP | `0x58` (`ESME_RTHROTTLED`) par défaut, réglé par listener avec `conf.status.creditPending` |
+| REST | `503`, code `CREDIT_PENDING`, `Retry-After: 2` |
+| gRPC | `UNAVAILABLE`, `CREDIT_PENDING`, nouvelle tentative après 2 secondes |
+| API plateforme | statut d'envoi `CREDIT_PENDING` |
+
+Un renvoi passe dès que la base répond. Quand 10 000 messages d'un compte, ou 100 000 sur toute la
+passerelle, attendent déjà, le suivant est refusé aussitôt comme `creditQueueFull` (`0x14`, ou un
+`503` de file pleine), lui aussi non débité.
+
+<Note>
+**Jusqu'à 0.15.6**, un tel message était refusé aussitôt. **De 0.15.9 à 0.17.1**, il attendait au
+plus 2 secondes, et une réservation qui échouait refusait aussitôt les messages en attente ; SMPP
+répondait `0x14` et REST et gRPC enregistraient le refus comme `queueFull`. La limite d'attente, la
+nouvelle tentative et les réponses `creditPending` distinctes datent de 0.17.x.
+`smsg.balance.block.seconds` ne règle plus l'attente.
+</Note>
+
+Voir [Refus](/platform/troubleshooting/refusals#crédit-non-confirmé-à-temps) pour répondre à un
+client qui les voit.
 
 ## Refus
 
 Un compte sans crédit obtient le statut `submit_sm_resp` **`0x402`**, HTTP **402**, raison
 `insufficientCredit`.
 
-`ESME_RTHROTTLED` n'est délibérément pas utilisé : cela signifie autre chose, et ferait qu'un
-client recule et retente une condition que seul un rechargement peut lever.
+`ESME_RTHROTTLED` n'est délibérément pas utilisé pour ce cas : il dit à un client de reculer et de
+renvoyer, ce qui est juste pour `creditPending` et faux pour une condition que seul un rechargement
+peut lever.
 
 Un [compte à unités](/platform/billing/units-accounts) qui épuise ses propres unités est un refus
 distinct, `noUnits` (`0x403`). Quand c'est son parent qui n'a plus d'argent, ses logins obtiennent celui-ci.
@@ -137,8 +174,8 @@ Un message débité puis abandonné pendant le routage voit son crédit restitu�
 fois**. Un message non tarifé n'est jamais débité du tout.
 
 Le rechargement se déclenche sur un seuil pendant qu'il reste du crédit, sur un thread de fond.
-**Si le trafic le devance, le message est refusé immédiatement** plutôt que de faire attendre le
-thread SMPP sur une base de données — un thread d'ingress bloqué est pire qu'un message refusé.
+**Si le trafic le devance, le message attend le rechargement** — sans retenir de thread SMPP, qui
+passe à la soumission suivante — et n'est refusé `creditPending` que si l'attente expire.
 
 ## Propriétés
 
@@ -150,6 +187,7 @@ thread SMPP sur une base de données — un thread d'ingress bloqué est pire qu
 | `smsg.balance.block.max` | `10000000` | Plafond sur une seule réservation |
 | `smsg.balance.refill.watermark.percent` | `20` | Le rechargement se déclenche ici |
 | `smsg.balance.recharge.poll.seconds` | `30` | Combien de temps met un rechargement à atterrir |
+| `smsg.balance.park.seconds` | `10` | À partir de 0.17.x. Combien de temps un message sans crédit en main attend son bloc avant d'être refusé `creditPending`. Pour toute la passerelle, de 1 à 30 ; les envois API attendent au plus 5 |
 
 ## En lien
 
@@ -158,6 +196,6 @@ thread SMPP sur une base de données — un thread d'ingress bloqué est pire qu
     Limites de crédit, et factures exactes à partir d'une mise en application approximative.
   </Card>
   <Card title="Refus" icon="ban" href="/platform/troubleshooting/refusals">
-    Lire `insufficientCredit` face à un solde positif.
+    `creditPending`, et `insufficientCredit` face à un solde positif.
   </Card>
 </CardGroup>

@@ -108,8 +108,14 @@ cuenta padre como siempre: el `conf.maxRate` propio de la cuenta padre, el valor
 y el presupuesto del puerto. Un login con un límite propio más rápido sigue sujeto al límite de su
 cuenta de unidades.
 
-`0x58` significa "vaya más despacio"; `0x14` significa "inténtelo de nuevo en breve". Vacío o `0`
-significa que la cuenta de unidades no tiene límite propio, y solo se aplican los de la cuenta padre.
+`0x58` significa "vaya más despacio"; `0x14` significa "inténtelo de nuevo en breve". Un cliente que
+se comporta bien reenvía ambos. `0x58` no es solo el límite de velocidad: desde 0.17.x, el mensaje de
+una cuenta con dinero cuyo crédito no se confirmó a tiempo (`creditPending`) también responde `0x58`
+por defecto; véase [Códigos de estado](/reference/smpp/status-codes). Los rechazos propios de un login
+de unidades no cambian: `noUnits` es `0x403` y `unitsPending` es `0x14`.
+
+Vacío o `0` significa que la cuenta de unidades no tiene límite propio, y solo se aplican los de la
+cuenta padre.
 
 Los binds de un login de unidades cuentan contra el límite de conexiones de su cuenta padre. No hay un
 límite de binds aparte por cuenta de unidades.

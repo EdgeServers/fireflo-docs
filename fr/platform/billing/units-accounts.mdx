@@ -106,8 +106,14 @@ n'épuise pas l'allocation de son revendeur. En deçà, les limites du parent s'
 toujours : le `conf.maxRate` propre au parent, la valeur par défaut du listener et le budget du port.
 Un login doté d'une limite propre plus rapide reste tenu à la limite de son compte à unités.
 
-`0x58` signifie « ralentissez » ; `0x14` signifie « réessayez sous peu ». Vide ou `0` signifie que le
-compte à unités n'a pas de limite propre, et seules celles du parent s'appliquent.
+`0x58` signifie « ralentissez » ; `0x14` signifie « réessayez sous peu ». Un client bien élevé
+renvoie dans les deux cas. `0x58` n'est pas seulement la limite de vitesse : à partir de 0.17.x, un
+message d'un compte à argent dont le crédit n'a pas été confirmé à temps (`creditPending`) répond
+`0x58` lui aussi, par défaut — voir [Codes de statut](/reference/smpp/status-codes). Les refus propres
+à un login à unités ne changent pas : `noUnits` est `0x403` et `unitsPending` est `0x14`.
+
+Vide ou `0` signifie que le compte à unités n'a pas de limite propre, et seules celles du parent
+s'appliquent.
 
 Les binds d'un login à unités comptent dans la limite de connexions de son parent. Il n'y a pas de
 limite de binds distincte par compte à unités.

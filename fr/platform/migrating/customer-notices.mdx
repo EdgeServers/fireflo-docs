@@ -88,6 +88,43 @@ SELECT account_id,
 
 S'il vous faut du temps, mettez à jour, désactivez **Send Unicode automatically** sur la page Gateway settings (`smsg.restapi.coding.autodetect`), prévenez vos clients, puis réactivez-le.
 
+## 0.17.x : crédit non confirmé à temps
+
+**Qui :** les clients d'un compte prépayé dont les messages ont été refusés parce que leur crédit n'a pas pu être réservé à temps, et toute plateforme qui lit le statut d'envoi de l'API plateforme. La facturation de personne ne change : ces messages n'ont jamais été facturés, ni avant ni après.
+
+| Un message dont le crédit n'est pas en main | Jusqu'à 0.17.1 | À partir de 0.17.x |
+| :--- | :--- | :--- |
+| Combien de temps il attend | au plus 2 secondes ; refusé aussitôt si la réservation a échoué | jusqu'à `smsg.balance.park.seconds` (10 secondes par défaut) en SMPP, au plus 5 sur l'API ; une réservation échouée est retentée |
+| Réponse SMPP quand l'attente expire | `0x14` (`ESME_RMSGQFUL`), comme une file pleine | `0x58` (`ESME_RTHROTTLED`), le `conf.status.creditPending` du listener |
+| Réponse REST | `503` sans `code`, enregistré `queueFull` | `503`, code `CREDIT_PENDING`, `Retry-After: 2`, enregistré `creditPending` |
+| Réponse gRPC | `UNAVAILABLE`, `QUEUE_FULL` | `UNAVAILABLE`, `CREDIT_PENDING`, nouvelle tentative après 2 secondes |
+| Statut d'envoi de l'API plateforme | `QUEUE_FULL` | `CREDIT_PENDING` |
+
+**Le nombre, la direction, la date :** à partir du jour de votre mise à jour, beaucoup moins de ces refus — la plupart des messages qui étaient refusés attendent désormais et sont envoyés — et ceux qui restent portent un nouveau code. Une vraie file pleine ne change pas : `0x14`, enregistré `queueFull`.
+
+Ce que chaque type de client doit faire :
+
+- **Les clients SMPP dont le client distingue les refus par code** voient `0x58` là où ils voyaient `0x14` pour ce cas. Un client qui renvoie sur `0x58` — la plupart le font, car c'est le statut standard « ralentissez » — n'a rien à faire. Un client qui traite `0x58` comme définitif doit être modifié, ou vous mettez `conf.status.creditPending` à `0x14` sur son listener pour garder l'ancienne réponse.
+- **Les clients de l'API plateforme** doivent accepter le nouveau statut d'envoi `CREDIT_PENDING` et le traiter comme « réessayez ».
+- **Les clients REST** reçoivent un `code` (`CREDIT_PENDING`) et un `Retry-After` sur ce `503`, qui n'en avait aucun. Un client qui réessaie tout `503` n'a rien à faire.
+
+Les candidats — les comptes refusés pour le crédit au cours des 30 derniers jours, par entrée :
+
+```sql
+SELECT account_id, ingress,
+       count(*)          AS refused_credit_pending,
+       max(rejected_at)  AS last_seen
+  FROM cdr_rejected
+ WHERE reason = 'creditPending'
+   AND rejected_at >= now() - interval '30 days'
+ GROUP BY account_id, ingress
+ ORDER BY refused_credit_pending DESC;
+```
+
+En REST et gRPC, les passerelles antérieures à 0.17.x enregistraient ces refus comme `queueFull`, qui est aussi une vraie file pleine : pour celles-ci, tout compte listé sous `queueFull` dans la même fenêtre est un candidat.
+
+**Dites que rien n'a été facturé.** Un client à qui l'on parle d'un code de refus suppose que les messages refusés ont été facturés ; aucun ne l'a été.
+
 ## Deux phrases qui ne doivent pas être adoucies
 
 Quoi que ce soit d'autre soit réécrit pour convenir au ton de votre plateforme, celles-ci survivent intactes :

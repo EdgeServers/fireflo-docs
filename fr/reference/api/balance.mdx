@@ -62,8 +62,10 @@ logins sur un même compte rapportent tous le même solde, et dépensent tous le
 Le crédit est réservé en **blocs** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
 l'équivalent de vingt messages par défaut — et les recharges sont **asynchrones**.
 
-Donc un message qui arrive pendant que la réservation suivante est prise obtient `402` alors même
-que cet endpoint rapporte un solde positif. **C'est transitoire ; le retry réussit.**
+Donc un message peut arriver pendant que la réservation suivante est prise. Il l'attend, et n'est
+refusé que si le crédit n'est toujours pas confirmé après l'attente : à partir de 0.17.x en `503` avec
+le code `CREDIT_PENDING` et `Retry-After: 2`, pas en `402`, alors même que cet endpoint rapporte un
+solde positif. **C'est transitoire ; le retry réussit.**
 
 La taille de bloc ne piège pas le crédit : une réservation retombe sur le bloc, le plancher, puis
 finalement sur le message unique qui l'a demandée. Un compte dépense donc chaque unité qu'il

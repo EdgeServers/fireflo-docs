@@ -40,16 +40,19 @@ se movem enquanto você pagina, e clicar em um filtra para ele.
 | **Product not sold** | O login nomeou um product sem linha habilitada no catálogo |
 | **No price configured** | Nenhum rate do lado de venda casou, e o gateway recusa em vez de enviar sem faturar |
 | **Product not allowed for this login** | O login não pode nomear aquele product |
-| **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap |
+| **Credit not confirmed in time; resend** | A partir da 0.17.x (`creditPending`). O crédito de uma account fundeada não foi confirmado dentro de `smsg.balance.park.seconds`, geralmente porque o banco de dados estava lento ou sem responder. Nada cobrado; um reenvio passa. Veja [Recusas](/platform/troubleshooting/refusals#crédito-não-confirmado-a-tempo) |
+| **Too many waiting for credit; resend** | A partir da 0.17.x (`creditQueueFull`). 10,000 mensagens da account, ou 100,000 no gateway, já estavam esperando crédito. A mesma causa da anterior, em volume |
+| **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap. Antes da 0.17.x, envios REST e gRPC recusados por crédito não confirmado a tempo também eram contados aqui |
 | **Could not be queued** | Aceita pelas verificações, mas não pôde ser entregue — geralmente o broker |
 | **Never routed** | *Após aceitação.* Nenhuma regra habilitada casou; reembolsado |
 | **Vendor refused it** | *Após aceitação.* A operadora rejeitou o submit; reembolsado |
 | **Dropped by a filter** | *Após aceitação.* Um filtro de roteamento a parou; reembolsado |
 
 <Note>
-**"Out of credit" imediatamente após um restart do gateway pode aparecer em uma conta fundeada**,
-enquanto o crédito está sendo reservado pela primeira vez. Uma mensagem o reporta e a próxima
-funciona. Persistir além dos primeiros envios é uma escassez real.
+**As mensagens de uma conta fundeada esperam pelo seu crédito** após um restart, ou sempre que seu
+bloco acaba, em vez de serem recusadas. Muitas recusas **Credit not confirmed in time** em várias
+accounts nos mesmos minutos apontam para o banco de dados. **Out of credit** em uma conta fundeada
+que persiste é uma escassez real, ou crédito retido em `reserved`.
 </Note>
 
 Dois motivos merecem sua própria nota. **Content not approved** é uma comparação exata fora dos

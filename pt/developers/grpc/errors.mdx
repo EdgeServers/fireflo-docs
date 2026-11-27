@@ -48,12 +48,13 @@ mesmo atraso, para as bibliotecas cliente que o respeitam.
 | O saldo não cobre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recarregue, depois repita. Nada foi cobrado. |
 | Não restam unidades do seu produto (uma conta de unidades, a partir da 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Peça mais unidades ao seu provedor. Nada foi cobrado. |
 | Suas unidades estão retidas em outro lugar por um momento | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Repita após o atraso. Nada foi cobrado. |
+| Seu crédito não pôde ser confirmado a tempo (a partir da 0.17.x) | 503 | `UNAVAILABLE` | `CREDIT_PENDING` | 2 s | Repita após o atraso. Nada foi cobrado. A conta tem saldo; o gateway esperou até 5 s pelo crédito e desistiu. |
 | Acima das mensagens por segundo da sua conta | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Recue e repita. |
 | Sender ID não aprovado | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use um sender ID aprovado, ou peça este. |
 | O texto não casa com nenhum template aprovado | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envie um texto aprovado, ou peça um template. |
 | Produto não vendido / não permitido para o login / sem tarifa | 403 | `PERMISSION_DENIED` | `PRODUCT_NOT_SOLD` / `PRODUCT_NOT_ALLOWED` / `UNRATED` | — | Fale com seu provedor. Não repita sem alterar. |
 | Sem rota para o destino | 403 | `PERMISSION_DENIED` | `NO_ROUTE` | — | Fale com seu provedor. Não repita sem alterar. |
-| O gateway não está aceitando mensagens agora | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Repita após o atraso. |
+| O gateway não está aceitando mensagens agora, ou (a partir da 0.17.x) mensagens suas demais já estão esperando crédito | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Repita após o atraso. Nada foi cobrado. |
 | O gateway está reiniciando | 503 | `UNAVAILABLE` | `SHUTTING_DOWN` | 5 s | Reconecte, faça login, repita. |
 | A operadora do destino está congestionada / não conectada | 503 | `UNAVAILABLE` | `VENDOR_BACKLOG` / `VENDOR_UNAVAILABLE` | 30 s | Repita após o atraso. |
 | O banco do gateway não está dando conta | 503 | `UNAVAILABLE` | `DB_UNAVAILABLE` | 5 s | Repita após o atraso. |

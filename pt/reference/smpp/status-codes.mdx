@@ -13,13 +13,18 @@ inteira.**
 | `0x403` | `STATUS_NO_UNITS` | A partir da 0.16.0. Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto. Nada foi cobrado. O padrão de `conf.status.noUnits`, configurável por listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Recusado no **bind**, não no submit: o produto resolvido está em branco, ou nomeia nenhuma linha habilitada em `app_product`. Só quando `conf.product.required` está on. |
 | `0x418` | `STATUS_NO_RATE` | A mensagem não casou com nenhuma regra de tarifa do lado de venda. Só quando `smsg.rating.unrated.refuse` está on; caso contrário é aceita e não cobra nada. |
-| `0x14` | `ESME_RMSGQFUL` | A fila do roteador ou a fila de entrada deste listener está no limite. Só quando `smsg.queue.capacity` ou `inQueue.capacity` está setado; ambos padrão ilimitado. |
+| `0x14` | `ESME_RMSGQFUL` | A fila do roteador ou a fila de entrada deste listener está no limite (só quando `smsg.queue.capacity` ou `inQueue.capacity` está setado; ambos padrão ilimitado). A partir da 0.17.x, também mensagens demais da conta já esperando pelo seu crédito (`creditQueueFull`: 10,000 por conta, 100,000 por gateway). Nada foi cobrado. |
+| `0x58` | `ESME_RTHROTTLED` | Acima de um teto de mensagens por segundo, do login ou da conta. A partir da 0.17.x, também uma conta fundeada cujo crédito não foi confirmado dentro do limite de espera (`creditPending`, veja [Crédito pré-pago](/platform/billing/prepaid-credit#aguardando-crédito)). Nada foi cobrado. O caso do crédito é o padrão de `conf.status.creditPending`, configurável por listener; antes da 0.17.x respondia `0x14`. |
 
 ## O que cada um deliberadamente não é
 
 **`0x402` não é `ESME_RTHROTTLED`.** Throttled diz ao cliente para fazer backoff e tentar de novo, o
 que é exatamente errado para uma condição que só um top-up ou uma fatura pode resolver. Um cliente
 que retenta uma recusa de crédito queima sua própria capacidade sem conseguir nada.
+
+**`0x58` para crédito não confirmado a tempo é o caso oposto.** A conta tem dinheiro; seu crédito não
+pôde ser confirmado dentro de `smsg.balance.park.seconds`, geralmente porque o banco de dados estava
+lento ou sem responder. Um reenvio um momento depois passa, que é o que um cliente faz em `0x58`.
 
 <Note>
 Pré-pago e pós-pago recusam de forma **idêntica**. `0x402` em SMPP, `402` com `insufficientCredit`
@@ -32,8 +37,9 @@ diferente de o seu provedor ficar sem dinheiro, e só quem lhe dá unidades pode
 login de unidades, `0x402` significa que acabou o crédito da sua **conta-pai**; a unidade que ele
 consumiu é devolvida.
 
-**`0x14` é um sinal de backpressure bem-comportado.** Um ESME que o respeita faz backoff e retenta.
-Esta é a única recusa aqui que um cliente *deve* retentar.
+**`0x14` e `0x58` são sinais de backpressure bem-comportados.** Um ESME que os respeita faz backoff
+e reenvia. São as recusas aqui que um cliente *deve* retentar: uma fila cheia, uma fila de espera de
+crédito cheia, um teto de taxa e crédito não confirmado a tempo se resolvem sozinhos.
 
 **`0x40F` carrega um código e duas linhas WARN distintas**. Produto em branco versus nome
 desconhecido. O cliente só vê o número, então o log é onde os dois são distinguidos.

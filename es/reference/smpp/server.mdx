@@ -105,6 +105,19 @@ a menos que vigiles esa línea de log.
 
 Consulta [Whitelisting](/reference/config/whitelisting) y [Límites](/reference/config/limits).
 
+## Estados de rechazo
+
+El estado de `submit_sm_resp` con el que este listener responde a un rechazo relacionado con el
+dinero. Por listener, para que cada puerto de cliente pueda cambiar cuando sus clientes estén listos.
+
+| Clave | Predeterminado | Descripción |
+| :--- | :--- | :--- |
+| `conf.status.insufficientCredit` | `0x402` | El crédito de la cuenta no cubre el mensaje (`insufficientCredit`). `0x401` o `0x402`; cualquier otro valor responde `0x402` con un aviso. |
+| `conf.status.noUnits` | `0x00000403` | Desde 0.16.0. Al login de una [cuenta de unidades](/platform/billing/units-accounts) no le quedan unidades de su producto (`noUnits`). Hexadecimal o decimal. |
+| `conf.status.creditPending` | `0x00000058` | Desde 0.17.x. El crédito de una cuenta con fondos no se confirmó dentro de `smsg.balance.park.seconds` (`creditPending`). Hexadecimal o decimal. Antes de 0.17.x este rechazo respondía `0x14`. |
+
+Consulta [Códigos de estado](/reference/smpp/status-codes) y [Límites](/reference/config/limits#en-espera-de-crédito).
+
 ## Hilos
 
 | Clave | Predeterminado | Descripción |

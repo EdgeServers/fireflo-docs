@@ -62,8 +62,10 @@ Varios logins en una cuenta reportan todos el mismo saldo, y todos gastan el mis
 El saldo se reserva en **bloques**: `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
 unos veinte mensajes por defecto. Y las recargas son **asíncronas**.
 
-Así que un mensaje que llega mientras se está tomando la siguiente reserva obtiene `402` aunque
-este endpoint reporte un saldo positivo. **Es transitorio; el reintento tiene éxito.**
+Así que un mensaje puede llegar mientras se está tomando la siguiente reserva. La espera, y solo
+se rechaza si el saldo sigue sin confirmarse tras la espera: desde 0.17.x como `503` con código
+`CREDIT_PENDING` y `Retry-After: 2`, no `402`, aunque este endpoint reporte un saldo positivo. **Es
+transitorio; el reintento tiene éxito.**
 
 El tamaño de bloque no deja saldo varado: una reserva baja por el bloque, el suelo, y finalmente
 el único mensaje que lo solicitó, así que una cuenta gasta cada unidad que posee.

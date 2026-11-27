@@ -26,9 +26,10 @@ sont l'écart, et votre fournisseur peut les lister.
 </Accordion>
 
 <Accordion title="Pourquoi suis-je refusé alors que j'ai de l'argent sur le compte ?">
-Presque toujours une **recharge en vol**. Le crédit est réservé par blocs et les recharges sont
-asynchrones, donc un message qui arrive pendant une réservation est refusé alors qu'il reste de
-l'argent. Un retry réussit.
+Presque toujours une **recharge qui a pris trop de temps**. Le crédit est réservé par blocs et les
+recharges sont asynchrones ; un message qui arrive pendant une réservation l'attend, et n'est refusé
+que si le crédit n'est toujours pas confirmé après l'attente. À partir de 0.17.x, ce refus est un
+`503` avec le code `CREDIT_PENDING` en REST et `0x58` en SMPP. Rien n'est débité, et un retry réussit.
 
 **La taille de bloc ne piège pas le crédit** : une réservation retombe sur le message unique qui l'a
 demandée si c'est tout ce que le solde couvre. Vous dépensez donc chaque unité que vous détenez.

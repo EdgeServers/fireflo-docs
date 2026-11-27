@@ -66,11 +66,14 @@ El saldo se **reserva en bloques, no por mensaje** —unos veinte mensajes de go
 mantiene la ruta de envío al margen de la base de datos.
 
 <Warning>
-**Puede ver un `402` con dinero todavía en la cuenta.** Las recargas son asíncronas, de modo que
-un mensaje que llega mientras se está tomando la siguiente reserva se rechaza. **Reintentar
-funciona**, y este es el único `402` que merece un reintento.
+**Un mensaje que llega mientras se está tomando la siguiente reserva la espera** en lugar de
+rechazarse. Solo si el saldo sigue sin confirmarse tras la espera —normalmente porque la base de
+datos de la pasarela va lenta un momento— se rechaza, y desde 0.17.x ese rechazo tiene su propia
+respuesta: `503` con código `CREDIT_PENDING` y `Retry-After: 2` por REST, `0x58` por SMPP. No se
+cobra nada. **Reintentar funciona.**
 
-Un `402` *persistente* con un saldo saludable es harina de otro costal. Escálelo con su proveedor.
+Un `402` significa que el saldo no cubre el mensaje. Un `402` *persistente* con un saldo saludable
+es harina de otro costal. Escálelo con su proveedor.
 </Warning>
 
 **El tamaño de bloque no deja saldo varado.** Una reserva baja por el bloque completo, luego el

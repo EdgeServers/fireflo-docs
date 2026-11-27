@@ -115,16 +115,52 @@ tres mensajes envía tres.
 uno no limpio.
 
 **Lo que seguirá viendo cerca del final:** las recargas son asíncronas por diseño, así que un
-mensaje que llega mientras la siguiente reserva está en vuelo puede ser rechazado aunque quede
-crédito. Ese rechazo es transitorio y el reintento tiene éxito. No es crédito varado.
+mensaje puede llegar mientras la siguiente reserva está en vuelo. La espera en lugar de ser
+rechazado; véase más abajo.
+
+## En espera de crédito
+
+Un mensaje que no encuentra crédito a mano —el bloque gastado, el siguiente aún sin reservar—
+**espera** a la reserva y se carga en cuanto aterriza, en el orden en que llegaron los mensajes. Una
+reserva que falla porque la base de datos va lenta o no responde se vuelve a intentar mientras los
+mensajes esperan. No se carga nada antes de reservar su crédito, así que el saldo nunca baja de cero.
+
+La espera es `smsg.balance.park.seconds`: para toda la pasarela, **10 segundos** por defecto, de 1 a
+30, leída en cada uso. Los envíos por la API HTTP, gRPC y la API de plataforma esperan como máximo 5
+segundos de ella.
+
+Si el crédito sigue sin confirmarse cuando se agota la espera, el mensaje se rechaza como
+**`creditPending`**, sin cargo:
+
+| Entrada | Respuesta |
+| :--- | :--- |
+| SMPP | `0x58` (`ESME_RTHROTTLED`) por defecto, configurable por listener con `conf.status.creditPending` |
+| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2` |
+| gRPC | `UNAVAILABLE`, `CREDIT_PENDING`, reintentar tras 2 segundos |
+| API de plataforma | estado de envío `CREDIT_PENDING` |
+
+Un reenvío pasa en cuanto la base de datos responde. Cuando ya esperan 10 000 mensajes de una cuenta,
+o 100 000 en toda la pasarela, el siguiente se rechaza de inmediato como `creditQueueFull` (`0x14`, o
+un `503` de cola llena), también sin cargo.
+
+<Note>
+**Hasta 0.15.6** un mensaje así se rechazaba de inmediato. **De 0.15.9 a 0.17.1** esperaba como
+máximo 2 segundos, y una reserva fallida rechazaba de inmediato los mensajes en espera; SMPP
+respondía `0x14` y REST y gRPC registraban el rechazo como `queueFull`. El límite de espera, el
+reintento y las respuestas propias de `creditPending` son de 0.17.x. `smsg.balance.block.seconds` ya
+no fija la espera.
+</Note>
+
+Véase [Rechazos](/platform/troubleshooting/refusals#crédito-no-confirmado-a-tiempo) para responder a
+un cliente que vea estos.
 
 ## Rechazo
 
 Una cuenta sin crédito recibe `submit_sm_resp` estado **`0x402`**, HTTP **402**, motivo
 `insufficientCredit`.
 
-`ESME_RTHROTTLED` deliberadamente no se usa: significa otra cosa, y haría que un cliente retrocediera
-y reintentara una condición que solo una recarga puede levantar.
+`ESME_RTHROTTLED` deliberadamente no se usa para esto: le dice a un cliente que retroceda y reenvíe, lo
+cual es correcto para `creditPending` y erróneo para una condición que solo una recarga puede levantar.
 
 Que una [cuenta de unidades](/platform/billing/units-accounts) se quede sin sus propias unidades es un
 rechazo distinto, `noUnits` (`0x403`). Cuando su cuenta padre se queda sin dinero, sus logins reciben este.
@@ -135,8 +171,8 @@ Un mensaje cargado y luego descartado durante el enrutamiento recibe su crédito
 **exactamente una vez**. Un mensaje sin tarificar nunca se carga en absoluto.
 
 La recarga se dispara en un watermark mientras queda crédito, en un hilo de fondo. **Si el tráfico lo
-supera, el mensaje se rechaza inmediatamente** en lugar de que el hilo SMPP espere a la base de
-datos: un hilo de entrada bloqueado es peor que un mensaje rechazado.
+supera, el mensaje espera a la recarga** —sin retener un hilo SMPP, que pasa al siguiente submit— y
+solo se rechaza como `creditPending` si se agota la espera.
 
 ## Propiedades
 
@@ -148,6 +184,7 @@ datos: un hilo de entrada bloqueado es peor que un mensaje rechazado.
 | `smsg.balance.block.max` | `10000000` | Techo en una reserva individual |
 | `smsg.balance.refill.watermark.percent` | `20` | La recarga se dispara aquí |
 | `smsg.balance.recharge.poll.seconds` | `30` | Cuán pronto aterriza una recarga |
+| `smsg.balance.park.seconds` | `10` | Desde 0.17.x. Cuánto espera a su bloque un mensaje sin crédito a mano antes de rechazarse como `creditPending`. Para toda la pasarela, de 1 a 30; los envíos por API esperan como máximo 5 |
 
 ## Relacionado
 
@@ -156,6 +193,6 @@ datos: un hilo de entrada bloqueado es peor que un mensaje rechazado.
     Límites de crédito, y facturas exactas a partir de una aplicación aproximada.
   </Card>
   <Card title="Rechazos" icon="ban" href="/platform/troubleshooting/refusals">
-    Leer `insufficientCredit` contra un saldo positivo.
+    `creditPending`, y `insufficientCredit` contra un saldo positivo.
   </Card>
 </CardGroup>

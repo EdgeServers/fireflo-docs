@@ -40,16 +40,19 @@ ne bougent pas quand vous paginez, et en cliquer une filtre dessus.
 | **Product not sold** | Le login a nommé un product sans ligne activée dans le catalogue |
 | **No price configured** | Aucun tarif côté vente n'a correspondu, et le gateway refuse plutôt qu'envoyer sans facturation |
 | **Product not allowed for this login** | Le login n'est pas autorisé à nommer ce product |
-| **Queue full** | La file du routeur était à capacité et a refusé plutôt que faire grossir le tas |
+| **Credit not confirmed in time; resend** | À partir de 0.17.x (`creditPending`). Le crédit d'un compte approvisionné n'a pas été confirmé dans `smsg.balance.park.seconds`, habituellement parce que la base était lente ou ne répondait pas. Rien de facturé ; un renvoi passe — voir [Refus](/platform/troubleshooting/refusals#crédit-non-confirmé-à-temps) |
+| **Too many waiting for credit; resend** | À partir de 0.17.x (`creditQueueFull`). 10 000 messages du compte, ou 100 000 sur le gateway, attendaient déjà du crédit. Même cause que la précédente, en volume |
+| **Queue full** | La file du routeur était à capacité et a refusé plutôt que faire grossir le tas. Avant 0.17.x, les envois REST et gRPC refusés pour un crédit non confirmé à temps étaient aussi comptés ici |
 | **Could not be queued** | Accepté par les vérifications, mais n'a pas pu être passé — habituellement le broker |
 | **Never routed** | *Après acceptation.* Aucune règle activée n'a correspondu ; remboursé |
 | **Vendor refused it** | *Après acceptation.* L'opérateur a rejeté le submit ; remboursé |
 | **Dropped by a filter** | *Après acceptation.* Un filter de routage l'a arrêté ; remboursé |
 
 <Note>
-**« Out of credit » immédiatement après un redémarrage du gateway peut apparaître sur un compte
-approvisionné**, pendant que le crédit est réservé pour la première fois. Un message le rapporte
-et le suivant réussit. Persister après les premiers envois est une vraie pénurie.
+**Les messages d'un compte approvisionné attendent leur crédit** après un redémarrage, ou chaque
+fois que son bloc est épuisé, au lieu d'être refusés. De nombreux refus **Credit not confirmed in
+time** sur plusieurs comptes dans les mêmes minutes désignent la base. Un **Out of credit** qui
+persiste sur un compte approvisionné est une vraie pénurie, ou du crédit retenu dans `reserved`.
 </Note>
 
 Deux raisons méritent leur propre note. **Content not approved** est une comparaison exacte en

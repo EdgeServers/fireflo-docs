@@ -40,16 +40,19 @@ desplazan al paginar, y hacer clic en una filtra a ella.
 | **Product not sold** | El login nombró un producto sin fila activada en el catálogo |
 | **No price configured** | Ninguna tasa del lado de venta coincidió, y la pasarela rechaza en lugar de enviar sin facturar |
 | **Product not allowed for this login** | El login no puede nombrar ese producto |
-| **Queue full** | La cola del enrutador estaba a capacidad y rechazó en lugar de crecer el heap |
+| **Credit not confirmed in time; resend** | Desde 0.17.x (`creditPending`). El crédito de una cuenta con fondos no se confirmó dentro de `smsg.balance.park.seconds`, normalmente porque la base de datos iba lenta o no respondía. Nada cobrado; un reenvío pasa. Véase [Rechazos](/platform/troubleshooting/refusals#crédito-no-confirmado-a-tiempo) |
+| **Too many waiting for credit; resend** | Desde 0.17.x (`creditQueueFull`). Ya esperaban crédito 10 000 mensajes de la cuenta, o 100 000 en la pasarela. La misma causa que el anterior, a volumen |
+| **Queue full** | La cola del enrutador estaba a capacidad y rechazó en lugar de crecer el heap. Antes de 0.17.x, los envíos REST y gRPC rechazados por crédito no confirmado a tiempo también se contaban aquí |
 | **Could not be queued** | Aceptado por las comprobaciones, pero no se pudo entregar: normalmente el broker |
 | **Never routed** | *Tras aceptación.* Ninguna regla activada coincidió; reembolsado |
 | **Vendor refused it** | *Tras aceptación.* El operador rechazó el submit; reembolsado |
 | **Dropped by a filter** | *Tras aceptación.* Un filtro de enrutamiento lo detuvo; reembolsado |
 
 <Note>
-**"Out of credit" inmediatamente tras un reinicio de la pasarela puede aparecer en una cuenta con
-fondos**, mientras el crédito se reserva por primera vez. Un mensaje lo informa y el siguiente
-tiene éxito. Persistir más allá de los primeros envíos es una escasez real.
+**Los mensajes de una cuenta con fondos esperan a su crédito** tras un reinicio, o siempre que se
+agota su bloque, en lugar de rechazarse. Muchos rechazos **Credit not confirmed in time** en varias
+cuentas en los mismos minutos apuntan a la base de datos. **Out of credit** en una cuenta con fondos
+que persiste es una escasez real, o crédito retenido en `reserved`.
 </Note>
 
 Dos motivos merecen su propia nota. **Content not approved** es una comparación exacta fuera de los

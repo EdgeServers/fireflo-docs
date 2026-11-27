@@ -26,6 +26,10 @@ maintient une connexion ouverte, donc attendre bloquerait cette session plutôt 
 | SMPP | `submit_sm_resp` avec `ESME_RMSGQFUL` (`0x14`). Rien n'est facturé — le refus a lieu avant que le message soit accepté. |
 | REST | `503` avec `queueFull` dans `cdr_rejected`. Tout ce qui a été déjà facturé est remboursé, car le chemin REST facture avant de publier. |
 
+Un message refusé parce que son **crédit** n'a pas été confirmé n'est pas une file pleine, et à partir
+de 0.17.x il n'est ni enregistré ni répondu comme tel — voir la section suivante. Avant 0.17.x, il
+répondait `0x14` en SMPP et était enregistré `queueFull` en REST et en gRPC.
+
 <Note>
 **Choisir un nombre.** Il n'y a pas de défaut car une limite est une affirmation sur votre propre
 trafic et votre propre tas. Trop bas refuse des messages qui auraient été livrés ; trop haut et il ne
@@ -36,6 +40,35 @@ vérifiez d'abord la profondeur sous charge normale — `router_queue` et le `qu
 worker sont sur [`/ops/health`](/reference/management/endpoints), avec la limite affichée à côté une
 fois qu'elle est fixée.
 </Note>
+
+## Attente de crédit
+
+Sur une passerelle prépayée, un message qui ne trouve pas de crédit en main attend le bloc de crédit
+suivant du compte au lieu d'être refusé. Ces propriétés bornent cette attente. À partir de 0.17.x.
+
+| Propriété | Portée | Défaut | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.balance.park.seconds` | globale | `10` | Combien de temps un message attend son crédit avant d'être refusé `creditPending`, non facturé. De 1 à 30, lu à chaque usage. En SMPP, toute l'attente ; sur l'API HTTP, gRPC et l'API plateforme, au plus 5 secondes de celle-ci. |
+| `conf.status.creditPending` | par listener | `0x00000058` | Le statut `submit_sm_resp` de ce refus. Hexadécimal ou décimal ; une valeur qui n'est pas un nombre retombe sur le défaut avec un avertissement. Défaut `ESME_RTHROTTLED`, que les clients renvoient ; mettez `0x14` pour garder la réponse d'avant 0.17.x. |
+
+**Ce qu'elle limite.** Le temps entre l'arrivée d'une soumission et la réponse de la passerelle,
+pendant que son crédit est réservé. Rien n'est facturé ni envoyé avant que le crédit soit réservé,
+donc l'attente retient la réponse, pas l'argent. Une réservation qui échoue parce que la base est
+lente ou ne répond pas est retentée pendant l'attente.
+
+<Warning>
+**Gardez `smsg.balance.park.seconds` en dessous du délai de réponse SMPP de vos clients.** Un client
+qui cesse d'attendre avant que la passerelle réponde renvoie la soumission, et si la première est
+ensuite acceptée, les deux sont envoyées. Le défaut de 10 secondes est en dessous des défauts
+habituels des clients.
+</Warning>
+
+Deux plafonds fixes empêchent l'attente de devenir à son tour un problème de tas : quand **10 000**
+messages d'un compte, ou **100 000** sur toute la passerelle, attendent déjà, le suivant est refusé
+aussitôt comme `creditQueueFull` — `0x14` en SMPP, un `503` de file pleine sur l'API — non facturé.
+
+Les réponses, les causes et ce qu'il faut regarder sont dans
+[Refus](/platform/troubleshooting/refusals#crédit-non-confirmé-à-temps).
 
 ## Limites d'entrée HTTP
 
@@ -97,7 +130,7 @@ est refusé.**
 </Warning>
 
 **Pourquoi ils existent.** Un produit non défini est un état supporté qui envoie des messages
-gratuitement. `RateSnapshot.rulesFor` court-circuite un produit null vers le seul bucket any-product,
+gratuitement. La tarification cherche un message sans produit dans les seules règles any-product,
 donc un message sans produit ne peut jamais atteindre une règle avec portée produit. Rien ne
 correspond, le message reste non tarifé, et le débit de crédit retourne tôt. Sur un compte dont
 toutes les règles de tarif portent un produit, c'est la facture entière.

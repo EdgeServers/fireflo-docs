@@ -62,8 +62,10 @@ na mesma conta reportam todos o mesmo saldo e gastam todos o mesmo crédito.
 O crédito é reservado em **blocos** — `max(smsg.balance.block.min, price × smsg.balance.block.min.messages)`,
 vinte mensagens por padrão. E as recargas são **assíncronas**.
 
-Então uma mensagem que chega enquanto a próxima reserva está sendo feita recebe `402` mesmo que
-este endpoint reporte saldo positivo. **É transitório; o retry tem sucesso.**
+Então uma mensagem pode chegar enquanto a próxima reserva está sendo feita. Ela espera por ela, e só
+é recusada se o crédito ainda não estiver confirmado depois da espera (a partir da 0.17.x como `503`
+com código `CREDIT_PENDING` e `Retry-After: 2`, não `402`), mesmo que este endpoint reporte saldo
+positivo. **É transitório; o retry tem sucesso.**
 
 O tamanho do bloco não deixa crédito preso: uma reserva cai do bloco, para o piso, e por fim para a
 única mensagem que pediu, então uma conta gasta cada unidade que tem.

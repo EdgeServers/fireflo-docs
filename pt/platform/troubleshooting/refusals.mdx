@@ -23,13 +23,16 @@ que as produziu.
 | `insufficientCredit` | Saldo pré-pago não cobriria | `0x402` / `402` | Faça top up |
 | `noUnits` | Um login de uma [conta de unidades](/platform/billing/units-accounts) não tem mais unidades do seu produto | `0x403` / `402` `NO_UNITS` | Dê unidades a ela, pela plataforma que a gerencia |
 | `unitsPending` | As unidades dela estavam retidas por outro nó por um momento | `0x14` / `503` `UNITS_PENDING` | Nada: um retry passa |
+| `creditPending` | A partir da 0.17.x. O crédito de uma conta fundeada não foi confirmado dentro do limite de espera | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Nada para o cliente: um reenvio passa. Olhe o banco de dados; veja [abaixo](#crédito-não-confirmado-a-tempo) |
+| `creditQueueFull` | A partir da 0.17.x. Mensagens demais da conta já estavam esperando pelo seu crédito | `0x14` / `503`, como uma fila cheia | A mesma causa de `creditPending`, em volume |
+| `queueFull` | A fila do router estava no limite | `0x14` / `503` | Descubra por que a fila não está escoando; geralmente um fornecedor |
+| `filtered` | Um filtro recusou | varia | Leia o filtro |
+| `maxAttempts` | **Não é uma recusa.** O roteamento desistiu | nada na hora do submit | [Nada é entregue](/platform/troubleshooting/nothing-is-delivered) |
 
 A coluna SMPP é o que o `submit_sm_resp` do cliente carregou; a coluna HTTP é o equivalente REST.
 A maioria são códigos **específicos do fornecedor** na faixa `0x4xx`, e não os SMPP padrão. As
-exceções são `0xC3`, que é `ESME_RMISSINGOPTPARAM` da especificação, e `0x14`. O cliente SMPP do cliente não vai
+exceções são `0xC3`, que é `ESME_RMISSINGOPTPARAM` da especificação, e `0x14` e `0x58`. O cliente SMPP do cliente não vai
 ter nomes para os valores `0x4xx`, então cite a palavra da razão, não o número.
-| `filtered` | Um filtro recusou | varia | Leia o filtro |
-| `maxAttempts` | **Não é uma recusa.** O roteamento desistiu | nada na hora do submit | [Nada é entregue](/platform/troubleshooting/nothing-is-delivered) |
 
 ## O que toda recusa tem em comum
 
@@ -90,21 +93,83 @@ inteira de incidente em um número que você lê com calma.
 
 </AccordionGroup>
 
+## Crédito não confirmado a tempo
+
+`creditPending` é a recusa sobre a qual pergunta um cliente com dinheiro na conta. É transitória, não
+custa nada a ele, e a correção quase nunca está do lado dele.
+
+**Como o crédito chega a uma mensagem.** O gateway não vai ao banco de dados a cada mensagem. Ele
+reserva o crédito de uma conta em **blocos** (dimensionados pelo que a conta enviou nos últimos dez
+segundos, nunca menos que `smsg.balance.block.min.messages` mensagens, 20 por padrão) e gasta do
+bloco em memória. Uma mensagem que não encontra crédito em mãos **espera** pelo próximo bloco em vez
+de ser recusada, e é cobrada assim que ele chega. Se uma reserva falha porque o banco de dados está
+lento ou não responde, o gateway tenta de novo enquanto a mensagem espera.
+
+Só quando a espera acaba a mensagem é recusada, como `creditPending`:
+
+| Como foi enviada | O que o remetente recebe |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` com `0x58` (`ESME_RTHROTTLED`), o `conf.status.creditPending` do listener. Antes da 0.17.x era `0x14`. |
+| REST | `503`, código `CREDIT_PENDING`, `Retry-After: 2`. Antes da 0.17.x um `503` sem código, registrado como `queueFull`. |
+| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, repetir após 2 segundos. Antes da 0.17.x `QUEUE_FULL`, registrado como `queueFull`. |
+| API da plataforma | Status de envio `CREDIT_PENDING`. |
+
+**Nada é cobrado**, e **reenviar funciona**: tanto `0x58` quanto um `503` dizem a um cliente para
+esperar e enviar de novo, e o reenvio é cobrado uma vez, normalmente.
+
+**A espera** é `smsg.balance.park.seconds`, para todo o gateway: **10 segundos** por padrão, de 1 a
+30. Um envio pela API HTTP, gRPC ou pela API da plataforma espera no máximo 5 segundos dela, porque o
+timeout do próprio chamador geralmente não é muito maior. Veja
+[Limites](/reference/config/limits#aguardando-crédito).
+
+**As causas**, na ordem em que ocorrem:
+
+1. **O banco de dados do gateway está lento, ou não está respondendo.** Um bloco não pode ser
+   reservado até que ele responda. Todas as contas do gateway que ficam sem bloco durante a parada
+   esperam juntas, então essas recusas vêm em grupo, em muitas contas. Antes da 0.17.x uma reserva
+   que falhava recusava as mensagens em espera de imediato, e a espera era de no máximo 2 segundos.
+2. **Em gateways antes da 0.15.9, várias mensagens chegando juntas após um período quieto.** Essas
+   versões recusavam de imediato uma mensagem que não encontrava bloco em mãos, então um cliente
+   enviando em rajadas (um lote a cada meio minuto, digamos) tinha parte de cada rajada recusada
+   enquanto o próximo bloco era reservado. A 0.15.9 fez essa mensagem esperar (no máximo 2 segundos),
+   e a 0.17.x tornou a espera configurável e a reserva repetida.
+
+`creditQueueFull` é a mesma causa em volume: quando **10,000** mensagens de uma conta, ou **100,000**
+em todo o gateway, já estão esperando crédito, a próxima é recusada de imediato (`0x14` via SMPP, um
+`503` de fila cheia via API) em vez de entrar numa fila que não anda. Nada é cobrado e um reenvio
+funciona assim que o banco de dados responde.
+
+**O que olhar:**
+
+- A página **Refused** no painel de controle: a contagem em **Credit not confirmed in time; resend**
+  (e **Too many waiting for credit; resend**) no período, e se é uma conta ou muitas. Muitas contas
+  nos mesmos minutos apontam para o banco de dados.
+- O tempo de resposta do banco de dados no mesmo período. Um banco de dados respondendo em poucos
+  milissegundos não produz essas recusas.
+- O log do gateway. `balance.credit.parked` é escrito quando as mensagens de uma conta tiveram de
+  esperar pelo seu crédito, com quanto tempo esperaram e quantas eram; `balance.credit.pending`
+  quando o crédito não pôde ser reservado a tempo e mensagens foram recusadas `creditPending`.
+
+<Warning>
+**Mantenha `smsg.balance.park.seconds` abaixo do timeout de resposta SMPP dos seus clientes.** Um
+cliente que para de esperar antes de o gateway responder reenvia, e se o primeiro submit for então
+aceito, as duas cópias são enviadas. 10 segundos está abaixo dos padrões usuais dos clientes; aumente
+só sabendo quanto os clientes dos seus clientes esperam.
+</Warning>
+
 ## `insufficientCredit` em uma conta com dinheiro
 
-Não é contradição, e é a surpresa mais comum na operação pré-paga.
+`insufficientCredit` significa que a reserva não encontrou dinheiro para cobrir a mensagem. Uma
+mensagem esperando pelo seu bloco nunca é recusada assim.
 
-**Crédito é reservado em blocos, não por mensagem.** O bloco é `max(smsg.balance.block.min,
-price × smsg.balance.block.min.messages)`. Vinte mensagens por padrão.
-
-Uma reserva tenta **três degraus decrescentes**: o bloco cheio, esse piso, depois a única mensagem
-que pediu. Assim o piso nunca deixa dinheiro parado. Uma conta gasta cada unidade que tem.
+**O piso nunca deixa dinheiro parado.** Uma reserva tenta **três degraus decrescentes**: o bloco
+cheio, o piso `smsg.balance.block.min.messages`, depois a única mensagem que pediu. Uma conta
+fundeada para três mensagens envia três.
 
 <Tip>
-**Uma recusa em uma conta com dinheiro restante geralmente é uma recarga em trânsito.** Recargas são
-assíncronas, então uma mensagem chegando no meio de uma reserva pode ser recusada; a retentativa dá
-certo. Recusas persistentes com saldo saudável são outro problema. Verifique o ledger e
-`reserved`.
+**`insufficientCredit` persistente com saldo saudável** geralmente é crédito retido em `reserved`,
+por outro nó ou deixado preso por um `kill -9`. Verifique o ledger e `reserved`; veja
+[Crédito pré-pago](/platform/billing/prepaid-credit).
 </Tip>
 
 ## Relacionados

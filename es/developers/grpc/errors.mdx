@@ -48,12 +48,13 @@ mismo retardo, para las bibliotecas cliente que lo respetan.
 | El saldo no lo cubre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recargue y reintente. No se cobró nada. |
 | No le quedan unidades de su producto (una cuenta de unidades, desde 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Pida más unidades a su proveedor. No se cobró nada. |
 | Sus unidades están retenidas en otro sitio por un momento | 503 | `UNAVAILABLE` | `UNITS_PENDING` | 5 s | Reintente tras el retardo. No se cobró nada. |
+| Su saldo no pudo confirmarse a tiempo (desde 0.17.x) | 503 | `UNAVAILABLE` | `CREDIT_PENDING` | 2 s | Reintente tras el retardo. No se cobró nada. La cuenta tiene dinero; la pasarela esperó hasta 5 s a su saldo y desistió. |
 | Por encima de los mensajes por segundo de su cuenta | 429 | `RESOURCE_EXHAUSTED` | `RATE_LIMITED` | 1 s | Espere y reintente. |
 | Sender ID no aprobado | 403 | `PERMISSION_DENIED` | `HEADER_NOT_APPROVED` | — | Use un sender ID aprobado, o solicite este. |
 | La redacción no coincide con ninguna plantilla aprobada | 403 | `PERMISSION_DENIED` | `CONTENT_NOT_APPROVED` | — | Envíe una redacción aprobada, o solicite una plantilla. |
 | Producto no vendido / no permitido para el login / sin tarifa | 403 | `PERMISSION_DENIED` | `PRODUCT_NOT_SOLD` / `PRODUCT_NOT_ALLOWED` / `UNRATED` | — | Pregunte a su proveedor. No reintente sin cambios. |
 | No hay ruta para el destino | 403 | `PERMISSION_DENIED` | `NO_ROUTE` | — | Pregunte a su proveedor. No reintente sin cambios. |
-| La pasarela no está aceptando mensajes en este momento | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Reintente tras el retardo. |
+| La pasarela no está aceptando mensajes en este momento, o (desde 0.17.x) demasiados mensajes suyos esperan ya saldo | 503 | `UNAVAILABLE` | `QUEUE_FULL` | 5 s | Reintente tras el retardo. No se cobró nada. |
 | La pasarela se está reiniciando | 503 | `UNAVAILABLE` | `SHUTTING_DOWN` | 5 s | Reconéctese, inicie sesión, reintente. |
 | El operador del destino está saturado / no conectado | 503 | `UNAVAILABLE` | `VENDOR_BACKLOG` / `VENDOR_UNAVAILABLE` | 30 s | Reintente tras el retardo. |
 | La base de datos de la pasarela no da abasto | 503 | `UNAVAILABLE` | `DB_UNAVAILABLE` | 5 s | Reintente tras el retardo. |

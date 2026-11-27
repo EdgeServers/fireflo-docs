@@ -3,8 +3,9 @@ title: "Erros da API"
 description: "Todo status que a API REST retorna, o que provoca cada um e a ordem em que as checagens rodam. Isso decide qual erro você realmente vê."
 ---
 
-Toda falha é um objeto JSON com um único `message`. O status HTTP é a parte legível por máquina; a
-string é para uma pessoa lendo um log.
+Toda falha é um objeto JSON com um `message`. O status HTTP é a parte legível por máquina; a
+string é para uma pessoa lendo um log. Algumas recusas também trazem um `code` que nomeia a causa, e
+as que se resolvem sozinhas, um cabeçalho `Retry-After`.
 
 ```json
 {"message":"Authentication failure"}
@@ -102,6 +103,8 @@ dois são permanentes. Não repita nenhum.
 | 429 | `Rate limit exceeded` | Acima do limite de mensagens por segundo da conta. |
 | 500 | `Cannot send message` | Aceito e não foi possível enfileirar. **Qualquer cobrança é revertida.** |
 | 503 | código `UNITS_PENDING` | As unidades de um login de unidades estão retidas por outro nó do gateway por um momento. Traz `Retry-After: 5`. Nada foi cobrado. |
+| 503 | código `CREDIT_PENDING` | A partir da 0.17.x. A conta tem fundos, mas seu crédito não foi confirmado em 5 segundos; geralmente o banco de dados do gateway estava lento ou sem responder. Traz `Retry-After: 2`. Nada foi cobrado. Antes da 0.17.x este caso respondia como uma fila cheia. |
+| 503 | uma mensagem de fila cheia, sem `code` | A fila do gateway está no limite, ou (a partir da 0.17.x) mensagens demais da conta já estão esperando pelo seu crédito. Nada foi cobrado, ou a cobrança foi revertida. |
 
 <Warning>
 **Não existe `Retry-After` em um `429`.** Faça backoff no seu próprio ritmo: exponencial, com
@@ -118,7 +121,9 @@ jitter. Um retry em intervalo fixo em muitos workers os ressincroniza no próxim
 | 429 | **Sim**, com backoff | Transitório por definição. |
 | 500 | **Sim**, uma ou duas vezes | A cobrança foi revertida, então um retry não é cobrança dobrada. |
 | 503 com código `UNITS_PENDING` | **Sim**, após o `Retry-After` | As unidades voltam em segundos. |
-| 502, 503, 504 | **Sim** | Não vem do gateway. É um proxy na frente. |
+| 503 com código `CREDIT_PENDING` | **Sim**, após o `Retry-After` | O crédito é confirmado assim que o banco de dados responde. |
+| 503 com outro `code`, ou uma mensagem de fila cheia | **Sim**, com backoff | Do próprio gateway; resolve quando o gateway escoa. |
+| 502, 504, ou um 503 sem corpo JSON do FireFlo | **Sim** | Não vem do gateway. É um proxy na frente. |
 
 <Tip>
 **Um `500` é seguro para repetir precisamente porque a cobrança é revertida.** É uma propriedade

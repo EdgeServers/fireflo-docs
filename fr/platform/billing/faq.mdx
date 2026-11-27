@@ -6,19 +6,25 @@ description: "Les questions que les opérateurs posent une fois que l'argent bou
 <AccordionGroup>
 
 <Accordion title="Un compte refuse des messages et il a de l'argent dessus">
-Presque toujours un **rechargement en cours**, pas du crédit bloqué.
+Regardez d'abord la raison. Avec de l'argent sur le compte, c'est presque toujours
+**`creditPending`**, pas du crédit bloqué.
 
 Le crédit est réservé par blocs, et les rechargements sont asynchrones par conception — donc un
-message arrivant pendant que la prochaine réservation est prélevée peut être refusé avec encore de
-l'argent sur le compte. Une nouvelle tentative réussit.
+message peut arriver pendant que la prochaine réservation est prélevée. Il l'**attend**, jusqu'à
+`smsg.balance.park.seconds` (10 secondes par défaut, pour toute la passerelle ; 5 au plus pour les
+envois API), et est débité quand le bloc atterrit. Ce n'est que si le crédit n'est toujours pas
+confirmé à ce moment-là (le plus souvent parce que la base était lente ou ne répondait pas) qu'il est
+refusé `creditPending` : `0x58` en SMPP (`conf.status.creditPending`), `503` `CREDIT_PENDING` en
+REST. Rien n'est débité, et un renvoi réussit. Voir
+[Refus](/platform/troubleshooting/refusals#crédit-non-confirmé-à-temps).
 
 **Le plancher de bloc ne bloque rien.** Une réservation essaie le bloc complet, puis le plancher
 libellé en messages, puis juste le message unique qui a demandé, donc un compte dépense chaque
 unité qu'il détient. Un compte financé pour trois messages envoie trois.
 
-Si cela arrive sur un compte **bien approvisionné**, la cause est différente et historique : le
-plancher était autrefois un montant en devise, ce qui pouvait dimensionner un bloc à exactement un
-message pour une destination coûteuse. C'est ce que `smsg.balance.block.min.messages` existe pour
+Si un compte **bien approvisionné** est refusé `insufficientCredit`, la cause est différente : du
+crédit retenu dans `reserved`, ou, historiquement, le plancher qui était un montant en devise, ce qui
+pouvait dimensionner un bloc à exactement un message pour une destination coûteuse. C'est ce que `smsg.balance.block.min.messages` existe pour
 empêcher.
 </Accordion>
 

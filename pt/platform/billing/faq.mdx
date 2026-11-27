@@ -6,19 +6,26 @@ description: "As perguntas que os operadores fazem uma vez que o dinheiro está 
 <AccordionGroup>
 
 <Accordion title="Uma conta está recusando mensagens e tem dinheiro nela">
-Quase sempre um **refill em trânsito**, não crédito preso.
+Olhe o motivo primeiro. Com dinheiro na conta é quase sempre **`creditPending`**, não crédito
+preso.
 
-Crédito é reservado em blocos, e refills são assíncronos por design. Portanto uma mensagem que chega
-enquanto a próxima reserva está sendo tomada pode ser recusada com dinheiro ainda na conta. Uma
-retentativa funciona.
+Crédito é reservado em blocos, e refills são assíncronos por design. Portanto uma mensagem pode
+chegar enquanto a próxima reserva está sendo tomada. Ela **espera** por ela, até
+`smsg.balance.park.seconds` (10 segundos por padrão, para todo o gateway; no máximo 5 para envios
+pela API), e é cobrada quando o bloco chega. Só se o crédito ainda não estiver confirmado até lá
+(geralmente porque o banco de dados estava lento ou sem responder) ela é recusada `creditPending`:
+`0x58` via SMPP (`conf.status.creditPending`), `503` `CREDIT_PENDING` via REST. Nada é cobrado, e o
+reenvio funciona. Veja
+[Recusas](/platform/troubleshooting/refusals#crédito-não-confirmado-a-tempo).
 
 **O piso do bloco não deixa nada preso.** Uma reserva tenta o bloco cheio, depois o piso denominado
 em mensagens, depois apenas a única mensagem que pediu, portanto uma conta gasta cada unidade que
 possui. Uma que foi fundeada para três mensagens envia três.
 
-Se isso acontece em uma conta **bem fundeada**, a causa é diferente e histórica: o piso costumava
-ser um valor em moeda, que podia dimensionar um bloco em exatamente uma mensagem para um destino
-caro. É para isso que `smsg.balance.block.min.messages` existe.
+Se uma conta **bem fundeada** é recusada com `insufficientCredit`, a causa é diferente: crédito
+retido em `reserved`, ou (historicamente) o piso ser um valor em moeda, que podia dimensionar um
+bloco em exatamente uma mensagem para um destino caro. É para isso que
+`smsg.balance.block.min.messages` existe.
 </Accordion>
 
 <Accordion title="Um top-up não chegou">

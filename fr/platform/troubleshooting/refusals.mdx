@@ -23,14 +23,17 @@ requête qui les a produites.
 | `insufficientCredit` | Le solde prépayé ne le couvrait pas | `0x402` / `402` | Rechargez |
 | `noUnits` | Un login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit | `0x403` / `402` `NO_UNITS` | Donnez-lui des unités, depuis la plateforme qui le gère |
 | `unitsPending` | Ses unités étaient retenues un instant par un autre nœud | `0x14` / `503` `UNITS_PENDING` | Rien : une nouvelle tentative passe |
+| `creditPending` | À partir de 0.17.x. Le crédit d'un compte approvisionné n'a pas été confirmé dans la limite d'attente | `0x58` (`conf.status.creditPending`) / `503` `CREDIT_PENDING` | Rien côté client : un renvoi passe. Regardez la base — voir [plus bas](#crédit-non-confirmé-à-temps) |
+| `creditQueueFull` | À partir de 0.17.x. Trop de messages du compte attendaient déjà leur crédit | `0x14` / `503`, comme une file pleine | La même cause que `creditPending`, en volume |
+| `queueFull` | La file du routeur était à sa limite | `0x14` / `503` | Trouvez pourquoi la file ne se vide pas — le plus souvent un fournisseur |
+| `filtered` | Un filtre l'a refusé | varie | Lisez le filtre |
+| `maxAttempts` | **Pas un refus.** Le routage a abandonné | rien à la soumission | [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered) |
 
 La colonne SMPP est ce que le `submit_sm_resp` du client transportait ; la colonne HTTP est
 l'équivalent REST. La plupart sont des codes **spécifiques au fournisseur** dans la plage
 `0x4xx` plutôt que des codes SMPP standard. Les exceptions sont `0xC3`, qui est `ESME_RMISSINGOPTPARAM`
-de la spécification, et `0x14`. Le client SMPP d'un customer n'aura pas de noms pour les valeurs `0x4xx`, donc
+de la spécification, ainsi que `0x14` et `0x58`. Le client SMPP d'un customer n'aura pas de noms pour les valeurs `0x4xx`, donc
 citez-lui le mot-clé de la raison, pas le nombre.
-| `filtered` | Un filtre l'a refusé | varie | Lisez le filtre |
-| `maxAttempts` | **Pas un refus.** Le routage a abandonné | rien à la soumission | [Rien n'est livré](/platform/troubleshooting/nothing-is-delivered) |
 
 ## Ce que tous les refus ont en commun
 
@@ -94,22 +97,85 @@ transforme toute cette classe d'incidents en un nombre que vous lisez à loisir.
 
 </AccordionGroup>
 
+## Crédit non confirmé à temps
+
+`creditPending` est le refus dont parle un client qui a de l'argent sur le compte. Il est transitoire,
+il ne lui coûte rien, et le correctif n'est presque jamais de son côté.
+
+**Comment le crédit atteint un message.** La passerelle ne va pas en base pour chaque message. Elle
+réserve le crédit d'un compte par **blocs** — dimensionnés d'après ce que le compte a envoyé dans les
+dix dernières secondes, jamais moins que l'équivalent de `smsg.balance.block.min.messages` messages
+(20 par défaut) — et dépense le bloc en mémoire. Un message qui ne trouve pas de crédit en main
+**attend** le bloc suivant au lieu d'être refusé, et est facturé dès qu'il arrive. Si une réservation
+échoue parce que la base est lente ou ne répond pas, la passerelle réessaie pendant que le message
+attend.
+
+Ce n'est que lorsque l'attente expire que le message est refusé, comme `creditPending` :
+
+| Comment il a été envoyé | Ce que l'expéditeur reçoit |
+| :--- | :--- |
+| SMPP | `submit_sm_resp` avec `0x58` (`ESME_RTHROTTLED`) — le `conf.status.creditPending` du listener. Avant 0.17.x, c'était `0x14`. |
+| REST | `503`, code `CREDIT_PENDING`, `Retry-After: 2`. Avant 0.17.x, un `503` sans code, enregistré comme `queueFull`. |
+| gRPC | `UNAVAILABLE`, `ErrorDetail.code` `CREDIT_PENDING`, nouvelle tentative après 2 secondes. Avant 0.17.x, `QUEUE_FULL`, enregistré comme `queueFull`. |
+| API plateforme | Statut d'envoi `CREDIT_PENDING`. |
+
+**Rien n'est facturé**, et **renvoyer fonctionne** : `0x58` comme un `503` disent à un client
+d'attendre et de renvoyer, et le renvoi est facturé une fois, normalement.
+
+**L'attente** est `smsg.balance.park.seconds`, pour toute la passerelle : **10 secondes** par défaut,
+de 1 à 30. Un envoi par l'API HTTP, gRPC ou l'API plateforme en attend au plus 5 secondes, car le
+délai d'attente de l'appelant lui-même n'est en général guère plus long. Voir
+[Limites](/reference/config/limits#attente-de-crédit).
+
+**Les causes**, dans l'ordre où elles surviennent :
+
+1. **La base de la passerelle est lente, ou ne répond pas.** Un bloc ne peut pas être réservé tant
+   qu'elle ne répond pas. Tous les comptes de la passerelle qui épuisent leur bloc pendant le blocage
+   attendent ensemble, donc ces refus arrivent groupés sur de nombreux comptes. Avant 0.17.x, une
+   réservation qui échouait refusait aussitôt les messages en attente, et l'attente était d'au plus
+   2 secondes.
+2. **Sur les passerelles antérieures à 0.15.9, plusieurs messages arrivant ensemble après une période
+   calme.** Ces versions refusaient aussitôt un message qui ne trouvait pas de bloc en main, donc un
+   client envoyant par rafales — un lot toutes les trente secondes, par exemple — voyait une partie de
+   chaque rafale refusée pendant que le bloc suivant était réservé. 0.15.9 a fait attendre un tel
+   message (au plus 2 secondes), et 0.17.x a rendu l'attente réglable et la réservation retentée.
+
+`creditQueueFull` est la même cause en volume : quand **10 000** messages d'un compte, ou **100 000**
+sur toute la passerelle, attendent déjà leur crédit, le suivant est refusé aussitôt — `0x14` en SMPP,
+un `503` de file pleine sur l'API — au lieu de rejoindre une file qui n'avance pas. Rien n'est facturé
+et un renvoi fonctionne dès que la base répond.
+
+**Ce qu'il faut regarder :**
+
+- La page **Refused** du panneau de contrôle : le compte sous **Credit not confirmed in time; resend**
+  (et **Too many waiting for credit; resend**) sur la période, et s'il s'agit d'un compte ou de
+  plusieurs. De nombreux comptes dans les mêmes minutes désignent la base.
+- Le temps de réponse de la base sur la même période. Une base qui répond en quelques millisecondes ne
+  produit pas ces refus.
+- Le log de la passerelle. `balance.credit.parked` est écrit quand les messages d'un compte ont dû
+  attendre leur crédit, avec la durée de l'attente et leur nombre ; `balance.credit.pending` quand le
+  crédit n'a pas pu être réservé à temps et que des messages ont été refusés `creditPending`.
+
+<Warning>
+**Gardez `smsg.balance.park.seconds` en dessous du délai de réponse SMPP de vos clients.** Un client
+qui cesse d'attendre avant que la passerelle réponde renvoie, et si la première soumission est ensuite
+acceptée, les deux copies sont envoyées. 10 secondes est en dessous des défauts habituels des clients ;
+ne l'augmentez qu'en sachant combien de temps attendent les clients de vos clients.
+</Warning>
+
 ## `insufficientCredit` sur un compte avec de l'argent dessus
 
-Pas une contradiction, et la surprise la plus fréquente en exploitation prépayée.
+`insufficientCredit` signifie que la réservation n'a pas trouvé d'argent pour couvrir le message. Un
+message qui attend son bloc n'est jamais refusé de cette façon.
 
-**Le crédit est réservé par blocs, pas par message.** Le bloc est `max(smsg.balance.block.min,
-price × smsg.balance.block.min.messages)` — l'équivalent de vingt messages par défaut.
-
-Une réservation essaie **trois paliers décroissants** : le bloc complet, ce plancher, puis le seul
-message qui a demandé. Donc le plancher n'immobilise jamais d'argent — un compte dépense chaque
-unité qu'il détient.
+**Le plancher n'immobilise jamais d'argent.** Une réservation essaie **trois paliers décroissants** :
+le bloc complet, le plancher `smsg.balance.block.min.messages`, puis le seul message qui a demandé. Un
+compte approvisionné pour trois messages en envoie trois.
 
 <Tip>
-**Un refus sur un compte avec de l'argent restant est généralement un rechargement en vol.** Les
-rechargements sont asynchrones, donc un message arrivant en pleine réservation peut être refusé ; la
-nouvelle tentative réussit. Des refus persistants avec un solde sain sont un problème différent —
-vérifiez le grand livre et `reserved`.
+**Un `insufficientCredit` persistant avec un solde sain** vient généralement de crédit retenu dans
+`reserved` — par un autre nœud, ou immobilisé par un `kill -9`. Vérifiez le grand livre et
+`reserved` ; voir [Crédit prépayé](/platform/billing/prepaid-credit).
 </Tip>
 
 ## Voir aussi

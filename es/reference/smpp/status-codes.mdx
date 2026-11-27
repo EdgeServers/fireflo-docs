@@ -12,13 +12,18 @@ Estados que FireFlo devuelve en `submit_sm_resp` más allá del conjunto estánd
 | `0x403` | `STATUS_NO_UNITS` | Desde 0.16.0. A un login de una [cuenta de unidades](/platform/billing/units-accounts) no le quedan unidades de su producto. No se cobró nada. El valor por defecto de `conf.status.noUnits`, configurable por listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Rechazado en **bind**, no al enviar: el producto resuelto está en blanco, o no nombra ninguna fila habilitada en `app_product`. Solo cuando `conf.product.required` está activo. |
 | `0x418` | `STATUS_NO_RATE` | El mensaje no coincidió con ninguna regla de tarifa de venta. Solo cuando `smsg.rating.unrated.refuse` está activo; de lo contrario se acepta y no se cobra nada. |
-| `0x14` | `ESME_RMSGQFUL` | La cola del router o la cola entrante de este listener está en su límite. Solo cuando `smsg.queue.capacity` o `inQueue.capacity` está establecido; ambos predeterminan a sin límite. |
+| `0x14` | `ESME_RMSGQFUL` | La cola del router o la cola entrante de este listener está en su límite (solo cuando `smsg.queue.capacity` o `inQueue.capacity` está establecido; ambos predeterminan a sin límite). Desde 0.17.x, también demasiados mensajes de la cuenta esperando ya su crédito (`creditQueueFull`: 10 000 por cuenta, 100 000 por pasarela). No se cobró nada. |
+| `0x58` | `ESME_RTHROTTLED` | Por encima de un techo de mensajes por segundo, del login o de la cuenta. Desde 0.17.x, también una cuenta con fondos cuyo crédito no se confirmó dentro del límite de espera (`creditPending`, consulta [Crédito prepago](/platform/billing/prepaid-credit#en-espera-de-crédito)). No se cobró nada. El caso del crédito es el valor por defecto de `conf.status.creditPending`, configurable por listener; antes de 0.17.x respondía `0x14`. |
 
 ## Qué es deliberadamente no cada uno
 
 **`0x402` no es `ESME_RTHROTTLED`.** Throttled le dice a un cliente que retroceda y reintente, que es exactamente
 lo incorrecto para una condición que solo una recarga o una factura pueden despejar. Un cliente que reintenta un rechazo
 de crédito quema su propia capacidad sin lograr nada.
+
+**`0x58` por crédito no confirmado a tiempo es el caso opuesto.** La cuenta tiene dinero; su crédito
+no pudo confirmarse dentro de `smsg.balance.park.seconds`, normalmente porque la base de datos iba
+lenta o no respondía. Un reenvío un momento después pasa, que es lo que hace un cliente ante `0x58`.
 
 <Note>
 Prepago y pospago rechazan **idénticamente**. `0x402` sobre SMPP, `402` con `insufficientCredit` sobre
@@ -29,8 +34,9 @@ HTTP, sea cual sea el modo en que la cuenta esté. La integración de un cliente
 distinta de que su proveedor se quede sin dinero, y solo quien le da unidades puede resolverla. Para un
 login de unidades, `0x402` significa que se agotó el crédito de su cuenta **padre**; la unidad que tomó se devuelve.
 
-**`0x14` es una señal de contrapresión bien educada.** Un ESME que la respete retrocede y reintenta. Este
-es el único rechazo aquí que un cliente *debería* reintentar.
+**`0x14` y `0x58` son señales de contrapresión bien educadas.** Un ESME que las respete retrocede y
+reenvía. Son los rechazos de aquí que un cliente *debería* reintentar: una cola llena, una cola de
+espera de crédito llena, un techo de tasa y el crédito no confirmado a tiempo se resuelven solos.
 
 **`0x40F` lleva un código y dos líneas WARN distintas.** Producto en blanco versus nombre desconocido. El
 cliente solo ve el número, así que el log es donde se distinguen.

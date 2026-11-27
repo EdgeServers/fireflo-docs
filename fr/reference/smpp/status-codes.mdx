@@ -13,13 +13,19 @@ la liste.**
 | `0x403` | `STATUS_NO_UNITS` | À partir de 0.16.0. Un login d'un [compte à unités](/platform/billing/units-accounts) n'a plus d'unités de son produit. Rien n'a été facturé. La valeur par défaut de `conf.status.noUnits`, réglable par listener. |
 | `0x40F` | `STATUS_INVALID_PRODUCT` | Refusé au **bind**, pas à la soumission : le produit résolu est vide, ou ne nomme aucune ligne activée dans `app_product`. Uniquement quand `conf.product.required` est activé. |
 | `0x418` | `STATUS_NO_RATE` | Le message n'a correspondu à aucune règle de tarif vente. Uniquement quand `smsg.rating.unrated.refuse` est activé ; sinon il est accepté et rien n'est facturé. |
-| `0x14` | `ESME_RMSGQFUL` | La file du routeur ou la file entrante de ce listener est à sa limite. Uniquement quand `smsg.queue.capacity` ou `inQueue.capacity` est réglé ; les deux valent illimité par défaut. |
+| `0x14` | `ESME_RMSGQFUL` | La file du routeur ou la file entrante de ce listener est à sa limite (uniquement quand `smsg.queue.capacity` ou `inQueue.capacity` est réglé ; les deux valent illimité par défaut). À partir de 0.17.x, aussi trop de messages du compte qui attendent déjà leur crédit (`creditQueueFull` : 10 000 par compte, 100 000 par passerelle). Rien n'a été facturé. |
+| `0x58` | `ESME_RTHROTTLED` | Au-delà d'un plafond de messages par seconde, celui du login ou du compte. À partir de 0.17.x, aussi un compte approvisionné dont le crédit n'a pas été confirmé dans la limite d'attente (`creditPending`, voir [Crédit prépayé](/platform/billing/prepaid-credit#attente-de-crédit)). Rien n'a été facturé. Le cas du crédit est la valeur par défaut de `conf.status.creditPending`, réglable par listener ; avant 0.17.x, il répondait `0x14`. |
 
 ## Ce que chacun n'est délibérément pas
 
 **`0x402` n'est pas `ESME_RTHROTTLED`.** Throttled dit à un client de faire un back-off et de
 réessayer, ce qui est exactement faux pour une condition que seul un rechargement ou une facture
 peut lever. Un client qui réessaie un refus de crédit brûle sa propre capacité sans rien accomplir.
+
+**`0x58` pour un crédit non confirmé à temps est le cas inverse.** Le compte a de l'argent ; son
+crédit n'a pas pu être confirmé dans `smsg.balance.park.seconds`, le plus souvent parce que la base
+était lente ou ne répondait pas. Un renvoi un instant plus tard passe, et c'est ce que fait un client
+sur `0x58`.
 
 <Note>
 Prépayé et postpayé refusent **à l'identique**. `0x402` sur SMPP, `402` avec `insufficientCredit`
@@ -31,8 +37,10 @@ besoin de savoir dans lequel il se trouve.
 différente de son fournisseur à court d'argent, et seul celui qui lui donne des unités peut la lever.
 Pour un login à unités, `0x402` signifie que le crédit de son **parent** est épuisé ; l'unité prise est rendue.
 
-**`0x14` est un signal de contre-pression bien élevé.** Un ESME qui le respecte fait un back-off et
-réessaie. C'est le seul refus ici qu'un client *devrait* réessayer.
+**`0x14` et `0x58` sont des signaux de contre-pression bien élevés.** Un ESME qui les respecte fait
+un back-off et renvoie. Ce sont les refus ici qu'un client *devrait* réessayer : une file pleine, une
+file d'attente de crédit pleine, un plafond de débit et un crédit non confirmé à temps se résolvent
+tous d'eux-mêmes.
 
 **`0x40F` porte un code et deux lignes WARN distinctes** — produit vide versus nom inconnu. Le
 client ne voit jamais que le nombre, donc le log est où on les distingue.

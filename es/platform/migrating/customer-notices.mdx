@@ -110,6 +110,55 @@ hace daño.
 Si necesitas tiempo, actualiza, desactiva **Send Unicode automatically** en la página Gateway
 settings (`smsg.restapi.coding.autodetect`), avisa a tus clientes y luego actívalo.
 
+## 0.17.x: crédito no confirmado a tiempo
+
+**A quién afecta:** a los clientes de una cuenta prepago cuyos mensajes se rechazaron porque su
+crédito no pudo reservarse a tiempo, y a cualquier plataforma que lea el estado de envío de la API de
+plataforma. Los cargos de nadie cambian: esos mensajes nunca se cobraron, ni antes ni después.
+
+| Un mensaje cuyo crédito no está a mano | Hasta la 0.17.1 | Desde la 0.17.x |
+| :--- | :--- | :--- |
+| Cuánto espera | como máximo 2 segundos; rechazado de inmediato si la reserva fallaba | hasta `smsg.balance.park.seconds` (10 segundos por defecto) por SMPP, como máximo 5 por la API; una reserva fallida se reintenta |
+| Respuesta SMPP cuando se agota la espera | `0x14` (`ESME_RMSGQFUL`), la misma que una cola llena | `0x58` (`ESME_RTHROTTLED`), el `conf.status.creditPending` del listener |
+| Respuesta REST | `503` sin `code`, registrado `queueFull` | `503`, código `CREDIT_PENDING`, `Retry-After: 2`, registrado `creditPending` |
+| Respuesta gRPC | `UNAVAILABLE`, `QUEUE_FULL` | `UNAVAILABLE`, `CREDIT_PENDING`, reintentar tras 2 segundos |
+| Estado de envío de la API de plataforma | `QUEUE_FULL` | `CREDIT_PENDING` |
+
+**El número, la dirección, la fecha:** desde el día en que actualices, muchos menos de estos
+rechazos —la mayoría de los mensajes que se rechazaban ahora esperan y se envían— y los que quedan
+llevan un código nuevo. Una cola realmente llena no cambia: `0x14`, registrado `queueFull`.
+
+Lo que necesita hacer cada tipo de cliente:
+
+- **Clientes SMPP cuyo cliente distingue los rechazos por código** ven `0x58` donde veían `0x14` en
+  este caso. Un cliente que reenvía ante `0x58` —la mayoría lo hace, pues es el estado estándar de
+  "vaya más despacio"— no necesita nada. Uno que trata `0x58` como permanente debe cambiarse, o
+  pones `conf.status.creditPending` a `0x14` en su listener para mantener la respuesta anterior.
+- **Clientes de la API de plataforma** deben aceptar el nuevo estado de envío `CREDIT_PENDING` y
+  tratarlo como "inténtalo de nuevo".
+- **Clientes REST** reciben un `code` (`CREDIT_PENDING`) y un `Retry-After` en este `503`, donde no
+  tenía ninguno de los dos. Un cliente que reintenta cualquier `503` no necesita nada.
+
+Los candidatos, es decir, las cuentas rechazadas por crédito en los últimos 30 días, por entrada:
+
+```sql
+SELECT account_id, ingress,
+       count(*)          AS refused_credit_pending,
+       max(rejected_at)  AS last_seen
+  FROM cdr_rejected
+ WHERE reason = 'creditPending'
+   AND rejected_at >= now() - interval '30 days'
+ GROUP BY account_id, ingress
+ ORDER BY refused_credit_pending DESC;
+```
+
+Por REST y gRPC, las pasarelas anteriores a la 0.17.x registraban estos como `queueFull`, que también
+es una cola realmente llena: para ellas, cualquier cuenta listada bajo `queueFull` en la misma ventana
+es candidata.
+
+**Di que no se cobró nada.** Un cliente al que se le informa de un código de rechazo asume que los
+mensajes rechazados se facturaron; no se facturó ninguno.
+
 ## Dos frases que no deben suavizarse
 
 Cualquiera que sea la reescritura para adecuar a la voz de tu plataforma, estas sobreviven intactas:

@@ -3,8 +3,9 @@ title: "Erreurs de l'API"
 description: "Chaque statut renvoyé par l'API REST, ce qui le provoque, et l'ordre dans lequel les vérifications s'exécutent — ce qui décide quelle erreur vous voyez réellement."
 ---
 
-Chaque échec est un objet JSON avec un unique `message`. Le statut HTTP est la partie lisible par
-la machine ; la chaîne est pour une personne lisant un log.
+Chaque échec est un objet JSON avec un `message`. Le statut HTTP est la partie lisible par
+la machine ; la chaîne est pour une personne lisant un log. Certains refus portent aussi un `code`
+qui en nomme la cause, et ceux qui se résolvent d'eux-mêmes un en-tête `Retry-After`.
 
 ```json
 {"message":"Authentication failure"}
@@ -105,6 +106,8 @@ réseau. Les deux sont permanentes, ne réessayez ni l'une ni l'autre.
 | 429 | `Rate limit exceeded` | Au-dessus de la limite messages-par-seconde du compte. |
 | 500 | `Cannot send message` | Accepté et n'a pas pu être mis en file. **Tout débit est inversé.** |
 | 503 | code `UNITS_PENDING` | Les unités d'un login à unités sont retenues un instant par un autre nœud de la passerelle. Porte `Retry-After: 5`. Rien n'a été débité. |
+| 503 | code `CREDIT_PENDING` | À partir de 0.17.x. Le compte est approvisionné, mais son crédit n'a pas été confirmé en 5 secondes, le plus souvent parce que la base de la passerelle était lente ou ne répondait pas. Porte `Retry-After: 2`. Rien n'a été débité. Avant 0.17.x, ce cas répondait comme une file pleine. |
+| 503 | un message de file pleine, sans `code` | La file de la passerelle est à sa limite, ou (à partir de 0.17.x) trop de messages du compte attendent déjà leur crédit. Rien n'a été débité, ou le débit a été remboursé. |
 
 <Warning>
 **Il n'y a pas de `Retry-After` sur un `429`.** Faites votre propre backoff — exponentiel, avec du
@@ -122,7 +125,9 @@ suivante.
 | 429 | **Oui**, avec backoff | Transitoire par définition. |
 | 500 | **Oui**, une ou deux fois | Le débit a été inversé, donc un retry n'est pas un double débit. |
 | 503 avec le code `UNITS_PENDING` | **Oui**, après `Retry-After` | Les unités reviennent en quelques secondes. |
-| 502, 503, 504 | **Oui** | Pas depuis la passerelle. Un proxy en amont. |
+| 503 avec le code `CREDIT_PENDING` | **Oui**, après `Retry-After` | Le crédit est confirmé dès que la base répond. |
+| 503 avec un autre `code`, ou un message de file pleine | **Oui**, avec backoff | Celui de la passerelle elle-même ; il se résout quand la passerelle se vide. |
+| 502, 504, ou un 503 sans corps JSON FireFlo | **Oui** | Pas depuis la passerelle. Un proxy en amont. |
 
 <Tip>
 **Un `500` est sûr à réessayer précisément parce que le débit est inversé.** C'est une propriété
