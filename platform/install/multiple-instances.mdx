@@ -10,8 +10,8 @@ against *one* database does not work, see [Clustering](/platform/install/cluster
 ## One name, two products
 
 ```bash
-sudo ./scripts/fireflo-install       install --tenant websmsc
-sudo ./scripts/fireflo-panel-install install --tenant websmsc
+sudo ./scripts/fireflo-install       install --tenant acme
+sudo ./scripts/fireflo-panel-install install --tenant acme
 ```
 
 `--tenant` is the whole idea: **the same word names the same instance to both installers**. One name
@@ -19,15 +19,15 @@ per customer, two products.
 
 | | Path | Unit |
 | :--- | :--- | :--- |
-| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
-| Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+| Gateway | `/srv/fireflo/acme/gateway` | `fireflo-acme` |
+| Panel | `/srv/fireflo/acme/panel` | `fireflo-acme-panel` |
 
 ## On update it is a lookup, not a layout
 
 This is the part that prevents the expensive mistake.
 
 ```bash
-sudo ./scripts/fireflo-install update --tenant websmsc
+sudo ./scripts/fireflo-install update --tenant acme
 ```
 
 On `update`, `service` and `rollback`, `--tenant` **finds** the install with that name and uses its own
@@ -55,11 +55,11 @@ non-default ports stops failing its own verify at the end of every upgrade.
 ## A virtualhost
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
+sudo ./scripts/fireflo-install install --tenant acme --vhost /home/acme --user acme
 ```
 
-Puts the instance under a per-customer home: `/home/websmsc/gateway`, with the panel at
-`/home/websmsc/panel`.
+Puts the instance under a per-customer home: `/home/acme/gateway`, with the panel at
+`/home/acme/panel`.
 
 **What it buys:** both generated units mount a **tmpfs over `/home`** and bind only that one
 virtualhost back in, so a gateway cannot see any other customer's home directory.

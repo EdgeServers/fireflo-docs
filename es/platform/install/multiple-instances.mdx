@@ -11,8 +11,8 @@ varias instancias contra *una* misma base de datos no funciona, consulta
 ## Un nombre, dos productos
 
 ```bash
-sudo ./scripts/fireflo-install       install --tenant websmsc
-sudo ./scripts/fireflo-panel-install install --tenant websmsc
+sudo ./scripts/fireflo-install       install --tenant acme
+sudo ./scripts/fireflo-panel-install install --tenant acme
 ```
 
 `--tenant` es toda la idea: **la misma palabra nombra la misma instancia para ambos instaladores**.
@@ -20,15 +20,15 @@ Un nombre por cliente, dos productos.
 
 | | Ruta | Unidad |
 | :--- | :--- | :--- |
-| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
-| Panel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+| Gateway | `/srv/fireflo/acme/gateway` | `fireflo-acme` |
+| Panel | `/srv/fireflo/acme/panel` | `fireflo-acme-panel` |
 
 ## En una actualización es una búsqueda, no un diseño
 
 Esta es la parte que evita el error caro.
 
 ```bash
-sudo ./scripts/fireflo-install update --tenant websmsc
+sudo ./scripts/fireflo-install update --tenant acme
 ```
 
 En `update`, `service` y `rollback`, `--tenant` **encuentra** la instalación con ese nombre y usa sus
@@ -58,11 +58,11 @@ puertos no predeterminados deje de fallar su propio verify al final de cada actu
 ## Un virtualhost
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
+sudo ./scripts/fireflo-install install --tenant acme --vhost /home/acme --user acme
 ```
 
-Coloca la instancia bajo un directorio personal por cliente: `/home/websmsc/gateway`, con el panel en
-`/home/websmsc/panel`.
+Coloca la instancia bajo un directorio personal por cliente: `/home/acme/gateway`, con el panel en
+`/home/acme/panel`.
 
 **Qué se gana:** ambas unidades generadas montan un **tmpfs sobre `/home`** y reintroducen únicamente
 ese virtualhost, de modo que un gateway no puede ver el directorio personal de ningún otro cliente.

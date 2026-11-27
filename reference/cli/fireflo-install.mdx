@@ -46,7 +46,7 @@ the gateway writes `fireflo-<name>.service` plus a `-logclean.timer` and `-logcl
 | Option | Purpose |
 | :--- | :--- |
 | `--tenant NAME` | Names this instance. On `update`, `service` and `rollback` it is a **lookup** — the install with that name is found and its own paths, unit, account and ports are used, so an upgrade cannot be aimed at the wrong instance by forgetting a flag. |
-| `--vhost PATH` | Puts the instance in a per-customer virtualhost — `--tenant websmsc --vhost /home/websmsc` gives `/home/websmsc/gateway`, with the panel alongside at `/home/websmsc/panel`. |
+| `--vhost PATH` | Puts the instance in a per-customer virtualhost — `--tenant acme --vhost /home/acme` gives `/home/acme/gateway`, with the panel alongside at `/home/acme/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Individual paths. |
 | `--user` / `--group` / `--service-name` | The service account and unit name. **Under `--vhost`, `--user` must be the account that owns the virtualhost** — the installer never chowns a directory that already exists, so any other account cannot traverse it. |
 

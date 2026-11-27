@@ -11,8 +11,8 @@ fonctionnent pas, voir [Clustering](/platform/install/clustering).
 ## Un nom, deux produits
 
 ```bash
-sudo ./scripts/fireflo-install       install --tenant websmsc
-sudo ./scripts/fireflo-panel-install install --tenant websmsc
+sudo ./scripts/fireflo-install       install --tenant acme
+sudo ./scripts/fireflo-panel-install install --tenant acme
 ```
 
 `--tenant` est toute l'idée : **le même mot nomme la même instance aux deux installateurs**. Un nom
@@ -20,15 +20,15 @@ par client, deux produits.
 
 | | Chemin | Unité |
 | :--- | :--- | :--- |
-| Passerelle | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
-| Panneau | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+| Passerelle | `/srv/fireflo/acme/gateway` | `fireflo-acme` |
+| Panneau | `/srv/fireflo/acme/panel` | `fireflo-acme-panel` |
 
 ## À la mise à jour, c'est une recherche, pas une disposition
 
 C'est la partie qui évite l'erreur coûteuse.
 
 ```bash
-sudo ./scripts/fireflo-install update --tenant websmsc
+sudo ./scripts/fireflo-install update --tenant acme
 ```
 
 Sur `update`, `service` et `rollback`, `--tenant` **trouve** l'installation portant ce nom et
@@ -60,11 +60,11 @@ chaque mise à niveau.
 ## Un hôte virtuel
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
+sudo ./scripts/fireflo-install install --tenant acme --vhost /home/acme --user acme
 ```
 
-Place l'instance sous un dossier personnel par client : `/home/websmsc/gateway`, avec le panneau à
-`/home/websmsc/panel`.
+Place l'instance sous un dossier personnel par client : `/home/acme/gateway`, avec le panneau à
+`/home/acme/panel`.
 
 **Ce que cela apporte :** les deux unités générées montent un **tmpfs sur `/home`** et ne
 réintroduisent que ce seul hôte virtuel, de sorte qu'une passerelle ne peut voir aucun autre

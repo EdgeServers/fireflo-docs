@@ -11,8 +11,8 @@ várias instâncias contra *um* mesmo banco não funcionam, veja
 ## Um nome, dois produtos
 
 ```bash
-sudo ./scripts/fireflo-install       install --tenant websmsc
-sudo ./scripts/fireflo-panel-install install --tenant websmsc
+sudo ./scripts/fireflo-install       install --tenant acme
+sudo ./scripts/fireflo-panel-install install --tenant acme
 ```
 
 `--tenant` é a ideia inteira: **a mesma palavra nomeia a mesma instância para ambos os instaladores**.
@@ -20,15 +20,15 @@ Um nome por cliente, dois produtos.
 
 | | Caminho | Unidade |
 | :--- | :--- | :--- |
-| Gateway | `/srv/fireflo/websmsc/gateway` | `fireflo-websmsc` |
-| Painel | `/srv/fireflo/websmsc/panel` | `fireflo-websmsc-panel` |
+| Gateway | `/srv/fireflo/acme/gateway` | `fireflo-acme` |
+| Painel | `/srv/fireflo/acme/panel` | `fireflo-acme-panel` |
 
 ## Na atualização é uma busca, não um layout
 
 Esta é a parte que evita o erro caro.
 
 ```bash
-sudo ./scripts/fireflo-install update --tenant websmsc
+sudo ./scripts/fireflo-install update --tenant acme
 ```
 
 Em `update`, `service` e `rollback`, `--tenant` **encontra** a instalação com aquele nome e usa seus
@@ -58,11 +58,11 @@ instância em portas não-padrão pare de falhar no seu próprio verify ao final
 ## Um virtualhost
 
 ```bash
-sudo ./scripts/fireflo-install install --tenant websmsc --vhost /home/websmsc --user websmsc
+sudo ./scripts/fireflo-install install --tenant acme --vhost /home/acme --user acme
 ```
 
-Coloca a instância sob um home por cliente: `/home/websmsc/gateway`, com o painel em
-`/home/websmsc/panel`.
+Coloca a instância sob um home por cliente: `/home/acme/gateway`, com o painel em
+`/home/acme/panel`.
 
 **O que isso traz:** ambas as unidades geradas montam um **tmpfs sobre `/home`** e fazem bind apenas
 daquele virtualhost específico, de modo que um gateway não consegue enxergar o diretório home de

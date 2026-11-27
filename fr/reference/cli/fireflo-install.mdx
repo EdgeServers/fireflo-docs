@@ -48,7 +48,7 @@ d'unités qu'il n'y paraît : la passerelle écrit `fireflo-<name>.service` plus
 | Option | Objet |
 | :--- | :--- |
 | `--tenant NOM` | Nomme cette instance. Sur `update`, `service` et `rollback`, c'est une **recherche** — l'installation portant ce nom est trouvée et ses propres chemins, unité, compte et ports sont utilisés, de sorte qu'une mise à niveau ne peut pas être visée sur la mauvaise instance en oubliant un drapeau. |
-| `--vhost CHEMIN` | Place l'instance dans un hôte virtuel par client — `--tenant websmsc --vhost /home/websmsc` donne `/home/websmsc/gateway`, avec le panneau à côté à `/home/websmsc/panel`. |
+| `--vhost CHEMIN` | Place l'instance dans un hôte virtuel par client — `--tenant acme --vhost /home/acme` donne `/home/acme/gateway`, avec le panneau à côté à `/home/acme/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Chemins individuels. |
 | `--user` / `--group` / `--service-name` | Le compte de service et le nom de l'unité. **Sous `--vhost`, `--user` doit être le compte qui possède l'hôte virtuel** — l'installateur ne fait jamais de chown sur un répertoire qui existe déjà, donc aucun autre compte ne peut le traverser. |
 

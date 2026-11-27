@@ -46,7 +46,7 @@ el gateway escribe `fireflo-<name>.service` más un par `-logclean.timer` y `-lo
 | Opción | Propósito |
 | :--- | :--- |
 | `--tenant NAME` | Nombra esta instancia. En `update`, `service` y `rollback` es una **búsqueda** — se encuentra la instalación con ese nombre y se usan sus propias rutas, unidad, cuenta y puertos, de modo que una actualización no pueda apuntar a la instancia equivocada por olvidar un flag. |
-| `--vhost PATH` | Coloca la instancia en un virtualhost por cliente — `--tenant websmsc --vhost /home/websmsc` da `/home/websmsc/gateway`, con el panel al lado en `/home/websmsc/panel`. |
+| `--vhost PATH` | Coloca la instancia en un virtualhost por cliente — `--tenant acme --vhost /home/acme` da `/home/acme/gateway`, con el panel al lado en `/home/acme/panel`. |
 | `--conf-dir` / `--app-dir` / `--data-dir` / `--log-dir` | Rutas individuales. |
 | `--user` / `--group` / `--service-name` | La cuenta de servicio y el nombre de la unidad. **Bajo `--vhost`, `--user` debe ser la cuenta propietaria del virtualhost** — el instalador nunca cambia el propietario de un directorio que ya existe, así que ninguna otra cuenta puede recorrerlo. |
 
