@@ -18,6 +18,16 @@ character by character, and check the log.
 
 There are exactly two functions, `NORMAL` and `LCR`. A table that declares no function is `NORMAL`.
 
+In the control panel the function is **How it chooses**, set when you add a table with **New table**
+and changed from the table's **Table** button: **In order** is `NORMAL`, **Cheapest vendor** is
+`LCR`. The panel offers only those two, so it cannot be mistyped there, and a table's page shows
+which one it is beside its name.
+
+<Frame caption="New table with How it chooses set to Cheapest vendor: every matching vendor is a candidate, and the cheapest rate wins.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--new-table-light.webp" alt="The new routing table form with How it chooses set to Cheapest vendor." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--new-table-dark.webp" alt="The new routing table form with How it chooses set to Cheapest vendor." />
+</Frame>
+
 <Note>
 A third function, `RC`, was removed in `V1.28.0`. It was in the enum, allowed by the database
 constraint, and described in the panel — and nothing anywhere branched on it, so a table set to `RC`
@@ -72,6 +82,14 @@ behaviour, you are changing the wrong file — the cost rates are what decide.
     `No candidate in least-cost table … has a rate`.
   </Step>
 </Steps>
+
+A vendor's cost rates are on its **Cost rates** tab in the control panel: what the vendor charges you,
+rule by rule, first match wins.
+
+<Frame caption="A vendor's Cost rates tab: what the vendor charges, rule by rule. A Cheapest vendor table compares these.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--cost-rates-light.webp" alt="A vendor's Cost rates tab: what the vendor charges, rule by rule, which the cheapest-vendor table compares." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--cost-rates-dark.webp" alt="A vendor's Cost rates tab: what the vendor charges, rule by rule, which the cheapest-vendor table compares." />
+</Frame>
 
 <Note>
 **A missing rate line degrades rather than blocks.** Refusing to route an unrated message would turn a

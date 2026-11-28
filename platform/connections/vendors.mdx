@@ -33,12 +33,20 @@ Every setting is at [Vendor settings](/reference/smpp/client).
 scripts/fireflo test-bind vendor1
 ```
 
-Dials once and reports what happened. The panel has the same thing as **Test connection**.
+Dials once and reports each step: the name lookup, the TCP connect, the bind, three `enquire_link`
+round trips and the unbind. The panel has the same thing as **Test connection**, on the vendor's page.
 
 <Warning>
-**It is refused while the vendor is already bound.** A second bind on the same `systemId` can cost you
-the live session — many carriers allow one.
+**It never opens a second bind while the vendor is already bound.** A second bind on the same
+`systemId` can cost you the live session — many carriers allow one. Instead it still resolves the
+address and opens a TCP connection, then sends `enquire_link` on each live session and times the
+answer.
 </Warning>
+
+<Frame caption="A connection test on a vendor that is already bound: the address resolved, the TCP connect, and every live session answering enquire_link.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--test-connection-light.webp" alt="A vendor's connection test: the address resolved, the TCP connect, and every live session answering enquire_link." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--test-connection-dark.webp" alt="A vendor's connection test: the address resolved, the TCP connect, and every live session answering enquire_link." />
+</Frame>
 
 ## Bound is not the same as able to send
 
@@ -53,11 +61,16 @@ receiver-only vendor binds perfectly and sends nothing.
 When those two numbers differ, that is the reason, and the panel shows **Can send** as its own figure
 for exactly this case.
 
+<Frame caption="A vendor's Status tab: its binds against those configured, what is queued, what was sent on these binds and its throughput against its limit. Can send appears beside Binds only when the two differ.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--vendor-light.webp" alt="A vendor's Status tab: connected with all its binds, what is queued, what was sent on these binds and its throughput against its limit." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--vendor-dark.webp" alt="A vendor's Status tab: connected with all its binds, what is queued, what was sent on these binds and its throughput against its limit." />
+</Frame>
+
 ## The four states
 
 | Badge | Means | Colour |
 | :--- | :--- | :--- |
-| **Connected** | Bound and accepting | Green |
+| **Connected** | Bound and accepting; the badge adds the bind count, such as **Connected · 5 binds** | Green |
 | **Not connected** | No session — a vendor with none is broken | Red |
 | **Not accepting** | Suspended; the queue drains back to the router so traffic reroutes | Amber |
 | **Holding** | Accepting but not sending; **the queue grows** | Amber |
@@ -68,6 +81,11 @@ for exactly this case.
 **Not loaded** usually means one of two things: the gateway has not reloaded since the vendor was
 added, or it is not reading workers from the database at all. The badge's detail text says which.
 </Note>
+
+<Frame caption="The Vendors page. A vendor that needs attention is listed first: here one reads Not connected, the other Connected with five binds.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors-light.webp" alt="The Vendors page: one card per carrier link with its state, sessions and traffic for the period." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors-dark.webp" alt="The Vendors page: one card per carrier link with its state, sessions and traffic for the period." />
+</Frame>
 
 ## Peak throughput
 
@@ -172,8 +190,24 @@ Turn it off and this vendor stops reporting outcomes, so every message through i
 | `hold` | You want it to stop sending but keep its queue |
 | `disable` | You want it gone within one poll interval |
 
-The panel exposes these as **Stop sending**, **Hold** and **Disable**, deliberately worded rather than
-iconographic — each reroutes or stops production traffic the moment it is pressed.
+On a vendor's page these are **Stop sending** and **Disable**, deliberately worded rather than
+iconographic — each reroutes or stops production traffic the moment it is pressed, so each asks first.
+**Restart**, beside them, closes every connection of the vendor and opens it again; messages in flight
+are retried. Hold has no button on the vendor's page; the **Connectivity** view offers it as
+**Pause sending (queue kept)**.
+
+## Error codes
+
+**Error codes**, on a vendor's page, maps a code the carrier sends to the one your customer receives.
+A vendor uses the **Every vendor** list until it has a list of its own, which replaces it. **Codes
+nobody mapped** chooses whether a code no mapping covers reaches the customer as sent or as `018`;
+**Inherit** follows the Every vendor answer. The settings behind it are at
+[Delivery receipt error codes](/reference/smpp/client#delivery-receipt-error-codes).
+
+<Frame caption="One vendor's own list: carrier code 444 reaches the customer as 016. Below it, what happens to a code nobody mapped.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--error-codes-light.webp" alt="A vendor's error codes: a code the carrier sends mapped to the one the customer receives, and what happens to a code nobody mapped." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--error-codes-dark.webp" alt="A vendor's error codes: a code the carrier sends mapped to the one the customer receives, and what happens to a code nobody mapped." />
+</Frame>
 
 ## Cost
 

@@ -16,6 +16,15 @@ A message can arrive as three and leave as three **without those two 3s being re
 reassembles what the customer sent, then splits the whole body again for the carrier using that
 carrier's encoding.
 
+A message's page in the control panel shows both legs: **Vendor exchange** has every `submit_sm` sent
+to the carrier, its answer and its receipt, with the rule and the encoding of each part; **Customer
+exchange**, below it, has what the customer sent and what they were answered.
+
+<Frame caption="A long message's vendor exchange: sent to the carrier as three GSM-7 parts with a concatenation header. The customer's side follows below.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages--vendor-exchange-light.webp" alt="A long message's vendor exchange: each submit_sm, its answer and its receipt with the rule and encoding, and the customer's side below." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages--vendor-exchange-dark.webp" alt="A long message's vendor exchange: each submit_sm, its answer and its receipt with the rule and encoding, and the customer's side below." />
+</Frame>
+
 ## How a customer sends one
 
 Two ways, both accepted and treated identically.
@@ -81,6 +90,11 @@ comparing this month with last.
 
 `smsg.restapi.billing.units` decides whether a multipart message is charged once or per segment.
 
+<Frame caption="A three-part message charged per segment: billed and costed as three units. Only part one carries the money; the other parts are written with no amounts.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages-light.webp" alt="A long message's page: three parts, one attempt and one receipt, with its route and what it was billed and cost." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages-dark.webp" alt="A long message's page: three parts, one attempt and one receipt, with its route and what it was billed and cost." />
+</Frame>
+
 <Warning>
 Set to `message`, a customer sending three-segment traffic pays for one and you pay your carrier for
 three. `segment` is the default for that reason.
@@ -89,6 +103,11 @@ A message stays within one segment at **160 characters** of plain GSM text, or *
 any character outside that set — an emoji, or a curly quote pasted from a word processor, halves the
 limit for the whole message.
 </Warning>
+
+<Frame caption="A Unicode message: 126 characters sent over HTTP as UCS-2, which went to the vendor in two parts.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages--unicode-light.webp" alt="A Unicode message's page: it arrived over REST as UCS-2 with 126 characters, and went to the vendor in two parts." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages--unicode-dark.webp" alt="A Unicode message's page: it arrived over REST as UCS-2 with 126 characters, and went to the vendor in two parts." />
+</Frame>
 
 ## Limits
 

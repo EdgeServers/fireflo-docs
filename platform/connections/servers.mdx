@@ -24,6 +24,11 @@ outSms.instance.smpp.enable   = true
 
 Every setting is at [Listener settings](/reference/smpp/server).
 
+<Frame caption="A listener's edit form. The name cannot be changed once the listener is added; delete it and add it again instead.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers--edit-light.webp" alt="A listener's edit form: its port, whether it is on, its advertised system ID, the most binds it takes and the TLVs it sends." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers--edit-dark.webp" alt="A listener's edit form: its port, whether it is on, its advertised system ID, the most binds it takes and the TLVs it sends." />
+</Frame>
+
 <Warning>
 **A listener that cannot take its port does not stop the gateway.** It logs and everything else keeps
 running — right for a multi-listener deployment, and surprising the first time.
@@ -89,17 +94,39 @@ logged once per configuration load naming the listener.
 | `mandatory.tlvs.submit` | Tags a message must carry, else `0xC3` |
 | `inQueue.capacity` | Messages held waiting for the message store |
 
+**Per-account overrides**, on the listener's **Listener settings** tab, give one account its own rate
+ceiling or bind count on this listener, in place of the listener default. The ceiling is shared by
+every login of the account. An empty value removes the override; `0` is unlimited.
+
+<Frame caption="One account's rate ceiling or bind count in place of the listener default. The defaults it replaces are shown under the form.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--overrides-light.webp" alt="A listener's settings with its per-account overrides: one account's rate ceiling or bind count in place of the listener default." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--overrides-dark.webp" alt="A listener's settings with its per-account overrides: one account's rate ceiling or bind count in place of the listener default." />
+</Frame>
+
 ## The states a listener can be in
 
 | Verb | Effect |
 | :--- | :--- |
 | `enable` / `disable` | Loaded, or not |
-| `suspend` / `resume` | Stop accepting; the queue drains back to the router |
-| `hold` / `release` | Keep accepting, stop sending; **the queue grows** |
+| `suspend` / `resume` | Keep accepting, route nothing: submits are parked and routed on resume, oldest first; once the park is full, submits are refused with a retryable error. Receipts keep flowing to customers |
+| `hold` / `release` | Refuse every submit with a retryable error (`ESME_RMSGQFUL`) and **hold receipts**. Nobody is disconnected |
+
+In the control panel, suspend is **Stop sending** and hold is **Stop accepting** (also **Hold**, at
+the foot of the listener's page). Each asks before it acts.
+
+<Frame caption="Stop accepting asks first: bound clients have their submits refused with a retryable error and their receipts held until you resume. Nobody is disconnected.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--stop-accepting-light.webp" alt="The question before a listener stops accepting: bound clients have their submits refused with a retryable error and nobody is disconnected." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--stop-accepting-dark.webp" alt="The question before a listener stops accepting: bound clients have their submits refused with a retryable error and nobody is disconnected." />
+</Frame>
 
 The panel shows these as one badge per card. `Listening` with nobody bound is **not** a fault — a
 listener with no customers connected is quiet, not broken, which is why it is not painted red the way
 a vendor with no session is.
+
+<Frame caption="The Servers page. One listener has three customers bound; the other reads Listening, which only means nobody is bound.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers-light.webp" alt="The Servers page: one card per listener with its state and its live sessions." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers-dark.webp" alt="The Servers page: one card per listener with its state and its live sessions." />
+</Frame>
 
 ## Dropping one customer's bind
 
@@ -109,6 +136,16 @@ scripts/fireflo disconnect smpp 7
 
 Session ids come from `fireflo health`. They are the listener's own counter, so they collide between
 listeners and restart with the gateway.
+
+In the control panel, open the listener's **Connections** tab, expand the account and press
+**Disconnect** on the session. Tick **Also disable this login** to keep it out as well.
+**Force disconnect**, at the foot of the listener's page, drops every session of an address, an
+account or a login on that listener.
+
+<Frame caption="The Connections tab: each bound account with its binds, system type, time up and messages received. Expand an account to reach its sessions.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--connections-light.webp" alt="A listener's Connections tab: each bound account with its binds, system type, time up and messages received." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--connections-dark.webp" alt="A listener's Connections tab: each bound account with its binds, system type, time up and messages received." />
+</Frame>
 
 <Note>
 **This ends a connection; it does not withdraw permission.** A healthy client rebinds within seconds

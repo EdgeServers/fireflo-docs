@@ -62,6 +62,14 @@ of, has any of, has none of, has no tag) works in a filter as it does in a rule,
 for every account tagged `otp`. See [Account tags](/platform/routing/account-tags).
 </Tip>
 
+In the control panel, **New filter** builds one in three steps: what to match, the values, then a
+name. Every box you tick at the first step has to hold, so each one narrows the filter further.
+
+<Frame caption="New filter, first step: tick what a message must match. Account tag is one of the choices; Something else opens the advanced editor.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters--new-filter-light.webp" alt="The new filter dialog at its first step: what a message must match, chosen from a set of cards." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters--new-filter-dark.webp" alt="The new filter dialog at its first step: what a message must match, chosen from a set of cards." />
+</Frame>
+
 ## An empty filter counts as disabled
 
 A filter with no conditions saves and loads, which is what lets one be built up a condition at a time.
@@ -93,8 +101,10 @@ priced differently".
 
 <Steps>
   <Step title="Read the count">
-    **Filters** in the panel lists how many rate rules and how many routing rules reference each
-    filter. Disabling a filter used by four routing rules removes four rules from the running snapshot.
+    **Filters** in the panel shows on each filter how many routing rules (**Routing · 4**) and how
+    many price rules (**Pricing · 2**) use it; press the count to list them. A filter nothing uses reads
+    **Unused**. Disabling a filter used by four routing rules removes four rules from the running
+    snapshot.
   </Step>
   <Step title="Look at what catches the traffic instead">
     For each rule that would be skipped, find the next rule in the same table that the traffic would
@@ -106,6 +116,11 @@ priced differently".
     nothing happened.
   </Step>
 </Steps>
+
+<Frame caption="The Filters page groups filters by what they match on. Under Status, Off or empty lists the filters whose rules the gateway skips.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters-light.webp" alt="The Filters page: filter cards grouped by what they match on, each with the rules that use it." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters-dark.webp" alt="The Filters page: filter cards grouped by what they match on, each with the rules that use it." />
+</Frame>
 
 ## Filter workers are a different thing
 

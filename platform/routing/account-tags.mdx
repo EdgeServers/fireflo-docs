@@ -63,8 +63,13 @@ See [How pricing works](/platform/billing/how-pricing-works) for scopes and the 
 
 ## Filtering lists and reports by tag
 
-The accounts list has a **Tags** column and a tag filter. **Usage** and **Messages** have a **Tag**
-filter.
+The accounts list has a **Tags** column (switch it on under **Columns**) and a tag filter. **Usage**
+and **Messages** have a **Tag** filter.
+
+<Frame caption="The Accounts list filtered to the accounts that carry the tag priority.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--by-tag-light.webp" alt="The Accounts list filtered to the accounts that carry the tag priority." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--by-tag-dark.webp" alt="The Accounts list filtered to the accounts that carry the tag priority." />
+</Frame>
 
 <Note>
 **The filter reads the tags accounts have now.** A message does not record the tags its account had
@@ -100,6 +105,15 @@ On a gateway whose licence is not current, configuration changes are frozen, tag
 - **A disabled tag matches nothing and prices nothing**, but stays on its accounts. Switch it back on
   and it applies again.
 - Deleting a tag that nothing names takes it off every account.
+
+**Add a tag** asks for the name, an optional label and description, and a colour. A new tag is on,
+and goes to the end of the order. Colour and description are for people only; routing and prices do
+not read them.
+
+<Frame caption="Add a tag: the name is fixed once added, because rules and prices name it.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--add-tag-light.webp" alt="The Add a tag dialog: its name, label, description and colour." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--add-tag-dark.webp" alt="The Add a tag dialog: its name, label, description and colour." />
+</Frame>
 
 Tags are put on an account on its **Settings** tab. A units account lists its parent's tags there,
 read only.

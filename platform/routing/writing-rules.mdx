@@ -51,9 +51,11 @@ instance (`vendor1`, `smppserver.smpp`), a **group**, or another table to chain 
 
 <Tabs>
   <Tab title="Control panel">
-    **Routing** lists each table with its rules in order. The editor validates the operator against
-    the field before saving, refuses a numeric operator on a text field, and warns about a regular
-    expression written into a literal operator.
+    **Routing** lists each table with its rules in order, each with its target, an on/off switch and
+    how many messages it has matched since the gateway last started. **Add a rule** opens the editor;
+    changes to a table wait for **Save**. The editor validates the operator against the field before
+    saving, refuses a numeric operator on a text field, and warns about a regular expression written
+    into a literal operator.
   </Tab>
   <Tab title="routingTable.conf">
 ```ini
@@ -66,6 +68,11 @@ vendor1::default:                  # the catch-all, LAST
   </Tab>
 </Tabs>
 
+<Frame caption="A routing table: its rules in order, each with its target, its switch and its match count. The warning says a rule names a target the gateway does not know.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables-light.webp" alt="A routing table: its rules in order, each with its conditions, its target and its match count." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables-dark.webp" alt="A routing table: its rules in order, each with its conditions, its target and its match count." />
+</Frame>
+
 <Warning>
 **The catch-all goes at the end.** Above other rules it makes every rule below it unreachable, and
 nothing warns you in the file — they parse fine, they simply never run. The panel reports it; the
@@ -74,7 +81,8 @@ gateway records it as `unreachable-rules` on `/ops/health` and carries on.
 
 ## Operators
 
-Any operator can be negated with a leading `!`.
+Any operator can be negated with a leading `!`. In the rule editor, that is **Except this** (**Except
+these** for a list of prefixes) under a condition.
 
 | Kind | Operators |
 | :--- | :--- |
@@ -111,6 +119,26 @@ ran as. Three tabs answer from the same matchers the message path uses:
 
 When nothing matches, it offers to create the rule, opened in the editor with the destination's
 country code filled in for you to correct.
+
+**Test and check**, in the Routing page's rail, puts a routing-only tester beside **Delivery check**.
+The tester takes the table to start from, the message type, the listener it arrived on, a sender, a
+destination and a product, and reads the gateway's live tables whether routing is configured from a
+file or the database. **Delivery check** walks the whole path a message takes, not just routing: a
+sample of what was refused in the last 24 hours, then approvals, TLVs, pricing, credit, routing and
+vendors. Where it finds a fault it says how to fix it.
+
+<Frame caption="Test and check: the message tester on the left, the delivery check on the right. Neither sends anything.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test-light.webp" alt="Test and check: a test message on the left, and the delivery check on the right." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test-dark.webp" alt="Test and check: a test message on the left, and the delivery check on the right." />
+</Frame>
+
+The tester's answer lists the table's rules in order: the one the message hits, and for each rule that
+did not match, the condition that failed and what the message held.
+
+<Frame caption="A test's verdict: rule 1 matched and sends here; for the others, the type each wanted and the type the message had.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test--verdict-light.webp" alt="A test message with its answer: the rule it hits, and for each rule that did not match, why." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test--verdict-dark.webp" alt="A test message with its answer: the rule it hits, and for each rule that did not match, why." />
+</Frame>
 
 The four text comparisons are lexicographical, not numeric — `greaterThan` on a phone number compares
 strings.
@@ -153,7 +181,13 @@ so a routing condition on either reads `NOT_CALCULATED` on every first attempt.
 ## Copy and continue
 
 A `+` on the target copies the message to that target and **carries on scanning**, rather than routing
-and stopping. In the database it is the `copied` column.
+and stopping. In the database it is the `copied` column. In the rule editor it is **After a match →
+Copy and keep going**; **Stop here** is the ordinary rule.
+
+<Frame caption="A new rule: where it sends, its conditions (destination starting 91, account tag priority), its filters, and whether it stops there.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables--edit-rule-light.webp" alt="A new routing rule being written: where it sends, its conditions (destination starting 91, account tag priority) and whether it stops there." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables--edit-rule-dark.webp" alt="A new routing rule being written: where it sends, its conditions (destination starting 91, account tag priority) and whether it stops there." />
+</Frame>
 
 ## Vendor groups
 

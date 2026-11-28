@@ -57,6 +57,15 @@ ordinary shape. Two things bound the recursion:
 A table reached twice by different paths is not a cycle: `default → a → c` alongside `default → b → c`
 loads normally.
 
+In the control panel, **Start here** on the Routing page draws how a message travels from `default`
+through the tables, and checks the default routing rules: one per listener for its receipts, and
+one per outbound message type in the entry table.
+
+<Frame caption="Start here: every message starts at default and follows the rules that send it into another table. Below, the rules the gateway needs to work at all.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost-light.webp" alt="The Routing page's Start here: how a message travels from default into MESSAGE, and the default routing rules checked against the tables." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost-dark.webp" alt="The Routing page's Start here: how a message travels from default into MESSAGE, and the default routing rules checked against the tables." />
+</Frame>
+
 ## The two things that load and then quietly misbehave
 
 Both appear on `/ops/health` under `routing_warnings`, and each is logged once when it first appears

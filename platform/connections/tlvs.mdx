@@ -6,6 +6,18 @@ description: "Where a tag can come from, the order they compose in, and how to f
 The grammar is at [TLV declarations](/reference/smpp/tlvs) — read that first if `1400` versus `0x1400`
 is new to you. This page is about running them.
 
+## Naming a tag
+
+**TLVs**, under Configuration in the control panel, lists every tag with its name, its meaning and
+what uses it. The tags of the SMPP standard and of the Indian DLT convention are built in. **Name a
+tag** gives any other tag a name and a one-line meaning for the panel to show. Names are for people:
+only the tag number reaches the wire, so naming one changes nothing the gateway sends.
+
+<Frame caption="The TLVs page: each tag's number, its name, its meaning, and what uses it.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-tlvs-light.webp" alt="The TLVs page: a list of tags with their names, meanings and where each one is used." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-tlvs-dark.webp" alt="The TLVs page: a list of tags with their names, meanings and where each one is used." />
+</Frame>
+
 ## A tag can come from four places
 
 <Steps>
@@ -69,7 +81,13 @@ A customer can see the TLVs **they sent** on their own messages, and can propose
 for an operator to approve. They never see what a vendor added downstream.
 
 The call record keeps three sets — received, sent, and what the whitelist stamped — so a dispute about
-what reached the carrier is answerable rather than argued.
+what reached the carrier is answerable rather than argued. A message's page in the control panel shows
+each tag as received, as resolved and as sent, with what happened to it.
+
+<Frame caption="A message's TLVs: the DLT entity and template IDs as received, as resolved and as sent. Both arrived and went out unchanged.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-tlvs--message-tlvs-light.webp" alt="A message's TLVs card: the DLT entity and template IDs as received, as resolved and as sent, with what happened to each." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-tlvs--message-tlvs-dark.webp" alt="A message's TLVs card: the DLT entity and template IDs as received, as resolved and as sent, with what happened to each." />
+</Frame>
 
 ## A worked case: Indian DLT
 
@@ -81,13 +99,14 @@ defaultTlvs:
   peid_0x1400: "1101234567890123456"
 ```
 
-The template id varies per message and is usually stamped by the whitelist on approval, or supplied by
-the customer:
+The template id (`tmplid_0x1401`) varies per message and is usually stamped by the whitelist on
+approval, or supplied by the customer. The telemarketer id (`tmid_0x1402`) is your own registration
+with the vendor, so it can be a vendor default:
 
 ```properties
 outSms.default.default.tlvs.submit = tmid_0x1402=1102000000000012345
-outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmplid_0x1401
 ```
 
-With both mandatory, a message that resolves neither is refused at ingress with `0xC3` rather than
+With both mandatory, a message missing either is refused at ingress with `0xC3` rather than
 rejected by the carrier later — which is the point of checking at all.
