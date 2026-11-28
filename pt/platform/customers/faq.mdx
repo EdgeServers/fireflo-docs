@@ -170,13 +170,13 @@ nomeando a account, e se aplica no momento em que a linha aparece. Criar um logi
 balance; *Open for credit* na página da account cria.
 </Accordion>
 
-<Accordion title="Desalistei uma account e seu tráfego continuou fluindo">
-O gateway nunca lê o catálogo de accounts. `enabled` em `app_account` decide se este painel lista
-a account e nada mais — seus logins continuam se conectando, seu tráfego continua enviando e suas
-rate rules continuam precificando.
+<Accordion title="Desliguei uma account e um bind continua de pé">
+Desligar uma account (**Enabled**, em Settings → Advanced) faz o gateway deixar de servir os logins
+dela em um poll de configuração, 30 segundos por padrão, e fecha o sign-in no portal. Os binds já
+abertos continuam de pé até caírem.
 
-É o oposto do que `enabled` significa em um vendor ou product. Para parar tráfego, desabilite os
-**logins**; para parar spend, use o balance.
+Para aposentar a account de vez, arquive-a: arquivar também derruba os binds ativos. Veja
+[Accounts](/platform/customers/accounts#o-que-a-linha-do-catálogo-efetivamente-contém).
 </Accordion>
 
 </AccordionGroup>

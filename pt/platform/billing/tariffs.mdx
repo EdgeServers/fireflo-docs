@@ -5,22 +5,27 @@ description: "Editando rates a partir do painel, overrides por conta e as duas i
 
 ## Editando rates a partir do painel
 
-Duas operações na página de um product, e a diferença entre elas importa:
+Os preços são editados na página **Pricing**. À esquerda ficam os scopes: **Everyone** (o default
+`*`), **Accounts** (o que elas nos pagam), **Tag prices** e **Vendors** (o que eles nos cobram). O
+seletor **Product** restringe a página a um produto.
 
-| Ação | Escreve | Escopo |
-| :--- | :--- | :--- |
-| **Definir o que todos pagam** | O scope `*` para esse product | Toda account sem regra própria |
-| **Precificar uma account** | O scope de uma account nomeada | Somente aquela account |
+<Frame caption="A página Pricing. Os cartões respondem às perguntas que custam dinheiro: quais vendors não têm custo, quantas contas pagam um preço próprio e quanto todos os outros pagam.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs-light.webp" alt="A página Pricing: os preços default por produto, com os preços de contas e de tags listados ao lado." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs-dark.webp" alt="A página Pricing: os preços default por produto, com os preços de contas e de tags listados ao lado." />
+</Frame>
 
-**Ambas salvam apenas as regras do product que você está olhando.** O restante do scope é intocado,
-portanto configurar `*` para `promo` não perturba `*` para nada mais.
-
-O editor de scope inteiro na página *Pricing* ainda substitui um scope por completo. E isso está
-correto ali, porque mostra tudo dele.
+Abra um scope para ver os preços dele, agrupados por produto. Edições, adições, movimentações e o
+ligar ou desligar de um preço ficam preparados e são salvos juntos. **Add pricing** pergunta de quem
+são os preços a acrescentar (uma conta, um vendor, uma tag ou todos) e abre esse scope. Quando um
+produto não tem default, a página dele e a visão geral de Pricing oferecem **Set what everyone pays**.
 
 A partir da 0.17.0 a página *Pricing* também lista **Tag prices**: uma lista de preços por
 [tag de conta](/platform/routing/account-tags), tentada depois dos preços próprios de uma conta e antes
 do default, na ordem da lista Tags.
+
+A aba **Tariff** de uma conta mostra os mesmos preços para essa conta e qual nível a precificaria.
+Quando uma plataforma gestora definiu uma tarifa customizada para a conta, a aba a mostra acima das
+regras: ela é aplicada antes delas e só é alterada naquela plataforma.
 
 <Warning>
 As regras próprias de uma account são tentadas primeiro e **a primeira que casar vence**, portanto
@@ -30,6 +35,30 @@ qualquer coisa que a account carregue bate o default. **Inclusive um catch-all p
 catch-all no nível da account desabilita silenciosamente todos os defaults que você configurar depois.
 O mesmo vale para os preços por tag: o catch-all próprio de uma conta também os vence.
 </Warning>
+
+## Exportando e importando preços
+
+**Export** na página Pricing baixa os preços como CSV, uma linha por preço: **Everything**,
+**Accounts** (o que os clientes pagam, com os preços por tag e o default) ou **Vendors** (o que as
+operadoras nos cobram). Os downloads ficam registrados no access log.
+
+<Frame caption="Export pricing. Mantenha a coluna rule_id ao editar o arquivo: é por ela que uma linha encontra o preço que altera.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--export-light.webp" alt="O diálogo Export pricing: todos os preços como um arquivo para editar e importar de novo." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--export-dark.webp" alt="O diálogo Export pricing: todos os preços como um arquivo para editar e importar de novo." />
+</Frame>
+
+Edite o arquivo numa planilha e traga de volta com **Import** (até 2 MB). Uma linha com `rule_id` em
+branco acrescenta um preço novo.
+
+<Warning>
+**Cada conta ou vendor citado no arquivo é substituído pelas linhas do arquivo.** Um preço que o
+arquivo não lista para esse scope é removido. Os scopes que o arquivo não cita ficam como estão.
+</Warning>
+
+Nada muda até você ler o preview. Ele lista, por scope, o que é acrescentado, alterado e removido. As
+remoções precisam ser ligadas à parte antes que **Apply** seja oferecido, e aplicar pede confirmação
+mais uma vez. Cada scope é salvo separadamente, então, se um falhar, os anteriores já estão
+aplicados. O gateway passa a precificar pelas linhas novas a partir do próximo poll de configuração.
 
 ## Duas identidades, não uma
 

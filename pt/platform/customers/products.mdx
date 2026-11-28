@@ -7,6 +7,11 @@ Um **product** é uma tag em um login. Ele é combinável na tabela de roteament
 decide se os IDs de remetente e o conteúdo da conta são checados. Ele também é opcional, e o caso
 opcional é o caro.
 
+<Frame caption="A página de um product: se está listado e checado, quantas regras de preço e logins o usam, o resumo do seu pricing e os logins que o selecionam.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products-light.webp" alt="A página de um product: sua descrição, os logins que o selecionam e o resumo do seu pricing." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products-dark.webp" alt="A página de um product: sua descrição, os logins que o selecionam e o resumo do seu pricing." />
+</Frame>
+
 ## Um product não definido é um estado suportado que envia de graça
 
 Deixar `product` fora de uma credencial é configuração válida. Ela combina com `product:isNull:` na
@@ -75,10 +80,15 @@ configurada como `0` não está nela — uma rota grátis permanece grátis e co
 
 | Coluna | Significado |
 | :--- | :--- |
-| `name` | A chave primária. Aparada, não-vazia, e comparada **exatamente** — `OTP` e `otp` são dois produtos. |
-| `label`, `description` | Para o painel. |
-| `enabled` | Se o gateway conta isso como um produto que vende. |
-| `whitelist_enabled` | Padrão `true`. `false` isenta o tráfego deste produto de checagens de sender ID e conteúdo. |
+| `name` | **Code** no painel. A chave primária. Aparada, não-vazia, e comparada **exatamente** — `OTP` e `otp` são dois produtos. Fixa depois de criada. |
+| `label`, `description` | **Display name** e **What the customer is buying**. Para o painel. |
+| `enabled` | **Listed**. Se o gateway conta isso como um produto que vende. |
+| `whitelist_enabled` | **Check sender IDs and content**. Padrão `true`. `false` isenta o tráfego deste produto de checagens de sender ID e conteúdo. |
+
+<Frame caption="Um product aberto para edição. O code é fixo: para passar a outro, crie-o, reaponte as regras e depois apague este.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products--edit-light.webp" alt="Um product aberto para edição: seu display name, o code fixo, o que o cliente está comprando, e se está listado e checado." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products--edit-dark.webp" alt="Um product aberto para edição: seu display name, o code fixo, o que o cliente está comprando, e se está listado e checado." />
+</Frame>
 
 ## Isentando um produto de whitelisting
 

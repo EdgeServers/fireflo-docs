@@ -1,6 +1,6 @@
 ---
 title: "Encontrando o caminho"
-description: "Um mapa da sidebar do operador, para que cada grupo serve, e as seis telas que não têm entrada de menu nenhuma."
+description: "Um mapa da sidebar do operador, para que cada grupo serve, e as telas que não têm entrada de menu nenhuma."
 ---
 
 O painel de controle é a metade do operador do FireFlo. Seus clientes nunca o veem — eles recebem
@@ -16,8 +16,8 @@ aconteceu sem escrever SQL.
 <AccordionGroup>
 
 <Accordion title="Overview — a primeira tela">
-Tráfego, entrega e falhas em todo o gateway, sobre 24 horas, 7 dias ou 30 dias. Comece aqui em um
-incidente; é a única tela que responde "há algo errado" sem que você tenha de nomear a coisa que
+Tráfego, entrega e falhas em todo o gateway, sobre 1 hora, 24 horas, 7 dias ou 30 dias. Comece aqui
+em um incidente; é a única tela que responde "há algo errado" sem que você tenha de nomear a coisa que
 suspeita.
 
 Veja [o dashboard](/platform/control-panel/dashboard).
@@ -31,15 +31,19 @@ Veja [o dashboard](/platform/control-panel/dashboard).
 | **Servers** | Listeners de entrada — como clientes se conectam a você |
 | **Accounts** | Seus clientes, e tudo ligado a eles |
 | **Pricing** | Tarifas, tanto o que você cobra quanto o que lhe é cobrado |
-| **Diagnostics** | Logs e configuração lidos da própria máquina do gateway |
+| **Logs** | Logs e configuração lidos da própria máquina do gateway — veja [Diagnósticos](/platform/control-panel/diagnostics) |
 
 **Vendor** e **server** são as duas metades da mesma ideia, e confundi-los é o erro inicial mais
 comum. Veja [conexões](/platform/connections/vendors).
 </Accordion>
 
 <Accordion title="Configuration — regras que o gateway aplica">
-**Filters** são condições reutilizáveis das quais tanto regras de roteamento quanto tarifas se
-valem. **TLVs** é o catálogo de parâmetros opcionais SMPP, incluindo aqueles que seus clientes
+**Gateway** reúne as configurações que todo vendor e listener herda, a menos que defina as suas
+próprias. **Error codes** mapeia os códigos de recibo de cada vendor para os que seus clientes
+recebem. **Filters** são condições reutilizáveis das quais tanto regras de roteamento quanto tarifas
+se valem; **Tags** são o que um filtro, uma regra de roteamento ou um preço pode testar sobre uma
+account; **Preprocessors** são programas para os quais uma regra de roteamento pode entregar
+mensagens. **TLVs** é o catálogo de parâmetros opcionais SMPP, incluindo aqueles que seus clientes
 propuseram e você ainda não aprovou.
 </Accordion>
 
@@ -52,8 +56,10 @@ os clientes solicitam em seu portal, e ambos só são aplicados onde você ligou
 | Item de menu | Responde |
 | :--- | :--- |
 | **Refused** | O que foi barrado antes de virar tráfego |
+| **Access log** | Quem entrou no portal ou no painel, quem foi recusado e o que mudaram |
+| **Security** | Binds e sign-ins recusados por endereço, quem está bloqueado, e Force disconnect |
 | **Queues** | O que está esperando agora, e limpar o que nunca será enviado |
-| **Archives** | O que uma limpeza de filas arquivou, e cada execução |
+| **Archives** | Onde os call records ficam, e o que uma limpeza de filas arquivou, com cada execução |
 | **Receipts** | Quão bem cada vendor reporta desfechos |
 | **Usage** | Volume e entrega, por account |
 | **Revenue** | Faturado, custo e margem |
@@ -63,15 +69,17 @@ os clientes solicitam em seu portal, e ambos só são aplicados onde você ligou
 
 ## As telas sem entrada de menu
 
-Existem seis telas que a sidebar nunca lista. Elas são alcançadas a partir de outras telas, o que é
+Existem oito telas que a sidebar nunca lista. Elas são alcançadas a partir de outras telas, o que é
 correto uma vez que você saiba e desconcertante até que saiba.
 
 | Tela | Alcançada de | O que é |
 | :--- | :--- | :--- |
-| **Live health** | O ícone de coração no header | Binds, profundidade de fila e recibos em trânsito, agora |
+| **Live health** | A pílula de saúde no header: um ponto, uma palavra como **Healthy** e a taxa de saída | Binds, profundidade de fila e recibos em trânsito, agora |
+| **Connectivity** | **Connectivity**, ao lado da pílula de saúde | Um mapa ao vivo de quem está conectado, por qual porta, a qual vendor |
+| **Kafka** | **Open Kafka topics** no card Kafka backbone da página Queues | Todo tópico no broker, seu consumer group, lag e retenção |
 | **Runtime** | "Runtime detail" na faixa de saúde do Overview | Memória, processador e capacidade de conexão |
 | **Routing** | A tela de Vendors | Routing tables, rules e vendor groups |
-| **Products** | A tela de Servers | O catálogo de products, e rates por product |
+| **Products** | A tela de Servers | O catálogo de products: cada product, um resumo do seu pricing e os logins que o selecionam. Os preços dele abrem em **Pricing**, restrito a esse product |
 | **Message detail** | Qualquer linha em Messages | Uma mensagem de ponta a ponta, incluindo seus TLVs |
 | **Sign-in** | Sair, ou uma sessão expirada | O formulário de sign-in do operador |
 

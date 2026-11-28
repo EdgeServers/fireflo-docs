@@ -3,13 +3,26 @@ title: "Uso"
 description: "Volume e entrega por account, com a única escolha aritmética que impede uma tarde ocupada de ser lida como um colapso."
 ---
 
-Quanto tráfego saiu, se chegou, e quem enviou. Volume e entrega lideram; dinheiro é a última coluna
-em vez do título — a pergunta comercial é respondida em [Receita](/platform/control-panel/revenue).
+Quanto tráfego saiu, se chegou, e quem enviou: por account, login e product. Volume e entrega
+lideram; dinheiro é a última coluna em vez do título — a pergunta comercial é respondida em
+[Receita](/platform/control-panel/revenue).
 
-O selecionador de intervalo oferece **24 horas**, **7 dias** ou **30 dias** e **default é 7 dias**,
-que é o único lugar no painel que não default para 24 horas. Um dia é a unidade em que uma pergunta
-de uso é feita, e um único dia de baldes horários não pode mostrar um formato de dia útil versus fim
-de semana.
+O selecionador de intervalo oferece **1 hour**, **24 hours**, **7 days** ou **30 days**. Como toda
+página de tráfego, abre na última hora e, depois disso, no intervalo que você escolheu por último
+naquele navegador. Um dia é a unidade em que uma pergunta de uso costuma ser feita, então, para ver o
+formato de dia útil versus fim de semana, escolha 7 ou 30 dias.
+
+<Frame caption="Uso em 7 dias. As barras contam só as mensagens que se liquidaram; a linha é a taxa de entrega contra o seu próprio eixo de 0–100%.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-usage-light.webp" alt="A página Usage: quatro cards de cifras, um gráfico diário e uma tabela por account." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-usage-dark.webp" alt="A página Usage: quatro cards de cifras, um gráfico diário e uma tabela por account." />
+</Frame>
+
+## Filtros
+
+Abaixo do título: **Account** e **Login** (cada um sugere nomes enquanto você digita), **Product**,
+**Tag**, e os dias **From** e **To** no fuso de billing. Nada é lido até você apertar **Go**;
+**Clear** remove todos. Um intervalo de datas substitui o selecionador de intervalo enquanto estiver
+definido. Os filtros que você aplicou ficam lembrados naquele navegador.
 
 ## As cifras
 
@@ -27,9 +40,15 @@ Portanto uma taxa de 98% significa 98% *das mensagens que têm um desfecho*. Men
 esperando são contadas em **Sent**, e em **Pending** na tabela, e estão em nenhuma metade da taxa.
 </Warning>
 
+A partir da 0.15.1, a página lê apenas os resumos de uso do gateway, e os call records dos últimos
+minutos e nada mais, seja o que for filtrado ou aberto — é isso que mantém uma visão de 30 dias
+rápida em volume. O **Pending** de uma hora ou de um dia resumido é o que ainda aguardava recibo
+quando o gateway o resumiu pela última vez.
+
 ## Tráfego
 
-Entregues e falhadas empilhadas por dia contra volume à esquerda, e a taxa de entrega como uma
+Entregues e falhadas empilhadas por dia (por hora nos intervalos mais curtos) contra volume à
+esquerda, e a taxa de entrega como uma
 linha contra um eixo fixo 0–100% à direita.
 
 Duas escolhas deliberadas que vale saber:
@@ -39,19 +58,31 @@ Duas escolhas deliberadas que vale saber:
 - **Um dia sem nada liquidado não tem taxa alguma**, e a linha quebra em vez de cair para zero.
   Uma lacuna é "sem evidência"; um zero seria "tudo falhou".
 
-## Por account
+## Por account, login e product
 
-Remetente mais pesado primeiro: **Account · Sent · Delivered · Failed · Pending · Rate · Billed**.
+O mais pesado primeiro, uma linha por account, login e product:
+**Account · Login · Product · Sent · Delivered · Failed · Pending · Rate · Billed**. Cinquenta linhas
+por página.
+
+Abra uma linha pela sua seta para ver os dias dela, ou as horas na visão de 24 horas; **Expand all**
+abre as primeiras 25 linhas de uma vez. A visão de 1 hora não tem nada para abrir.
+
+<Frame caption="A tabela por account, login e product em 7 dias. A seta em cada linha abre os seus dias.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-usage--breakdown-light.webp" alt="A tabela Usage aberta por account, login e product: sent, delivered, failed, pending, rate e billed." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-usage--breakdown-dark.webp" alt="A tabela Usage aberta por account, login e product: sent, delivered, failed, pending, rate e billed." />
+</Frame>
 
 Cada account leva através para aquele cliente, onde a mesma pergunta é respondida apenas para eles.
 
-A partir da 0.17.0 um filtro **Tag** limita a página às contas que têm elas mesmas uma
+A partir da 0.17.0 o filtro **Tag** limita a página às contas que têm elas mesmas uma
 [tag de conta](/platform/routing/account-tags). Ele lê as tags que as contas têm agora: uma mensagem não
 registra as tags da sua conta, então um período passado é lido com as de hoje.
 
-Tráfego que não nomeou uma account aparece como um **no account** acinzentado — não é erro, e não
-é uma account cujo nome está vazio. É tráfego que chegou sem uma, o que geralmente significa um
-login sem account anexada, e vale a pena investigar porque precifica e fatura diferentemente.
+Tráfego que não nomeou uma account mostra um traço na coluna **Account** — não é erro, e não é uma
+account cujo nome está vazio. É tráfego que chegou sem uma, o que geralmente significa um login sem
+account anexada, e vale a pena investigar porque precifica e fatura diferentemente. Os dias que o
+gateway resumiu antes de registrar logins (antes da 0.15.1) mostram todos os logins juntos numa
+linha, e a página diz isso.
 
 ## Uso contra o statement
 

@@ -1,42 +1,45 @@
 ---
 title: "Concedendo acesso ao portal para um cliente"
-description: "Duas configurações na conta, um requisito de deployment, e o motivo pelo qual o painel nunca confirmará se o endereço de um cliente foi reconhecido."
+description: "O e-mail da conta e os seus logins do portal, um requisito de deployment, e o motivo pelo qual o painel nunca confirmará se o endereço de um cliente foi reconhecido."
 ---
 
-Os clientes acessam o portal informando seu endereço de email e seguindo um link de uso único. Não há
-senha para emitir, nem convite para enviar, e nada a revogar exceto as duas configurações abaixo.
+Os clientes entram no portal com um **login do portal**: um endereço de email que entra por um link de
+uso único enviado por email, ou com uma senha depois que uma for definida. Os logins do portal de uma
+conta ficam na aba **Settings** dela, no cartão **Portal access**.
 
 ## O que um operador configura
 
-Abra a conta, vá em **Settings** e defina dois itens no cartão **Organisation**.
-
 <Steps>
 <Step title="Defina o endereço de email">
-O campo **Email** na conta. Uma conta por endereço, ignorando maiúsculas/minúsculas — uma segunda conta
-reivindicando o mesmo endereço é recusada em vez de silenciosamente sobrepor a primeira.
+O campo **Email** no cartão **Organisation**. Uma conta por endereço, ignorando
+maiúsculas/minúsculas — uma segunda conta reivindicando o mesmo endereço é recusada em vez de
+silenciosamente sobrepor a primeira.
 
 Um endereço malformado é recusado enquanto você digita, então um endereço que foi salvo é um endereço
-que o portal consegue reconhecer.
+que o portal consegue reconhecer. Salvá-lo dá à conta um login do portal para esse endereço. Se esse
+login estiver faltando, o cartão Portal access oferece **Create a login for** o endereço.
 </Step>
 
-<Step title="Mantenha a conta listada">
-A caixa de seleção **Listed**, em **Advanced**. Um link de acesso só é emitido para uma conta que
-esteja tanto correspondida por endereço **quanto** habilitada.
+<Step title="Escolha como ele entra">
+Cada login no cartão Portal access diz como entra: **Emailed link only** ou **Password, or emailed
+link**. **Set password** ou **Change password** define uma senha; **Remove password** volta para só
+links. Sem senha, o cliente entra pelo link enviado por email e pode definir uma senha pelo portal.
+</Step>
+
+<Step title="Mantenha a conta habilitada">
+A chave **Enabled**, em **Advanced**. Ninguém consegue entrar no portal por uma conta que está
+desligada ou arquivada.
 </Step>
 </Steps>
 
-<Warning>
-**Desmarcar "Listed" desliga o acesso ao portal da conta, e a caixa de seleção não diz isso.**
+<Frame caption="A aba Settings de uma conta. O login do portal fica à direita, com a forma como ele entra e quando entrou pela última vez.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="As Settings de uma conta: nome, e-mail, notas e tags, e o seu sign-in no portal." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="As Settings de uma conta: nome, e-mail, notas e tags, e o seu sign-in no portal." />
+</Frame>
 
-A descrição dela fala sobre listagens no painel e observa corretamente que o tráfego continua fluindo
-de qualquer forma — desmarcar não interrompe nada que o gateway faz. Mas *interrompe* sim a emissão
-de links de acesso pelo portal, o que a torna o mais próximo de um interruptor liga/desliga do portal
-que a conta possui. Esse é o comportamento atual; o texto ao lado da caixa de seleção ainda não foi
-atualizado.
-
-Para interromper o tráfego, desabilite os logins. Para interromper gastos, use o saldo. Para
-interromper o acesso ao portal, desmarque "Listed".
-</Warning>
+Para impedir uma pessoa de entrar, aperte **Turn off** no login dela; **Turn on** a deixa entrar de
+novo. Desligar a conta inteira também para o tráfego dela — veja
+[Accounts](/platform/customers/accounts#o-que-a-linha-do-catálogo-efetivamente-contém).
 
 ## O que o deployment precisa
 
@@ -72,6 +75,11 @@ respondido com a mesma frase neutra — o cliente não é informado de que foi l
 **A aba Logins não é acesso ao portal.** Ela armazena credenciais SMPP e HTTP, que são como o
 *software* do cliente se conecta. Nada nela concede ou revoga o acesso de uma pessoa. Uma conta pode
 ter uma dúzia de logins e nenhum acesso ao portal, ou acesso ao portal e nenhum login.
+
+<Frame caption="A aba Logins: os logins SMPP e HTTP que faturam para a conta, se cada um está conectado, e as suas sessões ativas. Nenhum deles é um sign-in do portal.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins-light.webp" alt="A aba Logins de uma conta: cada login com seu tipo, estado de conexão e ações." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins-dark.webp" alt="A aba Logins de uma conta: cada login com seu tipo, estado de conexão e ações." />
+</Frame>
 
 Uma vez dentro, um cliente vê seu próprio tráfego, extrato, IDs de remetente, templates e o playground
 da API. E nunca vê seu custo, sua margem ou qual fornecedor carregou o quê. O que eles podem fazer

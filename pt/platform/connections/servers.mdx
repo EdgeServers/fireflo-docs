@@ -24,6 +24,11 @@ outSms.instance.smpp.enable   = true
 
 Todas as configurações estão em [Configurações do Listener](/reference/smpp/server).
 
+<Frame caption="O formulário de edição de um listener. O nome não pode ser mudado depois que o listener é adicionado; em vez disso, apague-o e adicione de novo.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers--edit-light.webp" alt="O formulário de edição de um listener: sua porta, se está ligado, o system ID que anuncia, o máximo de binds que aceita e as TLVs que envia." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers--edit-dark.webp" alt="O formulário de edição de um listener: sua porta, se está ligado, o system ID que anuncia, o máximo de binds que aceita e as TLVs que envia." />
+</Frame>
+
 <Warning>
 **Um listener que não consegue pegar sua porta não para o gateway.** Ele loga e todo o resto
 continua rodando — correto para uma implantação com vários listeners, e surpreendente na primeira vez.
@@ -77,17 +82,39 @@ logado uma vez por load de configuração nomeando o listener.
 | `mandatory.tlvs.submit` | Tags que uma mensagem precisa carregar, senão `0xC3` |
 | `inQueue.capacity` | Mensagens retidas esperando pelo message store |
 
+Os **overrides por account**, na aba **Listener settings** do listener, dão a uma account o seu
+próprio teto de taxa ou número de binds neste listener, no lugar do padrão do listener. O teto é
+compartilhado por todos os logins da account. Um valor vazio remove o override; `0` é ilimitado.
+
+<Frame caption="O teto de taxa ou o número de binds de uma account no lugar do padrão do listener. Os padrões que ele substitui aparecem abaixo do formulário.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--overrides-light.webp" alt="As configurações de um listener com seus overrides por account: o teto de taxa ou o número de binds de uma account no lugar do padrão do listener." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--overrides-dark.webp" alt="As configurações de um listener com seus overrides por account: o teto de taxa ou o número de binds de uma account no lugar do padrão do listener." />
+</Frame>
+
 ## Os estados em que um listener pode estar
 
 | Verbo | Efeito |
 | :--- | :--- |
 | `enable` / `disable` | Carregado, ou não |
-| `suspend` / `resume` | Para de aceitar; a fila drena de volta para o router |
-| `hold` / `release` | Continua aceitando, para de enviar; **a fila cresce** |
+| `suspend` / `resume` | Continua aceitando, não roteia nada: os submits ficam estacionados e são roteados no resume, os mais antigos primeiro; quando o estacionamento enche, os submits são recusados com um erro que permite retry. Os recibos continuam chegando aos clientes |
+| `hold` / `release` | Recusa todo submit com um erro que permite retry (`ESME_RMSGQFUL`) e **retém os recibos**. Ninguém é desconectado |
+
+No painel de controle, suspend é **Stop sending** e hold é **Stop accepting** (também **Hold**, no pé
+da página do listener). Cada um pergunta antes de agir.
+
+<Frame caption="Stop accepting pergunta primeiro: os clientes bindados têm seus submits recusados com um erro que permite retry e seus recibos retidos até você retomar. Ninguém é desconectado.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--stop-accepting-light.webp" alt="A pergunta antes de um listener parar de aceitar: os clientes bindados têm seus submits recusados com um erro que permite retry e ninguém é desconectado." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--stop-accepting-dark.webp" alt="A pergunta antes de um listener parar de aceitar: os clientes bindados têm seus submits recusados com um erro que permite retry e ninguém é desconectado." />
+</Frame>
 
 O painel mostra estes como um badge por card. `Listening` sem ninguém bindado **não** é falha. Um
 listener sem clientes conectados é quieto, não quebrado, e é por isso que ele não é pintado de
 vermelho como um vendor sem sessão é.
+
+<Frame caption="A página Servers. Um listener tem três clientes bindados; o outro diz Listening, o que só significa que ninguém está bindado.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers-light.webp" alt="A página Servers: um card por listener com seu estado e suas sessões ao vivo." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers-dark.webp" alt="A página Servers: um card por listener com seu estado e suas sessões ao vivo." />
+</Frame>
 
 ## Derrubando o bind de um cliente
 
@@ -97,6 +124,16 @@ scripts/fireflo disconnect smpp 7
 
 Ids de sessão vêm de `fireflo health`. Eles são o contador do próprio listener, portanto colidem
 entre listeners e reiniciam com o gateway.
+
+No painel de controle, abra a aba **Connections** do listener, expanda a account e aperte
+**Disconnect** na sessão. Marque **Also disable this login** para mantê-lo fora também.
+**Force disconnect**, no pé da página do listener, derruba todas as sessões de um endereço, de uma
+account ou de um login nesse listener.
+
+<Frame caption="A aba Connections: cada account bindada com seus binds, system type, tempo conectado e mensagens recebidas. Expanda uma account para chegar às sessões dela.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--connections-light.webp" alt="A aba Connections de um listener: cada account bindada com seus binds, system type, tempo conectado e mensagens recebidas." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--connections-dark.webp" alt="A aba Connections de um listener: cada account bindada com seus binds, system type, tempo conectado e mensagens recebidas." />
+</Frame>
 
 <Note>
 **Isso encerra uma conexão; não revoga permissão.** Um cliente saudável faz rebind em segundos a

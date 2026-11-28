@@ -45,6 +45,11 @@ O SMPP continua sendo a terceira via de entrada, e é separado — veja [Bind](/
 | `fireflo.v1.SendService` | `Send`, `SendStream` | Uma mensagem por chamada, ou muitas num stream. Veja [Enviando mensagens](/developers/grpc/sending). |
 | `fireflo.v1.ReceiptService` | `Subscribe`, `Pull`, `Ack` | Coleta os recibos de entrega das suas mensagens. Veja [Recibos de entrega via gRPC](/developers/grpc/receipts). |
 
+<Frame caption="A parte gRPC da referência da API REST no seu portal do cliente: o endereço, o transporte, o pacote e o seu login, e depois os três serviços. Onde seu provedor não publicou um endereço gRPC, ela diz isso e orienta você a pedir.">
+  <img className="block dark:hidden" src="/images/developers/grpc/apis-grpc-light.webp" alt="A parte gRPC API da referência do portal: endereço, transporte, pacote e login, um aviso de que nenhum endereço gRPC foi publicado, como obter o proto, e a tabela com AuthService, SendService e ReceiptService" />
+  <img className="hidden dark:block" src="/images/developers/grpc/apis-grpc-dark.webp" alt="A parte gRPC API da referência do portal: endereço, transporte, pacote e login, um aviso de que nenhum endereço gRPC foi publicado, como obter o proto, e a tabela com AuthService, SendService e ReceiptService" />
+</Frame>
+
 ## Conectando
 
 Seu provedor te dá um **host e uma porta**. Num gateway sem nada na frente, a porta costuma ser

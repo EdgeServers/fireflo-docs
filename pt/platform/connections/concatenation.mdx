@@ -16,6 +16,15 @@ Uma mensagem pode chegar como três e sair como três **sem que esses dois 3s es
 o FireFlo remonta o que o cliente enviou e depois divide o corpo inteiro novamente para a operadora
 usando a codificação daquela operadora.
 
+A página de uma mensagem no painel de controle mostra as duas pernas: **Vendor exchange** traz cada
+`submit_sm` enviado à operadora, a resposta e o recibo dele, com a regra e a codificação de cada
+parte; **Customer exchange**, logo abaixo, traz o que o cliente enviou e o que lhe foi respondido.
+
+<Frame caption="A troca com o vendor de uma mensagem longa: enviada à operadora como três partes GSM-7 com um cabeçalho de concatenação. O lado do cliente vem logo abaixo.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages--vendor-exchange-light.webp" alt="A troca com o vendor de uma mensagem longa: cada submit_sm, sua resposta e seu recibo com a regra e a codificação, e o lado do cliente abaixo." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages--vendor-exchange-dark.webp" alt="A troca com o vendor de uma mensagem longa: cada submit_sm, sua resposta e seu recibo com a regra e a codificação, e o lado do cliente abaixo." />
+</Frame>
+
 ## Como um cliente envia uma
 
 Duas maneiras, ambas aceitas e tratadas identicamente.
@@ -82,6 +91,11 @@ de comparar este mês com o passado.
 
 `smsg.restapi.billing.units` decide se uma mensagem multipart é cobrada uma vez ou por segmento.
 
+<Frame caption="Uma mensagem de três partes cobrada por segmento: faturada e custeada como três unidades. Só a parte um carrega o dinheiro; as outras partes são gravadas sem valores.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages-light.webp" alt="A página de uma mensagem longa: três partes, uma tentativa e um recibo, com sua rota e o que foi cobrado e custou." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages-dark.webp" alt="A página de uma mensagem longa: três partes, uma tentativa e um recibo, com sua rota e o que foi cobrado e custou." />
+</Frame>
+
 <Warning>
 Configurado como `message`, um cliente enviando tráfego de três segmentos paga por uma e você paga
 sua operadora por três. `segment` é o padrão por essa razão.
@@ -90,6 +104,11 @@ Uma mensagem permanece em um segmento com **160 caracteres** de texto GSM plano,
 qualquer caractere fora desse conjunto — um emoji, ou uma aspa curva colada de um processador de
 texto, corta o limite da mensagem inteira pela metade.
 </Warning>
+
+<Frame caption="Uma mensagem Unicode: 126 caracteres enviados por HTTP como UCS-2, que foram ao vendor em duas partes.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-long-messages--unicode-light.webp" alt="A página de uma mensagem Unicode: chegou por REST como UCS-2 com 126 caracteres e foi ao vendor em duas partes." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-long-messages--unicode-dark.webp" alt="A página de uma mensagem Unicode: chegou por REST como UCS-2 com 126 caracteres e foi ao vendor em duas partes." />
+</Frame>
 
 ## Limites
 

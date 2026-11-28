@@ -6,6 +6,31 @@ description: "Por que um período fechado nunca é reescrito, por que a linha BI
 Um statement é o uso de um cliente em um período. **Fechar** um período transforma isso de uma
 query viva em um fato registrado.
 
+## A aba Statement
+
+Abra uma conta e escolha **Statement**. Escolha um **Month**, ou um **Date range** de até 92 dias, e
+aperte **Show**: o período é lido quando você aperta, não quando escolhe. Os cartões dão o valor, o
+que foi enviado e entregue e a taxa de entrega; **Per day** desenha as mensagens por dia por produto,
+com uma linha para o que foi cobrado.
+
+<Frame caption="A aba Statement de uma conta para um mês em andamento. O valor ainda se move conforme o tráfego chega, então o mês ainda não pode ser fechado.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements-light.webp" alt="A aba Statement de uma conta: totais do período, um gráfico por dia e os períodos fechados." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements-dark.webp" alt="A aba Statement de uma conta: totais do período, um gráfico por dia e os períodos fechados." />
+</Frame>
+
+A tabela abaixo divide o período por **Product** ou por **Login**, com entregues, com falha,
+expiradas, pendentes e não cobradas contadas à parte, ao lado do que foi cobrado.
+
+<Frame caption="O statement por produto. Not billed é tráfego que saiu sem preço; ele é enviado do mesmo jeito.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements--by-product-light.webp" alt="A tabela por produto de um statement: enviadas, entregues, com falha, expiradas, pendentes e não cobradas contadas à parte, com o valor." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements--by-product-dark.webp" alt="A tabela por produto de um statement: enviadas, entregues, com falha, expiradas, pendentes e não cobradas contadas à parte, com o valor." />
+</Frame>
+
+**Download CSV** prepara um arquivo; ele aparece em **Prepared files** quando fica pronto. **Close
+this period** é oferecido para um período ainda não fechado, exceto o mês em andamento, e pede que
+você confirme o período e o valor.
+Os períodos fechados ficam listados na aba; clique em um para mostrá-lo de novo.
+
 ## Um período fechado é imutável
 
 Fechar escreve uma linha `BILL` registrando o que foi faturado. **Ela nunca é reescrita.**

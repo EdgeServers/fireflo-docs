@@ -58,6 +58,15 @@ não escolhidas entre si.
 significava antes de a coluna existir, então um deployment intocado casa exatamente como antes e não
 foi necessário backfill. Dois logins na mesma conta podem manter o mesmo sender ID.
 
+Na aba **Approvals** da conta, **Approve a sender ID** define tudo isso: o sender ID, se está em
+serviço, o **Product** (ou todos os produtos), o **Login** (ou todos os logins da conta) e as TLVs que
+ele carimba.
+
+<Frame caption="Approve a sender ID. Product e Login restringem a linha; deixá-los em Every product e Every login on the account é o escopo mais amplo.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--approve-sender-light.webp" alt="O diálogo Approve a sender ID: o remetente, se está em serviço, o produto e o login que cobre, e as TLVs a carimbar." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--approve-sender-dark.webp" alt="O diálogo Approve a sender ID: o remetente, se está em serviço, o produto e o login que cobre, e as TLVs a carimbar." />
+</Frame>
+
 <Warning>
 **Um login sem linhas próprias e sem linhas em nível de conta não pode enviar nada quando o
 enforcement está ligado.** Vincular uma aprovação a um login não apenas adiciona especificidade — ela
@@ -78,16 +87,22 @@ sua referência de registro. O gateway serve uma linha somente quando ela está 
 `APPROVED`, então uma requisição é armazenada, visível aos dois lados, e inerte.
 </Step>
 <Step title="Um operador decide">
-Aprovar ou recusar, na página da conta ou na lista entre contas. Uma recusa mantém a linha e carrega
-um motivo mostrado ao cliente — que é por que não há recusa em lote, apenas aprovação em lote.
+Aprovar ou recusar, na aba Approvals da conta ou na página **Headers**, que lista os sender IDs de
+todas as contas. Uma recusa mantém a linha e carrega um motivo mostrado ao cliente — que é por que não
+há recusa em lote, apenas aprovação em lote.
 </Step>
 <Step title="Entra em serviço no próximo poll">
 Sem reconexão. Veja abaixo.
 </Step>
 </Steps>
 
+<Frame caption="A página Headers restrita a uma conta, com uma requisição aberta: quem pediu, o seu escopo, os stamps que colocaria no wire e o seu histórico.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--requests-light.webp" alt="Requisições de sender ID restritas a uma conta, uma delas aberta mostrando quem pediu, o seu escopo e o seu histórico." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--requests-dark.webp" alt="Requisições de sender ID restritas a uma conta, uma delas aberta mostrando quem pediu, o seu escopo e o seu histórico." />
+</Frame>
+
 `status` e `enabled` são colunas separadas fazendo trabalhos separados. Aprovar escreve `status` e
-registra o revisor. Desmarcar escreve `enabled = false` e deixa `status` em paz: **retirar algo não é
+registra o revisor. Desligar **Approved** na linha escreve `enabled = false` e deixa `status` em paz: **retirar algo não é
 desaprová-lo**, e uma linha retirada colocada de volta em serviço não deve precisar ser aprovada
 novamente.
 

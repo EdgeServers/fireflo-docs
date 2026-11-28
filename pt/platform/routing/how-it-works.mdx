@@ -59,6 +59,15 @@ forma comum. Duas coisas limitam a recursão:
 Uma tabela alcançada duas vezes por caminhos diferentes não é um ciclo: `default → a → c` junto com
 `default → b → c` carrega normalmente.
 
+No painel de controle, **Start here** na página Routing desenha como uma mensagem viaja a partir de
+`default` pelas tabelas, e verifica as regras de roteamento padrão: uma por listener para os seus
+receipts, e uma por tipo de mensagem de saída na tabela de entrada.
+
+<Frame caption="Start here: toda mensagem começa em default e segue as regras que a mandam para outra tabela. Abaixo, as regras de que o gateway precisa para funcionar.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost-light.webp" alt="O Start here da página Routing: como uma mensagem viaja de default para MESSAGE, e as regras de roteamento padrão verificadas contra as tabelas." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost-dark.webp" alt="O Start here da página Routing: como uma mensagem viaja de default para MESSAGE, e as regras de roteamento padrão verificadas contra as tabelas." />
+</Frame>
+
 ## As duas coisas que carregam e depois se comportam mal em silêncio
 
 Ambas aparecem em `/ops/health` sob `routing_warnings`, e cada uma é logada uma vez quando aparece

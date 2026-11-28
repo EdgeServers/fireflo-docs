@@ -17,6 +17,14 @@ Elas fazem join em `(gateway_msg_id, part_no)`. A view `cdr_pnl` faz left-join e
 portanto registros ainda sem desfecho aparecem como `PENDING`. **A exposição em trânsito permanece
 visível** em vez de ser silenciosamente excluída dos seus números.
 
+No painel de controle, esses registros são a página **Messages**: uma linha por mensagem, filtrada por
+período, desfecho, conta, vendor, produto e mais.
+
+<Frame caption="A página Messages filtrada para uma conta. Billed é o lado do cliente; o custo do vendor é uma das colunas que você pode acrescentar.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records-light.webp" alt="A página Messages: uma barra de filtros sobre os call records, com o valor cobrado de cada mensagem." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records-dark.webp" alt="A página Messages: uma barra de filtros sobre os call records, com o valor cobrado de cada mensagem." />
+</Frame>
+
 ## Por que recibos de progresso vivem na sua própria tabela
 
 Um vendor pode enviar vários recibos para uma mensagem: `ACCEPTD` ao aceitá-la, `BUFFRED` enquanto
@@ -57,6 +65,15 @@ cobrar por mensagem.
 | `margin`, `margin_pct` | Armazenado, para que o P&L some uma coluna |
 | `cost_currency`, `price_currency` | Por lado; o FireFlo nunca converte |
 | `cost_rule_id`, `price_rule_id` | Qual rate rule casou, para auditoria |
+
+Na página Messages, **Columns** mostra ou esconde essas colunas, agrupadas em mensagem, rota, dinheiro
+e desfecho. A escolha vale só para a tela: um export CSV carrega todas as colunas do registro, seja
+qual for a escolha, então duas pessoas exportando os mesmos filtros recebem o mesmo arquivo.
+
+<Frame caption="O seletor de colunas. O grupo Money reúne os dois lados da operação: valor cobrado, tarifa e unidades cobradas, custo, tarifa de custo e unidades de custo, e a margem.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--columns-light.webp" alt="A lista Messages com o seletor de colunas aberto: colunas de mensagem, rota, dinheiro e desfecho para mostrar ou esconder." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--columns-dark.webp" alt="A lista Messages com o seletor de colunas aberto: colunas de mensagem, rota, dinheiro e desfecho para mostrar ou esconder." />
+</Frame>
 
 <Warning>
 **Dinheiro desconhecido é `NULL`, nunca `0`.** Uma taxa que não pôde ser determinada permanece
@@ -111,6 +128,14 @@ Toda tentativa em um vendor agora deixa sua própria linha `cdr_submit` — não
 finalmente teve sucesso ou falhou terminalmente. `vendor_attempt` as numera, `submit_status` carrega o
 que o vendor efetivamente disse em cada uma, e `NULL` ali significa "não registrado", não "aceito".
 Veja [Tabelas de call record](/reference/data/cdr-tables) para o formato exato.
+
+Na página Messages, mude de **Per message** para **Every attempt** para listar uma linha por
+tentativa.
+
+<Frame caption="Every attempt: uma linha para cada tentativa em um vendor, então uma mensagem retentada mostra cada tentativa em vez de só a última.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--attempts-light.webp" alt="A lista Messages em Every attempt: uma linha por tentativa, com o ingresso, o vendor, o valor e o desfecho." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--attempts-dark.webp" alt="A lista Messages em Every attempt: uma linha por tentativa, com o ingresso, o vendor, o valor e o desfecho." />
+</Frame>
 
 <Tip>
 A página por mensagem do painel de controle lê essas linhas, mais `cdr_interim` e `cdr_final`, como

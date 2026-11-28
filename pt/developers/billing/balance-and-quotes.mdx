@@ -51,6 +51,11 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
 **O custo é `unit_rate × submit_sm_count`.** `submit_sm_count` é a contagem de segmentos, então esse
 é também o jeito de descobrir que uma mensagem que você achava que era uma é na verdade três.
 
+<Frame caption="Price a message na referência da API REST no seu portal do cliente: os parâmetros, um exemplo para o seu login, a resposta e as duas recusas próprias dele.">
+  <img className="block dark:hidden" src="/images/developers/billing/apis-rest--price-light.webp" alt="A parte Price a message da referência da API REST do portal: to, content, coding, product e from, um exemplo em curl, a resposta com unit_rate e submit_sm_count, e os 400 e 403 que pode retornar" />
+  <img className="hidden dark:block" src="/images/developers/billing/apis-rest--price-dark.webp" alt="A parte Price a message da referência da API REST do portal: to, content, coding, product e from, um exemplo em curl, a resposta com unit_rate e submit_sm_count, e os 400 e 403 que pode retornar" />
+</Frame>
+
 `/secure/rate` **não envia nada, não cobra nada e não conta em nenhum rate limit.** Isso o torna
 seguro para chamar em conteúdo gerado por usuários antes de comprometer um envio. É a única checagem
 prévia que é genuinamente grátis.

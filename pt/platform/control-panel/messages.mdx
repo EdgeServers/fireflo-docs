@@ -12,13 +12,28 @@ Filtros se aplicam quando você pressiona **Search**, não conforme digita, e vi
 endereço — portanto uma visão filtrada pode ser marcada ou colada para um colega e ele verá o que
 você viu.
 
-A linha sempre visível: **Period**, **Outcome**, **To number** (casa a partir do início),
-**Message id** (exato) e **Message text** (contém). **More filters** adiciona account, bind name,
-vendor, product, ingress e from-number.
+A linha sempre visível: **Period** (um preset, ou um intervalo de datas), **Outcome** e **Find**, uma
+caixa que aceita um número de destino (casado a partir do início) ou um message id (exato) e
+distingue os dois sozinha. **Filters** abre o resto em três grupos, e o seu badge conta quantos deles
+estão definidos:
 
-A partir da 0.17.0 ele também oferece **Tag**: mensagens de contas que têm elas mesmas essa
+| Grupo | Filtros |
+| :--- | :--- |
+| **Route** | Ingress server, Vendor, Came in via |
+| **Sender** | Account, Tag, Bind name (system id), Product |
+| **Message** | From number (começa com), Message text (contém) |
+
+**Tag** (a partir da 0.17.0) encontra mensagens de contas que têm elas mesmas essa
 [tag de conta](/platform/routing/account-tags) agora. Uma mensagem não registra as tags da sua conta, e
 o filtro precisa de um período diferente de todo o histórico.
+
+Cada filtro aplicado aparece como um chip abaixo da barra; remova um com o seu X, ou todos com
+**Clear all**.
+
+<Frame caption="Messages de uma account em 7 dias, com Filters aberto. O chip da account abaixo da barra é o filtro aplicado.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages-light.webp" alt="A página Messages: a barra de filtros e uma tabela de mensagens com seus desfechos." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages-dark.webp" alt="A página Messages: a barra de filtros e uma tabela de mensagens com seus desfechos." />
+</Frame>
 
 **Awaiting a receipt** é listado primeiro entre desfechos em vez de alfabeticamente. Em um gateway
 ocupado e saudável, é o maior grupo, e é o que as pessoas geralmente estão procurando.
@@ -31,12 +46,13 @@ da mensagem**, que está desligado por padrão. Um resultado vazio pode signific
 
 ### Uma linha por mensagem, ou uma por tentativa
 
-O controle **Rows** decide o grão, e muda o que os números significam:
+A chave **Per message** / **Every attempt** ao lado dos filtros decide o grão, e muda o que os números
+significam:
 
 | Configuração | Uma linha é |
 | :--- | :--- |
-| **One row per message** *(padrão)* | O que o cliente enviou |
-| **Every attempt and segment** | O que o gateway fez — incluindo retries e segmentos de mensagem longa |
+| **Per message** *(padrão)* | O que o cliente enviou |
+| **Every attempt** | O que o gateway fez — uma linha por tentativa no vendor, incluindo retries e segmentos de mensagem longa |
 
 Uma mensagem longa que dividiu em três, retentada duas vezes no vendor, é uma linha na primeira
 configuração e várias na segunda. Se uma contagem parecer alta demais, verifique este controle
@@ -44,8 +60,8 @@ antes de concluir qualquer coisa.
 
 ## Colunas
 
-Sete por padrão: submitted, to, from, account, vendor, billed, outcome. O selecionador agrupa
-aproximadamente mais trinta sob **Message**, **Route**, **Money** e **Outcome** — incluindo custo,
+Oito por padrão: submitted, to, from, account, ingress server, vendor, billed, outcome. O
+selecionador agrupa aproximadamente mais trinta sob **Message**, **Route**, **Money** e **Outcome** — incluindo custo,
 margem, ambas rate rules, estado do recibo e código de erro.
 
 <Warning>
@@ -89,6 +105,15 @@ resultados que de outra forma se parecem com falhas:
 Cada recibo mostra o mnemônico SMPP com seu significado em inglês simples, e então a parte que as
 pessoas precisam: se ele **fechou a mensagem**, foi **um desfecho posterior, não o que foi
 faturado**, ou foi **progresso** que deixou a mensagem aberta.
+
+<Frame caption="Os recibos de uma mensagem longa. A linha acima da tabela diz o que o cliente pediu; Sent on diz se cada recibo foi repassado a ele.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages--receipts-light.webp" alt="A página de uma mensagem longa nos seus recibos: a troca com o cliente e depois cada recibo que voltou, com seu estado e o id próprio do vendor." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages--receipts-dark.webp" alt="A página de uma mensagem longa nos seus recibos: a troca com o cliente e depois cada recibo que voltou, com seu estado e o id próprio do vendor." />
+</Frame>
+
+Abaixo do erro aparece o código próprio da operadora, marcado **mapped** quando os seus códigos de erro
+o traduziram. **Sent on** mostra **Held — not asked for** quando o cliente não pediu recibos, então
+nada foi enviado a ele.
 
 Onde o gateway registrou o que o cliente pediu, é mostrado ao lado. Onde não, a página diz isso
 explicitamente. Não é o mesmo que o cliente não ter pedido nada.

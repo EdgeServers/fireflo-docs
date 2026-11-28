@@ -11,7 +11,22 @@ de cinco pode mostrar 95% ali enquanto três em cinco de tudo que você enviou a
 desfecho algum. A taxa não está errada. Ela está respondendo a uma pergunta mais estreita do que
 aparenta.
 
-Esta página amplia o denominador.
+Esta página amplia o denominador. Ela é **Receipts**, em Reports, lida sobre **1 hour**,
+**24 hours**, **7 days** ou **30 days**; abre na última hora e, depois disso, no intervalo que você
+escolheu por último naquele navegador.
+
+## Os gráficos
+
+**How attempts ended, by vendor** divide tudo o que cada vendor recebeu em cinco partes que sempre
+somam a barra: entregue, com falha, desistido, ainda aberto e recusado (uma tentativa que o vendor
+recusou nunca recebe recibo). **Time to receipt** põe a mediana de cada vendor ao lado do seu
+percentil 90. Os dois são desenhados a partir das linhas da tabela abaixo, então sempre concordam
+com ela.
+
+<Frame caption="Receipts de 7 dias. A barra de um vendor é quase toda verde, e o seu percentil 90 fica bem à direita da sua mediana.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts-light.webp" alt="A página Receipts: uma tabela de vendors com sua reporting rate e seus tempos de recibo." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts-dark.webp" alt="A página Receipts: uma tabela de vendors com sua reporting rate e seus tempos de recibo." />
+</Frame>
 
 ## A tabela
 
@@ -33,6 +48,11 @@ plano de 70%, vermelho abaixo. Um vendor abaixo de 70% está lhe custando sua pr
 aconteceu com tráfego pelo qual você já pagou.
 
 Um vendor sem nome registrado aparece como **no vendor**.
+
+Num intervalo longo, os tempos e os recibos de progresso são lidos de uma **amostra** das mensagens, e
+uma linha abaixo da tabela diz quantas de quantas. A amostra é das mesmas mensagens a cada
+carregamento, e as contagens de progresso são extrapoladas a partir dela. Sent, reported, gave up on,
+still open e delivered são sempre exatos.
 
 ## As quatro coisas que vale a pena ler duas vezes
 
@@ -65,8 +85,16 @@ falhar na entrega. Começou a falhar em *te contar*, e as duas são indistinguí
 página Vendors. Tráfego ainda sai, clientes ainda são cobrados, e sua evidência silenciosamente
 para de se acumular.
 
-As mesmas cifras aparecem como uma linha compacta no card de cada vendor, rotuladas como **Reports
-outcomes**, **Median to outcome**, **90th percentile** e **Never reported**.
+As mesmas cifras aparecem para um vendor na própria página dele, na aba **Traffic**, em **Delivery
+receipts**: **Reports outcomes**, **Sent**, **Reported**, **Still open**, **Median to first sign**,
+**Median to outcome**, **90th percentile** e **Never reported**. **Median to first sign** é o tempo até
+o primeiro sinal de vida do vendor; posto ao lado de **Median to outcome**, ele separa um vendor que
+confirma na hora e liquida tarde de um que não diz nada até o fim.
+
+<Frame caption="A aba Traffic de um vendor em 24 horas. Delivery receipts dá a sua reporting rate com as contagens de que ela é a razão.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts--vendor-traffic-light.webp" alt="A aba Traffic de um vendor em 24 horas: mensagens, entrega, custo e suas cifras de recibo — reportadas, ainda abertas e o tempo mediano até um desfecho." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts--vendor-traffic-dark.webp" alt="A aba Traffic de um vendor em 24 horas: mensagens, entrega, custo e suas cifras de recibo — reportadas, ainda abertas e o tempo mediano até um desfecho." />
+</Frame>
 
 ## O que ela precisa para dizer algo
 

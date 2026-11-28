@@ -99,29 +99,57 @@ não é.
 ## Limpando uma fila: arquivar e encerrar
 
 <Warning>
-**Suspenda ou segure primeiro.** Se você só precisa que o tráfego pare, suspenda o fornecedor ou segure
-o listener: nada se perde. Limpe uma fila só para mensagens que nunca serão enviadas.
+**Stop sending ou Hold primeiro.** Se você precisa que o tráfego pare, suspenda o fornecedor ou segure
+o listener ([Controlando um worker](/platform/operations/worker-control)) — nada se perde, e retomar
+continua de onde parou. Limpe uma fila só para mensagens que nunca serão enviadas: um fornecedor que
+deixou de existir, um estacionamento de roteamento que ninguém vai consertar, receipts para um login
+que nunca mais vai fazer bind.
 </Warning>
 
-A partir da 0.12.19 uma fila pode ser limpa, pela linha de comando ou pelo painel; os dois usam o mesmo
-endpoint do gateway com o token admin:
+A partir da 0.12.19 uma fila pode ser limpa, pela linha de comando ou pelo painel de controle; os dois
+chamam o mesmo endpoint do gateway, com o token admin:
 
 ```bash
-./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held
+./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held   # dry run: counts, refund total, sample
 FIREFLO_QUEUE_ARCHIVE=true ./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held \
       --note "vendor withdrawn" --yes
 ```
 
-Cada mensagem é tirada da fila de forma atômica, **arquivada** em uma transação confirmada (se o
-arquivo falhar, tudo volta para a fila) e depois **encerrada**: reembolsada se foi cobrada, um receipt
-de falha se pedido, e registrada como `REJECTED` com motivo `operatorPurge`. Receipts e retentativas de
-webhook não carregam dinheiro: são arquivados e removidos. **Nada arquivado pode ser devolvido.** Uma
-fila no broker não pode ser limpa (`broker-backed`).
+O que acontece com cada mensagem que casa, nesta ordem:
+
+1. **Tirada da fila** — de forma atômica: uma mensagem é pega pela sessão do fornecedor ou pela
+   limpeza, nunca pelas duas. O gateway continua rodando; nada precisa ser suspenso antes.
+2. **Arquivada**, em uma única transação confirmada no banco, com quem fez, por quê (a nota) e o lote
+   a que pertence. Se o arquivo não puder ser escrito, todas as mensagens voltam para a fila e o
+   comando responde que não conseguiu — nada se perde.
+3. **Encerrada**, exatamente como uma mensagem que o próprio gateway descarta: **reembolsada** se foi
+   cobrada, um **receipt de falha** enviado onde o cliente pediu um, e registrada como `REJECTED` com
+   motivo `operatorPurge` — que é o que a timeline da mensagem e a página Refused mostram.
+
+Receipts esperando por um login e retentativas de callback de webhook não carregam dinheiro: são
+arquivados e removidos. **Nada arquivado pode ser devolvido** — limpar encerra uma mensagem, não a
+estaciona.
+
+| Store | Contém | Sub-stores |
+| :--- | :--- | :--- |
+| `worker` | As filas de um fornecedor ou de um listener | `pending`, `retry`, `held` (enquanto parado), `parked` (a entrada de um listener enquanto parado) |
+| `routing` | As filas do gateway inteiro antes de um fornecedor ser escolhido | `router`, `retry`, `failed` (estacionamento de roteamento com falha) |
+| `receipts` | Receipts esperando que um login SMPP faça bind | por login ou conta |
+| `callbacks` | Callbacks de webhook esperando retentativa | por conta |
+
+Uma limpeza de um store `worker` ou `routing` sem fornecedor, listener, conta ou login indicado é
+recusada, a menos que você diga `--all`. Cada chamada arquiva no máximo 10 000; o comando e o painel
+trabalham em lotes até nada mais casar.
 
 <Note>
-Tradução pendente: o detalhe completo está
-[em inglês](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+**Uma fila mantida no message broker não pode ser limpa.** O AMQP não consegue ler uma mensagem sem
+tirá-la, e uma limpeza precisa ver uma mensagem para arquivá-la — então uma fila no broker é recusada
+com `broker-backed`, e as ferramentas do próprio broker são o caminho para lidar com ela.
 </Note>
+
+O arquivo é lido em **Reports → Archives → Queue housekeeping** no painel, ou com
+`fireflo queue archived` e `fireflo queue archive summary`; ele é mantido em partições mensais ao lado
+de um resumo por dia que nunca é apagado. Veja [a referência de comandos](/reference/cli/fireflo#queues).
 
 ## Acesso
 

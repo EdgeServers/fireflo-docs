@@ -3,23 +3,28 @@ title: "Mensagens e extrato"
 description: "Como achar uma mensagem entre milhares, exportar o resultado e ler uma fatura cobrada na submissão, não na entrega."
 ---
 
-Duas telas respondem duas perguntas diferentes. **Mensagens** é "o que aconteceu com esta".
-**Extrato** é "pelo que estou pagando". Elas discordam levemente de propósito, e o motivo está no
+Duas telas respondem duas perguntas diferentes. **Messages** é "o que aconteceu com esta".
+**Statement** é "pelo que estou pagando". Elas discordam levemente de propósito, e o motivo está no
 fim desta página.
 
 ## Mensagens
 
-Uma barra de filtros sobre uma tabela. Os filtros são aplicados quando você aperta **Buscar**, não
+Uma barra de filtros sobre uma tabela. Os filtros são aplicados quando você aperta **Search**, não
 enquanto digita, e eles são carregados na barra de endereços. Assim, uma visão filtrada pode ser
 salva nos favoritos ou colada em um chamado, de forma que quem ler veja exatamente o que você viu.
 
+<Frame caption="Messages: a barra de filtros e depois a tabela, com Columns e Download CSV acima dela. A linha sobre as linhas da tabela diz quantas ainda não têm desfecho final, para que uma coluna em branco não pareça uma falha.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-messages-light.webp" alt="A página Messages do portal: filtros Period, Outcome, To number, Message id e Message text com um botão Search, e uma tabela de mensagens com hora de submissão, to, from, message id, conta, valor cobrado e desfecho" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-messages-dark.webp" alt="A página Messages do portal: filtros Period, Outcome, To number, Message id e Message text com um botão Search, e uma tabela de mensagens com hora de submissão, to, from, message id, conta, valor cobrado e desfecho" />
+</Frame>
+
 | Filtro | Observações |
 | :--- | :--- |
-| **Período** | Última hora, 24 horas, 7 dias, 30 dias, ou um intervalo customizado. Padrão: 24 horas |
-| **Desfecho** | Qualquer, ou um específico |
-| **Número de destino** | Match pelo início do número |
+| **Period** | Última hora, 24 horas, 7 dias, 30 dias, ou um intervalo customizado. Abre na última hora, ou no período que você escolheu por último naquele navegador |
+| **Outcome** | Qualquer, ou um específico |
+| **To number** | Match pelo início do número |
 | **Message id** | Exato |
-| **Texto da mensagem** | Busca dentro dos corpos das mensagens |
+| **Message text** | Busca dentro dos corpos das mensagens |
 
 **Awaiting a receipt** aparece primeiro entre os desfechos, e não em ordem alfabética, porque é o
 que as pessoas vêm procurar.
@@ -36,11 +41,16 @@ Revendedores ganham um filtro extra para restringir a uma única conta ou buscar
 ### Colunas
 
 Sete são exibidas por padrão: submetida, para, de, message id, conta, cobrado e desfecho.
-**Colunas** abre um seletor agrupado em Mensagem, Rota, Dinheiro e Desfecho. Cerca de trinta ao
-todo, incluindo contagens de partes e retries, data coding, as TLVs que você enviou, tipo de
-mensagem, MCC e MNC, tarifa, unidades cobradas, estado do recibo, código de erro e hora do recibo.
+**Columns** abre um seletor agrupado em Message, Route, Money e Outcome. Cerca de trinta ao todo,
+incluindo contagens de partes e retries, data coding, as TLVs que você enviou, tipo de mensagem, MCC
+e MNC, tarifa, unidades cobradas, estado do recibo, código de erro e hora do recibo.
 
-Três não podem ser desligadas: **Submetida**, **Para** e **Desfecho**. Uma linha sem elas não é
+<Frame caption="O seletor de colunas. Os cadeados marcam as três que não podem ser desligadas, e a linha no rodapé é a regra a lembrar: o CSV carrega o que estiver marcado aqui.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-messages--columns-light.webp" alt="O seletor de colunas de Messages aberto, com colunas agrupadas em Message, Route, Money e Outcome; Submitted, To e Outcome travadas como ligadas; um link Reset to default" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-messages--columns-dark.webp" alt="O seletor de colunas de Messages aberto, com colunas agrupadas em Message, Route, Money e Outcome; Submitted, To e Outcome travadas como ligadas; um link Reset to default" />
+</Frame>
+
+Três não podem ser desligadas: **Submitted**, **To** e **Outcome**. Uma linha sem elas não é
 identificável.
 
 A sua escolha fica salva naquele navegador, e **o CSV carrega o que estiver marcado**. Configure as
@@ -52,33 +62,61 @@ seu provedor pagou para transportar, e quem transportou, é dele. Sem coluna, se
 na API.
 </Warning>
 
-**Baixar CSV** respeita os filtros e as colunas atuais. Os horários aparecem no fuso do seu
-navegador, e o rodapé diz qual, para que uma linha discutida entre fusos possa ser fixada.
+**Download CSV** respeita os filtros e as colunas atuais.
+
+Os horários aparecem no fuso escolhido na barra do topo: o fuso da plataforma do seu provedor, a
+menos que você escolha o do seu navegador ou UTC. Cada coluna de horário diz o fuso no cabeçalho, e o
+rodapé repete, para que uma linha discutida entre fusos possa ser fixada. O CSV mantém suas colunas
+de horário em UTC e acrescenta uma cópia local de cada uma no fuso em que você estava lendo a tabela.
 
 Onde algumas linhas ainda não têm desfecho, uma nota acima da tabela informa:
 
-> *n* de *total* ainda aguardam um recibo de entrega. Isso é normal. Uma mensagem sem recibo é
-> fechada no seu prazo de expiração.
+> *n* de *total* ainda não têm desfecho final. Isso é normal. O gateway fecha tudo o que ainda
+> estiver aberto no seu prazo de expiração.
+
+Onde a operadora já confirmou algumas delas com um recibo de progresso, a linha diz isso também.
 
 ## Extrato
 
-Escolha um mês. Os últimos treze são oferecidos, e o atual é marcado como **(so far)**. Abre no mês
-*anterior* completo, porque é aquele que você está sendo cobrado.
+Escolha um mês e aperte **Show**. Os últimos treze são oferecidos, e o atual é marcado como
+**(so far)**. Escolher um mês só o marca como alterado; os números e o CSV continuam sendo os do mês
+indicado no rótulo até você apertar Show. Abre no mês *anterior* completo, porque é aquele que você
+está sendo cobrado.
 
-O card do topo mostra o valor, mensagens enviadas, entregues e um de dois números, nunca os dois: um
-**limite de crédito** para contas faturadas a posteriori, ou um **saldo** para contas em crédito
-pré-pago. Ler um limite de crédito como saldo é a leitura errada que custa dinheiro, então eles
-nunca têm o mesmo nome.
+<Frame caption="O extrato de um mês: o valor, as mensagens enviadas e entregues com o que aconteceu com o resto e depois, numa linha própria, porque não faz parte do mês, o que está na conta agora.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-statement-light.webp" alt="O Statement do portal para um mês marcado so far: Amount, Messages sent e Delivered com as contagens de falhas e aguardando, o crédito restante agora e um gráfico por dia" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-statement-dark.webp" alt="O Statement do portal para um mês marcado so far: Amount, Messages sent e Delivered com as contagens de falhas e aguardando, o crédito restante agora e um gráfico por dia" />
+</Frame>
+
+O card do topo mostra o valor, as mensagens enviadas e as entregues com a sua taxa. Abaixo de
+entregues, o resto é contabilizado (quantas falharam, expiraram e ainda aguardam um recibo), então
+toda mensagem enviada está em um desses números.
+
+Abaixo dele, numa linha própria e rotulado como **right now** em vez de parte do mês, um de dois
+números, nunca os dois: um **limite de crédito** para contas faturadas a posteriori, ou o **crédito
+restante** para contas em crédito pré-pago. Ler um limite de crédito como saldo é a leitura errada
+que custa dinheiro, então eles nunca têm o mesmo nome.
 
 Se algum tráfego saiu sem preço, uma nota diz quantas mensagens e confirma que não estão no valor.
 
-Abaixo: um detalhamento por produto — enviadas, entregues, com falha, pendentes, valor. E, onde
-existirem, uma lista de **períodos faturados**.
+Abaixo: um gráfico **por dia** (mensagens por dia por produto, com o valor cobrado como uma linha) e
+depois um detalhamento **por produto**, ou **por login** se você alternar. Cada linha tem enviadas,
+entregues, com falha, expiradas, pendentes, não cobradas e valor; **Not billed** é o que concilia a
+contagem de enviadas de uma linha com o seu valor. Onde existirem, segue uma lista de **períodos
+faturados**.
+
+<Frame caption="O detalhamento por produto. Entregues, com falha, expiradas, pendentes e não cobradas são contadas à parte; a chave Product e Login no canto superior direito muda o que as linhas representam.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-statement--by-product-light.webp" alt="A tabela By product do extrato: product, sent, delivered, failed, expired, pending, not billed e amount, com uma chave Product e Login" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-statement--by-product-dark.webp" alt="A tabela By product do extrato: product, sent, delivered, failed, expired, pending, not billed e amount, com uma chave Product e Login" />
+</Frame>
 
 > Um período fechado é final. Qualquer coisa que caia nele depois aparece como um ajuste no período
 > seguinte.
 
-Cada mês exporta em CSV.
+Cada mês exporta em CSV com **Download CSV**, ao lado de Show.
+
+Os dias no gráfico e no extrato vão de meia-noite a meia-noite no fuso da plataforma do seu provedor,
+seja qual for o fuso que você escolheu para os horários.
 
 ## Por que as duas telas discordam
 
@@ -86,7 +124,7 @@ Cada mês exporta em CSV.
 > medida que os recibos chegam; o valor não.
 
 Uma mensagem aceita no dia 31 e reportada no dia 1º é cobrada no mês anterior e entregue no
-seguinte. Então a contagem de entregues em Mensagens vai variar depois que um extrato é fechado, e o
+seguinte. Então a contagem de entregues em Messages vai variar depois que um extrato é fechado, e o
 valor do extrato não.
 
 Essa é a alternativa a uma fatura que muda por semanas depois que você a recebe. Os preços são

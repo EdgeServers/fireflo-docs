@@ -1,22 +1,22 @@
 ---
 title: "Recusadas"
-description: "Mensagens que o gateway não enviou e por quê. Incluindo as três recusas que acontecem depois que o cliente ouviu sim, e que portanto carregam um message id e um reembolso."
+description: "Mensagens que o gateway não enviou e por quê. Incluindo as recusas que acontecem depois que o cliente ouviu sim, e que portanto carregam um reembolso."
 ---
 
 **Mensagens que o gateway não enviou, e por quê.** A primeira tela a abrir quando um cliente diz
 que nada está chegando.
 
-A maioria das recusas aconteceu na porta: nada foi enviado e nada foi cobrado. Três não, e a
+A maioria das recusas aconteceu na porta: nada foi enviado e nada foi cobrado. Algumas não, e a
 diferença é a coisa mais importante desta página.
 
 ## Recusada na porta, ou recusada depois da aceitação
 
 <Warning>
-**Três motivos acontecem depois que o cliente ouviu sim** — *never routed*, *vendor refused it* e
-*dropped by a filter*.
+**Quatro motivos acontecem depois que o cliente ouviu sim** — *never routed*, *vendor refused it*,
+*dropped by a filter* e *expired waiting for its vendor*.
 
-Essas mensagens foram aceitas, cobradas e em dois casos efetivamente enviadas. Elas carregam um
-**message id**, aparecem nos call records, e **sua cobrança foi reembolsada**. Todo o resto nesta
+Essas mensagens foram aceitas e cobradas, e em *vendor refused it* efetivamente enviadas. Elas
+carregam um **message id**, aparecem nos call records, e **sua cobrança foi reembolsada**. Todo o resto nesta
 página foi barrado antes de virar tráfego.
 
 O filtro **Stage** separa os dois, e é o filtro a que recorrer ao reconciliar a contagem de um
@@ -25,8 +25,25 @@ cliente contra a sua.
 
 ## Os motivos
 
-Cards de resumo lideram a página — um por motivo, com uma contagem para toda a janela. Eles não
-se movem enquanto você pagina, e clicar em um filtra para ele.
+**By reason** lidera a página — um card por motivo, com uma contagem para toda a janela e um botão de
+informação que o explica. Os cards não se movem enquanto você pagina, e escolher um filtra para ele;
+escolha-o de novo para limpar. A partir da 0.12.14, o resumo é feito sobre as **últimas 50 000
+recusas** e a página diz isso: num gateway que recusa mais do que isso na janela, os cards descrevem
+a forma recente em vez de um total exato, e a tabela abaixo continua completa.
+
+<Frame caption="Recusas de uma account em 7 dias: um card por motivo acima dos filtros e as recusas mais recentes.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused-light.webp" alt="A página Refused: cards de motivo acima de uma tabela de mensagens recusadas." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused-dark.webp" alt="A página Refused: cards de motivo acima de uma tabela de mensagens recusadas." />
+</Frame>
+
+<Frame caption="A mesma página depois de escolher o card No units left: o card fica destacado, Why passa a ser ele, e a contagem acima da tabela é só desse motivo.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused--one-reason-light.webp" alt="A página Refused restrita a um motivo pela escolha do seu card: No units left." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused--one-reason-dark.webp" alt="A página Refused restrita a um motivo pela escolha do seu card: No units left." />
+</Frame>
+
+Submits SMPP respondidos com throttle (`0x58`) não são linhas aqui. Eles são guardados como contagens
+por minuto por account, listener e login, e uma linha abaixo dos cards diz quantos houve na janela,
+ou que não houve nenhum.
 
 | Motivo | Geralmente significa |
 | :--- | :--- |
@@ -44,9 +61,15 @@ se movem enquanto você pagina, e clicar em um filtra para ele.
 | **Too many waiting for credit; resend** | A partir da 0.17.2 (`creditQueueFull`). 10,000 mensagens da account, ou 100,000 no gateway, já estavam esperando crédito. A mesma causa da anterior, em volume |
 | **Queue full** | A fila do router estava na capacidade e recusou em vez de crescer o heap. Antes da 0.17.2, envios REST e gRPC recusados por crédito não confirmado a tempo também eram contados aqui |
 | **Could not be queued** | Aceita pelas verificações, mas não pôde ser entregue — geralmente o broker |
+| **Vendor backlog full** | A partir da 0.15.1. Todo vendor para o qual a mensagem poderia ir tinha passado do seu limite de backlog, e nenhuma outra rota era utilizável. Nada cobrado |
+| **Vendor unavailable** | A partir da 0.15.1. O vendor para o qual ela iria está sem bind há mais tempo do que `smsg.vendor.unbound.refuse.after.seconds`, e nenhuma outra rota era utilizável. Nada cobrado |
+| **Database not answering; try again** | A partir da 0.15.1. O banco de dados estava lento demais para receber novas mensagens, então novos submits foram recusados antes de qualquer cobrança. As mensagens já aceitas seguem em frente |
+| **Gateway stopping** | O gateway estava desligando e não recebeu novas mensagens. Nada cobrado; um retry passa assim que outro nó ou o gateway reiniciado o receber |
+| **Hand-off outcome unknown** | Aceita e entregue ao broker, e a entrega terminou sem resposta definida: pode ter sido enviada. Não reembolsada, para não poder ser faturada duas vezes; o gateway a acerta quando a resposta for conhecida |
 | **Never routed** | *Após aceitação.* Nenhuma regra habilitada casou; reembolsado |
 | **Vendor refused it** | *Após aceitação.* A operadora rejeitou o submit; reembolsado |
 | **Dropped by a filter** | *Após aceitação.* Um filtro de roteamento a parou; reembolsado |
+| **Expired waiting for its vendor** | *Após aceitação.* Enfileirada para um vendor, esperou mais do que `smsg.vendor.backlog.expire.seconds` (ou a sua própria validade) e não foi enviada; reembolsado, com um recibo de falha onde um foi pedido |
 
 <Note>
 **As mensagens de uma conta fundeada esperam pelo seu crédito** após um restart, ou sempre que seu
@@ -66,18 +89,25 @@ carregado permite tudo por design**.
 
 ## Encontrando uma
 
-A rede ampla é **Anything**, que olha dentro de account, sender, destino, product, login,
-detalhe da recusa e trecho da mensagem de uma vez. Filtros mais estreitos existem para account,
-destino, bind name, product, ingress, listener, from-number e message id.
+A linha sempre visível é **Period**, **Why** (o motivo), **Account** (exato), **To number** (começa
+com) e **Anything**. **Anything** é a rede ampla: olha dentro de account, sender, destino, product,
+login, detalhe da recusa e trecho da mensagem de uma vez. **More filters** adiciona **Bind name
+(system id)**, **Product**, **Came in via**, **Listener**, **From number**, **Message id**, **Carrier
+status** e **Stage**. **Clear** esvazia todos.
 
 **Carrier status** recebe o número da operadora em decimal — 69 é o genérico "recusou e não vai
 dizer por quê" — e apenas recusas de vendor carregam um.
 
+**A página sempre precisa de um período, de no máximo 92 dias.** As recusas não podem ser listadas
+sobre todo o histórico: builds anteriores mostravam silenciosamente as recusas de um dia sob o
+título **All time**, que é o tipo de erro em que as pessoas acreditam, então a partir da 0.12.14 a
+página pede um período.
+
 ## A tabela
 
-Nove colunas por padrão: refused, why, vendor said, account, product, from, to, via, message. O
-selecionador adiciona o motivo em inglês, o detalhe da recusa, se foi cobrada e reembolsada, o
-nome do código do vendor, e os ids da linha e da mensagem.
+Dez colunas por padrão: refused, why, vendor said, account, product, from, to, via, ingress server,
+message. O selecionador adiciona o motivo em inglês, o detalhe da recusa, se foi cobrada e
+reembolsada, o que foi dito ao cliente, o nome do código do vendor, e os ids da linha e da mensagem.
 
 O **trecho da mensagem** — os primeiros 160 caracteres — é mantido **incondicionalmente**, diferente
 do corpo em um call record. Uma recusa de conteúdo não pode ser diagnosticada sem ver o que foi

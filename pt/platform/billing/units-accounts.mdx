@@ -125,6 +125,23 @@ unidades usadas neste mês e por dia, os seus limites de velocidade e o ledger d
 Tariff e Statement não são mostradas: os preços e o extrato são da conta-pai. Nenhuma ação de dinheiro
 é oferecida.
 
+<Frame caption="A aba Billing de uma conta de unidades. As unidades restantes por produto à esquerda, a conta que paga à direita, e depois as unidades usadas e os limites de velocidade próprios da conta.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units-light.webp" alt="A aba Billing de uma conta de unidades: as unidades restantes por produto e a conta-pai em que são cobradas." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units-dark.webp" alt="A aba Billing de uma conta de unidades: as unidades restantes por produto e a conta-pai em que são cobradas." />
+</Frame>
+
+**Left** é o que ainda pode ser enviado: unidades ainda não distribuídas, mais as unidades que os nós
+do gateway seguram e não usaram. As unidades usadas são acertadas a cada poucos segundos, então,
+numa conta movimentada, os números andam um pouco atrás do tráfego.
+
+O **Unit ledger** lista toda concessão, retirada e movimentação, com o seu produto e a sua referência.
+As unidades usadas não aparecem ali; elas ficam em **Units used**.
+
+<Frame caption="O ledger de unidades. Cada lote de unidades que a plataforma gestora concedeu ou retirou, cada um sob a sua própria referência.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units--ledger-light.webp" alt="O ledger de uma conta de unidades: cada lote de unidades concedido a ela pela plataforma gestora, com produto e referência." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units--ledger-dark.webp" alt="O ledger de uma conta de unidades: cada lote de unidades concedido a ela pela plataforma gestora, com produto e referência." />
+</Frame>
+
 A aba **Billing** de uma conta-pai lista as suas subcontas, com as unidades restantes por produto e um
 estado "no units". Se as contas de unidades ainda não podem ser usadas, porque um nó é mais antigo que
 0.16.0 ou a aplicação do pré-pago está desligada, a aba diz qual dos dois.

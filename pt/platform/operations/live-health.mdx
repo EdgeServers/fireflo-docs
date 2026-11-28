@@ -116,6 +116,60 @@ Em um **listener** geralmente significa que nenhum cliente está conectado agora
 vez de quebrado. Por isso um listener com ninguém conectado não é pintado de vermelho da forma como
 um fornecedor sem sessão é.
 
+## No painel de controle
+
+A **pílula de saúde** no cabeçalho de toda página do painel lê este endpoint: um ponto, uma palavra
+como **Healthy** e a taxa de saída. Escolha-a para abrir **Health**, que é a mesma resposta organizada
+para leitura. Ela é lida da memória do gateway em execução, não do banco de dados, e some quando o
+processo reinicia.
+
+<Frame caption="Health: a fila do router, os receipts esperando correspondência e os registros escritos ou perdidos no topo, e depois o banco de dados em que o gateway escreve.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health-light.webp" alt="A página Live health: os números de fila, receipts e registros, e o card do banco de dados abaixo deles." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health-dark.webp" alt="A página Live health: os números de fila, receipts e registros, e o card do banco de dados abaixo deles." />
+</Frame>
+
+| Bloco | Campo |
+| :--- | :--- |
+| **Router queue** | `router_queue` |
+| **Awaiting receipt** | `awaiting_receipt`; a linha abaixo diz se o store sobrevive a um restart |
+| **Records written** | `cdr.written`, com o sink |
+| **Waiting on the broker** | a profundidade do broker, ou que nenhum está configurado |
+| **Records lost** | `cdr.failed`; escritas que falharam não são retentadas |
+
+Abaixo dos blocos, o card **Database** mostra a conexão do gateway, os seus writers e a latência que
+admite ou recusa novos submits. Um card **Routing tables** só aparece quando uma tabela tem um
+problema que vale a pena dizer, como nenhuma regra que pegue todo o resto. **Connections** lista todo
+listener e fornecedor com o seu estado, as sessões conectadas (e quantas podem transmitir, quando isso
+difere), a fila, a taxa contra o seu teto e as mensagens submetidas; uma linha com sessões se abre para
+listá-las.
+
+<Frame caption="Connections em Health: um fornecedor conectado cinco vezes e enviando, o outro aceitando sem bind; listeners sem ninguém conectado estão quietos, não quebrados.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health--connections-light.webp" alt="As conexões em Health: cada listener e fornecedor com o seu estado, as sessões conectadas e a fila." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health--connections-dark.webp" alt="As conexões em Health: cada listener e fornecedor com o seu estado, as sessões conectadas e a fila." />
+</Frame>
+
+### O mapa Connectivity
+
+**Connectivity**, ao lado da pílula de saúde, desenha o mesmo estado ao vivo como um mapa: os clientes
+conectados no topo, depois as portas de listener por onde entraram, o nó do gateway e o seu banco de
+dados, e os fornecedores embaixo, com o tráfego andando ao longo de cada ligação. A largura de uma
+ligação é a sua taxa; uma ligação vermelha tracejada são recusas na porta no último minuto, ou uma
+ligação que caiu.
+
+- **All**, **Submits** e **Receipts** escolhem quais fluxos são desenhados.
+- **Counts** lê MT e DLR na **Last hour**, ou **Since bind** a partir dos contadores de cada sessão.
+- A busca encontra uma conta, login, IP ou fornecedor no mapa; zoom e **Fit** o movem; **Expand all**
+  abre todos os grupos; **By IP** divide cada cliente em uma caixa por endereço de onde ele se conecta.
+- Escolha uma caixa para ver o que você pode fazer com ela: abrir a sua conta, listener ou fornecedor,
+  a sua saúde, filas ou tabela de roteamento, ou agir sobre ela no mesmo menu.
+
+Os totais de MT, DLR e escritas no banco ficam abaixo do mapa.
+
+<Frame caption="O mapa com Receipts escolhido e todos os grupos abertos: três clientes conectados em uma porta, receipts voltando até eles de um fornecedor enquanto o outro está sem bind.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-connectivity--receipts-light.webp" alt="O mapa Connectivity aberto para receipts: cada cliente conectado, porta e fornecedor com as suas contagens de submits e receipts." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-connectivity--receipts-dark.webp" alt="O mapa Connectivity aberto para receipts: cada cliente conectado, porta e fornecedor com as suas contagens de submits e receipts." />
+</Frame>
+
 ## Relacionado
 
 <CardGroup cols={2}>

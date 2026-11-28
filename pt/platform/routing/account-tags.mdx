@@ -70,8 +70,13 @@ Veja [Como o pricing funciona](/platform/billing/how-pricing-works) para os scop
 
 ## Filtrar listas e relatórios por tag
 
-A lista de contas tem uma coluna **Tags** e um filtro por tag. **Usage** e **Messages** têm um filtro
-**Tag**.
+A lista de contas tem uma coluna **Tags** (ligue-a em **Columns**) e um filtro por tag. **Usage** e
+**Messages** têm um filtro **Tag**.
+
+<Frame caption="A lista Accounts filtrada para as contas que têm a tag priority.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--by-tag-light.webp" alt="A lista Accounts filtrada para as contas que têm a tag priority." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--by-tag-dark.webp" alt="A lista Accounts filtrada para as contas que têm a tag priority." />
+</Frame>
 
 <Note>
 **O filtro lê as tags que as contas têm agora.** Uma mensagem não registra as tags que a conta tinha
@@ -109,6 +114,14 @@ tags.
 - **Uma tag desativada não casa com nada e não precifica nada**, mas continua nas suas contas. Ligada de
   novo, volta a valer.
 - Apagar uma tag que nada nomeia a tira de todas as contas.
+
+**Add a tag** pede o nome, um rótulo e uma descrição opcionais, e uma cor. Uma tag nova vem ligada e
+vai para o fim da ordem. Cor e descrição são só para pessoas; o roteamento e os preços não as leem.
+
+<Frame caption="Add a tag: o nome fica fixo depois de adicionado, porque regras e preços o citam.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--add-tag-light.webp" alt="O diálogo Add a tag: o nome, o rótulo, a descrição e a cor." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--add-tag-dark.webp" alt="O diálogo Add a tag: o nome, o rótulo, a descrição e a cor." />
+</Frame>
 
 As tags são colocadas numa conta na aba **Settings** dela. Uma conta de unidades mostra ali as tags da
 conta-pai, só para leitura.

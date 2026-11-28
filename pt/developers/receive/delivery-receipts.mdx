@@ -39,6 +39,11 @@ Um `POST` com `Content-Type: application/json`:
 
 `id` é o `messageId` que seu envio retornou. **É por ele que você correlaciona.** Não há mais nada.
 
+<Frame caption="Recibos de entrega na referência da API REST no seu portal do cliente: como pedi-los, dlr_level e todos os campos que um recibo traz, a começar pelo id que seu envio retornou.">
+  <img className="block dark:hidden" src="/images/developers/receive/apis-receipts--receipt-docs-light.webp" alt="A parte Delivery receipts da referência da API REST do portal: dlr, dlr_url e dlr_level explicados, e uma tabela de campos do recibo, de id e stat até system_id e parts" />
+  <img className="hidden dark:block" src="/images/developers/receive/apis-receipts--receipt-docs-dark.webp" alt="A parte Delivery receipts da referência da API REST do portal: dlr, dlr_url e dlr_level explicados, e uma tabela de campos do recibo, de id e stat até system_id e parts" />
+</Frame>
+
 Os nomes de campos seguem os do Jasmin, então um receptor escrito para Jasmin lê isso sem
 alterações. Campos nulos são omitidos em vez de enviados como null, então um recibo para uma
 mensagem que nunca chegou a um fornecedor não vem cheio de chaves vazias.

@@ -64,6 +64,15 @@ Um catch-all real é uma regra sem condições **e sem filtros**, colocada por �
 filtro pode representar todas as contas com a tag `otp`. Veja [Tags de conta](/platform/routing/account-tags).
 </Tip>
 
+No painel de controle, **New filter** monta um em três passos: o que casar, os valores e depois um
+nome. Toda caixa que você marca no primeiro passo precisa valer, então cada uma estreita o filtro um
+pouco mais.
+
+<Frame caption="New filter, primeiro passo: marque o que uma mensagem precisa casar. Account tag é uma das escolhas; Something else abre o editor avançado.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters--new-filter-light.webp" alt="O diálogo de novo filtro no primeiro passo: o que uma mensagem precisa casar, escolhido a partir de um conjunto de cartões." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters--new-filter-dark.webp" alt="O diálogo de novo filtro no primeiro passo: o que uma mensagem precisa casar, escolhido a partir de um conjunto de cartões." />
+</Frame>
+
 ## Um filtro vazio conta como desabilitado
 
 Um filtro sem condições salva e carrega, o que permite que um seja construído uma condição por vez. A
@@ -96,9 +105,10 @@ enviadas" em vez de "mensagens são precificadas de forma diferente".
 
 <Steps>
   <Step title="Leia a contagem">
-    **Filters** no painel lista quantas regras de tarifa e quantas regras de roteamento referenciam
-    cada filtro. Desabilitar um filtro usado por quatro regras de roteamento remove quatro regras do
-    snapshot em execução.
+    **Filters** no painel mostra em cada filtro quantas regras de roteamento (**Routing · 4**) e
+    quantas regras de preço (**Pricing · 2**) o usam; aperte a contagem para listá-las. Um filtro que
+    nada usa mostra **Unused**. Desabilitar um filtro usado por quatro regras de roteamento remove
+    quatro regras do snapshot em execução.
   </Step>
   <Step title="Olhe o que pega o tráfego em vez">
     Para cada regra que seria pulada, encontre a próxima regra na mesma tabela com a qual o tráfego
@@ -110,6 +120,11 @@ enviadas" em vez de "mensagens são precificadas de forma diferente".
     nada aconteceu.
   </Step>
 </Steps>
+
+<Frame caption="A página Filters agrupa os filtros pelo que eles casam. Em Status, Off or empty lista os filtros cujas regras o gateway pula.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters-light.webp" alt="A página Filters: cartões de filtro agrupados pelo que casam, cada um com as regras que o usam." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters-dark.webp" alt="A página Filters: cartões de filtro agrupados pelo que casam, cada um com as regras que o usam." />
+</Frame>
 
 ## Filter workers são uma coisa diferente
 

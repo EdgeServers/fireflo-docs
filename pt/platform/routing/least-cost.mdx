@@ -13,6 +13,13 @@ Ela registra `routing.table.unknown-function` e continua funcionando. A queda pa
 
 Existem exatamente duas funções, `NORMAL` e `LCR`. Uma tabela que não declara função é `NORMAL`.
 
+No painel de controle, a função é **How it chooses**, definida quando você adiciona uma tabela com **New table** e alterada pelo botão **Table** da tabela: **In order** é `NORMAL`, **Cheapest vendor** é `LCR`. O painel oferece só essas duas, então ali não há como digitar errado, e a página de uma tabela mostra qual é ao lado do nome dela.
+
+<Frame caption="New table com How it chooses em Cheapest vendor: todo fornecedor que corresponde é um candidato, e a tarifa mais barata vence.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--new-table-light.webp" alt="O formulário de nova tabela de roteamento com How it chooses em Cheapest vendor." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--new-table-dark.webp" alt="O formulário de nova tabela de roteamento com How it chooses em Cheapest vendor." />
+</Frame>
+
 <Note>
 Uma terceira função, `RC`, foi removida na `V1.28.0`. Ela estava no enum, era permitida pela restrição do banco de dados e descrita no painel, e nada em lugar algum se ramificava por ela, então uma tabela configurada como `RC` roteava como `NORMAL` enquanto toda superfície que um operador pudesse consultar dizia o contrário. As linhas existentes são reescritas para `NORMAL`, que é o que elas já estavam fazendo.
 </Note>
@@ -55,6 +62,13 @@ Uma tabela `NORMAL` para na primeira regra correspondente, o que faz da ordem do
     Um fornecedor sem uma tarifa de custo correspondente é guardado à parte e usado somente se nada mais correspondeu, registrando `No candidate in least-cost table … has a rate`.
   </Step>
 </Steps>
+
+As tarifas de custo de um fornecedor ficam na aba **Cost rates** dele no painel de controle: o que o fornecedor cobra de você, regra por regra, a primeira correspondência vence.
+
+<Frame caption="A aba Cost rates de um fornecedor: o que o fornecedor cobra, regra por regra. Uma tabela Cheapest vendor compara essas tarifas.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--cost-rates-light.webp" alt="A aba Cost rates de um fornecedor: o que o fornecedor cobra, regra por regra, e que a tabela de fornecedor mais barato compara." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--cost-rates-dark.webp" alt="A aba Cost rates de um fornecedor: o que o fornecedor cobra, regra por regra, e que a tabela de fornecedor mais barato compara." />
+</Frame>
 
 <Note>
 **Uma linha de tarifa ausente degrada em vez de bloquear.** Recusar rotear uma mensagem sem tarifa transformaria uma linha esquecida em `rates.conf` em uma indisponibilidade; preferi-la enviaria tudo pelo fornecedor menos configurado. O último recurso é a única resposta que não é nenhuma das duas.

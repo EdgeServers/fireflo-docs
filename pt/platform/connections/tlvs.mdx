@@ -6,6 +6,19 @@ description: "De onde uma tag pode vir, a ordem em que compõem, e como descobri
 A gramática está em [Declarações de TLV](/reference/smpp/tlvs). Leia primeiro se `1400` versus
 `0x1400` for novidade. Esta página é sobre operá-los.
 
+## Dando nome a uma tag
+
+**TLVs**, em Configuration no painel de controle, lista todas as tags com o nome, o significado e o
+que as usa. As tags do padrão SMPP e da convenção DLT indiana já vêm embutidas. **Name a tag** dá a
+qualquer outra tag um nome e um significado de uma linha para o painel mostrar. Os nomes são para
+pessoas: só o número da tag vai para o wire, então dar nome a uma não muda nada do que o gateway
+envia.
+
+<Frame caption="A página TLVs: o número de cada tag, seu nome, seu significado e o que a usa.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-tlvs-light.webp" alt="A página TLVs: uma lista de tags com seus nomes, significados e onde cada uma é usada." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-tlvs-dark.webp" alt="A página TLVs: uma lista de tags com seus nomes, significados e onde cada uma é usada." />
+</Frame>
+
 ## Uma tag pode vir de quatro lugares
 
 <Steps>
@@ -69,7 +82,14 @@ Um cliente pode ver os TLVs **que ele enviou** em suas próprias mensagens, e po
 definições de tag para um operador aprovar. Ele nunca vê o que um vendor adicionou downstream.
 
 O call record mantém três conjuntos — recebido, enviado e o que o whitelist carimbou — portanto uma
-disputa sobre o que chegou à operadora é respondível em vez de argumentada.
+disputa sobre o que chegou à operadora é respondível em vez de argumentada. A página de uma
+mensagem no painel de controle mostra cada tag como recebida, como resolvida e como enviada, com o que
+aconteceu com ela.
+
+<Frame caption="As TLVs de uma mensagem: os IDs de entidade e de template do DLT como recebidos, como resolvidos e como enviados. Os dois chegaram e saíram sem alteração.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-tlvs--message-tlvs-light.webp" alt="O card TLVs de uma mensagem: os IDs de entidade e de template do DLT como recebidos, como resolvidos e como enviados, com o que aconteceu com cada um." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-tlvs--message-tlvs-dark.webp" alt="O card TLVs de uma mensagem: os IDs de entidade e de template do DLT como recebidos, como resolvidos e como enviados, com o que aconteceu com cada um." />
+</Frame>
 
 ## Um caso trabalhado: DLT indiano
 
@@ -81,13 +101,14 @@ defaultTlvs:
   peid_0x1400: "1101234567890123456"
 ```
 
-O template id varia por mensagem e é geralmente carimbado pelo whitelist na aprovação, ou fornecido
-pelo cliente:
+O template id (`tmplid_0x1401`) varia por mensagem e é geralmente carimbado pelo whitelist na
+aprovação, ou fornecido pelo cliente. O telemarketer id (`tmid_0x1402`) é o seu próprio registro com o
+vendor, então pode ser um default do vendor:
 
 ```properties
 outSms.default.default.tlvs.submit = tmid_0x1402=1102000000000012345
-outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmid_0x1402
+outSms.instance.smpp.mandatory.tlvs.submit = peid_0x1400,tmplid_0x1401
 ```
 
-Com ambos mandatórios, uma mensagem que não resolve nenhum é recusada na entrada com `0xC3` em vez
+Com ambos mandatórios, uma mensagem sem qualquer um deles é recusada na entrada com `0xC3` em vez
 de rejeitada pela operadora depois — o que é o ponto de verificar.

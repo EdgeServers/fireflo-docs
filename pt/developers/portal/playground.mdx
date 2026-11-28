@@ -19,8 +19,9 @@ Tarifar uma mensagem é a única chamada que não envia nada, não cobra nada e 
 rate limit. Use à vontade.
 </Warning>
 
-<Frame caption="O playground, com a requisição construída na linguagem que você escolher a partir da sua própria base URL e login. A senha vive na aba e em nenhum outro lugar.">
-  <img src="/images/developers/portal/playground.png" alt="The portal API playground showing the send form beside a generated curl request" />
+<Frame caption="O playground em Send one message: escolha um login e verifique a senha dele no topo, preencha o formulário, e a requisição é construída ao lado a partir da sua própria base URL e login. A senha vive na aba e em nenhum outro lugar.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground-light.webp" alt="O playground da API do portal: uma barra de login e senha, abas para os cinco endpoints, o formulário Send one message com to, content, from, coding e priority, e a requisição curl gerada ao lado" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground-dark.webp" alt="O playground da API do portal: uma barra de login e senha, abas para os cinco endpoints, o formulário Send one message com to, content, from, coding e priority, e a requisição curl gerada ao lado" />
 </Frame>
 
 ## Conectando
@@ -50,9 +51,11 @@ tem uma nota de uma linha. Várias dessas notas existem por causa de um erro esp
 
 - `to` — **entre aspas.** Um número sem aspas perde os zeros à esquerda.
 - `content` — informe este ou `hex_content`, nunca os dois.
-- `from` — precisa ser um aprovado para sua conta, ou o envio é recusado. O seletor oferece apenas
-  sender IDs **aprovados**; os pendentes estão deliberadamente ausentes, porque oferecer um que você
-  ainda não pode usar produziria uma recusa que o formulário poderia ter previsto.
+- `from` — precisa ser um aprovado para sua conta, ou o envio é recusado com `403`. Vazio, assume o
+  nome do seu login. A caixa sugere apenas sender IDs **aprovados**; os pendentes estão
+  deliberadamente ausentes, porque oferecer um que você ainda não pode usar produziria uma recusa que
+  o formulário poderia ter previsto. Você ainda pode digitar um, já que uma aprovação pode chegar
+  depois que a página carregou.
 - `coding` — use 8 para qualquer coisa fora de GSM-7. Isso reduz o comprimento do segmento pela
   metade.
 - `validity_period` — minutos inteiros, não uma string de duração.
@@ -77,13 +80,24 @@ recibo de entrega e na sua [lista de mensagens](/developers/portal/messages-and-
 Ao lado, um painel de **Requisição** mostra a mesma chamada em curl, Node, PHP ou Python, preenchida
 com sua própria base URL e login. Copie direto para o seu código.
 
+<Frame caption="Price a message, com a requisição mostrada em Python. Tarifar não envia nada e não cobra nada, então esta é a aba para testar primeiro.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--price-python-light.webp" alt="A aba Price a message do playground: campos to, content e coding, um botão Call e a requisição mostrada como um trecho em Python" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--price-python-dark.webp" alt="A aba Price a message do playground: campos to, content e coding, um botão Call e a requisição mostrada como um trecho em Python" />
+</Frame>
+
 As últimas chamadas ficam em um pequeno histórico que você pode recarregar no formulário. Ele vive
 na aba e morre com ela.
 
 ## Batches
 
-O endpoint de batch aceita uma lista JSON, e a textarea se recusa a enviar JSON malformado em vez de
-deixar o gateway rejeitar.
+O endpoint de batch aceita uma lista JSON: um objeto por mensagem, cada um com os mesmos campos de um
+envio único, e um `to` que pode ser ele mesmo uma lista. A textarea se recusa a enviar JSON
+malformado em vez de deixar o gateway rejeitar.
+
+<Frame caption="Send a batch. A linha abaixo das abas avisa antes de você enviar: a resposta confirma apenas aceitação, e os resultados por mensagem chegam na sua errback URL.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--batch-light.webp" alt="A aba Send a batch do playground: um campo messages que aceita uma lista JSON, uma seção recolhida para recibos, validade e parâmetros personalizados, e a requisição curl ao lado" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--batch-dark.webp" alt="A aba Send a batch do playground: um campo messages que aceita uma lista JSON, uma seção recolhida para recibos, validade e parâmetros personalizados, e a requisição curl ao lado" />
+</Frame>
 
 <Warning>
 **A resposta de um batch confirma aceitação, não entrega, e nem mesmo aceitação por mensagem.** Uma
@@ -97,9 +111,15 @@ configurou uma, essas recusas são invisíveis para você.
 ## A referência ao lado
 
 A **referência da API REST** na mesma seção documenta cada endpoint, preenchido com os valores da
-sua conta, além de recibos de entrega, callbacks de batch, a tabela de erros compartilhada e a
-gramática de custom TLVs. Ela também trata de **rotação de credenciais** — trocar uma senha ou API
-key por conta própria, com o novo valor mostrado exatamente uma vez.
+sua conta, além de recibos de entrega, callbacks de batch, a tabela de erros compartilhada, a
+gramática de custom TLVs e a API gRPC. Se você revende, ela acrescenta as chamadas para gerenciar
+suas próprias contas. Ela também trata de **rotação de credenciais** — trocar uma senha ou API key
+por conta própria, com o novo valor mostrado exatamente uma vez.
+
+<Frame caption="A referência da API REST, escrita com sua própria base URL e login; até o cabeçalho Authorization vem preenchido. O controle de rotação fica em Authentication; o sumário corre pela direita.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-api-docs-light.webp" alt="A referência da API REST do portal: base URL e login, a seção Authentication com um cabeçalho Authorization preenchido e um controle Rotate, o início de Send one message e uma lista On this page" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-api-docs-dark.webp" alt="A referência da API REST do portal: base URL e login, a seção Authentication com um cabeçalho Authorization preenchido e um controle Rotate, o início de Send one message e uma lista On this page" />
+</Frame>
 
 <Note>
 Depois de rotacionar, o gateway recarrega credenciais em um timer. Por aproximadamente o próximo
