@@ -44,6 +44,7 @@ mismo retardo, para las bibliotecas cliente que lo respetan.
 | Aceptado | 200 | `OK` | — | — | Guarde `message_id`. |
 | Mismo `client_ref` que un envío aceptado | 200, `duplicate` | `OK`, `duplicate: true` | — | — | No se volvió a enviar ni a cobrar nada. Trátelo como éxito. |
 | Un campo ausente, desconocido o no válido | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, con `field` | — | Corrija la petición. No la reintente sin cambios. |
+| Un `dlr_url` que la pasarela nunca llamará (desde 0.17.3) | 400 | `INVALID_ARGUMENT` | `CALLBACK_URL_REFUSED` | — | Use una URL `http` o `https` pública, o pida a su proveedor que permita su red. |
 | Falta un parámetro SMPP obligatorio | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Añada el parámetro: consulte [TLV personalizados](/developers/send/custom-tlvs). |
 | El saldo no lo cubre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recargue y reintente. No se cobró nada. |
 | No le quedan unidades de su producto (una cuenta de unidades, desde 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Pida más unidades a su proveedor. No se cobró nada. |
@@ -61,12 +62,14 @@ mismo retardo, para las bibliotecas cliente que lo respetan.
 | **La entrega interna no respondió; puede que el mensaje se haya enviado** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, con `message_id` | 5 s, sin `RetryInfo` | **Reintente solo con el mismo `client_ref`.** Consulte más abajo. |
 | Aceptado y no se pudo encolar | 500 | `INTERNAL` | `CANNOT_SEND` | — | Todo cargo se revierte. Reintente con el mismo `client_ref`. |
 | Un mensaje por encima del límite de tamaño | — | `RESOURCE_EXHAUSTED` | ninguno: lo genera el transporte | — | Envíelo más pequeño. |
+| Demasiadas llamadas abiertas: streams de recibos, pulls o streams de envío en una sesión, llamadas en una conexión, o llamadas de larga duración desde una dirección (desde 0.17.3) | 429 | `RESOURCE_EXHAUSTED` | `TOO_MANY_CALLS` | 1 s | Cierre las llamadas que ya no usa, o comparta un solo stream. Los valores por defecto son 4 `Subscribe`, 8 `Pull` y 16 `SendStream` por sesión. |
 
 **Nada rechazado se cobra, y nada rechazado cuenta para su límite de tasa.**
 
 <Tip>
-`RESOURCE_EXHAUSTED` significa aquí dos cosas distintas. Con un `ErrorDetail` cuyo código es
-`RATE_LIMITED`, vaya más despacio. Sin ningún `ErrorDetail`, la petición era demasiado grande y nunca
+`RESOURCE_EXHAUSTED` significa aquí tres cosas distintas. Con un `ErrorDetail` cuyo código es
+`RATE_LIMITED`, vaya más despacio. Con `TOO_MANY_CALLS`, mantiene demasiadas llamadas abiertas a la
+vez; cierre algunas. Sin ningún `ErrorDetail`, la petición era demasiado grande y nunca
 tendrá éxito tal como está.
 </Tip>
 

@@ -87,6 +87,7 @@ seule erreur qu'une barre d'adresse de navigateur produira de manière fiable.
 | 400 | `Mandatory argument <name> is not found.` | Un champ requis était absent ou vide. |
 | 400 | `Unknown argument: <name>` | Un champ que l'API n'a pas, y compris `username` et `password`, qui appartiennent à l'en-tête. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Bon nom, mauvaise forme — un `coding` non numérique, un `hex_content` de longueur impaire. |
+| 400 | code `CALLBACK_URL_REFUSED` | Depuis 0.17.3. Un `dlr-url`, ou le `callback_url` ou `errback_url` d'un lot, est une URL que la passerelle n'appellera jamais : ni `http` ni `https`, une adresse link-local, loopback ou privée que votre fournisseur n'a pas autorisée, ou l'un des ports de la passerelle elle-même. Rien n'a été envoyé. Avant 0.17.3 elle était acceptée et ses accusés n'arrivaient jamais. Voir [Webhooks](/reference/config/webhooks). |
 
 <Warning>
 **`412` pour du JSON invalide, pas `400`.** La plupart des APIs utilisent `400` pour les deux, donc

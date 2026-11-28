@@ -93,10 +93,17 @@ fail2ban **banea el proxy, y a todos los clientes que hay detrás**.
 | :--- | :--- | :--- |
 | `smsg.grpc.proxy.forwarding` | sigue el ajuste de REST (`quarkus.http.proxy.proxy-address-forwarding`) | Confía en `X-Forwarded-For` en el puerto gRPC. |
 | `smsg.grpc.proxy.hops` | sigue `smsg.restapi.proxy.hops` (1) | Qué entrada, contando desde la derecha, es el cliente: el número de proxies que ejecutas. |
+| `smsg.grpc.proxy.trusted` | sigue `smsg.restapi.proxy.trusted` (vacío: solo loopback) | Desde 0.17.3. Los pares cuyos `X-Forwarded-For` y `X-Forwarded-Proto` se creen en el puerto gRPC: direcciones o bloques CIDR, separados por comas, nunca nombres. Loopback — un proxy en el propio host de la pasarela — siempre es de confianza. |
 
-Ambos son ajustes de plataforma y se aplican a la siguiente llamada. La pasarela registra un aviso una
-sola vez cuando ve `X-Forwarded-For` desde una dirección privada en la que no confía: la señal de que
-falta esto.
+Los tres son ajustes de plataforma, para toda la pasarela, y se aplican a la siguiente llamada.
+
+**Desde 0.17.3 las cabeceras de reenvío solo se creen de un proxy de confianza.** Con el reenvío
+activado, una llamada cuyo par TCP no es loopback ni está en la lista tiene sus cabeceras ignoradas:
+el propio par es quien llama, para las sesiones, las comprobaciones de direcciones permitidas y el
+registro de logins rechazados. La pasarela registra `proxy.untrusted` en WARN una sola vez, con ese
+par. **Un proxy en otro host debe estar en la lista**, en `smsg.restapi.proxy.trusted` (que el puerto
+gRPC sigue) o en `smsg.grpc.proxy.trusted`, o cada llamante recibe la dirección del proxy. Un proxy en
+el propio host de la pasarela no necesita nada.
 
 ## TLS en el propio puerto
 
@@ -138,6 +145,18 @@ instalada cuando el de la release es distinto, y luego recarga fail2ban. Consult
 | Sesiones por login | `smsg.grpc.session.max.per.login` | `64` | Tokens vivos por login, por nodo; un Login por encima termina el usado menos recientemente. |
 | En curso por stream | `smsg.grpc.stream.max.inflight` | `256` (como mucho 4096) | Peticiones que un `SendStream` retiene a la vez; se aplica a los streams abiertos después de un cambio. |
 | Keepalive | — | ping del servidor tras 60 s de inactividad | Los clientes que hacen ping más a menudo que cada 20 s se desconectan (`GOAWAY too_many_pings`). |
+| Streams de recibos por sesión | `smsg.grpc.session.max.subscribes` | `4` | Desde 0.17.3. Streams `Subscribe` que una sesión mantiene abiertos a la vez. Por sesión. |
+| Pulls por sesión | `smsg.grpc.session.max.pulls` | `8` | Desde 0.17.3. Long-polls `Pull` que una sesión tiene esperando a la vez. Por sesión. |
+| Streams de envío por sesión | `smsg.grpc.session.max.sendstreams` | `16` | Desde 0.17.3. `SendStream`s que una sesión mantiene abiertos a la vez. Los mensajes dentro de un stream no cuentan; esos los limita `smsg.grpc.stream.max.inflight`. Por sesión. |
+| Llamadas por conexión | `smsg.grpc.connection.max.calls` | `1000` | Desde 0.17.3. Llamadas de cualquier tipo abiertas a la vez en una conexión, incluidos los envíos unarios. Por conexión. |
+| Llamadas de larga duración por dirección | `smsg.grpc.ip.max.streams` | `256` | Desde 0.17.3. Llamadas `Subscribe`, `Pull` y `SendStream` abiertas a la vez desde una dirección de cliente, todas las sesiones y logins juntos. Por dirección de cliente. |
+
+Los cinco límites de 0.17.3 son ajustes de toda la pasarela que se leen en cada llamada, así que un
+cambio no necesita reinicio; `Login` y `PlatformLogin` no cuentan. Una llamada por encima de un límite
+se cierra al instante con `RESOURCE_EXHAUSTED`, `ErrorDetail.code` `TOO_MANY_CALLS`, y no retiene
+nada; una llamada que termina libera su lugar. Limitan cuántas llamadas se mantienen abiertas, no
+cuántos mensajes se envían. Detrás de un proxy que no es de confianza, cada llamante tiene la dirección
+del proxy y todos comparten un mismo límite por dirección.
 
 **No hay un límite de tasa gRPC separado, deliberadamente**: uno propio duplicaría lo que se
 permite a una cuenta. Los listeners SMPP mantienen el suyo (`conf.maxRate.*`), como antes.
@@ -216,8 +235,9 @@ pasarela no se ha reiniciado desde entonces. `grpc.enabled` en health dice cuál
 </Accordion>
 
 <Accordion title="Cada login rechazado, y cada sesión, muestra la dirección del proxy">
-`smsg.grpc.proxy.forwarding` está desactivado, o `hops` no coincide con el número de proxies.
-Corrígelo antes de que fail2ban cuente diez rechazos desde el proxy y lo banee.
+`smsg.grpc.proxy.forwarding` está desactivado, `hops` no coincide con el número de proxies, o (desde
+0.17.3) el proxy está en otro host y no figura en `smsg.restapi.proxy.trusted` ni en
+`smsg.grpc.proxy.trusted` — el aviso `proxy.untrusted` da su dirección. Corrígelo antes de que fail2ban cuente diez rechazos desde el proxy y lo banee.
 </Accordion>
 
 <Accordion title="Las llamadas fallan en el transporte antes de que la pasarela responda">

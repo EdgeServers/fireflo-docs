@@ -92,10 +92,17 @@ proxy, e todos os clientes atrás dele**.
 | :--- | :--- | :--- |
 | `smsg.grpc.proxy.forwarding` | segue a configuração do REST (`quarkus.http.proxy.proxy-address-forwarding`) | Confia no `X-Forwarded-For` na porta gRPC. |
 | `smsg.grpc.proxy.hops` | segue `smsg.restapi.proxy.hops` (1) | Qual entrada, contando a partir da direita, é o cliente: o número de proxies que você roda. |
+| `smsg.grpc.proxy.trusted` | segue `smsg.restapi.proxy.trusted` (vazio: só loopback) | Desde 0.17.3. Os pares cujos `X-Forwarded-For` e `X-Forwarded-Proto` são aceitos na porta gRPC: endereços ou blocos CIDR, separados por vírgula, nunca nomes. Loopback — um proxy no próprio host do gateway — é sempre confiável. |
 
-As duas são configurações de plataforma e valem para a próxima chamada. O gateway loga um aviso uma
-vez quando vê `X-Forwarded-For` vindo de um endereço privado em que não confia — o sinal de que isso
-está faltando.
+As três são configurações de plataforma, para todo o gateway, e valem para a próxima chamada.
+
+**Desde 0.17.3 os cabeçalhos de encaminhamento só são aceitos de um proxy confiável.** Com o
+encaminhamento ligado, uma chamada cujo par TCP não é loopback nem está na lista tem os cabeçalhos
+ignorados: o próprio par é quem chama, para as sessões, as verificações de endereço permitido e o
+registro de logins recusados. O gateway loga `proxy.untrusted` em WARN uma vez, com esse par. **Um
+proxy em outro host precisa estar na lista**, em `smsg.restapi.proxy.trusted` (que a porta gRPC segue)
+ou em `smsg.grpc.proxy.trusted`, senão todo chamador fica com o endereço do proxy. Um proxy no próprio
+host do gateway não precisa de nada.
 
 ## TLS na própria porta
 
@@ -137,6 +144,18 @@ instalado quando o da versão é diferente, e depois recarrega o fail2ban. Veja
 | Sessões por login | `smsg.grpc.session.max.per.login` | `64` | Tokens ativos por login, por nó; um Login além disso encerra o usado há mais tempo. |
 | Stream em andamento | `smsg.grpc.stream.max.inflight` | `256` (no máximo 4096) | Requisições que um `SendStream` segura ao mesmo tempo; vale para streams abertos depois de uma mudança. |
 | Keepalive | — | ping do servidor após 60 s ocioso | Clientes que pingam com mais frequência que a cada 20 s são desconectados (`GOAWAY too_many_pings`). |
+| Streams de recibos por sessão | `smsg.grpc.session.max.subscribes` | `4` | Desde 0.17.3. Streams `Subscribe` que uma sessão mantém abertos ao mesmo tempo. Por sessão. |
+| Pulls por sessão | `smsg.grpc.session.max.pulls` | `8` | Desde 0.17.3. Long-polls `Pull` que uma sessão tem esperando ao mesmo tempo. Por sessão. |
+| Streams de envio por sessão | `smsg.grpc.session.max.sendstreams` | `16` | Desde 0.17.3. `SendStream`s que uma sessão mantém abertos ao mesmo tempo. As mensagens dentro de um stream não contam; quem as limita é `smsg.grpc.stream.max.inflight`. Por sessão. |
+| Chamadas por conexão | `smsg.grpc.connection.max.calls` | `1000` | Desde 0.17.3. Chamadas de qualquer tipo abertas ao mesmo tempo em uma conexão, incluindo envios unários. Por conexão. |
+| Chamadas longas por endereço | `smsg.grpc.ip.max.streams` | `256` | Desde 0.17.3. Chamadas `Subscribe`, `Pull` e `SendStream` abertas ao mesmo tempo a partir de um endereço de cliente, todas as sessões e logins juntos. Por endereço de cliente. |
+
+Os cinco tetos de 0.17.3 são configurações de todo o gateway lidas a cada chamada, então uma mudança
+não exige reinício; `Login` e `PlatformLogin` não contam. Uma chamada acima de um teto é fechada na
+hora com `RESOURCE_EXHAUSTED`, `ErrorDetail.code` `TOO_MANY_CALLS`, e não retém nada; uma chamada que
+termina libera seu lugar. Eles limitam quantas chamadas ficam abertas, não quantas mensagens são
+enviadas. Atrás de um proxy que não é confiável, todo chamador tem o endereço do proxy e todos dividem
+o mesmo teto por endereço.
 
 **Não existe um teto de taxa separado para o gRPC, de propósito**: um teto à parte dobraria o que uma
 conta pode enviar. Os listeners SMPP mantêm o seu próprio (`conf.maxRate.*`), como antes.
@@ -214,7 +233,9 @@ reiniciado desde então. O `grpc.enabled` do health diz qual dos dois.
 </Accordion>
 
 <Accordion title="Todo login recusado, e toda sessão, mostra o endereço do proxy">
-`smsg.grpc.proxy.forwarding` está desligado, ou `hops` não corresponde ao número de proxies. Corrija
+`smsg.grpc.proxy.forwarding` está desligado, `hops` não corresponde ao número de proxies, ou (desde
+0.17.3) o proxy está em outro host e não está em `smsg.restapi.proxy.trusted` nem em
+`smsg.grpc.proxy.trusted` — o aviso `proxy.untrusted` dá o endereço dele. Corrija
 antes que o fail2ban conte dez recusas do proxy e o bana.
 </Accordion>
 

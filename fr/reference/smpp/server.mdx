@@ -44,6 +44,7 @@ qu'un démarrage propre signifie que tous les listeners sont en service.
 | :--- | :--- | :--- |
 | `srv.proxy.enabled` | `false` | Un port dédié attendant des en-têtes HAProxy protocol. |
 | `srv.proxy.port` | `2777` | Ce port. |
+| `srv.proxy.trusted` | `""` | Depuis 0.17.3. Les répartiteurs de charge ou proxys dont l'en-tête PROXY protocol est cru sur ce listener : adresses ou blocs CIDR, séparés par des virgules. Vide : loopback seulement. Un bind venant de tout autre pair voit son en-tête ignoré, et le pair lui-même est vérifié contre les adresses autorisées, les limites par adresse et l'enregistrement des logins refusés ; `proxy.untrusted` est journalisé en WARN une fois. Par listener. |
 
 ## Défauts par compte
 

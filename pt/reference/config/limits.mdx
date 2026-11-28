@@ -110,6 +110,23 @@ ambos quando o limite deve valer para o gateway inteiro.
 Mesma lógica dos limites de fila: a fila do roteador é ilimitada por padrão e não pode fazer push
 back, então um batch sem teto é uma forma de exaurir o heap.
 
+## Escritas de contas de um revendedor
+
+Desde 0.17.3. Elas limitam o que um revendedor faz pela API de revendedores (`/secure/accounts`): criar e
+alterar as contas e os logins dos seus clientes. **Elas limitam a gestão de contas, não o tráfego de
+mensagens** — nenhum envio, recibo ou leitura é contado.
+
+| Propriedade | Escopo | Padrão | O que limita |
+| :--- | :--- | :--- | :--- |
+| `smsg.reseller.max.children` | por revendedor | `500` | Contas vivas que um revendedor pode ter. Contas arquivadas não contam. Acima disso, criar uma conta responde `409`, código `LIMIT_REACHED`. |
+| `smsg.reseller.max.logins.per.account` | por conta (cada conta de um revendedor) | `50` | Logins que uma dessas contas pode ter, incluindo os desativados. Acima disso, adicionar um login responde `409`, código `LIMIT_REACHED`. |
+| `smsg.reseller.writes.per.minute` | por revendedor, por nó do gateway | `120` | Escritas de gestão de contas em um minuto: criar ou alterar uma conta ou um login, definir uma senha, recarregar, retirar. Acima disso, a escrita responde `429`, código `RATE_LIMITED`, com `Retry-After` nos segundos que faltam no minuto, e nada é feito. Leituras não contam. |
+
+As três são configurações de todo o gateway lidas a cada uso, então uma mudança não exige reinício;
+`0` ou menos significa o padrão. A recusa nomeia a chave. Um revendedor que já está acima de um teto
+mantém o que tem e não pode adicionar mais até a chave ser aumentada. O minuto é contado em cada nó,
+então em um cluster um revendedor pode fazer esse número de escritas em cada nó.
+
 ## Recusas de produto e rating
 
 Três chaves, **todas off por padrão**, que transformam uma má configuração silenciosa em uma

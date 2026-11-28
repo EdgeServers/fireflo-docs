@@ -63,3 +63,43 @@ service.
 
 Voir [Santé en direct](/platform/operations/live-health) pour comment le lire, et
 [Le endpoint opérationnel](/reference/config/operational-endpoint) pour les tokens.
+
+## L'API de gestion signée (`/manage`)
+
+Pas sur ce port. Une plateforme de gestion — FireFlo OMNI, par exemple — crée, lit et crédite des
+comptes par `/manage/*` et l'API plateforme sur le port de **messagerie**, en signant chaque requête
+avec le token de gestion. Chaque compte qu'une plateforme a créé ou revendiqué porte la référence de
+cette plateforme, son `ref`.
+
+Depuis 0.17.3 **une référence est une frontière.** Un appelant qui nomme un `ref` n'atteint que les
+comptes portant exactement cette référence. Un compte sans référence — créé dans le panneau de
+contrôle et jamais revendiqué — n'appartient à aucune plateforme. Cela vaut pour chaque champ de l'API
+plateforme et pour ces appels REST, qui exigent désormais un `ref` (dans le corps, ou `?ref=` sur le
+`GET`) :
+
+| Méthode | Chemin |
+| :--- | :--- |
+| `POST` | `/token` |
+| `POST` | `/manage/accounts/{id}/top-ups` |
+| `POST` | `/manage/accounts/{id}/debits` |
+| `GET` | `/manage/accounts/{id}` |
+| `PUT` | `/manage/accounts/{id}/tags` (le `ref` était facultatif avant 0.17.3) |
+| `POST` | `/manage/quote`, quand il nomme un compte |
+
+| Réponse | Quand |
+| :--- | :--- |
+| `400`, code `REF_REQUIRED` | Pas de `ref`, ou un `ref` vide. |
+| `404` `Not found` | Le compte n'existe pas, porte la référence d'une autre plateforme, ou n'en porte aucune. Les trois répondent de la même façon, donc un appelant ne peut pas distinguer un compte qu'il n'a pas le droit de voir d'un compte qui n'existe pas. |
+| `503` | `POST /token` sur une passerelle sans base de données de configuration. |
+
+Une plateforme ne peut créer un compte enfant que sous un parent portant sa propre référence ; sous
+tout autre parent elle reçoit `404`. Un préfixe de référence utilisé pour lister des comptes est
+comparé comme un préfixe, caractère par caractère : `_` et `%` ne correspondent qu'à eux-mêmes.
+
+**Revendiquer un compte non marqué** y pose la référence de l'appelant, pour qu'une plateforme puisse
+reprendre les comptes qu'elle gérait avant l'existence des références ; OMNI le fait à chaque
+installation et mise à niveau. Un compte qui porte déjà une référence ne peut pas être revendiqué.
+
+| Propriété | Portée | Défaut | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.manage.claim.enabled` | toute la passerelle | `true` | Depuis 0.17.3. Si une plateforme peut revendiquer un compte qui ne porte pas de référence. `false` refuse toute revendication avec `409`, en nommant la clé. Réglez-le quand chaque plateforme a revendiqué les comptes qu'elle gère. |

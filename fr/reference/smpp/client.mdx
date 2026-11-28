@@ -1,6 +1,6 @@
 ---
 title: "Réglages fournisseur"
-description: "Chaque clé par fournisseur : hôtes, nombre de binds, keep-alives, classification des retry, TLVs et gestion des MO."
+description: "Chaque clé par fournisseur : hôtes, TLS, nombre de binds, keep-alives, classification des retry, TLVs et gestion des MO."
 ---
 
 Un **fournisseur** est une connexion sortante vers celui qui porte votre trafic. Les clés sont
@@ -17,6 +17,28 @@ Chaque worker a aussi [les réglages de base](/reference/smpp/worker-base).
 | `password` | `psms` | Le mot de passe de bind. |
 | `extra.hosts` | `""` | Paires `host:port` supplémentaires à bind **en parallèle**, séparées par virgules. |
 | `backup.hosts` | `""` | Paires `host:port` utilisées **si le principal échoue**. |
+
+## TLS
+
+| Clé | Défaut | Description |
+| :--- | :--- | :--- |
+| `ssl` | `false` | Fait le bind vers ce fournisseur en TLS. |
+| `ssl.verify.hostname` | `true` | Depuis 0.17.3. Le certificat du fournisseur doit nommer l'hôte par lequel ce fournisseur est appelé — `host`, ou l'hôte dans `extra.hosts` ou `backup.hosts` — comme nom DNS ou adresse IP dans ses noms alternatifs du sujet. `false` ne vérifie que la chaîne et journalise un avertissement. |
+| `ssl.truststore.path` | `""` | Depuis 0.17.3. Un truststore contenant la CA du fournisseur, ou son certificat, pour un fournisseur sur une CA privée. Vide : le truststore de la JVM elle-même. |
+| `ssl.truststore.password` | `""` | Depuis 0.17.3. Le mot de passe du truststore, s'il en a un. |
+| `ssl.truststore.type` | `""` | Depuis 0.17.3. `PKCS12` ou `JKS`. Vide : le défaut de la JVM, PKCS12. |
+| `ssl.trustAll` | `false` | Saute les deux vérifications : n'importe quel certificat, pour n'importe quel nom. Journalisé en WARN (`vendor.tls.trustAll`) à chaque bind. Préférez `ssl.truststore.path`. |
+
+Toutes sont par fournisseur.
+
+<Warning>
+**Avant 0.17.3 le certificat d'un fournisseur était vérifié pour sa chaîne et jamais pour son nom**,
+donc tout certificat valide était accepté. Un fournisseur configuré par adresse IP, ou par un nom que
+son certificat ne porte pas, échoue désormais au handshake TLS (`No subject alternative ... matching`
+dans le journal) et ne fait plus de bind. Appelez-le par le nom de son certificat, ou réglez
+`ssl.verify.hostname=false` pour ce fournisseur. Un fournisseur sur CA privée qui demandait
+`ssl.trustAll=true` devrait passer à `ssl.truststore.path`.
+</Warning>
 
 ## Nombres de binds
 

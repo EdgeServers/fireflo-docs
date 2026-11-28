@@ -109,6 +109,24 @@ Establece ambos cuando el límite deba ser para toda la pasarela.
 Mismo razonamiento que los límites de cola: la cola del router es sin límite por defecto y no puede empujar de vuelta, así que
 un lote sin tope es una forma de agotar el heap.
 
+## Escrituras de cuentas de un revendedor
+
+Desde 0.17.3. Acotan lo que un revendedor hace a través de la API de revendedores (`/secure/accounts`):
+crear y cambiar las cuentas y los logins de sus clientes. **Limitan la gestión de cuentas, no el
+tráfico de mensajes**: no se cuenta ningún envío, acuse ni lectura.
+
+| Propiedad | Ámbito | Predeterminado | Qué limita |
+| :--- | :--- | :--- | :--- |
+| `smsg.reseller.max.children` | por revendedor | `500` | Cuentas vivas que puede tener un revendedor. Las archivadas no cuentan. Por encima, crear una cuenta responde `409`, código `LIMIT_REACHED`. |
+| `smsg.reseller.max.logins.per.account` | por cuenta (cada cuenta de un revendedor) | `50` | Logins que puede tener una de esas cuentas, incluidos los desactivados. Por encima, añadir un login responde `409`, código `LIMIT_REACHED`. |
+| `smsg.reseller.writes.per.minute` | por revendedor, por nodo de la pasarela | `120` | Escrituras de gestión de cuentas en un minuto: crear o cambiar una cuenta o un login, fijar una contraseña, recargar, retirar. Por encima, la escritura responde `429`, código `RATE_LIMITED`, con `Retry-After` en los segundos que quedan del minuto, y no se hace nada. Las lecturas no cuentan. |
+
+Las tres son ajustes de toda la pasarela que se leen en cada uso, así que un cambio no necesita
+reinicio; `0` o menos significa el valor por defecto. El rechazo nombra la clave. Un revendedor que ya
+está por encima de un límite conserva lo que tiene y no puede añadir más hasta que se suba la clave.
+El minuto se cuenta en cada nodo, así que en un clúster un revendedor puede hacer ese número de
+escrituras en cada nodo.
+
 ## Rechazos de producto y tarificación
 
 Tres interruptores, **todos apagados por defecto**, que convierten una mala configuración silenciosa en una ruidosa.

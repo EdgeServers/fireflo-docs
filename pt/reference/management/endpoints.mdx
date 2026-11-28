@@ -60,3 +60,42 @@ Nunca conte o array `sessions` para responder "quantos estão bound". É uma amo
 
 Veja [Health ao vivo](/platform/operations/live-health) para como ler, e
 [O endpoint operacional](/reference/config/operational-endpoint) para os tokens.
+
+## A API de gerenciamento assinada (`/manage`)
+
+Não fica nesta porta. Uma plataforma gestora — o FireFlo OMNI, por exemplo — cria, lê e credita contas
+por `/manage/*` e pela API de plataforma na porta de **mensagens**, assinando cada requisição com o
+token de gerenciamento. Cada conta que uma plataforma criou ou reivindicou traz a referência dessa
+plataforma, o seu `ref`.
+
+Desde 0.17.3 **uma referência é uma fronteira.** Quem chama nomeando um `ref` só alcança as contas que
+trazem exatamente essa referência. Uma conta sem referência — criada no painel de controle e nunca
+reivindicada — não pertence a nenhuma plataforma. Isso vale em todo campo da API de plataforma e nestas
+chamadas REST, que agora exigem um `ref` (no corpo, ou `?ref=` no `GET`):
+
+| Método | Caminho |
+| :--- | :--- |
+| `POST` | `/token` |
+| `POST` | `/manage/accounts/{id}/top-ups` |
+| `POST` | `/manage/accounts/{id}/debits` |
+| `GET` | `/manage/accounts/{id}` |
+| `PUT` | `/manage/accounts/{id}/tags` (o `ref` era opcional antes de 0.17.3) |
+| `POST` | `/manage/quote`, quando nomeia uma conta |
+
+| Resposta | Quando |
+| :--- | :--- |
+| `400`, código `REF_REQUIRED` | Sem `ref`, ou com um vazio. |
+| `404` `Not found` | A conta não existe, traz a referência de outra plataforma, ou não traz nenhuma. As três respondem igual, então quem chama não consegue distinguir uma conta que não pode ver de uma que não existe. |
+| `503` | `POST /token` em um gateway sem banco de dados de configuração. |
+
+Uma plataforma só pode criar uma conta filha sob uma conta pai que traga a sua própria referência; sob
+qualquer outra recebe `404`. Um prefixo de referência usado para listar contas é comparado como
+prefixo, caractere por caractere: `_` e `%` só correspondem a si mesmos.
+
+**Reivindicar uma conta sem marca** coloca nela a referência de quem chama, para que uma plataforma
+possa assumir as contas que gerenciava antes de as referências existirem; o OMNI faz isso a cada
+instalação e atualização. Uma conta que já traz uma referência não pode ser reivindicada.
+
+| Propriedade | Escopo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `smsg.manage.claim.enabled` | todo o gateway | `true` | Desde 0.17.3. Se uma plataforma pode reivindicar uma conta que não traz referência. `false` recusa toda reivindicação com `409`, nomeando a chave. Configure quando cada plataforma tiver reivindicado as contas que gerencia. |

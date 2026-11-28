@@ -9,9 +9,10 @@ Se aplica tanto a `dlr_url` em uma submissão quanto a `forward.mo.url` em um co
 
 | Propriedade | Padrão | Descrição |
 | :--- | :--- | :--- |
-| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. |
-| `smsg.webhook.schemes` | `https,http` | Schemes que o gateway vai chamar. |
-| `smsg.webhook.private.targets` | `allow` | `deny` recusa targets privados, loopback e link-local. |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. Desde 0.17.3 um redirect seguido é checado a cada salto pelas mesmas regras, no máximo 5 saltos; um salto para um endereço recusado encerra a tentativa como falha. |
+| `smsg.webhook.schemes` | `https,http` | Schemes que o gateway vai chamar. Desde 0.17.3 só `http` e `https` são chamados, seja o que for que a lista diga. |
+| `smsg.webhook.private.allowed` | `""` | Desde 0.17.3. As redes não públicas que um callback pode alcançar: endereços ou blocos CIDR, separados por vírgula. Vazio recusa todo target não público. Loopback só é alcançável quando um bloco de loopback está listado aqui. Para todo o gateway. |
+| `smsg.webhook.private.targets` | `deny` | **Obsoleto desde 0.17.3**: use `smsg.webhook.private.allowed`. `allow` agora abre só as faixas privadas — loopback, link-local e as portas do próprio gateway continuam recusados — e loga um aviso que nomeia a nova chave. |
 | `smsg.webhook.retries` | `10` | Tentativas antes de o receipt ser abandonado. |
 | `smsg.webhook.retry.interval.ms` | `120000` | Espera entre tentativas. |
 | `smsg.webhook.timeout.ms` | `5000` | Timeout de conexão e requisição. |
@@ -23,12 +24,38 @@ buscado. Um endpoint que dependia de um redirect agora falha de forma alta em ve
 ir para outro lugar.
 </Warning>
 
-`private.targets` é `allow` por padrão para que implantações que fazem POST a uma aplicação na
-própria rede continuem funcionando. Configure `deny` onde clientes são externos.
+### Julgada quando a mensagem é aceita
+
+Desde 0.17.3 uma URL de callback é checada quando a mensagem ou o lote é **aceito**, pelas mesmas
+regras que o envio usa: `dlr-url` em um envio REST, um envio de plataforma e `Send`/`SendStream` do
+gRPC, e `callback_url`, `errback_url` e o `dlr-url` de cada mensagem de um lote. Uma URL que o gateway
+nunca chamaria é recusada com `400`, código `CALLBACK_URL_REFUSED` (gRPC `INVALID_ARGUMENT`), e a
+mensagem não é enviada. Antes de 0.17.3 ela era aceita e os receipts se perdiam em silêncio. Um nome
+que não resolve naquele momento passa; o envio checa de novo. O `forward.mo.url` de um conector é
+configuração, não uma requisição, então só é checado quando é chamado.
+
+**Nunca alcançáveis, seja qual for a configuração:**
+
+- endereços link-local — `169.254.0.0/16`, onde fica o serviço de metadados da nuvem, e `fe80::/10`;
+- o endereço não especificado — `0.0.0.0/8` e `::`;
+- as portas em que este gateway escuta (REST, gerenciamento, gRPC, cada listener SMPP) nos seus
+  próprios endereços.
+
+Qualquer outro target privado, unique-local ou loopback precisa do seu bloco em
+`smsg.webhook.private.allowed`. Uma aplicação no próprio host do gateway que recebe callbacks em
+`127.0.0.1` precisa de `smsg.webhook.private.allowed=127.0.0.1/32`.
+
+<Warning>
+**Uma instalação que configurou `private.targets=allow` perde o loopback em 0.17.3.** Callbacks para
+`127.0.0.1` ou `localhost` deixam de ser chamados e são recusados na aceitação até que um bloco de
+loopback esteja em `smsg.webhook.private.allowed`. Mova para essa chave as redes que você queria:
+`allow` abria todas as faixas privadas para todos os clientes do gateway.
+</Warning>
 
 <Note>
 Ele resolve o host e depois conecta, então um nome que responde diferente entre uma coisa e outra
 derrota. Ele aumenta o custo em vez de fechar o buraco. Regras de firewall de egress é que fecham.
+Desde 0.17.3 cada checagem resolve o nome de novo; não há mais um cache de veredictos separado.
 </Note>
 
 No orçamento padrão de retentativas, um endpoint inalcançável ocupa uma virtual thread por vinte

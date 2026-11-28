@@ -134,7 +134,8 @@ La pasarela anuncia la capacidad **`account_tags`** cuando su configuración est
 
 - `GET /manage/accounts/{id}` incluye `tags`, las etiquetas propias de la cuenta.
 - `PUT /manage/accounts/{id}/tags` recibe `add` y `remove`, ambas listas, y responde con la cuenta y sus
-  etiquetas después del cambio. Nunca reemplaza la lista. Una etiqueta que la pasarela no define, o una
+  etiquetas después del cambio. Desde 0.17.3 también exige el `ref` de la plataforma: consulta
+  [la API de gestión firmada](/reference/management/endpoints). Nunca reemplaza la lista. Una etiqueta que la pasarela no define, o una
   que se añade y se quita a la vez, responde `400`.
 
 ### API de revendedores

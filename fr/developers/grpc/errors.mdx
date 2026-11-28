@@ -44,6 +44,7 @@ même délai, pour les bibliothèques clientes qui le respectent.
 | Accepté | 200 | `OK` | — | — | Conservez `message_id`. |
 | Même `client_ref` qu'un envoi accepté | 200, `duplicate` | `OK`, `duplicate: true` | — | — | Rien n'a été renvoyé ni débité. Traitez comme un succès. |
 | Un champ absent, inconnu ou invalide | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, avec `field` | — | Corrigez la requête. Ne réessayez pas à l'identique. |
+| Un `dlr_url` que la passerelle n'appellera jamais (depuis 0.17.3) | 400 | `INVALID_ARGUMENT` | `CALLBACK_URL_REFUSED` | — | Utilisez une URL `http` ou `https` publique, ou demandez à votre fournisseur d'autoriser son réseau. |
 | Un paramètre SMPP requis est absent | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Ajoutez le paramètre — voir [TLVs personnalisés](/developers/send/custom-tlvs). |
 | Le solde ne couvrira pas | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Rechargez, puis réessayez. Rien n'a été débité. |
 | Plus aucune unité de votre produit (un compte à unités, à partir de 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Demandez des unités supplémentaires à votre fournisseur. Rien n'a été débité. |
@@ -61,12 +62,14 @@ même délai, pour les bibliothèques clientes qui le respectent.
 | **La transmission n'a pas répondu ; le message a peut-être été envoyé** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, avec `message_id` | 5 s, pas de `RetryInfo` | **Ne réessayez qu'avec le même `client_ref`.** Voir ci-dessous. |
 | Accepté et n'a pas pu être mis en file | 500 | `INTERNAL` | `CANNOT_SEND` | — | Tout débit est inversé. Réessayez avec le même `client_ref`. |
 | Un message au-delà de la limite de taille | — | `RESOURCE_EXHAUSTED` | aucun — levé par le transport | — | Envoyez-le plus petit. |
+| Trop d'appels ouverts : flux de reçus, pulls ou flux d'envoi sur une session, appels sur une connexion, ou appels longs depuis une adresse (depuis 0.17.3) | 429 | `RESOURCE_EXHAUSTED` | `TOO_MANY_CALLS` | 1 s | Fermez les appels dont vous n'avez plus besoin, ou partagez un seul flux. Les défauts sont 4 `Subscribe`, 8 `Pull` et 16 `SendStream` par session. |
 
 **Rien de refusé n'est débité, et rien de refusé ne compte dans votre limite de débit.**
 
 <Tip>
-`RESOURCE_EXHAUSTED` signifie ici deux choses différentes. Avec un `ErrorDetail` dont le code est
-`RATE_LIMITED`, ralentissez. Sans aucun `ErrorDetail`, la requête était trop grande et ne réussira
+`RESOURCE_EXHAUSTED` signifie ici trois choses différentes. Avec un `ErrorDetail` dont le code est
+`RATE_LIMITED`, ralentissez. Avec `TOO_MANY_CALLS`, vous gardez trop d'appels ouverts à la fois ;
+fermez-en. Sans aucun `ErrorDetail`, la requête était trop grande et ne réussira
 jamais telle quelle.
 </Tip>
 

@@ -1,6 +1,6 @@
 ---
 title: "Configurações de fornecedor"
-description: "Toda chave por fornecedor: hosts, contagens de bind, keep-alives, classificação de retentativa, TLVs e tratamento de MO."
+description: "Toda chave por fornecedor: hosts, TLS, contagens de bind, keep-alives, classificação de retentativa, TLVs e tratamento de MO."
 ---
 
 Um **fornecedor** é uma conexão de saída para quem carrega seu tráfego. Chaves são configuradas como
@@ -17,6 +17,28 @@ também tem [as configurações base](/reference/smpp/worker-base).
 | `password` | `psms` | A senha de bind. |
 | `extra.hosts` | `""` | Pares `host:port` extras para bind **concorrente**, separados por vírgula. |
 | `backup.hosts` | `""` | Pares `host:port` usados **se o primário falha**. |
+
+## TLS
+
+| Chave | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `ssl` | `false` | Faz o bind com este fornecedor sobre TLS. |
+| `ssl.verify.hostname` | `true` | Desde 0.17.3. O certificado do fornecedor precisa nomear o host pelo qual este fornecedor é discado — `host`, ou o host em `extra.hosts` ou `backup.hosts` — como nome DNS ou endereço IP nos seus nomes alternativos do sujeito. `false` checa só a cadeia e loga um aviso. |
+| `ssl.truststore.path` | `""` | Desde 0.17.3. Um truststore com a CA do fornecedor, ou o certificado dele, para um fornecedor com CA privada. Vazio: o truststore da própria JVM. |
+| `ssl.truststore.password` | `""` | Desde 0.17.3. A senha do truststore, se houver. |
+| `ssl.truststore.type` | `""` | Desde 0.17.3. `PKCS12` ou `JKS`. Vazio: o padrão da JVM, PKCS12. |
+| `ssl.trustAll` | `false` | Pula as duas checagens: qualquer certificado, para qualquer nome. Logado em WARN (`vendor.tls.trustAll`) a cada bind. Prefira `ssl.truststore.path`. |
+
+Todas são por fornecedor.
+
+<Warning>
+**Antes de 0.17.3 o certificado de um fornecedor era checado pela cadeia e nunca pelo nome**, então
+qualquer certificado válido era aceito. Um fornecedor configurado por endereço IP, ou por um nome que o
+certificado não traz, agora falha no handshake TLS (`No subject alternative ... matching` no log) e
+para de fazer bind. Disque-o pelo nome do certificado, ou configure `ssl.verify.hostname=false` para
+esse fornecedor. Um fornecedor com CA privada que precisava de `ssl.trustAll=true` deveria passar para
+`ssl.truststore.path`.
+</Warning>
 
 ## Contagens de bind
 

@@ -87,6 +87,7 @@ que la barra de direcciones de un navegador producirá con fiabilidad.
 | 400 | `Mandatory argument <name> is not found.` | Un campo obligatorio ausente o en blanco. |
 | 400 | `Unknown argument: <name>` | Un campo que la API no tiene, incluyendo `username` y `password`, que pertenecen a la cabecera. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Nombre correcto, forma incorrecta: un `coding` no numérico, un `hex_content` con longitud impar. |
+| 400 | código `CALLBACK_URL_REFUSED` | Desde 0.17.3. Un `dlr-url`, o el `callback_url` o `errback_url` de un lote, es una URL que la pasarela nunca llamará: no es `http` ni `https`, es una dirección link-local, loopback o privada que su proveedor no ha permitido, o uno de los puertos de la propia pasarela. No se envió nada. Antes de 0.17.3 se aceptaba y sus acuses nunca llegaban. Consulte [Webhooks](/reference/config/webhooks). |
 
 <Warning>
 **`412` para JSON malo, no `400`.** La mayoría de APIs usan `400` para ambos, así que un cliente

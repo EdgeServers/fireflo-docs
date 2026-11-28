@@ -44,6 +44,7 @@ mesmo atraso, para as bibliotecas cliente que o respeitam.
 | Aceita | 200 | `OK` | — | — | Guarde o `message_id`. |
 | Mesmo `client_ref` de um envio aceito | 200, `duplicate` | `OK`, `duplicate: true` | — | — | Nada foi enviado de novo nem cobrado. Trate como sucesso. |
 | Um campo ausente, desconhecido ou inválido | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, com `field` | — | Corrija a requisição. Não repita sem alterar. |
+| Um `dlr_url` que o gateway nunca vai chamar (desde 0.17.3) | 400 | `INVALID_ARGUMENT` | `CALLBACK_URL_REFUSED` | — | Use uma URL `http` ou `https` pública, ou peça ao seu provedor para liberar a rede dela. |
 | Falta um parâmetro SMPP obrigatório | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Adicione o parâmetro — veja [Custom TLVs](/developers/send/custom-tlvs). |
 | O saldo não cobre | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Recarregue, depois repita. Nada foi cobrado. |
 | Não restam unidades do seu produto (uma conta de unidades, a partir da 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Peça mais unidades ao seu provedor. Nada foi cobrado. |
@@ -61,12 +62,14 @@ mesmo atraso, para as bibliotecas cliente que o respeitam.
 | **A passagem adiante não respondeu; a mensagem pode ter sido enviada** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, com `message_id` | 5 s, sem `RetryInfo` | **Repita só com o mesmo `client_ref`.** Veja abaixo. |
 | Aceita e não foi possível enfileirar | 500 | `INTERNAL` | `CANNOT_SEND` | — | Qualquer cobrança é revertida. Repita com o mesmo `client_ref`. |
 | Uma mensagem acima do limite de tamanho | — | `RESOURCE_EXHAUSTED` | nenhum — gerado pelo transporte | — | Envie menor. |
+| Chamadas demais abertas: streams de recibos, pulls ou streams de envio em uma sessão, chamadas em uma conexão, ou chamadas longas a partir de um endereço (desde 0.17.3) | 429 | `RESOURCE_EXHAUSTED` | `TOO_MANY_CALLS` | 1 s | Feche as chamadas que não usa mais, ou compartilhe um único stream. Os padrões são 4 `Subscribe`, 8 `Pull` e 16 `SendStream` por sessão. |
 
 **Nada recusado é cobrado, e nada recusado conta contra o seu limite de taxa.**
 
 <Tip>
-`RESOURCE_EXHAUSTED` significa duas coisas diferentes aqui. Com um `ErrorDetail` cujo código é
-`RATE_LIMITED`, diminua o ritmo. Sem nenhum `ErrorDetail`, a requisição era grande demais e nunca vai
+`RESOURCE_EXHAUSTED` significa três coisas diferentes aqui. Com um `ErrorDetail` cujo código é
+`RATE_LIMITED`, diminua o ritmo. Com `TOO_MANY_CALLS`, você mantém chamadas demais abertas ao mesmo
+tempo; feche algumas. Sem nenhum `ErrorDetail`, a requisição era grande demais e nunca vai
 dar certo do jeito que está.
 </Tip>
 

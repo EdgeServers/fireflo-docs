@@ -9,9 +9,10 @@ Aplica tanto a `dlr_url` en un envío como a `forward.mo.url` en un conector.
 
 | Propiedad | Predeterminado | Descripción |
 | :--- | :--- | :--- |
-| `smsg.webhook.redirects` | `never` | `never`, `normal` o `always`. |
-| `smsg.webhook.schemes` | `https,http` | Esquemas que la pasarela llamará. |
-| `smsg.webhook.private.targets` | `allow` | `deny` rechaza objetivos privados, loopback y link-local. |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` o `always`. Desde 0.17.3 una redirección seguida se comprueba en cada salto con las mismas reglas, como mucho 5 saltos; un salto a una dirección rechazada termina el intento como fallo. |
+| `smsg.webhook.schemes` | `https,http` | Esquemas que la pasarela llamará. Desde 0.17.3 solo se llaman `http` y `https`, diga lo que diga la lista. |
+| `smsg.webhook.private.allowed` | `""` | Desde 0.17.3. Las redes no públicas a las que puede llegar un callback: direcciones o bloques CIDR, separados por comas. Vacío rechaza todo objetivo no público. Loopback solo es alcanzable cuando aquí figura un bloque de loopback. Para toda la pasarela. |
+| `smsg.webhook.private.targets` | `deny` | **Obsoleto desde 0.17.3**: usa `smsg.webhook.private.allowed`. `allow` ahora abre solo los rangos privados — loopback, link-local y los puertos de la propia pasarela siguen rechazados — y registra un aviso que nombra la nueva clave. |
 | `smsg.webhook.retries` | `10` | Intentos antes de que el acuse sea abandonado. |
 | `smsg.webhook.retry.interval.ms` | `120000` | Espera entre intentos. |
 | `smsg.webhook.timeout.ms` | `5000` | Timeout de conexión y petición. |
@@ -23,12 +24,39 @@ que se accede. Un endpoint que dependía de una redirección ahora falla ruidosa
 a otro sitio.
 </Warning>
 
-`private.targets` es `allow` por defecto para que los despliegues que hacen POST a una aplicación en su propia red
-sigan funcionando. Establece `deny` donde los clientes son externos.
+### Se juzga cuando se acepta el mensaje
+
+Desde 0.17.3 una URL de callback se comprueba cuando el mensaje o el lote se **acepta**, con las mismas
+reglas que usa el envío: `dlr-url` en un envío REST, un envío de plataforma y `Send`/`SendStream` de
+gRPC, y `callback_url`, `errback_url` y el `dlr-url` de cada mensaje de un lote. Una URL que la
+pasarela nunca llamaría se rechaza con `400`, código `CALLBACK_URL_REFUSED` (gRPC `INVALID_ARGUMENT`),
+y el mensaje no se envía. Antes de 0.17.3 se aceptaba y sus acuses se perdían en silencio. Un nombre
+que no resuelve en ese momento pasa; el envío lo vuelve a comprobar. El `forward.mo.url` de un
+conector es configuración, no una petición, así que solo se comprueba cuando se llama.
+
+**Nunca alcanzables, se configure lo que se configure:**
+
+- las direcciones link-local — `169.254.0.0/16`, donde está el servicio de metadatos de la nube, y
+  `fe80::/10`;
+- la dirección no especificada — `0.0.0.0/8` y `::`;
+- los puertos en los que escucha esta pasarela (REST, gestión, gRPC, cada listener SMPP) en sus propias
+  direcciones.
+
+Cualquier otro objetivo privado, unique-local o loopback necesita su bloque en
+`smsg.webhook.private.allowed`. Una aplicación en el propio host de la pasarela que recibe callbacks en
+`127.0.0.1` necesita `smsg.webhook.private.allowed=127.0.0.1/32`.
+
+<Warning>
+**Una instalación que puso `private.targets=allow` pierde loopback en 0.17.3.** Los callbacks a
+`127.0.0.1` o `localhost` dejan de llamarse y se rechazan al aceptar hasta que figure un bloque de
+loopback en `smsg.webhook.private.allowed`. Pasa a esa clave las redes que querías: `allow` abría
+todos los rangos privados a todos los clientes de la pasarela.
+</Warning>
 
 <Note>
 Resuelve el host y luego se conecta, así que un nombre que responda diferente en medio lo derrota. Sube el
-coste en lugar de cerrar el agujero. Las reglas de firewall de salida son las que lo cierran.
+coste en lugar de cerrar el agujero. Las reglas de firewall de salida son las que lo cierran. Desde
+0.17.3 cada comprobación vuelve a resolver el nombre; no hay una caché de veredictos aparte.
 </Note>
 
 Con el presupuesto de reintentos predeterminado, un endpoint inalcanzable ocupa un hilo virtual durante veinte minutos.

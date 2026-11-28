@@ -84,6 +84,7 @@ barra de endereços de navegador produz de forma confiável.
 | 400 | `Mandatory argument <name> is not found.` | Um campo obrigatório estava ausente ou em branco. |
 | 400 | `Unknown argument: <name>` | Um campo que a API não tem, incluindo `username` e `password`, que pertencem ao cabeçalho. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Nome certo, formato errado. Um `coding` não numérico, um `hex_content` de comprimento ímpar. |
+| 400 | código `CALLBACK_URL_REFUSED` | Desde 0.17.3. Um `dlr-url`, ou o `callback_url` ou `errback_url` de um lote, é uma URL que o gateway nunca vai chamar: não é `http` nem `https`, é um endereço link-local, loopback ou privado que o seu provedor não liberou, ou uma das portas do próprio gateway. Nada foi enviado. Antes de 0.17.3 ela era aceita e os recibos nunca chegavam. Veja [Webhooks](/reference/config/webhooks). |
 
 <Warning>
 **`412` para JSON ruim, não `400`.** A maioria das APIs usa `400` para os dois, então um cliente que

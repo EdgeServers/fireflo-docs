@@ -9,9 +9,10 @@ S'applique à la fois à `dlr_url` sur une soumission et à `forward.mo.url` sur
 
 | Propriété | Défaut | Description |
 | :--- | :--- | :--- |
-| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. |
-| `smsg.webhook.schemes` | `https,http` | Schémas que la passerelle appellera. |
-| `smsg.webhook.private.targets` | `allow` | `deny` refuse les cibles privées, loopback et link-local. |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` ou `always`. Depuis 0.17.3 une redirection suivie est vérifiée à chaque saut par les mêmes règles, 5 sauts au plus ; un saut vers une adresse refusée termine la tentative en échec. |
+| `smsg.webhook.schemes` | `https,http` | Schémas que la passerelle appellera. Depuis 0.17.3 seuls `http` et `https` sont appelés, quoi que dise la liste. |
+| `smsg.webhook.private.allowed` | `""` | Depuis 0.17.3. Les réseaux non publics qu'un callback peut atteindre : adresses ou blocs CIDR, séparés par des virgules. Vide refuse toute cible non publique. Loopback n'est joignable que si un bloc loopback figure ici. Pour toute la passerelle. |
+| `smsg.webhook.private.targets` | `deny` | **Obsolète depuis 0.17.3** : utilisez `smsg.webhook.private.allowed`. `allow` n'ouvre plus que les plages privées — loopback, link-local et les ports de la passerelle elle-même restent refusés — et journalise un avertissement qui nomme la nouvelle clé. |
 | `smsg.webhook.retries` | `10` | Tentatives avant que l'accusé ne soit abandonné. |
 | `smsg.webhook.retry.interval.ms` | `120000` | Attente entre tentatives. |
 | `smsg.webhook.timeout.ms` | `5000` | Timeout de connexion et de requête. |
@@ -23,12 +24,40 @@ vérifiée n'est pas l'adresse qui est appelée. Un endpoint qui dépendait d'un
 désormais bruyamment plutôt que d'aller silencieusement ailleurs.
 </Warning>
 
-`private.targets` vaut par défaut `allow` pour que les déploiements qui postent à une application
-sur leur propre réseau continuent de fonctionner. Réglez `deny` là où les clients sont externes.
+### Jugée à l'acceptation du message
+
+Depuis 0.17.3 une URL de callback est vérifiée quand le message ou le lot est **accepté**, par les
+mêmes règles que l'envoi : `dlr-url` sur un envoi REST, un envoi de plateforme et `Send`/`SendStream`
+gRPC, et `callback_url`, `errback_url` et le `dlr-url` de chaque message d'un lot. Une URL que la
+passerelle n'appellerait jamais est refusée avec `400`, code `CALLBACK_URL_REFUSED` (gRPC
+`INVALID_ARGUMENT`), et le message n'est pas envoyé. Avant 0.17.3 elle était acceptée et ses accusés
+perdus en silence. Un nom qui ne se résout pas à ce moment passe ; l'envoi le vérifie encore. Le
+`forward.mo.url` d'un connecteur est de la configuration, pas une requête : il n'est vérifié qu'au
+moment de l'appel.
+
+**Jamais joignables, quelle que soit la configuration :**
+
+- les adresses link-local — `169.254.0.0/16`, où se trouve le service de métadonnées du cloud, et
+  `fe80::/10` ;
+- l'adresse non spécifiée — `0.0.0.0/8` et `::` ;
+- les ports d'écoute de cette passerelle (REST, gestion, gRPC, chaque listener SMPP) sur ses propres
+  adresses.
+
+Toute autre cible privée, unique-local ou loopback a besoin de son bloc dans
+`smsg.webhook.private.allowed`. Une application sur l'hôte même de la passerelle qui reçoit les
+callbacks sur `127.0.0.1` a besoin de `smsg.webhook.private.allowed=127.0.0.1/32`.
+
+<Warning>
+**Une installation qui avait réglé `private.targets=allow` perd loopback en 0.17.3.** Les callbacks
+vers `127.0.0.1` ou `localhost` ne sont plus appelés et sont refusés à l'acceptation tant qu'aucun bloc
+loopback ne figure dans `smsg.webhook.private.allowed`. Déplacez vers cette clé les réseaux que vous
+visiez : `allow` ouvrait toutes les plages privées à tous les clients de la passerelle.
+</Warning>
 
 <Note>
 Il résout l'hôte puis se connecte, donc un nom qui répond différemment entre les deux le contourne.
 Il élève le coût plutôt que de fermer le trou — ce sont les règles pare-feu de sortie qui le ferment.
+Depuis 0.17.3 chaque vérification résout le nom à nouveau ; il n'y a plus de cache de verdicts séparé.
 </Note>
 
 Au budget de retry par défaut, un endpoint injoignable occupe un thread virtuel pendant vingt

@@ -44,6 +44,7 @@ listener está activo.
 | :--- | :--- | :--- |
 | `srv.proxy.enabled` | `false` | Un puerto dedicado esperando cabeceras del protocolo HAProxy. |
 | `srv.proxy.port` | `2777` | Ese puerto. |
+| `srv.proxy.trusted` | `""` | Desde 0.17.3. Los balanceadores o proxies cuyo encabezado PROXY protocol se cree en este listener: direcciones o bloques CIDR, separados por comas. Vacío: solo loopback. Un bind desde cualquier otro par tiene su encabezado ignorado, y el propio par se comprueba contra las direcciones permitidas, los límites por dirección y el registro de logins rechazados; `proxy.untrusted` se registra en WARN una vez. Por listener. |
 
 ## Valores por defecto por cuenta
 

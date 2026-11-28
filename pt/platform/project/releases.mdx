@@ -25,6 +25,7 @@ O par atual é <Versions />.
 
 | Gateway | Painel | Data | Sobre o que foi a release |
 | :--- | :--- | :--- | :--- |
+| **0.17.3** | 0.17.3.0 | 2026-11-28 | **Segurança: endereços encaminhados só dos seus próprios proxies, URLs de callback checadas quando a mensagem é aceita, uma plataforma restrita às próprias contas.** *Endereços de cliente encaminhados só são aceitos dos seus próprios proxies:* `X-Forwarded-For`, `X-Forwarded-Proto` e um cabeçalho PROXY protocol do SMPP só são lidos de loopback ou de um proxy listado (`smsg.restapi.proxy.trusted`, `smsg.grpc.proxy.trusted`, `srv.proxy.trusted`), e um `X-Forwarded-For` longo demais mantém a ponta direita. *Uma URL de callback é julgada quando a mensagem é aceita:* um `dlr-url` ou callback de lote que o gateway nunca chamaria é recusado com `400`, código `CALLBACK_URL_REFUSED`; só `http` e `https` são chamados; endereços link-local, o endereço não especificado e as portas do próprio gateway nunca são alcançáveis; as redes não públicas que um callback pode alcançar são listadas em `smsg.webhook.private.allowed`; redirects são checados a cada salto. *Uma referência de plataforma é uma fronteira:* uma plataforma só alcança as contas que trazem exatamente a sua referência, e as chamadas REST `/manage` que nomeiam uma conta precisam de um `ref` (`400` `REF_REQUIRED`). *TLS para um fornecedor checa o nome do host*, com um truststore por fornecedor para uma CA privada. *Chamadas gRPC mantidas abertas têm teto* (`RESOURCE_EXHAUSTED`, `TOO_MANY_CALLS`), e *as escritas de contas de um revendedor têm teto* (`409` `LIMIT_REACHED`, `429` `RATE_LIMITED`). Dezessete chaves de configuração novas, todas com um padrão adequado a uma instalação de um só host. **Sem migração** (o schema continua 1.134.0): atualize sem `--migrate`, o gateway primeiro; o rollback é o binário 0.17.2. O painel de controle muda apenas de versão. **Quatro das mudanças podem parar algo que funciona hoje: leia antes “Atualizando para 0.17.3”, abaixo.** |
 | **0.17.2** | 0.17.2.0 | 2026-11-28 | **Um envio espera pelo seu crédito em vez de ser recusado.** A mensagem de uma conta pré-paga que não encontra crédito em mãos fica retida até o crédito ser reservado — até `smsg.balance.park.seconds` (novo, para todo o gateway, 10 s por padrão) em SMPP e até 5 s nos envios por API — e uma reserva que falha ou demora é repetida enquanto houver mensagens à espera: um banco de dados ocupado ou sem resposta já não causa a recusa. Nada é cobrado antes de o crédito ser reservado. *As recusas que restam têm cada uma a sua resposta.* Crédito não confirmado dentro da espera: `creditPending`, SMPP `0x58` por padrão (era `0x14`; ajustável por listener com a nova chave `conf.status.creditPending`), REST `503` com o código `CREDIT_PENDING` e `Retry-After: 2`, gRPC `CREDIT_PENDING`. Mensagens demais da conta já à espera: `creditQueueFull`, respondido como fila cheia. *Toda recusa na entrada é registrada.* Desde a 0.15.1, duas recusas desse tipo no mesmo microssegundo eram gravadas como uma só linha. Numa parada, os envios à espera são respondidos antes de os listeners se desligarem. **Migração 1.134.0** (duas linhas de configuração, sem tabela nem coluna): atualize com `--migrate`; um gateway 0.17.1 funciona sobre ela sem alterações. |
 | **0.17.1** | 0.17.1.0 | 2026-11-22 | **Duas correções para o modo Kafka, encontradas em um teste de sobrecarga.** *Um roteador parado resolve sozinho uma transação pendurada.* Uma transação do Kafka que fica pendurada sobre os offsets do grupo do roteador — em geral depois de um broker sem memória ou sem disco — nunca é encerrada pelo broker; as partições do roteador que precisam desses offsets param, e suas mensagens são aceitas e cobradas mas não enviadas até que alguém aborte a transação no broker. A recuperação do roteador agora encontra essa transação e a aborta, pelo mesmo teste que `kafka-transactions.sh find-hanging` aplica; uma que o broker ainda acompanha é deixada como está. Registrado como `kafka.router.hanging.aborted`, contado em `fireflo_kafka_router_hanging_aborted_total`. Exige Kafka 3.0 ou mais novo e, com ACLs ativas, `Describe` e `Write` em `__consumer_offsets`, `Describe` nos ids transacionais e `ClusterAction`; sem eles `kafka.router.hanging.failed` é registrado e o passo manual continua valendo. *Uma mensagem que um fornecedor aceitou duas vezes tem preço em um único registro.* Quando um fornecedor responde a um envio depois de `request.tout` e a nova tentativa já saiu, ele aceita as duas cópias. O cliente sempre foi cobrado uma vez, mas os dois registros podiam trazer o preço, e os números de receita e margem contavam a mensagem duas vezes. Agora só a primeira aceitação traz o preço; os registros já gravados não são alterados. **Sem migração** (o schema continua 1.133.0): atualize sem `--migrate`. O painel de controle muda apenas de versão. |
 | **0.17.0** | 0.17.0.0 | 2026-11-21 | **Etiquetas de conta para roteamento, preços e filtros.** Uma etiqueta é um nome que o operador coloca nas contas — "otp", "premium", "bank" — e uma conta pode ter várias. Só o operador as define; revendedores e clientes nunca as veem. Uma conta de unidades também leva as etiquetas da conta superior, então etiquetar um revendedor cobre os clientes dele. As regras de roteamento, as regras de preço e os filtros nomeados ganham uma condição, "Etiqueta de conta": tem esta etiqueta, tem todas estas, tem alguma destas, não tem nenhuma, e cada uma negada. Os preços ganham um nível "Preços por etiqueta" entre os preços próprios da conta e o preço padrão; quando uma conta tem várias etiquetas com preço, vence a que está mais acima na lista de etiquetas, e a cotação, o testador e a página de tarifas da conta dizem qual preço se aplica e por quê. Contas, uso e mensagens podem ser filtrados por etiqueta, conforme as etiquetas que a conta tem agora. Uma mudança é adotada na leitura seguinte da configuração, em até 30 segundos, e as sessões SMPP conectadas recebem o novo preço. As etiquetas exigem a configuração no banco de dados. O painel de controle ganha uma página Etiquetas, um seletor de etiquetas na conta e a condição no assistente de filtros, nas regras de rota e nas regras de preço. A API da plataforma anuncia a capacidade `account_tags`; a API de gestão ganha `tags` na conta e `PUT /manage/accounts/{id}/tags`; a API de revendedores não muda. Também: uma conta de unidades recebe na cotação o preço que lhe é cobrado, o da conta superior que paga. **Traz uma migração** (schema 1.132.0 → 1.133.0, duas tabelas novas e vazias): atualize primeiro o gateway, com `--migrate`. Se o painel de controle grava com um papel próprio do banco de dados, conceda a ele `SELECT, INSERT, UPDATE, DELETE` em `app_tag` e `app_account_tag` depois da atualização. Nada muda até que uma etiqueta seja criada, colocada em uma conta e citada por uma regra ou um preço. |
@@ -123,6 +124,44 @@ billing, e cada release depois dela fechou algo que a anterior expôs — um def
 segmento, depois o matching de template do qual dependia, depois a gramática de placeholders, depois
 o trabalho de postpaid, depois três defeitos no caminho de crédito. Releases se agrupam quando uma
 costura está sendo trabalhada; é assim que se parece.
+
+## Atualizando para 0.17.3
+
+0.17.3 não traz migração: atualize a partir de 0.17.2 com `fireflo-install update`, sem `--migrate`,
+o gateway primeiro e depois o painel de controle. Voltar é só o binário 0.17.2. Nenhuma das dezessete
+chaves novas está ainda no registro de configurações, então o painel de controle não oferece campo para
+elas: adicione uma pelo nome (Configurações do gateway → Adicionar uma chave) ou no arquivo de
+configuração.
+
+**Quatro mudanças podem parar algo que funciona hoje.** Cheque cada uma antes de atualizar.
+
+| Se a sua instalação tem | Depois da atualização | O que fazer |
+| :--- | :--- | :--- |
+| Um proxy em **outro host** na frente da porta REST ou gRPC, com o encaminhamento do proxy ligado | Todo chamador aparece como o proxy: listas de endereços permitidos falham, tokens ficam vinculados ao proxy, o fail2ban pode bani-lo | Liste o endereço do proxy em `smsg.restapi.proxy.trusted`. O aviso `proxy.untrusted` no log dá o endereço a adicionar |
+| Callbacks (`dlr-url`, callbacks de lote, o `forward.mo.url` de um conector) para um **endereço privado ou loopback** | Eles não são chamados; um envio com uma URL assim recebe `400` `CALLBACK_URL_REFUSED` onde recebia `200` | Liste a rede em `smsg.webhook.private.allowed` — para uma aplicação no próprio host do gateway, `127.0.0.1/32` |
+| Scripts que chamam REST `/manage` **sem `ref`** (`POST /token`, recargas, débitos, ler uma conta, tags, a cotação de uma conta) | `400` `REF_REQUIRED`; `404` para uma conta que não traz a referência de quem chama | Envie a referência da conta em toda chamada. O OMNI já faz isso |
+| Um fornecedor com bind sobre **TLS** (`ssl=true`) por endereço IP, ou por um nome que o certificado não traz | O bind falha no handshake TLS (`No subject alternative ... matching` no log) | Disque o fornecedor pelo nome do certificado, ou configure `ssl.verify.hostname=false` para esse fornecedor |
+
+Um proxy no próprio host do gateway, encaminhamento do proxy desligado, callbacks para endereços
+públicos, e fornecedores sem TLS ou com um certificado público para o nome configurado: nada muda.
+
+Duas coisas menores que uma instalação pode notar:
+
+- Um cliente gRPC que abre mais de 4 streams de recibos, 8 pulls ou 16 streams de envio em uma sessão
+  recebe `RESOURCE_EXHAUSTED` nos excedentes. Atrás de um proxy que não é confiável, todos os chamadores
+  dividem o teto por endereço de 256. Veja [Operando a API gRPC](/platform/operations/grpc).
+- Um revendedor que já passa de 500 contas vivas, ou uma das suas contas que passa de 50 logins, não
+  pode adicionar mais até a chave ser aumentada; nada que existe é removido. Veja
+  [Limites e recusas](/reference/config/limits).
+
+`/token` em um gateway sem banco de dados de configuração responde `503`.
+
+Onde cada mudança está descrita: [Bloqueando clientes abusivos](/platform/operations/blocking-abusive-clients)
+(em inglês) e [Operando a API gRPC](/platform/operations/grpc) para os proxies confiáveis,
+[Webhooks](/reference/config/webhooks) para as URLs de callback,
+[Management API](/reference/management/endpoints) para `/manage` e `ref`,
+[Configurações de fornecedor](/reference/smpp/client) para o TLS de fornecedores, e
+[Limites e recusas](/reference/config/limits) para os tetos de revendedores.
 
 ## Antes de atualizar
 

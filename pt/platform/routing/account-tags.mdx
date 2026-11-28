@@ -132,7 +132,8 @@ O gateway anuncia a capacidade **`account_tags`** quando sua configuração est�
 
 - `GET /manage/accounts/{id}` inclui `tags`, as tags próprias da conta.
 - `PUT /manage/accounts/{id}/tags` recebe `add` e `remove`, duas listas, e responde com a conta e suas
-  tags depois da mudança. Nunca substitui a lista. Uma tag que o gateway não define, ou uma adicionada e
+  tags depois da mudança. Desde 0.17.3 também exige o `ref` da plataforma — veja
+  [a API de gerenciamento assinada](/reference/management/endpoints). Nunca substitui a lista. Uma tag que o gateway não define, ou uma adicionada e
   removida ao mesmo tempo, responde `400`.
 
 ### API de revendedores

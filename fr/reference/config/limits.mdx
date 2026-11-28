@@ -113,6 +113,24 @@ Réglez les deux quand la limite doit être à l'échelle de la passerelle.
 Même raisonnement que pour les limites de files : la file du routeur est illimitée par défaut et ne
 peut pas repousser, donc un lot non plafonné est une manière d'épuiser le tas.
 
+## Écritures de comptes d'un revendeur
+
+Depuis 0.17.3. Elles bornent ce qu'un revendeur fait par l'API revendeur (`/secure/accounts`) : créer
+et modifier les comptes et les logins de ses clients. **Elles limitent la gestion des comptes, pas le
+trafic de messages** — aucun envoi, accusé ou lecture n'est compté.
+
+| Propriété | Portée | Défaut | Ce qu'elle limite |
+| :--- | :--- | :--- | :--- |
+| `smsg.reseller.max.children` | par revendeur | `500` | Comptes vivants qu'un revendeur peut détenir. Les comptes archivés ne sont pas comptés. Au-delà, créer un compte répond `409`, code `LIMIT_REACHED`. |
+| `smsg.reseller.max.logins.per.account` | par compte (chacun des comptes d'un revendeur) | `50` | Logins qu'un tel compte peut avoir, désactivés compris. Au-delà, ajouter un login répond `409`, code `LIMIT_REACHED`. |
+| `smsg.reseller.writes.per.minute` | par revendeur, par nœud de la passerelle | `120` | Écritures de gestion de comptes en une minute : créer ou modifier un compte ou un login, définir un mot de passe, recharger, retirer. Au-delà, l'écriture répond `429`, code `RATE_LIMITED`, avec `Retry-After` égal aux secondes restantes de la minute, et rien n'est fait. Les lectures ne sont pas comptées. |
+
+Les trois sont des réglages pour toute la passerelle lus à chaque usage, donc un changement ne demande
+pas de redémarrage ; `0` ou moins signifie la valeur par défaut. Le refus nomme la clé. Un revendeur
+déjà au-delà d'un plafond garde ce qu'il a et ne peut rien ajouter tant que la clé n'est pas relevée.
+La minute est comptée sur chaque nœud : dans un cluster, un revendeur peut faire ce nombre
+d'écritures sur chaque nœud.
+
 ## Refus de produit et de tarification
 
 Trois interrupteurs, **tous éteints par défaut**, qui transforment une mauvaise configuration

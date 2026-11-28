@@ -136,7 +136,8 @@ La passerelle annonce la capacité **`account_tags`** quand sa configuration est
 
 - `GET /manage/accounts/{id}` inclut `tags`, les étiquettes propres du compte.
 - `PUT /manage/accounts/{id}/tags` prend `add` et `remove`, deux listes, et répond avec le compte et ses
-  étiquettes après le changement. Il ne remplace jamais la liste. Une étiquette que la passerelle ne
+  étiquettes après le changement. Depuis 0.17.3 il exige aussi le `ref` de la plateforme — voir
+  [l'API de gestion signée](/reference/management/endpoints). Il ne remplace jamais la liste. Une étiquette que la passerelle ne
   définit pas, ou une étiquette à la fois ajoutée et retirée, répond `400`.
 
 ### API revendeur
