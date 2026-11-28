@@ -25,6 +25,7 @@ The current pair is <Versions />.
 
 | Gateway | Control panel | Date | What the release was about |
 | :--- | :--- | :--- | :--- |
+| **0.17.3** | 0.17.3.0 | 2026-11-28 | **Security: forwarded addresses only from your own proxies, callback URLs checked when a message is accepted, a platform kept to its own accounts.** *Forwarded client addresses are believed only from your own proxies:* `X-Forwarded-For`, `X-Forwarded-Proto` and an SMPP PROXY-protocol header are read only from loopback or a listed proxy (`smsg.restapi.proxy.trusted`, `smsg.grpc.proxy.trusted`, `srv.proxy.trusted`), and an over-long `X-Forwarded-For` keeps its right-hand end. *A callback URL is judged when the message is accepted:* a `dlr-url` or batch callback the gateway would never call is refused `400`, code `CALLBACK_URL_REFUSED`; only `http` and `https` are called; link-local addresses, the unspecified address and the gateway's own ports are never reachable; the non-public networks a callback may reach are listed in `smsg.webhook.private.allowed`; redirects are checked at each hop. *A platform reference is a boundary:* a platform is in scope only for accounts carrying exactly its reference, and REST `/manage` calls that name an account need a `ref` (`400` `REF_REQUIRED`). *TLS to a vendor checks the host name*, with a truststore per vendor for a private CA. *gRPC calls held open are capped* (`RESOURCE_EXHAUSTED`, `TOO_MANY_CALLS`), and *a reseller's account writes are capped* (`409` `LIMIT_REACHED`, `429` `RATE_LIMITED`). Seventeen new configuration keys, every default fit for a single-host install. **No migration** (schema stays 1.134.0): update without `--migrate`, gateway first; rollback is the 0.17.2 binary. The control panel changes only its version. **Four of the changes can stop something that works today: read **Upgrading to 0.17.3** below first.** |
 | **0.17.2** | 0.17.2.0 | 2026-11-28 | **A submit waits for its credit instead of being refused.** A prepaid account's message that finds no credit in hand is held until its credit is reserved — up to `smsg.balance.park.seconds` (new, gateway-wide, default 10 s) on SMPP and up to 5 s on API sends — and a reservation that fails or is slow is retried while messages wait, so a busy or unanswering database no longer refuses it. Nothing is charged before its credit is reserved. *The refusals left each have their own answer.* Credit not confirmed within the wait: `creditPending`, SMPP `0x58` by default (was `0x14`; set per listener with the new `conf.status.creditPending`), REST `503` with code `CREDIT_PENDING` and `Retry-After: 2`, gRPC `CREDIT_PENDING`. Too many of an account's messages already waiting: `creditQueueFull`, answered as a full queue. *Every refusal at the door is recorded.* Since 0.15.1, two such refusals in the same microsecond were stored as one row. Submits waiting at a stop are answered before the listeners unbind. **Migration 1.134.0** (two settings rows, no table or column): update with `--migrate`; a 0.17.1 gateway runs against it unchanged. |
 | **0.17.1** | 0.17.1.0 | 2026-11-22 | **Two fixes for Kafka mode, found on an overload test.** *A stalled router clears a hanging transaction itself.* A Kafka transaction left hanging on the router group's offsets — typically after a broker starved of memory or disk — is never ended by the broker; the router partitions that need those offsets stop, and their messages are accepted and charged but not sent until someone aborts the transaction on the broker. The router's recovery now finds such a transaction and aborts it, by the test `kafka-transactions.sh find-hanging` applies; one the broker still tracks is left alone. Logged as `kafka.router.hanging.aborted`, counted in `fireflo_kafka_router_hanging_aborted_total`. Needs Kafka 3.0 or later and, where ACLs are on, `Describe` and `Write` on `__consumer_offsets`, `Describe` on transactional ids and `ClusterAction`; without them `kafka.router.hanging.failed` is logged and the manual step still applies. *A message a vendor accepted twice is priced on one record.* When a vendor answers a submit after `request.tout` and the retry has already gone, both copies are accepted. The customer was always charged once, but both call records could carry the price, so revenue and margin figures counted the message twice. Only the first acceptance now carries the price; records already written are not changed. **No migration** (schema stays 1.133.0): update without `--migrate`. The control panel changes only its version. |
 | **0.17.0** | 0.17.0.0 | 2026-11-21 | **Account tags for routing, pricing and filters.** A tag is a name the operator puts on accounts — "otp", "premium", "bank" — and an account can carry several. Only the operator sets tags; resellers and customers never see them. A units account also carries its parent's tags, so tagging a reseller covers its customers. Routing rules, price rules and named filters gain a condition, "Account tag": has this tag, has all of these, has any of these, has no tag, and each negated. Pricing gains a "Tag prices" level between an account's own prices and the default; when an account has several tags with prices, the tag higher in the Tags list wins, and the rate quote, the tester and an account's tariff page say which price applies and why. Accounts, usage and messages can be filtered by tag, read from the tags an account has now. A change is adopted at the next configuration poll, within 30 seconds, and bound SMPP sessions are re-priced. Tags need configuration in the database. The control panel adds a Tags page, a tags picker on an account, and the condition in the filter wizard, route rules and price rules. The platform API announces the capability `account_tags`; the management API gains `tags` on an account and `PUT /manage/accounts/{id}/tags`; the reseller API is unchanged. Also: a units account is quoted the price it is charged, its paying parent's. **Carries a migration** (schema 1.132.0 → 1.133.0, two new empty tables): update the gateway first, with `--migrate`. When the control panel writes through a database role of its own, grant that role `SELECT, INSERT, UPDATE, DELETE` on `app_tag` and `app_account_tag` after the update. Nothing behaves differently until a tag is made, put on an account and named by a rule or a price. |
@@ -121,6 +122,42 @@ does not.
 each release after it closed something the previous one exposed — a segment billing defect, then the
 template matching it depended on, then the placeholder grammar, then the postpaid work, then three
 defects on the credit path. Releases cluster when a seam is being worked; that is what it looks like.
+
+## Upgrading to 0.17.3
+
+0.17.3 carries no migration: update from 0.17.2 with `fireflo-install update`, without `--migrate`, the
+gateway first and then the control panel. Rolling back is the 0.17.2 binary alone. None of the
+seventeen new keys is in the settings registry yet, so the control panel offers no field for them:
+add one by name (Gateway settings → Add a key) or in the configuration file.
+
+**Four changes can stop something that works today.** Check each before you update.
+
+| If your install has | After the update | What to do |
+| :--- | :--- | :--- |
+| A proxy on **another host** in front of the REST or gRPC port, with proxy forwarding on | Every caller appears as the proxy: allowed-address lists fail, tokens bind to the proxy, fail2ban can ban it | List the proxy's address in `smsg.restapi.proxy.trusted`. The warning `proxy.untrusted` in the log names the address to add |
+| Callbacks (`dlr-url`, batch callbacks, a connector's `forward.mo.url`) to a **private or loopback address** | They are not called; a send carrying such a URL gets `400` `CALLBACK_URL_REFUSED` where it got `200` | List the network in `smsg.webhook.private.allowed` — for an application on the gateway's own host, `127.0.0.1/32` |
+| Scripts calling REST `/manage` **without a `ref`** (`POST /token`, top-ups, debits, reading an account, tags, an account's quote) | `400` `REF_REQUIRED`; `404` for an account that does not carry the caller's reference | Send the account's reference on every call. OMNI already does |
+| A vendor bound over **TLS** (`ssl=true`) by IP address, or by a name its certificate does not carry | The bind fails the TLS handshake (`No subject alternative ... matching` in the log) | Dial the vendor by the name on its certificate, or set `ssl.verify.hostname=false` for that vendor |
+
+A proxy on the gateway's own host, proxy forwarding off, callbacks to public addresses, and vendors
+without TLS or with a public certificate for the configured name: nothing changes.
+
+Two smaller things an install may notice:
+
+- A gRPC client opening more than 4 receipt streams, 8 pulls or 16 send streams on one session gets
+  `RESOURCE_EXHAUSTED` on the extra ones. Behind a proxy that is not trusted, every caller shares the
+  per-address cap of 256. See [Running the gRPC API](/platform/operations/grpc).
+- A reseller already above 500 live accounts, or one of its accounts above 50 logins, cannot add more
+  until the key is raised; nothing existing is removed. See [Limits](/reference/config/limits).
+
+`/token` on a gateway with no configuration database answers `503`.
+
+Where each change is described: [Blocking abusive clients](/platform/operations/blocking-abusive-clients)
+and [Running the gRPC API](/platform/operations/grpc) for trusted proxies,
+[Webhooks](/reference/config/webhooks) for callback URLs,
+[Management API](/reference/management/endpoints) for `/manage` and `ref`,
+[Vendor settings](/reference/smpp/client) for vendor TLS, and [Limits](/reference/config/limits) for
+the reseller caps.
 
 ## Before you upgrade
 

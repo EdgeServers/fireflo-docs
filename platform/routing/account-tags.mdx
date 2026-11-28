@@ -123,7 +123,8 @@ The gateway announces the capability **`account_tags`** when its configuration i
 
 - `GET /manage/accounts/{id}` includes `tags`, the account's own tags.
 - `PUT /manage/accounts/{id}/tags` takes `add` and `remove`, both lists, and answers the account with
-  its tags afterwards. It never replaces the list. A tag the gateway does not define, or one both added
+  its tags afterwards. From 0.17.3 it also requires the platform's `ref` — see
+  [the signed management API](/reference/management/endpoints). It never replaces the list. A tag the gateway does not define, or one both added
   and removed, answers `400`.
 
 ### Reseller API

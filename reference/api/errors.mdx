@@ -84,6 +84,7 @@ browser address bar will reliably produce.
 | 400 | `Mandatory argument <name> is not found.` | A required field was absent or blank. |
 | 400 | `Unknown argument: <name>` | A field the API does not have — including `username` and `password`, which belong in the header. |
 | 400 | `Argument <name> has an invalid value: <value>.` | Right name, wrong shape — a non-numeric `coding`, an odd-length `hex_content`. |
+| 400 | code `CALLBACK_URL_REFUSED` | From 0.17.3. A `dlr-url`, or a batch's `callback_url` or `errback_url`, is a URL the gateway will never call: not `http` or `https`, a link-local, loopback or private address your provider has not allowed, or one of the gateway's own ports. Nothing was sent. Before 0.17.3 it was accepted and its receipts never arrived. See [Webhooks](/reference/config/webhooks). |
 
 <Warning>
 **`412` for bad JSON, not `400`.** Most APIs use `400` for both, so a client that branches on the

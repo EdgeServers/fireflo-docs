@@ -108,6 +108,23 @@ Set both when the limit is meant to be gateway-wide.
 Same reasoning as the queue limits: the router queue is unbounded by default and cannot push back, so
 an uncapped batch is a way to exhaust the heap.
 
+## Reseller account writes
+
+From 0.17.3. These bound what a reseller does through the reseller API (`/secure/accounts`): creating
+and changing its customers' accounts and logins. **They limit account management, not message
+traffic** — no send, receipt or read is counted.
+
+| Property | Scope | Default | What it limits |
+| :--- | :--- | :--- | :--- |
+| `smsg.reseller.max.children` | per reseller | `500` | Live accounts one reseller may hold. Archived accounts are not counted. Over it, creating an account answers `409`, code `LIMIT_REACHED`. |
+| `smsg.reseller.max.logins.per.account` | per account (each of a reseller's accounts) | `50` | Logins one such account may have, disabled ones included. Over it, adding a login answers `409`, code `LIMIT_REACHED`. |
+| `smsg.reseller.writes.per.minute` | per reseller, per gateway node | `120` | Account-management writes in one minute: creating or changing an account or a login, setting a password, recharging, withdrawing. Over it the write answers `429`, code `RATE_LIMITED`, with `Retry-After` set to the seconds left in the minute, and nothing is done. Reads are not counted. |
+
+All three are gateway-wide settings read on each use, so a change needs no restart; `0` or less means
+the default. The refusal names the key. A reseller already above a cap keeps what it has and cannot
+add more until the key is raised. The minute is counted on each node, so in a cluster a reseller can
+make this many writes on every node.
+
 ## Product and rating refusals
 
 Three switches, **all off by default**, that turn a quiet misconfiguration into a loud one.

@@ -92,9 +92,16 @@ customer behind it**.
 | :--- | :--- | :--- |
 | `smsg.grpc.proxy.forwarding` | follows the REST setting (`quarkus.http.proxy.proxy-address-forwarding`) | Trust `X-Forwarded-For` on the gRPC port. |
 | `smsg.grpc.proxy.hops` | follows `smsg.restapi.proxy.hops` (1) | Which entry, counted from the right, is the client: the number of proxies you run. |
+| `smsg.grpc.proxy.trusted` | follows `smsg.restapi.proxy.trusted` (empty: loopback only) | From 0.17.3. The peers whose `X-Forwarded-For` and `X-Forwarded-Proto` are believed on the gRPC port: addresses or CIDR blocks, comma-separated, never names. Loopback — a proxy on the gateway's own host — is always trusted. |
 
-Both are platform settings and apply to the next call. The gateway logs a warning once when it sees
-`X-Forwarded-For` from a private address it does not trust — the sign that this is missing.
+All three are platform settings, gateway-wide, and apply to the next call.
+
+**From 0.17.3 forwarding headers are believed only from a trusted proxy.** With forwarding on, a call
+whose TCP peer is neither loopback nor on the list has its headers ignored: the peer itself is the
+caller, for sessions, allowed-address checks and the refused-login record. The gateway logs
+`proxy.untrusted` at WARN once, naming that peer. **A proxy on another host must be listed**, in
+`smsg.restapi.proxy.trusted` (which the gRPC port follows) or in `smsg.grpc.proxy.trusted`, or every
+caller gets the proxy's address. A proxy on the gateway's own host needs nothing.
 
 ## TLS on the port itself
 
@@ -136,6 +143,17 @@ when the release's differs, then reloads fail2ban. See
 | Sessions per login | `smsg.grpc.session.max.per.login` | `64` | Live tokens per login, per node; a Login past it ends the least recently used. |
 | Stream in flight | `smsg.grpc.stream.max.inflight` | `256` (at most 4096) | Requests one `SendStream` holds at once; applies to streams opened after a change. |
 | Keepalive | — | server ping after 60 s idle | Clients pinging more often than every 20 s are disconnected (`GOAWAY too_many_pings`). |
+| Receipt streams per session | `smsg.grpc.session.max.subscribes` | `4` | From 0.17.3. `Subscribe` streams one session holds open at once. Per session. |
+| Pulls per session | `smsg.grpc.session.max.pulls` | `8` | From 0.17.3. `Pull` long-polls one session has waiting at once. Per session. |
+| Send streams per session | `smsg.grpc.session.max.sendstreams` | `16` | From 0.17.3. `SendStream`s one session holds open at once. The messages inside a stream are not counted; `smsg.grpc.stream.max.inflight` bounds those. Per session. |
+| Calls per connection | `smsg.grpc.connection.max.calls` | `1000` | From 0.17.3. Calls of any kind open at once on one connection, unary sends included. Per connection. |
+| Long-lived calls per address | `smsg.grpc.ip.max.streams` | `256` | From 0.17.3. `Subscribe`, `Pull` and `SendStream` calls open at once from one client address, all sessions and logins together. Per client address. |
+
+The five caps from 0.17.3 are gateway-wide settings read on each call, so a change needs no restart;
+`Login` and `PlatformLogin` are not counted. A call over a cap is closed at once with
+`RESOURCE_EXHAUSTED`, `ErrorDetail.code` `TOO_MANY_CALLS`, and holds nothing; a call that ends frees its
+place. They bound how many calls are held open, not how many messages are sent. Behind a proxy that is
+not trusted, every caller has the proxy's address and shares one per-address cap.
 
 **There is no separate gRPC rate ceiling, deliberately**: one would double what an account is allowed.
 The SMPP listeners keep their own (`conf.maxRate.*`), as before.
@@ -212,8 +230,10 @@ not been restarted since. Health's `grpc.enabled` says which.
 </Accordion>
 
 <Accordion title="Every refused login, and every session, shows the proxy's address">
-`smsg.grpc.proxy.forwarding` is off, or `hops` does not match the number of proxies. Fix it before
-fail2ban counts ten refusals from the proxy and bans it.
+`smsg.grpc.proxy.forwarding` is off, `hops` does not match the number of proxies, or (from 0.17.3) the
+proxy is on another host and not listed in `smsg.restapi.proxy.trusted` or `smsg.grpc.proxy.trusted` —
+the `proxy.untrusted` warning names its address. Fix it before fail2ban counts ten refusals from the
+proxy and bans it.
 </Accordion>
 
 <Accordion title="Calls fail at the transport before the gateway answers">

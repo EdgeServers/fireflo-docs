@@ -9,9 +9,10 @@ Applies to both `dlr_url` on a submission and `forward.mo.url` on a connector.
 
 | Property | Default | Description |
 | :--- | :--- | :--- |
-| `smsg.webhook.redirects` | `never` | `never`, `normal` or `always`. |
-| `smsg.webhook.schemes` | `https,http` | Schemes the gateway will call. |
-| `smsg.webhook.private.targets` | `deny` | `allow` permits private, loopback and link-local targets. From 0.12.15 `deny` also refuses IPv6 unique-local, carrier-grade NAT and any name that does not resolve, and covers batch `callback_url`/`errback_url`. |
+| `smsg.webhook.redirects` | `never` | `never`, `normal` or `always`. From 0.17.3 a followed redirect is checked at each hop by the same rules, at most 5 hops; a hop to a refused address ends the attempt as a failure. |
+| `smsg.webhook.schemes` | `https,http` | Schemes the gateway will call. From 0.17.3 only `http` and `https` are ever called, whatever is listed. |
+| `smsg.webhook.private.allowed` | `""` | From 0.17.3. The non-public networks a callback may reach: addresses or CIDR blocks, comma-separated. Empty refuses every non-public target. Loopback is reachable only when a loopback block is listed here. Gateway-wide. |
+| `smsg.webhook.private.targets` | `deny` | **Deprecated from 0.17.3**: use `smsg.webhook.private.allowed`. `allow` now opens the private ranges only — loopback, link-local and the gateway's own ports stay refused — and logs a warning naming the new key. From 0.12.15 `deny` also refuses IPv6 unique-local, carrier-grade NAT and any name that does not resolve, and covers batch `callback_url`/`errback_url`. |
 | `smsg.webhook.retries` | `10` | Attempts before the receipt is abandoned. |
 | `smsg.webhook.retry.interval.ms` | `120000` | Wait before the **first** retry. Each wait after it doubles, held at an hour. |
 | `smsg.webhook.retry.pending.max` | `10000` | From 0.12.15. Attempts (first and retries, receipts and inbound messages) held in memory when there is no broker. At the cap the oldest is dropped, counted in `fireflo_webhook_retry_dropped_total` and, for a receipt, written to its callback record. Read at startup. |
@@ -32,11 +33,40 @@ you traffic. If you post receipts to an application on your own network, set `al
 upgrade — the refusal is silent to the customer and shows up only as receipts that never arrive.
 </Warning>
 
+### Judged when the message is accepted
+
+From 0.17.3 a callback URL is checked when the message or batch is **accepted**, by the same rules
+the sender uses: `dlr-url` on a REST send, a platform send and gRPC `Send`/`SendStream`, and a batch's
+`callback_url`, `errback_url` and per-message `dlr-url`. A URL the gateway would never call is refused
+with `400`, code `CALLBACK_URL_REFUSED` (gRPC `INVALID_ARGUMENT`), and the message is not sent.
+Before 0.17.3 it was accepted and its receipts were silently dropped. A name that does not resolve at
+that moment passes; the send still checks it. A connector's `forward.mo.url` is configuration, not a
+request, so it is checked only when it is called.
+
+**Never reachable, whatever is configured:**
+
+- link-local addresses — `169.254.0.0/16`, which holds the cloud metadata service, and `fe80::/10`;
+- the unspecified address — `0.0.0.0/8` and `::`;
+- this gateway's own listening ports (REST, management, gRPC, every SMPP listener) on its own
+  addresses.
+
+Every other private, unique-local or loopback target needs its block in
+`smsg.webhook.private.allowed`. An application on the gateway's own host that receives callbacks on
+`127.0.0.1` needs `smsg.webhook.private.allowed=127.0.0.1/32`.
+
+<Warning>
+**An install that set `private.targets=allow` loses loopback in 0.17.3.** Callbacks to `127.0.0.1` or
+`localhost` stop being called and are refused at accept until a loopback block is listed in
+`smsg.webhook.private.allowed`. Move the networks you meant to that key: `allow` opened every private
+range to every customer on the gateway.
+</Warning>
+
 <Note>
 It resolves the host and then connects, so a name that answers differently in between defeats it. It
 raises the cost rather than closing the hole — egress firewall rules are what close it. What makes
 the two lookups agree in practice is the JVM's own positive address cache, so do not set
-`networkaddress.cache.ttl` to `0` on a gateway that posts receipts.
+`networkaddress.cache.ttl` to `0` on a gateway that posts receipts. From 0.17.3 every check resolves
+the name again; there is no separate verdict cache.
 </Note>
 
 **The retry ladder is exponential with full jitter, and that changed in 0.11.** At the defaults the

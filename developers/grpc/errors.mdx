@@ -44,6 +44,7 @@ delay, for client libraries that honour it.
 | Accepted | 200 | `OK` | — | — | Keep `message_id`. |
 | Same `client_ref` as an accepted send | 200, `duplicate` | `OK`, `duplicate: true` | — | — | Nothing was sent again or charged. Treat as success. |
 | A missing, unknown or invalid field | 400 | `INVALID_ARGUMENT` | `BAD_REQUEST`, with `field` | — | Fix the request. Do not retry unchanged. |
+| A `dlr_url` the gateway will never call (from 0.17.3) | 400 | `INVALID_ARGUMENT` | `CALLBACK_URL_REFUSED` | — | Use a public `http` or `https` URL, or ask your provider to allow its network. |
 | A required SMPP parameter is missing | 400 | `INVALID_ARGUMENT` | `MISSING_TLV` | — | Add the parameter — see [Custom TLVs](/developers/send/custom-tlvs). |
 | Balance will not cover it | 402 | `FAILED_PRECONDITION` | `INSUFFICIENT_CREDIT` | — | Top up, then retry. Nothing was charged. |
 | No units of your product left (a units account, from 0.16.0) | 402 | `FAILED_PRECONDITION` | `NO_UNITS` | — | Ask your provider for more units. Nothing was charged. |
@@ -61,13 +62,14 @@ delay, for client libraries that honour it.
 | **The hand-off did not answer; the message may have been sent** | 503 | **`UNKNOWN`** | `OUTCOME_UNKNOWN`, with `message_id` | 5 s, no `RetryInfo` | **Retry only with the same `client_ref`.** See below. |
 | Accepted and could not be queued | 500 | `INTERNAL` | `CANNOT_SEND` | — | Any charge is reversed. Retry with the same `client_ref`. |
 | A message over the size limit | — | `RESOURCE_EXHAUSTED` | none — raised by the transport | — | Send it smaller. |
+| Too many calls held open: receipt streams, pulls or send streams on one session, calls on one connection, or long-lived calls from one address (from 0.17.3) | 429 | `RESOURCE_EXHAUSTED` | `TOO_MANY_CALLS` | 1 s | Close calls you no longer use, or share one stream. The defaults are 4 `Subscribe`, 8 `Pull` and 16 `SendStream` per session. |
 
 **Nothing refused is charged, and nothing refused counts against your rate limit.**
 
 <Tip>
-`RESOURCE_EXHAUSTED` means two different things here. With an `ErrorDetail` whose code is
-`RATE_LIMITED`, slow down. With no `ErrorDetail` at all, the request was too large and will never
-succeed as it is.
+`RESOURCE_EXHAUSTED` means three different things here. With an `ErrorDetail` whose code is
+`RATE_LIMITED`, slow down. With `TOO_MANY_CALLS`, you hold too many calls open at once; close some.
+With no `ErrorDetail` at all, the request was too large and will never succeed as it is.
 </Tip>
 
 ## `OUTCOME_UNKNOWN`: retry only with `client_ref`

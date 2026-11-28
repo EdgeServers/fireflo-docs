@@ -79,3 +79,42 @@ Never count the `sessions` array to answer "how many are bound". It is a capped 
 
 See [Live health](/platform/operations/live-health) for how to read it, and
 [The operational endpoint](/reference/config/operational-endpoint) for the tokens.
+
+## The signed management API (`/manage`)
+
+Not on this port. A managing platform — FireFlo OMNI, for one — provisions, reads and credits accounts
+through `/manage/*` and the platform API on the **messaging** port, signing each request with the
+management token. Each account a platform made or claimed carries that platform's reference, its
+`ref`.
+
+From 0.17.3 **a reference is a boundary.** A caller naming a `ref` is in scope only for an account
+carrying exactly that reference. An account with no reference — made in the control panel, and never
+claimed — belongs to no platform. This holds on every platform API field and on these REST calls,
+which now require a `ref` (in the body, or `?ref=` on the `GET`):
+
+| Method | Path |
+| :--- | :--- |
+| `POST` | `/token` |
+| `POST` | `/manage/accounts/{id}/top-ups` |
+| `POST` | `/manage/accounts/{id}/debits` |
+| `GET` | `/manage/accounts/{id}` |
+| `PUT` | `/manage/accounts/{id}/tags` (the `ref` was optional before 0.17.3) |
+| `POST` | `/manage/quote`, when it names an account |
+
+| Answer | When |
+| :--- | :--- |
+| `400`, code `REF_REQUIRED` | No `ref`, or a blank one. |
+| `404` `Not found` | The account does not exist, carries another platform's reference, or carries none. The three answer alike, so a caller cannot tell an account it may not see from one that does not exist. |
+| `503` | `POST /token` on a gateway with no configuration database. |
+
+A platform can create a child account only under a parent carrying its own reference; under any other
+parent it gets `404`. A reference prefix used to list accounts is compared as a prefix, character for
+character: `_` and `%` match only themselves.
+
+**Claiming an unmarked account** puts the caller's reference on it, so a platform can take over the
+accounts it ran before references existed; OMNI does this on every install and upgrade. An account that
+already carries a reference cannot be claimed.
+
+| Property | Scope | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `smsg.manage.claim.enabled` | gateway-wide | `true` | From 0.17.3. Whether a platform may claim an account that carries no reference. `false` refuses every claim with `409`, naming the key. Set it once every platform has claimed the accounts it runs. |

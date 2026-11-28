@@ -1,6 +1,6 @@
 ---
 title: "Vendor settings"
-description: "Every per-vendor key: hosts, bind counts, keep-alives, retry classification, TLVs and MO handling."
+description: "Every per-vendor key: hosts, TLS, bind counts, keep-alives, retry classification, TLVs and MO handling."
 ---
 
 A **vendor** is a connection out to whoever carries your traffic. Keys are set as
@@ -17,6 +17,27 @@ A **vendor** is a connection out to whoever carries your traffic. Keys are set a
 | `password` | `psms` | The bind password. |
 | `extra.hosts` | `""` | Extra `host:port` pairs to bind **concurrently**, comma-separated. |
 | `backup.hosts` | `""` | `host:port` pairs used **if the primary fails**. |
+
+## TLS
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `ssl` | `false` | Bind to this vendor over TLS. |
+| `ssl.verify.hostname` | `true` | From 0.17.3. The vendor's certificate must name the host this vendor is dialled by — `host`, or the host in `extra.hosts` or `backup.hosts` — as a DNS name or IP address in its subject alternative names. `false` checks the chain only and logs a warning. |
+| `ssl.truststore.path` | `""` | From 0.17.3. A truststore holding the vendor's CA, or its certificate, for a vendor on a private CA. Empty: the JVM's own truststore. |
+| `ssl.truststore.password` | `""` | From 0.17.3. The truststore's password, if it has one. |
+| `ssl.truststore.type` | `""` | From 0.17.3. `PKCS12` or `JKS`. Empty: the JVM's default, PKCS12. |
+| `ssl.trustAll` | `false` | Skips both checks: any certificate, for any name. Logged at WARN (`vendor.tls.trustAll`) on every bind. Prefer `ssl.truststore.path`. |
+
+All are per vendor.
+
+<Warning>
+**Before 0.17.3 a vendor's certificate was checked for its chain and never for its name**, so any valid
+certificate was accepted. A vendor configured by IP address, or by a name its certificate does not
+carry, now fails the TLS handshake (`No subject alternative ... matching` in the log) and stops
+binding. Dial it by the name on its certificate, or set `ssl.verify.hostname=false` for that vendor. A
+vendor on a private CA that needed `ssl.trustAll=true` should move to `ssl.truststore.path`.
+</Warning>
 
 ## Bind counts
 

@@ -45,6 +45,7 @@ listener is up.
 | :--- | :--- | :--- |
 | `srv.proxy.enabled` | `false` | A dedicated port expecting HAProxy protocol headers. |
 | `srv.proxy.port` | `2777` | That port. |
+| `srv.proxy.trusted` | `""` | From 0.17.3. The load balancers or proxies whose PROXY-protocol header is believed on this listener: addresses or CIDR blocks, comma-separated. Empty: loopback only. A bind from any other peer has its header ignored, and the peer itself is checked against allowed addresses, per-address limits and the refused-login record; `proxy.untrusted` is logged at WARN once. Per listener. |
 
 ## Per-account defaults
 

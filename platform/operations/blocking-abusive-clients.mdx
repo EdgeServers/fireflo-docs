@@ -104,6 +104,20 @@ mailer broke, and they would never learn why.
 proxy and every customer behind it. See [Running the gRPC API](/platform/operations/grpc#behind-a-proxy).
 </Warning>
 
+**From 0.17.3 the forwarded address is believed only from a proxy you trust.** With forwarding on, the
+headers are read only when the connection comes from loopback (a proxy on the gateway's own host) or
+from an address on the list for that port. From any other peer they are ignored and the peer itself
+is the caller — so a client that reaches the port directly cannot choose the address fail2ban sees.
+The gateway logs `proxy.untrusted` at WARN once per port, naming the peer.
+
+| Key | Applies to | Default | What it sets |
+| :--- | :--- | :--- | :--- |
+| `smsg.restapi.proxy.trusted` | the gateway (REST port; the gRPC port follows it) | empty: loopback only | The proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` are believed. Addresses or CIDR blocks, comma-separated, never names |
+| `smsg.grpc.proxy.trusted` | the gateway (gRPC port) | unset: follows `smsg.restapi.proxy.trusted` | The same for the gRPC port |
+| `srv.proxy.trusted` | one SMPP listener | empty: loopback only | The proxies whose PROXY-protocol header is believed on that listener's PROXY port. See [Listener settings](/reference/smpp/server) |
+
+A proxy on another host must be listed, or every caller is recorded — and banned — as the proxy.
+
 ## Fill in the never-ban list first
 
 **Before you enable a single jail.** A ban is on an address, and an address usually carries a whole
