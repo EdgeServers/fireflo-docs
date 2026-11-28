@@ -156,6 +156,19 @@ is true of a pull: taking credit back is recorded on the account you took it fro
 | `429` | Too many transfers already waiting to be applied |
 | `503` | This platform holds no balances |
 
+## Managing the accounts themselves
+
+Moving credit is one part of looking after accounts beneath yours. If you resell, the REST API
+reference in your customer portal has a **Managing your accounts** section for the rest — listing and
+creating accounts, renaming, suspending and resuming them, adding and changing their logins, and
+recharging and withdrawing — with your own base URL and login filled in. It uses your own HTTP login,
+the one you send with.
+
+<Frame caption="A reseller's API reference in the customer portal: every call for managing its own accounts, and an example that creates one with an opening credit.">
+  <img className="block dark:hidden" src="/images/developers/billing/apis-reference--reseller-light.webp" alt="The Managing your accounts part of a reseller's API reference: a table of methods and paths under /secure/accounts and a Create a sub-account example" />
+  <img className="hidden dark:block" src="/images/developers/billing/apis-reference--reseller-dark.webp" alt="The Managing your accounts part of a reseller's API reference: a table of methods and paths under /secure/accounts and a Create a sub-account example" />
+</Frame>
+
 ## Related
 
 <CardGroup cols={2}>

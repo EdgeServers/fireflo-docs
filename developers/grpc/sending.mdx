@@ -135,6 +135,11 @@ be on its way. **Retry that only with the same `client_ref`.** See
 For sustained high volume. You write `SendStreamRequest`s and read `SendStreamResult`s on one
 bidirectional stream.
 
+<Frame caption="SendStream and the receipt feed in the gRPC part of the REST API reference in your customer portal. Results come back in any order, matched on correlation_id.">
+  <img className="block dark:hidden" src="/images/developers/grpc/apis-grpc--stream-light.webp" alt="The gRPC reference in the portal at SendStream and Receipts: the ErrorDetail fields, how a stream pairs correlation_id with results, and Subscribe, Pull and Ack" />
+  <img className="hidden dark:block" src="/images/developers/grpc/apis-grpc--stream-dark.webp" alt="The gRPC reference in the portal at SendStream and Receipts: the ErrorDetail fields, how a stream pairs correlation_id with results, and Subscribe, Pull and Ack" />
+</Frame>
+
 **Each request** is a `correlation_id` of your choosing and a `SendRequest` — exactly the message you
 would pass to `Send`.
 

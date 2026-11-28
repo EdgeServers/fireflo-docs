@@ -16,6 +16,11 @@ Or the header directly, if your client does not build it for you:
 Authorization: Basic <base64 of login:password>
 ```
 
+<Frame caption="The Authentication part of the REST API reference in your customer portal: your base URL and login, and the Authorization header already built for that login.">
+  <img className="block dark:hidden" src="/images/developers/api/apis-rest-light.webp" alt="The portal REST API reference at Authentication: base URL and login, a note that only HTTP logins can use the API, the filled-in Authorization header and a control to rotate a credential" />
+  <img className="hidden dark:block" src="/images/developers/api/apis-rest-dark.webp" alt="The portal REST API reference at Authentication: base URL and login, a note that only HTTP logins can use the API, the filled-in Authorization header and a control to rotate a credential" />
+</Frame>
+
 ## Credentials go in the header, nowhere else
 
 `username` and `password` as body fields are **not ignored** — they come back as

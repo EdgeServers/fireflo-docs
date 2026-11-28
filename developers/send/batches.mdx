@@ -17,6 +17,11 @@ description: "Many messages in one call, scheduling, and the response that tells
 Each element takes the same fields as a single send. A message's `to` may itself be an array, which
 multiplies out.
 
+<Frame caption="Send a batch in the REST API reference in your customer portal, with an example built for your login. Two numbers in one to make a messageCount of 3 — and the answer confirms acceptance, nothing more.">
+  <img className="block dark:hidden" src="/images/developers/send/apis-rest--batch-light.webp" alt="The Send a batch part of the portal's REST API reference: the messages, globals and batch_config fields, a curl example with an array of numbers in to, and the 200 answer with batchId, messageCount and scheduled" />
+  <img className="hidden dark:block" src="/images/developers/send/apis-rest--batch-dark.webp" alt="The Send a batch part of the portal's REST API reference: the messages, globals and batch_config fields, a curl example with an array of numbers in to, and the 200 answer with batchId, messageCount and scheduled" />
+</Frame>
+
 ## The response confirms acceptance only
 
 ```json

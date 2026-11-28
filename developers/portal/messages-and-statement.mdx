@@ -13,9 +13,14 @@ A filter bar over a table. Filters apply when you press **Search**, not as you t
 carried in the address bar — so a filtered view can be bookmarked, or pasted into a support request
 so that whoever reads it sees exactly what you saw.
 
+<Frame caption="Messages: the filter bar, then the table with Columns and Download CSV above it. The line over the rows says how many have no final outcome yet, so a column of blanks does not read as a fault.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-messages-light.webp" alt="The portal Messages page: Period, Outcome, To number, Message id and Message text filters with a Search button, and a table of messages with submitted time, to, from, message id, account, billed and outcome" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-messages-dark.webp" alt="The portal Messages page: Period, Outcome, To number, Message id and Message text filters with a Search button, and a table of messages with submitted time, to, from, message id, account, billed and outcome" />
+</Frame>
+
 | Filter | Notes |
 | :--- | :--- |
-| **Period** | Last hour, 24 hours, 7 days, 30 days, or a custom range. Defaults to 24 hours |
+| **Period** | Last hour, 24 hours, 7 days, 30 days, or a custom range. Opens on the last hour, or on the period you last chose in that browser |
 | **Outcome** | Any, or one specific outcome |
 | **To number** | Matches from the start of the number |
 | **Message id** | Exact |
@@ -39,6 +44,11 @@ opens a chooser grouped under Message, Route, Money and Outcome — around thirt
 part and retry counts, data coding, the TLVs you sent, message type, MCC and MNC, price rate, billed
 units, receipt state, error code and receipt time.
 
+<Frame caption="The column chooser. The padlocks mark the three that cannot be turned off, and the line at the foot is the rule to remember: the CSV carries whatever is ticked here.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-messages--columns-light.webp" alt="The Messages column chooser open, with columns grouped under Message, Route, Money and Outcome; Submitted, To and Outcome locked on; a Reset to default link" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-messages--columns-dark.webp" alt="The Messages column chooser open, with columns grouped under Message, Route, Money and Outcome; Submitted, To and Outcome locked on; a Reset to default link" />
+</Frame>
+
 Three cannot be turned off — **Submitted**, **To** and **Outcome** — since a row without them is not
 identifiable.
 
@@ -51,35 +61,62 @@ What your provider paid to carry it, and who carried it, are theirs — no colum
 field.
 </Warning>
 
-**Download CSV** honours the current filters and the current columns. Times are shown in your
-browser's time zone, and the footer says which one, so a row discussed across time zones can be
-pinned down.
+**Download CSV** honours the current filters and the current columns.
+
+Times are shown in the zone picked in the top bar — your provider's platform zone unless you choose
+your browser's own or UTC. Each time column names the zone in its heading, and the footer says it
+again, so a row discussed across time zones can be pinned down. The CSV keeps its time columns in
+UTC and adds a local copy of each in the zone you were reading the table in.
 
 Where some rows have no outcome yet, a line above the table says so:
 
-> *n* of these *total* are still awaiting a delivery receipt. That is normal — a message with no
-> receipt is closed at its expiry deadline.
+> *n* of these *total* have no final outcome yet. That is normal — the gateway closes anything still
+> open at its expiry deadline.
+
+Where the carrier has already acknowledged some of them with a progress receipt, the line says that
+too.
 
 ## Statement
 
-Choose a month — the last thirteen are offered, the current one marked **(so far)**. It opens on the
-*previous* complete month, because that is the one you are being asked to pay.
+Choose a month and press **Show** — the last thirteen are offered, the current one marked
+**(so far)**. Picking a month only marks it changed; the figures and the CSV stay those of the month
+they are labelled with until you press Show. It opens on the *previous* complete month, because that
+is the one you are being asked to pay.
 
-The headline card shows the amount, messages sent, delivered, and then one of two figures, never
-both: a **credit limit** for accounts billed in arrears, or a **balance** for accounts on prepaid
-credit. Reading a credit limit as a balance is the misreading that costs money, so they are never
-given the same name.
+<Frame caption="A month's statement: the amount, messages sent and delivered with what became of the rest, then — on a row of its own, because it is not part of the month — what is on the account right now.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-statement-light.webp" alt="The portal Statement for a month marked so far: Amount, Messages sent and Delivered with failed and awaiting counts, the credit remaining right now, and a per-day chart" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-statement-dark.webp" alt="The portal Statement for a month marked so far: Amount, Messages sent and Delivered with failed and awaiting counts, the credit remaining right now, and a per-day chart" />
+</Frame>
+
+The headline card shows the amount, messages sent, and delivered with its rate. Under delivered, the
+rest are accounted for — how many failed, expired and are still awaiting a receipt — so every message
+sent is in one of those figures.
+
+Beneath it, on its own row and labelled as **right now** rather than as part of the month, one of two
+figures, never both: a **credit limit** for accounts billed in arrears, or the **credit remaining**
+for accounts on prepaid credit. Reading a credit limit as a balance is the misreading that costs
+money, so they are never given the same name.
 
 If some traffic went out unpriced, a note says how many messages and confirms they are not in the
 amount.
 
-Below: a per-product breakdown — sent, delivered, failed, pending, amount — and, where they exist, a
-list of **invoiced periods**.
+Below: a **per-day** chart — messages per day by product, with what was billed as a line — then a
+breakdown **by product**, or **by login** if you switch it. Each row has sent, delivered, failed,
+expired, pending, not billed and amount; **Not billed** is what reconciles a row's sent count with its
+amount. Where they exist, a list of **invoiced periods** follows.
+
+<Frame caption="The breakdown by product. Delivered, failed, expired, pending and not billed are counted apart; the Product and Login switch at the top right changes what the rows are.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-statement--by-product-light.webp" alt="The statement's By product table: product, sent, delivered, failed, expired, pending, not billed and amount, with a Product and Login switch" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-statement--by-product-dark.webp" alt="The statement's By product table: product, sent, delivered, failed, expired, pending, not billed and amount, with a Product and Login switch" />
+</Frame>
 
 > A closed period is final. Anything landing against one afterwards appears as an adjustment on the
 > period that follows it.
 
-Each month exports as CSV.
+Each month exports as CSV with **Download CSV**, beside Show.
+
+Days on the chart and in the statement run midnight to midnight in your provider's platform zone,
+whatever zone you have chosen for times.
 
 ## Why the two screens disagree
 

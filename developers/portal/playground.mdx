@@ -19,8 +19,9 @@ Pricing a message is the one call that sends nothing, charges nothing, and count
 limit. Use it freely.
 </Warning>
 
-<Frame caption="The playground, with the request built in the language of your choice from your own base URL and login. The password lives in the tab and nowhere else.">
-  <img src="/images/developers/portal/playground.png" alt="The portal API playground showing the send form beside a generated curl request" />
+<Frame caption="The playground on Send one message: pick a login and check its password at the top, fill in the form, and the request is built beside it from your own base URL and login. The password lives in the tab and nowhere else.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground-light.webp" alt="The portal API playground: a login and password bar, tabs for the five endpoints, the Send one message form with to, content, from, coding and priority, and the generated curl request beside it" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground-dark.webp" alt="The portal API playground: a login and password bar, tabs for the five endpoints, the Send one message form with to, content, from, coding and priority, and the generated curl request beside it" />
 </Frame>
 
 ## Connecting
@@ -49,9 +50,10 @@ a one-line note. Several of those notes exist because of a specific mistake:
 
 - `to` — **quote it.** An unquoted number loses its leading zeros.
 - `content` — give this or `hex_content`, never both.
-- `from` — must be one approved for your account, or the send is refused. The picker offers only
-  **approved** sender IDs; pending ones are deliberately absent, because offering one you cannot yet
-  use would produce a refusal the form could have predicted.
+- `from` — must be one approved for your account, or the send is refused with `403`. Left empty, it
+  defaults to your login name. The box suggests only **approved** sender IDs; pending ones are
+  deliberately absent, because offering one you cannot yet use would produce a refusal the form could
+  have predicted. You can still type one, since an approval can land after the page has loaded.
 - `coding` — use 8 for anything outside GSM-7, which halves the segment length.
 - `validity_period` — whole minutes, not a duration string.
 
@@ -75,13 +77,24 @@ the delivery receipt and in your [message list](/developers/portal/messages-and-
 Alongside, a **Request** panel shows the same call as curl, Node, PHP or Python, filled in with your
 own base URL and login. Copy it straight into your code.
 
+<Frame caption="Price a message, with its request shown as Python. Pricing sends nothing and charges nothing, so this is the tab to try first.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--price-python-light.webp" alt="The playground's Price a message tab: to, content and coding fields, a Call button, and the request shown as a Python snippet" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--price-python-dark.webp" alt="The playground's Price a message tab: to, content and coding fields, a Call button, and the request shown as a Python snippet" />
+</Frame>
+
 The last few calls are kept in a small history you can reload into the form. It lives in the tab and
 dies with it.
 
 ## Batches
 
-The batch endpoint takes a JSON list, and the textarea refuses to send malformed JSON rather than
-letting the gateway reject it.
+The batch endpoint takes a JSON list — one object per message, each taking the same fields as a
+single send, and a `to` that may itself be a list. The textarea refuses to send malformed JSON rather
+than letting the gateway reject it.
+
+<Frame caption="Send a batch. The line under the tabs says it before you send: the response confirms acceptance only, and per-message results arrive on your errback URL.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--batch-light.webp" alt="The playground's Send a batch tab: a messages field taking a JSON list, a collapsed section for receipts, validity and custom parameters, and the curl request beside it" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--batch-dark.webp" alt="The playground's Send a batch tab: a messages field taking a JSON list, a collapsed section for receipts, validity and custom parameters, and the curl request beside it" />
+</Frame>
 
 <Warning>
 **A batch response confirms acceptance, not delivery, and not even per-message acceptance.** A
@@ -95,9 +108,15 @@ configured one, those refusals are invisible to you.
 ## The reference alongside it
 
 The **REST API reference** in the same section documents every endpoint, filled in with your account's
-own values, plus delivery receipts, batch callbacks, the shared error table and the custom TLV
-grammar. It also handles **credential rotation** — replacing a password or API key yourself, with the
-new value shown exactly once.
+own values, plus delivery receipts, batch callbacks, the shared error table, the custom TLV grammar
+and the gRPC API. If you resell, it adds the calls for managing your own accounts. It also handles
+**credential rotation** — replacing a password or API key yourself, with the new value shown exactly
+once.
+
+<Frame caption="The REST API reference, written with your own base URL and login — even the Authorization header is filled in. The rotation control sits under Authentication; the contents run down the right.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-api-docs-light.webp" alt="The portal REST API reference: base URL and login, the Authentication section with a filled-in Authorization header and a Rotate control, the start of Send one message, and an On this page list" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-api-docs-dark.webp" alt="The portal REST API reference: base URL and login, the Authentication section with a filled-in Authorization header and a Rotate control, the start of Send one message, and an On this page list" />
+</Frame>
 
 <Note>
 After rotating, the gateway reloads credentials on a timer. For roughly the next half minute your

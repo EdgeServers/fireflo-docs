@@ -44,6 +44,11 @@ SMPP remains the third way in, and is separate again — see [Binding](/develope
 | `fireflo.v1.SendService` | `Send`, `SendStream` | One message per call, or many on one stream. See [Sending messages](/developers/grpc/sending). |
 | `fireflo.v1.ReceiptService` | `Subscribe`, `Pull`, `Ack` | Collect the delivery receipts of your messages. See [Delivery receipts over gRPC](/developers/grpc/receipts). |
 
+<Frame caption="The gRPC part of the REST API reference in your customer portal: the address, transport, package and your login, then the three services. Where your provider has not published a gRPC address, it says so and tells you to ask.">
+  <img className="block dark:hidden" src="/images/developers/grpc/apis-grpc-light.webp" alt="The gRPC API part of the portal's reference: address, transport, package and login, a warning that no gRPC address has been published, how to get the proto, and the AuthService, SendService and ReceiptService table" />
+  <img className="hidden dark:block" src="/images/developers/grpc/apis-grpc-dark.webp" alt="The gRPC API part of the portal's reference: address, transport, package and login, a warning that no gRPC address has been published, how to get the proto, and the AuthService, SendService and ReceiptService table" />
+</Frame>
+
 ## Connecting
 
 Your provider gives you a **host and port**. On a gateway with nothing in front of it the port is

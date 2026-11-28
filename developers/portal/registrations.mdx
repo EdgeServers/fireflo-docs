@@ -29,20 +29,33 @@ The middle column is what [`/secure/senders`](/reference/api/senders) and
 states rather than eight. **Only `APPROVED` is usable** — the other three all mean a message will be
 refused, for different reasons.
 
-Each row also says which product it applies to, and which login — either a named one or **all your
-logins**.
+Each row also says which product it applies to. Once any of your registrations is bound to one login,
+every row says which login it covers as well — either a named one or **all your logins**.
 
-<Frame caption="Sender IDs, all approved and in use. The product each is scoped to is beside it — a sender approved for one product is not approved for another.">
-  <img src="/images/developers/portal/senders.png" alt="The portal Sender IDs screen listing three approved sender IDs, each scoped to a product" />
+<Frame caption="Sender IDs, each with its state and the product it is for. These three are still waiting for approval, and each says so in words: it is not in use yet.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations-light.webp" alt="The portal Sender IDs page listing three sender IDs, each marked Waiting for approval, for product india-ot, with an Edit button and a Request a sender ID button above" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations-dark.webp" alt="The portal Sender IDs page listing three sender IDs, each marked Waiting for approval, for product india-ot, with an Edit button and a Request a sender ID button above" />
 </Frame>
 
-<Frame caption="Templates, including one in Hindi. The {#var#} gaps are what may change; everything around them is matched exactly.">
-  <img src="/images/developers/portal/templates.png" alt="The portal Templates screen listing four approved templates with placeholder syntax" />
+<Frame caption="Templates, on the same pattern. The {#var#} gaps are what may change; everything around them is matched exactly.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--templates-light.webp" alt="The portal Templates page listing three templates with {#var#} placeholders, each marked Waiting for approval, for product india-ot" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--templates-dark.webp" alt="The portal Templates page listing three templates with {#var#} placeholders, each marked Waiting for approval, for product india-ot" />
 </Frame>
 
 ## Requesting a sender ID
 
-One field. The refusals are worth knowing before you hit them:
+**Request a sender ID** opens a short form: the sender ID itself, a **note for your operator** and the
+[stamps to ask for](#stamps).
+
+<Frame caption="The request form. Only the sender ID is needed; the note is where a regulator's registration reference goes, and nothing is usable until your operator approves it.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--request-light.webp" alt="The Request a sender ID dialog: a Sender ID field, a Note for your operator field, Stamps to ask for with an Add a stamp button, and Send for approval" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--request-dark.webp" alt="The Request a sender ID dialog: a Sender ID field, a Note for your operator field, Stamps to ask for with an Add a stamp button, and Send for approval" />
+</Frame>
+
+> **Note for your operator** — if this is registered with a regulator, put the reference here. Your
+> operator sets the value the gateway sends; you do not need to.
+
+The sender ID is the field that is checked. The refusals are worth knowing before you hit them:
 
 - A sender ID is at most 64 characters, **but SMPP allows 21** — anything near the upper bound could
   be stored here and never delivered.
@@ -53,7 +66,8 @@ One field. The refusals are worth knowing before you hit them:
 ## Requesting a template
 
 A **name**, for you and your provider to recognise it, matched against nothing. Then the **wording**,
-which is matched — exactly, apart from the gaps you mark.
+which is matched — exactly, apart from the gaps you mark. The note for your operator and the stamps
+follow, as for a sender ID.
 
 > Put `{#var#}` where the message changes — a name, a code, an order number. Everything else has to
 > match exactly.
@@ -93,7 +107,11 @@ provider.
 ## Stamps
 
 Under **Stamps to ask for** you can propose the values your provider attaches to every message on
-this registration — under DLT, your entity and template identifiers.
+this registration — under DLT, your entity and template identifiers. **Add a stamp** gives you a tag
+and a value per row.
+
+> The tag is whatever follows the last underscore, decimal unless written `0x` — so `tlv_0100` is
+> tag 100, not 64.
 
 > **Asking is free:** nothing here reaches a message until your operator accepts it, so an approved
 > registration keeps working meanwhile.
@@ -103,13 +121,20 @@ queueing a second request.
 
 ## Which login
 
-Where your account has more than one API login, you can bind a registration to one of them.
+Where your account has more than one API login, the form also offers **Which login**, to bind a
+registration to one of them. With a single login the choice is not shown.
 
 <Warning>
 **Leave this on "All my logins" unless you know you want otherwise.** Bound to one login, a
 registration does nothing for the others — and a login with nothing approved for it can send nothing
 at all.
 </Warning>
+
+## Asking for one of your customers
+
+If you resell, the form also asks **Who this is for**: your own account, or one of your customers.
+Pick a customer and the registration is requested against their account, and your operator approves
+it before they can send with it. A registration asked for a customer covers all of their logins.
 
 ## Editing something that is in use
 

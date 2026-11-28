@@ -39,6 +39,11 @@ A `POST` with `Content-Type: application/json`:
 
 `id` is the `messageId` your send returned. **That is how you correlate** — there is nothing else.
 
+<Frame caption="Delivery receipts in the REST API reference in your customer portal: how to ask for them, dlr_level, and every field a receipt carries — starting with the id your send returned.">
+  <img className="block dark:hidden" src="/images/developers/receive/apis-receipts--receipt-docs-light.webp" alt="The Delivery receipts part of the portal's REST API reference: dlr, dlr_url and dlr_level explained, and a table of receipt fields from id and stat to system_id and parts" />
+  <img className="hidden dark:block" src="/images/developers/receive/apis-receipts--receipt-docs-dark.webp" alt="The Delivery receipts part of the portal's REST API reference: dlr, dlr_url and dlr_level explained, and a table of receipt fields from id and stat to system_id and parts" />
+</Frame>
+
 Field names follow Jasmin's, so a receiver written for Jasmin reads this unchanged. Null fields are
 omitted rather than sent as nulls, so a receipt for a message that never reached a vendor does not
 arrive full of empty keys.

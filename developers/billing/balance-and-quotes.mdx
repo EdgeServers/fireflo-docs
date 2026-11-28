@@ -51,6 +51,11 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
 **The cost is `unit_rate × submit_sm_count`.** `submit_sm_count` is the segment count, so this is
 also how you find out that a message you thought was one is actually three.
 
+<Frame caption="Price a message in the REST API reference in your customer portal: the parameters, an example for your login, the answer, and the two refusals particular to it.">
+  <img className="block dark:hidden" src="/images/developers/billing/apis-rest--price-light.webp" alt="The Price a message part of the portal's REST API reference: to, content, coding, product and from, a curl example, the answer with unit_rate and submit_sm_count, and the 400 and 403 it can return" />
+  <img className="hidden dark:block" src="/images/developers/billing/apis-rest--price-dark.webp" alt="The Price a message part of the portal's REST API reference: to, content, coding, product and from, a curl example, the answer with unit_rate and submit_sm_count, and the 400 and 403 it can return" />
+</Frame>
+
 `/secure/rate` **sends nothing, charges nothing, and counts against no rate limit.** That makes it
 safe to call on user-generated content before committing to a send — the one pre-flight check that is
 genuinely free.
