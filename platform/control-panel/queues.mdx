@@ -6,9 +6,25 @@ description: "What has been accepted and not yet sent — and why a calm-looking
 **Messages the gateway has accepted and not yet sent. Nothing here is charged twice or lost — but a
 queue that only grows is a customer waiting.**
 
-The screen reads live, re-reading every few seconds, and can be paused. A search box narrows what is
-listed by account, sender, destination, product or vendor, and a **Retries only** toggle separates
-"more arrived than we could send" from "the vendor is refusing".
+The screen reads live, re-reading every few seconds; **Live** pauses it, **Refresh** reads once.
+
+## Where messages are waiting
+
+The card at the top lays the queues out as the path a message takes: **Kafka** (or **Broker**), then
+**Router**, then **Outgoing**, one row per vendor and server. Idle ones fold into a single line that
+**show** opens. Under the path, a line totals what is waiting in the gateway and what is behind on the
+broker. Choose any stage to open its own card below.
+
+<Frame caption="Nothing waits in the gateway, but 50 messages sit behind on Kafka with nothing draining them, so the strip is outlined in red.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-queues-light.webp" alt="The Queues page: the stages strip and the list of messages waiting at the selected stage." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-queues-dark.webp" alt="The Queues page: the stages strip and the list of messages waiting at the selected stage." />
+</Frame>
+
+Below the path come three cards that are not queues of messages but explain them: **Receipts waiting
+to be matched** (receipts a vendor sent, held until the receipt store records them; from 0.15.3),
+**gRPC** (its sessions, streams and the receipts waiting for logins to collect them; from 0.15.9), and
+**Database** (the connection, the writers that record messages, and the latency that admits or refuses
+new submits; from 0.15.1). **Slow queries** opens from the Database card.
 
 ## The broker and the router are different queues
 
@@ -18,28 +34,39 @@ listed by account, sender, destination, product or vendor, and a **Retries only*
 Once the in-process queue passes its highwater mark the consumer stops pulling, so the router queue
 stops growing and looks calm — while messages pile up on the broker behind it.
 
-If the router queue is suspiciously steady and customers are reporting delays, read the broker card
-first.
+If the router queue is suspiciously steady and customers are reporting delays, look at the Kafka (or
+Broker) stage first.
 </Warning>
 
-The broker card is always shown, even where there is no broker, because *not configured* and
+The first stage is always shown, even where there is no broker, because *not configured* and
 *configured and not answering* are entirely different facts and both would otherwise render as
 nothing.
 
 | State | What it means |
 | :--- | :--- |
-| **No broker configured** | The default. REST submissions go straight to the router queue |
-| **Not answering** | Publishes are falling back in-process; whatever is on the broker is stranded |
+| **None** | No broker. REST goes straight to the router |
+| **Not connected** (Kafka) or **Not answering** | The gateway cannot reach the broker; whatever is on it is stranded |
 | **Nothing draining it** | Messages are queued and no consumer is attached. Not slowness — nothing is reading them |
 
+On Kafka the stage counts how many messages are behind across its topics, and its card, **Kafka
+backbone**, lists each topic with how far behind it is, its partitions and members. **Open Kafka
+topics** on that card opens the **Kafka** page: every topic the gateway keeps on its broker, what it
+carries, who uses it, its consumer group, lag and retention. It reads the broker without consuming
+anything.
+
+<Frame caption="The Kafka page: one row per topic, grouped by role, with the listeners and APIs that use it, its consumer group, lag and retention.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-kafka-light.webp" alt="The Kafka topics page: one row per topic with its purpose, consumer group, lag and retention." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-kafka-dark.webp" alt="The Kafka topics page: one row per topic with its purpose, consumer group, lag and retention." />
+</Frame>
+
 <Note>
-When the broker is unreachable its depth reads **unknown**, never zero. A stranded queue that
+When the broker is unreachable its figure reads **unknown**, never zero. A stranded queue that
 displayed "0 waiting" would be the most dangerous number on the screen.
 </Note>
 
 ## The in-process queues
 
-One card per queue, each saying what it holds:
+Choosing the router or an outgoing row opens that queue's card, which says what it holds:
 
 | Kind | Holds |
 | :--- | :--- |
@@ -55,6 +82,10 @@ Each card offers a reading of its own contents, and these are the sentences to a
 
 That reading disappears when you filter, deliberately: a retries-only view cannot honestly pronounce
 on the mix.
+
+Above the list, a search box narrows it by account, sender, number or product, **Retries only**
+separates "more arrived than we could send" from "the vendor is refusing", and **Show** sets how many
+to list per queue: 20, 50, 100 or 500.
 
 The table shows when each message was queued, its account, product, addresses, size and encoding,
 whether it is a first attempt or a retry, its target, and — on a retry queue — when it is next due.
@@ -91,6 +122,11 @@ if you only need traffic to stop.
    asks you to confirm that one — it never archives more than you agreed to. It then works in batches
    of up to 10,000, showing the running totals, with **Stop** (the batch in flight finishes first), and
    ends with links to the runs on [Reports → Archives](/platform/control-panel/archives).
+
+<Frame caption="Clean up after Show, on unpushed receipts for one account: six match, with the sample listed. Nothing has been taken yet.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-queues--clean-up-light.webp" alt="The Clean up card after Show: the unpushed receipts that would be ended for one account, counted before anything is taken." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-queues--clean-up-dark.webp" alt="The Clean up card after Show: the unpushed receipts that would be ended for one account, counted before anything is taken." />
+</Frame>
 
 On a vendor's or listener's own page the same dialog opens from **Clean queue…** in the footer, beside
 Stop sending, Hold and Restart, while something is waiting there. It is already scoped to that worker

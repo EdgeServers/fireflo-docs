@@ -1,26 +1,65 @@
 ---
 title: "Archives"
-description: "What queue housekeeping took off the gateway — month by month, per account and entry by entry — and every run that took it, including receipt re-pushes."
+description: "Where call records live, live or archived, and what queue housekeeping took off the gateway — month by month, per account and entry by entry — with every run that took it."
 ---
 
-**Reports → Archives**, under Queues. A read-only report, from 0.12.19, of everything a queue clean
-archived and every run that wrote to the archive. Anyone who may read reports may open it; cleaning
-happens on the [Queues page](/platform/control-panel/queues#clean-up-archive-and-end-what-will-never-be-sent),
-on a vendor's or listener's page, or on the command line, and deleting archive months is command-line
-only.
+**Reports → Archives**, under Queues. The switch at the top right picks one of two sections:
+**Call records**, which opens first, and **Queue housekeeping**.
+
+## Call records
+
+From gateway 0.15, where call records live: today and the last few days in the **live** tables,
+where traffic is written, and every settled day before them in the **archive**, in the same database.
+**Nothing on this page deletes a record**: the gateway's schedule moves settled days, and only a purge
+run by hand on the gateway host ever deletes.
+
+<Frame caption="Call records with 3 days live and 40 days archived. The line at the top is the whole process; the tiles say when the last move ran and when the next one will.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-archives-light.webp" alt="The Archives page at Call records: how records move from live to archive, the live and archive tiles, and the tables with their rows, size and days." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-archives-dark.webp" alt="The Archives page at Call records: how records move from live to archive, the live and archive tiles, and the tables with their rows, size and days." />
+</Frame>
+
+Top to bottom:
+
+- **Live**, **Archive**, **Last move** and **Next move** tiles: how many days are live, what range the
+  archive holds, how the last move ended and how long it took, and when the next runs.
+- **Tables**: each call-record table's live and archive rows, size and days. Rows are the database's
+  estimates, not counts.
+- **Archive settings**: **Days kept live** (`smsg.cdr.hot.days`, at least 3, because receipts arrive
+  for two days after a message), **Schedule** (daily, or weekly on a chosen day, at a time in UTC),
+  **Move days to the archive** (off, nothing moves and the live tables keep growing), **CSV copy on
+  each move**, and the **Purge** command to run on the host. They are saved to the gateway's
+  configuration, which takes them up at its next poll or at once with **Apply now**. A gateway reading
+  its settings from a file shows them read-only.
+- **Waiting to move**: days old enough to leave the live tables that are not settled yet, and why.
+  Days move in order, so one waiting day holds back the ones after it.
+- **Move log**: every run, newest first, one row per day and table, including the runs that moved
+  nothing. **Failures** narrows it to the runs that failed.
+
+Against a gateway older than 0.15 the section says call-record tiers arrive with 0.15, and shows
+nothing else.
+
+## Queue housekeeping
+
+A read-only report, from 0.12.19, of everything a queue clean archived and every run that wrote to the
+archive. Anyone who may read reports may open it; cleaning happens on the
+[Queues page](/platform/control-panel/queues#clean-up-archive-and-end-what-will-never-be-sent), on a
+vendor's or listener's page, or on the command line, and deleting archive months is command-line only.
 
 Every archived message was **ended**, not parked: refunded if it was charged, sent a failed receipt
 where the customer asked for one, and recorded as refused with reason `operatorPurge`. The archive is
 the record of what was ended, who did it and why.
 
 <Note>
-Against a gateway older than 0.12.19 the page says **Available from gateway 0.12.19** and shows
+Against a gateway older than 0.12.19 the section says **Available from gateway 0.12.19** and shows
 nothing else. That is not an error: the archive arrives with that release's database update.
 </Note>
 
-## Latest runs, and the Batches tab
+Under **Latest runs** sit four tabs: **Partitions**, **By account**, **Entries** and **Batches**.
 
-The strip at the top lists the newest runs; the **Batches** tab lists them all and filters by kind:
+### Latest runs, and the Batches tab
+
+**Latest runs** lists the newest runs; the **Batches** tab lists them all, and its **What** filter
+picks one kind:
 
 | Kind | A run that… |
 | :--- | :--- |
@@ -32,17 +71,28 @@ Each run shows when it started (and whether it is still running), who ran it, th
 given, how many matched, were archived, refunded and sent a receipt, how many failed, and the note.
 Choose the time to see that run's entries.
 
-## Partitions
+<Frame caption="The Batches tab: one clean-up run, with who ran it, the selector it was given, what it matched and archived, and its note.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-archives--batches-light.webp" alt="Queue housekeeping's batches: a clean-up run with who ran it, its selector, what it matched and archived, and its note." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-archives--batches-dark.webp" alt="Queue housekeeping's batches: a clean-up run with who ran it, its selector, what it matched and archived, and its note." />
+</Frame>
+
+### Partitions
 
 One row per month: the rows held, the first and last archive time, and the size on disk. A month whose
 detail was purged shows **purged on &lt;date&gt;, &lt;n&gt; rows** — the entries are gone, and the
 summary kept for that month says how many there were.
 
-## By account — the reconciliation view
+### By account — the reconciliation view
 
-Per account, over an optional range of days (in the billing zone, both ends included): messages
-archived, refunded, receipts sent, price total, first and last, and how much of the total is still
-**held** in detail versus **purged**. **CSV** downloads what is shown.
+Per account, over an optional range of days (in the billing zone, both ends included; empty means all
+time) and an optional account, read when you press **Show**: messages archived, refunded, receipts
+sent, price total, first and last, and how much of the total is still **held** in detail versus
+**purged**. **CSV** downloads what is shown.
+
+<Frame caption="By account: archived messages reconciled against refunds and receipts sent, and how much of each total is still held in detail.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/operations-archives--by-account-light.webp" alt="Archived messages by account, with refunds, receipts sent, price total and the first and last archived." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/operations-archives--by-account-dark.webp" alt="Archived messages by account, with refunds, receipts sent, price total and the first and last archived." />
+</Frame>
 
 <Tip>
 This tab reads the per-day summary the gateway keeps **forever**, never the detail rows. Its totals
@@ -50,7 +100,7 @@ are what `fireflo queue archive summary --by account` prints, and they do not ch
 are purged — Held falls and Purged rises by the same number.
 </Tip>
 
-## Entries
+### Entries
 
 The archived entries themselves, newest first, filtered by period, account, vendor or listener (the
 list offers the configured ones), system id, store, batch and message id; the filters live in the

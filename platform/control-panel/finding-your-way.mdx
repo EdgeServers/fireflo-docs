@@ -1,6 +1,6 @@
 ---
 title: "Finding your way around"
-description: "A map of the operator sidebar, what each group is for, and the six screens that have no menu entry at all."
+description: "A map of the operator sidebar, what each group is for, and the screens that have no menu entry at all."
 ---
 
 The control panel is the operator's half of FireFlo. Your customers never see it — they get
@@ -16,7 +16,7 @@ without writing SQL.
 <AccordionGroup>
 
 <Accordion title="Overview — the first screen">
-Traffic, delivery and failures across the whole gateway, over 24 hours, 7 days or 30 days. Start
+Traffic, delivery and failures across the whole gateway, over 1 hour, 24 hours, 7 days or 30 days. Start
 here in an incident; it is the only screen that answers "is anything wrong" without you having to
 name the thing you suspect.
 
@@ -31,16 +31,19 @@ See [the dashboard](/platform/control-panel/dashboard).
 | **Servers** | Inbound listeners — how customers connect to you |
 | **Accounts** | Your customers, and everything hung off them |
 | **Pricing** | Tariffs, both what you charge and what you are charged |
-| **Diagnostics** | Logs and configuration read from the gateway's own machine |
+| **Logs** | Logs and configuration read from the gateway's own machine — see [Diagnostics](/platform/control-panel/diagnostics) |
 
 **Vendor** and **server** are the two halves of the same idea, and mixing them up is the most common
 early mistake — see [connections](/platform/connections/vendors).
 </Accordion>
 
 <Accordion title="Configuration — rules the gateway applies">
-**Filters** are reusable conditions that routing rules and tariffs both draw on. **TLVs** is the
-catalogue of SMPP optional parameters, including ones your customers have proposed and you have not
-yet approved.
+**Gateway** holds the settings every vendor and listener inherits unless it sets its own. **Error
+codes** maps each vendor's receipt codes to the ones your customers receive. **Filters** are reusable
+conditions that routing rules and tariffs both draw on; **Tags** are what a filter, a routing rule or
+a price can test about an account; **Preprocessors** are programs a routing rule can hand messages to.
+**TLVs** is the catalogue of SMPP optional parameters, including ones your customers have proposed and
+you have not yet approved.
 </Accordion>
 
 <Accordion title="Assets — what customers may send">
@@ -52,8 +55,10 @@ customers request in their portal, and both are only enforced where you have swi
 | Menu item | Answers |
 | :--- | :--- |
 | **Refused** | What was turned away before it became traffic |
+| **Access log** | Who signed in to the portal or the panel, who was refused, and what they changed |
+| **Security** | Refused binds and sign-ins by address, who is blocked, and Force disconnect |
 | **Queues** | What is waiting right now, and cleaning up what will never be sent |
-| **Archives** | What a queue clean archived, per month, per account and entry by entry, and every run |
+| **Archives** | Where call records live, and what a queue clean archived, with every run |
 | **Receipts** | How well each vendor reports outcomes |
 | **Usage** | Volume and delivery, by account |
 | **Revenue** | Billed, cost and margin |
@@ -63,12 +68,14 @@ customers request in their portal, and both are only enforced where you have swi
 
 ## The screens with no menu entry
 
-Six screens exist that the sidebar never lists. They are reached from other screens, which is fine
+Eight screens exist that the sidebar never lists. They are reached from other screens, which is fine
 once you know and baffling until you do.
 
 | Screen | Reached from | What it is |
 | :--- | :--- | :--- |
-| **Live health** | The heart icon in the header | Binds, queue depth and in-flight receipts, right now |
+| **Live health** | The health pill in the header: a dot, a word such as **Healthy**, and the outbound rate | Binds, queue depth and in-flight receipts, right now |
+| **Connectivity** | **Connectivity**, beside the health pill | A live map of who is connected, through which port, to which vendor |
+| **Kafka** | **Open Kafka topics** on the Queues page's Kafka backbone card | Every topic on the broker, its consumer group, lag and retention |
 | **Runtime** | "Runtime detail" on the Overview health strip | Memory, processor and connection capacity |
 | **Routing** | The Vendors screen | Routing tables, rules and vendor groups |
 | **Products** | The Servers screen | The product catalogue: each product, a summary of its pricing, and the logins that select it. Its prices open on **Pricing**, narrowed to that product |

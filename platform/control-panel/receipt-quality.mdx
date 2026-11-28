@@ -10,7 +10,21 @@ is computed over *reported* traffic — so a vendor that reports on two messages
 there while three in five of everything you sent it have no outcome at all. The rate is not wrong.
 It is answering a narrower question than it appears to.
 
-This page widens the denominator.
+This page widens the denominator. It is **Receipts** under Reports, read over **1 hour**, **24 hours**,
+**7 days** or **30 days**; it opens on the last hour, and after that on whichever range you last
+picked in that browser.
+
+## The charts
+
+**How attempts ended, by vendor** splits everything each vendor was sent into five shares that always
+add up to the bar: delivered, failed, gave up on, still open, and refused (an attempt the vendor
+turned away never gets a receipt). **Time to receipt** sets each vendor's median beside its 90th
+percentile. Both are drawn from the rows of the table below, so they always agree with it.
+
+<Frame caption="Receipts for 7 days. One vendor's bar is mostly green, and its 90th percentile sits well to the right of its median.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts-light.webp" alt="The Receipts page: a table of vendors with their reporting rate and receipt times." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts-dark.webp" alt="The Receipts page: a table of vendors with their reporting rate and receipt times." />
+</Frame>
 
 ## The table
 
@@ -32,6 +46,11 @@ from 70%, red below. A vendor under 70% is losing you your own view of what happ
 have already paid for.
 
 A vendor with no name recorded appears as **no vendor**.
+
+On a long range the timings and progress receipts are read from a **sample** of the messages, and a
+line under the table says how many of how many. The sample is the same messages on every load, and
+progress counts are scaled up from it. Sent, reported, gave up on, still open and delivered are always
+exact.
 
 ## The four things worth reading twice
 
@@ -64,8 +83,16 @@ to deliver. It has started failing to *tell you*, and the two are indistinguisha
 Vendors page alone. Traffic still leaves, customers still get charged, and your evidence quietly
 stops accumulating.
 
-The same figures appear as a compact line on each vendor's own card, labelled **Reports outcomes**,
-**Median to outcome**, **90th percentile** and **Never reported**.
+The same figures appear for one vendor on its own page, on the **Traffic** tab under **Delivery
+receipts**: **Reports outcomes**, **Sent**, **Reported**, **Still open**, **Median to first sign**,
+**Median to outcome**, **90th percentile** and **Never reported**. **Median to first sign** is the
+time to the vendor's first sign of life; set beside **Median to outcome**, it separates a vendor that
+acknowledges at once and settles late from one that says nothing until the end.
+
+<Frame caption="One vendor's Traffic tab for 24 hours. Delivery receipts gives its reporting rate with the counts it is a ratio of.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts--vendor-traffic-light.webp" alt="A vendor's Traffic tab for 24 hours: messages, delivery, cost, and its receipt figures — reported, still open and the median time to an outcome." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts--vendor-traffic-dark.webp" alt="A vendor's Traffic tab for 24 hours: messages, delivery, cost, and its receipt figures — reported, still open and the median time to an outcome." />
+</Frame>
 
 ## What it needs to say anything
 

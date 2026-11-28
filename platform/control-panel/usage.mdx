@@ -3,13 +3,25 @@ title: "Usage"
 description: "Volume and delivery by account, with the one arithmetic choice that stops a busy afternoon reading as a collapse."
 ---
 
-How much traffic went out, whether it arrived, and who sent it. Volume and delivery lead; money is
-the last column rather than the headline — the commercial question is answered on
-[Revenue](/platform/control-panel/revenue).
+How much traffic went out, whether it arrived, and who sent it: by account, login and product.
+Volume and delivery lead; money is the last column rather than the headline — the commercial question
+is answered on [Revenue](/platform/control-panel/revenue).
 
-The range picker offers **24 hours**, **7 days** or **30 days** and **defaults to 7 days**, which is
-the one place in the panel that does not default to 24 hours. A day is the unit a usage question gets
-asked in, and a single day of hourly buckets cannot show you a weekday-to-weekend shape.
+The range picker offers **1 hour**, **24 hours**, **7 days** or **30 days**. Like every traffic page it
+opens on the last hour, and after that on whichever range you last picked in that browser. A day is
+the unit a usage question usually gets asked in, so for a weekday-to-weekend shape pick 7 or 30 days.
+
+<Frame caption="Usage for 7 days. The bars count only messages that settled; the line is the delivery rate against its own 0–100% axis.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-usage-light.webp" alt="The Usage page: four figure cards, a daily chart and a table by account." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-usage-dark.webp" alt="The Usage page: four figure cards, a daily chart and a table by account." />
+</Frame>
+
+## Filters
+
+Under the title: **Account** and **Login** (each suggests names as you type), **Product**, **Tag**, and
+**From** and **To** days in the billing zone. Nothing is read until you press **Go**; **Clear** removes
+them all. A date range replaces the range picker while it is set. The filters you applied are
+remembered in that browser.
 
 ## The figures
 
@@ -27,15 +39,15 @@ So a rate of 98% means 98% *of the messages that have an outcome*. Messages stil
 in **Sent**, and in **Pending** in the table, and are in neither half of the rate.
 </Warning>
 
-From 0.12.15 whole days the gateway's nightly rollup has summarised are read from the daily usage
-summary and only today is read live, which is what keeps a 30-day view quick at volume. A summarised
-day's **Pending** is therefore zero — today's is live. A gateway whose rollup has not run reads
-everything live, as before.
+From 0.15.1 the page reads the gateway's usage summaries only, and the call records for the last few
+minutes and nothing else, whatever is filtered or opened — which is what keeps a 30-day view quick at
+volume. A summarised hour's or day's **Pending** is what was still awaiting a receipt when the gateway
+last summarised it.
 
 ## Traffic
 
-Delivered and failed stacked per day against volume on the left, and the delivery rate as a line
-against a fixed 0–100% axis on the right.
+Delivered and failed stacked per day (per hour on the shorter ranges) against volume on the left,
+and the delivery rate as a line against a fixed 0–100% axis on the right.
 
 Two deliberate choices worth knowing:
 
@@ -44,19 +56,31 @@ Two deliberate choices worth knowing:
 - **A day with nothing settled has no rate at all**, and the line breaks rather than dropping to
   zero. A gap is "no evidence"; a zero would be "everything failed".
 
-## By account
+## By account, login and product
 
-Heaviest sender first: **Account · Sent · Delivered · Failed · Pending · Rate · Billed**.
+Heaviest first, one row per account, login and product:
+**Account · Login · Product · Sent · Delivered · Failed · Pending · Rate · Billed**. Fifty rows to a
+page.
+
+Open a row with its arrow to see its days, or its hours on the 24-hour view; **Expand all** opens the
+first 25 rows at once. The 1-hour view has nothing to open.
+
+<Frame caption="The table by account, login and product for 7 days. The arrow on each row opens its days.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-usage--breakdown-light.webp" alt="The Usage table opened out by account, login and product: sent, delivered, failed, pending, rate and billed." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-usage--breakdown-dark.webp" alt="The Usage table opened out by account, login and product: sent, delivered, failed, pending, rate and billed." />
+</Frame>
 
 Each account links through to that customer, where the same question is answered for them alone.
 
-From 0.17.0 a **Tag** filter narrows the page to accounts that carry an [account tag](/platform/routing/account-tags)
+From 0.17.0 the **Tag** filter narrows the page to accounts that carry an [account tag](/platform/routing/account-tags)
 themselves. It reads the tags accounts have now: a message does not record its account's tags, so a past
 period is read with today's.
 
-Traffic that named no account appears as a greyed **no account** — not an error, and not an account
-whose name is empty. It is traffic that arrived without one, which usually means a login with no
-account attached, and is worth chasing because it prices and bills differently.
+Traffic that named no account shows a dash in the **Account** column — not an error, and not an
+account whose name is empty. It is traffic that arrived without one, which usually means a login with
+no account attached, and is worth chasing because it prices and bills differently. Days the gateway
+summarised before it recorded logins (before 0.15.1) show every login together in one row, and the
+page says so.
 
 ## Usage against the statement
 

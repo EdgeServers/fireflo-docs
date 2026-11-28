@@ -11,12 +11,27 @@ message end to end.
 Filters apply when you press **Search**, not as you type, and they travel in the address bar — so a
 filtered view can be bookmarked or pasted to a colleague and they will see what you saw.
 
-The always-visible row: **Period**, **Outcome**, **To number** (matches from the start),
-**Message id** (exact), and **Message text** (contains). **More filters** adds account, bind name,
-vendor, product, ingress, and from-number.
-From 0.17.0 it also offers **Tag**: messages from accounts that carry that
+The always-visible row: **Period** (a preset, or a date range), **Outcome**, and **Find**, one box
+that takes a to number (matched from the start) or a message id (exact) and tells them apart by
+itself. **Filters** opens the rest in three groups, and its badge counts how many of them are set:
+
+| Group | Filters |
+| :--- | :--- |
+| **Route** | Ingress server, Vendor, Came in via |
+| **Sender** | Account, Tag, Bind name (system id), Product |
+| **Message** | From number (starts with), Message text (contains) |
+
+**Tag** (from 0.17.0) finds messages from accounts that carry that
 [account tag](/platform/routing/account-tags) themselves now. A message does not record its account's
 tags, and the filter needs a period other than all time.
+
+Each applied filter shows as a chip under the bar; remove one with its cross, or all of them with
+**Clear all**.
+
+<Frame caption="Messages for one account over 7 days, with Filters open. The account chip under the bar is the filter that is applied.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages-light.webp" alt="The Messages page: the filter bar and a table of messages with their outcomes." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages-dark.webp" alt="The Messages page: the filter bar and a table of messages with their outcomes." />
+</Frame>
 
 **Awaiting a receipt** is listed first among outcomes rather than alphabetically. On a healthy busy
 gateway it is the largest group, and it is what people are usually looking for.
@@ -47,21 +62,22 @@ on under **Gateway settings → Call records → Keep message text** (from 0.12.
 
 ### One row per message, or one per attempt
 
-The **Rows** control decides the grain, and it changes what the numbers mean:
+The **Per message** / **Every attempt** switch beside the filters decides the grain, and it changes
+what the numbers mean:
 
 | Setting | A row is |
 | :--- | :--- |
-| **One row per message** *(default)* | What the customer sent |
-| **Every attempt and segment** | What the gateway did — including retries and long-message segments |
+| **Per message** *(default)* | What the customer sent |
+| **Every attempt** | What the gateway did — one row per vendor attempt, including retries and long-message segments |
 
 A long message that split into three, retried twice at the vendor, is one row on the first setting
 and several on the second. If a count looks too high, check this control before concluding anything.
 
 ## Columns
 
-Seven by default: submitted, to, from, account, vendor, billed, outcome. The chooser groups roughly
-thirty more under **Message**, **Route**, **Money** and **Outcome** — including cost, margin, both
-rate rules, receipt state and error code.
+Eight by default: submitted, to, from, account, ingress server, vendor, billed, outcome. The chooser
+groups roughly thirty more under **Message**, **Route**, **Money** and **Outcome** — including cost,
+margin, both rate rules, receipt state and error code.
 
 <Warning>
 **An empty cell and a blank cell are different, and the distinction matters on the TLV columns.**
@@ -106,6 +122,15 @@ that otherwise look like faults:
 Each receipt shows the SMPP mnemonic with its plain-English meaning, and then the part people need:
 whether it **closed the message**, was **a later outcome, not the one that was billed**, or was
 **progress** that left the message open.
+
+<Frame caption="A long message's receipts. The line above the table says what the customer asked for; Sent on says whether each receipt was passed on to them.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages--receipts-light.webp" alt="A long message's page at its receipts: the customer exchange, then each receipt that came back with its state and the vendor's own id." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages--receipts-dark.webp" alt="A long message's page at its receipts: the customer exchange, then each receipt that came back with its state and the vendor's own id." />
+</Frame>
+
+Under the error, the carrier's own code is shown, marked **mapped** where your error codes translated
+it. **Sent on** reads **Held — not asked for** when the customer did not ask for receipts, so nothing
+was sent to them.
 
 Where the gateway recorded what the customer asked for, it is shown alongside. Where it did not, the
 page says so explicitly — that is not the same as the customer asking for nothing.

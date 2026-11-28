@@ -1,23 +1,23 @@
 ---
 title: "Refused"
-description: "Messages the gateway would not send, and why — including the three refusals that happen after the customer was told yes, and so carry a refund."
+description: "Messages the gateway would not send, and why — including the refusals that happen after the customer was told yes, and so carry a refund."
 ---
 
 **Messages the gateway would not send, and why.** The first screen to open when a customer says
 nothing is arriving.
 
-Most refusals happened at the door: nothing was sent and nothing was charged. Three did not, and the
+Most refusals happened at the door: nothing was sent and nothing was charged. A few did not, and the
 difference is the most important thing on this page.
 
 ## Refused at the door, or refused after acceptance
 
 <Warning>
-**Three reasons happen after the customer was told yes** — *never routed*, *vendor refused it* and
-*dropped by a filter*.
+**Four reasons happen after the customer was told yes** — *never routed*, *vendor refused it*,
+*dropped by a filter* and *expired waiting for its vendor*.
 
-Those messages were accepted, charged and in two cases actually sent. They carry a **message id**,
-they appear in the call records, and **their charge was refunded**. Everything else on this page was
-turned away before it became traffic at all.
+Those messages were accepted and charged, and on *vendor refused it* actually sent. They carry a
+**message id**, they appear in the call records, and **their charge was refunded**. Everything else on
+this page was turned away before it became traffic at all.
 
 The **Stage** filter separates the two, and it is the filter to reach for when reconciling a
 customer's count against your own.
@@ -25,10 +25,25 @@ customer's count against your own.
 
 ## The reasons
 
-Summary cards lead the page — one per reason, with a count for the whole window. They do not shift as
-you page, and clicking one filters to it. From 0.12.14 the summary is taken over the **latest 50,000
-refusals** and the page says so: on a gateway refusing more than that in the window, the cards
-describe the recent shape rather than an exact total, and the table beneath is still complete.
+**By reason** leads the page — a card per reason, with a count for the whole window and an info
+button that explains it. The cards do not shift as you page, and choosing one filters to it; choose it
+again to clear. From 0.12.14 the summary is taken over the **latest 50,000 refusals** and the page
+says so: on a gateway refusing more than that in the window, the cards describe the recent shape
+rather than an exact total, and the table beneath is still complete.
+
+<Frame caption="Refusals for one account over 7 days: a card per reason above the filters and the newest refusals.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused-light.webp" alt="The Refused page: reason cards above a table of refused messages." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused-dark.webp" alt="The Refused page: reason cards above a table of refused messages." />
+</Frame>
+
+<Frame caption="The same page after choosing the No units left card: the card is highlighted, Why is set to it, and the count above the table is for that reason alone.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused--one-reason-light.webp" alt="The Refused page narrowed to one reason by choosing its card: No units left." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused--one-reason-dark.webp" alt="The Refused page narrowed to one reason by choosing its card: No units left." />
+</Frame>
+
+SMPP submits answered with a throttle (`0x58`) are not rows here. They are kept as minute counts per
+account, listener and login, and a line under the cards says how many there were in the window, or
+that there were none.
 
 | Reason | Usually means |
 | :--- | :--- |
@@ -46,9 +61,15 @@ describe the recent shape rather than an exact total, and the table beneath is s
 | **Too many waiting for credit; resend** | From 0.17.2 (`creditQueueFull`). 10,000 of the account's messages, or 100,000 on the gateway, were already waiting for credit. Same cause as the above, at volume |
 | **Queue full** | The router queue was at capacity and refused rather than growing the heap. Before 0.17.2, REST and gRPC sends refused for credit not confirmed in time were also counted here |
 | **Could not be queued** | Accepted by the checks, but could not be handed on — usually the broker |
+| **Vendor backlog full** | From 0.15.1. Every vendor the message could go to was past its backlog limit, and no other route was usable. Nothing charged |
+| **Vendor unavailable** | From 0.15.1. The vendor it would go to has had no bind for longer than `smsg.vendor.unbound.refuse.after.seconds`, and no other route was usable. Nothing charged |
+| **Database not answering; try again** | From 0.15.1. The database was too slow to take new messages, so new submits were refused before anything was charged. Messages already accepted carry on |
+| **Gateway stopping** | The gateway was shutting down and took no new messages. Nothing charged; a retry goes through once another node or the restarted gateway takes it |
+| **Hand-off outcome unknown** | Accepted and handed to the broker, and the hand-off ended without a definite answer: it may have been sent. Not refunded, so it cannot be billed twice; the gateway settles it once the answer is known |
 | **Never routed** | *After acceptance.* No enabled rule matched; refunded |
 | **Vendor refused it** | *After acceptance.* The carrier rejected the submit; refunded |
 | **Dropped by a filter** | *After acceptance.* A routing filter stopped it; refunded |
+| **Expired waiting for its vendor** | *After acceptance.* Queued for a vendor, it waited longer than `smsg.vendor.backlog.expire.seconds` (or its own validity) and was not sent; refunded, with a failed receipt where one was asked for |
 
 <Note>
 **A funded account's messages wait for their credit** after a restart, or whenever its block runs out,
@@ -68,9 +89,11 @@ design**.
 
 ## Finding one
 
-The wide net is **Anything**, which looks inside account, sender, destination, product, login,
-refusal detail and message excerpt at once. Narrower filters exist for account, destination, bind
-name, product, ingress, listener, from-number and message id.
+The always-visible row is **Period**, **Why** (the reason), **Account** (exact), **To number** (starts
+with) and **Anything**. **Anything** is the wide net: it looks inside account, sender, destination,
+product, login, refusal detail and message excerpt at once. **More filters** adds **Bind name (system
+id)**, **Product**, **Came in via**, **Listener**, **From number**, **Message id**, **Carrier status**
+and **Stage**. **Clear** empties them all.
 
 **Carrier status** takes the carrier's number in decimal — 69 is the generic "refused and will not
 say why" — and only vendor refusals carry one.
@@ -81,9 +104,9 @@ wrong that gets believed, so from 0.12.14 the page asks for a period instead.
 
 ## The table
 
-Nine columns by default: refused, why, vendor said, account, product, from, to, via, message. The
-chooser adds the English reason, the refusal detail, whether it was charged and refunded, the vendor
-code name, and the row and message ids.
+Ten columns by default: refused, why, vendor said, account, product, from, to, via, ingress server,
+message. The chooser adds the English reason, the refusal detail, whether it was charged and refunded,
+what the customer was told, the vendor code name, and the row and message ids.
 
 The **message excerpt** — the first 160 characters — is kept **unconditionally**, unlike the body on
 a call record. A content refusal cannot be diagnosed without seeing what was sent, so this is the one

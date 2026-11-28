@@ -9,15 +9,27 @@ working is a different question, asked on [Runtime](/platform/control-panel/runt
 two are kept apart because an operator staring at a delivery problem does not want to be reading
 about heap size.
 
-Everything on the page obeys one range control — **24 hours**, **7 days** or **30 days**, defaulting
-to 24 hours. The page asks for fresh figures every thirty seconds, and stops asking while the browser
-tab is in the background.
+Everything on the page obeys one range control — **1 hour**, **24 hours**, **7 days** or **30 days**.
+The page opens on the last hour, and after that on whichever range you last picked in that browser.
+It asks for fresh figures every thirty seconds, and stops asking while the browser tab is in the
+background.
+
+<Frame caption="The Overview for 7 days. A vendor warning sits above the figures only while something is wrong; the shaded end of the chart is still settling.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-dashboard-light.webp" alt="The Overview: four figure cards, a traffic chart and the breakdown of why messages failed." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-dashboard-dark.webp" alt="The Overview: four figure cards, a traffic chart and the breakdown of why messages failed." />
+</Frame>
+
+**Vendor backlogs** appears above the figures when a vendor is past its backlog limit, has had no bind
+for longer than its grace, or has a waiting message half way through its topic's retention. Each line
+says where that vendor's traffic goes instead, or that submits with no other route are refused. On a
+healthy platform the card is not there at all.
 
 ## When the figures were read
 
 From 0.12.16 the figures are a **snapshot the panel builds in the background**, not a query run for
-your tab. A line under the title says when: **as of 10:42:17** means the panel last read the
-database at that second, in your browser's time zone. Open the page in three tabs, or three
+your tab. A line above the figures says when: **as of 10:42:17 UTC** means the panel last read the
+database at that second, in the time zone chosen in the header. Beside it, **from the database** or
+**live from the gateway** says where the figures were read. Open the page in three tabs, or three
 operators open it, and the database does the same work as for one.
 
 The snapshot is rebuilt once a minute. Most of a minute's rebuild is small: the last three hours
@@ -95,8 +107,14 @@ settling (see above).
 
 ## Why messages failed
 
-A breakdown of every outcome that was not a delivery, each named in plain language rather than by its
-receipt code:
+Two cards sit side by side under the chart. **Why messages failed** draws the period's failures as
+rings: account, then vendor, outcome, error code and the carrier's own code. **Sent by vendor** draws
+what each vendor carried the same way: vendor, then account, outcome and error code. Choose a ring to
+zoom into it; the centre names what is under the pointer, with its count and share.
+
+**Show table** on either card lists the same figures as rows. On **Why messages failed** it also opens
+the list of failure kinds, every outcome that was not a delivery, each named in plain language rather
+than by its receipt code:
 
 - Failed at the vendor
 - Rejected on submission

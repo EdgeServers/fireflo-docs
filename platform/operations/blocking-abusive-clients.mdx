@@ -217,10 +217,23 @@ why a reboot releases them.
 
 ## Seeing who was refused, and who is blocked
 
-**Security**, under Gateway in the control panel. All three surfaces in one list — because the same
-actor moves between them, and an address working through system IDs is often the one trying the panel
-afterwards — with filters, a window, and refusals-per-hour so a burst reads as a shape rather than as
-rows.
+**Security**, under Reports in the control panel. One range covers everything on the page — **1h**,
+**6h**, **24h**, **7d** or **30d**. Every surface is in one place — SMPP, REST, gRPC, the metrics and
+ops ports, operator and portal sign-ins — because the same actor moves between them, and an address
+working through system IDs is often the one trying the panel afterwards.
+
+<Frame caption="Security for 24 hours: refused logins by surface over time, the addresses behind them with their reasons, and who is blocked or held out now.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-security-light.webp" alt="The Security page: refused logins over time, the addresses behind them and who is blocked now." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-security-dark.webp" alt="The Security page: refused logins over time, the addresses behind them and who is blocked now." />
+</Frame>
+
+Four figures lead: **Refused logins** (split by surface), **Addresses**, **Blocked now** and **Held
+out**. The chart draws refusals over the range, coloured by surface, so a burst reads as a shape rather than
+as rows. Below it, three tabs read the same refusals three ways — **By address**, **By server port**
+and **Every attempt** — filtered by surface, listener and reason. Down the side: **Blocked now** by
+fail2ban, **Held out** by an operator, **Sign-ins** to the panel and the portal, and **Live SMPP
+watch**, which shows every PDU one client address sends to a listener and is sent back, live, refused
+binds included, with a pcap to download. Start it from **Watch** on any row.
 
 The blocked list is asked of fail2ban directly rather than reconstructed, so it cannot drift from
 what is actually dropping traffic. The recorded bans and releases are still kept, because they are
@@ -231,6 +244,17 @@ On the host:
 ```bash
 sudo fail2ban-client status fireflo-gateway
 ```
+
+**Access log**, beside Security under Reports, is the other half: who signed in to the customer
+portal or the operator panel, who was refused, and what they did once in, with changes made in the
+panel recorded under the person who made them. One tab per door; filter by event, email (actor on the
+operator door), days, or **Failures only**. Every operator may read the portal's tab; the operator
+panel's is for admins only. An account's page opens the portal tab already narrowed to that account.
+
+<Frame caption="The Access log at the customer portal's tab, narrowed to one account: each sign-in and visit with its time, who and from where.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-access-log-light.webp" alt="The Access log: sign-ins, refusals and actions, each with its person, door and time." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-access-log-dark.webp" alt="The Access log: sign-ins, refusals and actions, each with its person, door and time." />
+</Frame>
 
 ## A reboot releases FireFlo's bans
 
@@ -255,9 +279,9 @@ Fail2ban answers repeated failed logins. When a client is **logged in** and misb
 **Force disconnect** instead — on a server's page, on a login's live-sessions box under the account's
 **Logins** tab, or on **Security**:
 
-- **Choose the target:** an IP address, an account, or a login. It's matched exactly, never by prefix,
-  so `acme` never touches `acme2`. A preview lists the sessions that would be dropped before
-  anything happens.
+- **Choose the target:** an IP address, an account, or a login (system ID). It's matched exactly,
+  never by prefix, so `acme` never touches `acme2`. A preview lists the sessions that would be
+  dropped before anything happens.
 - **Choose what happens next:**
   - **Allow them to reconnect:** the sessions are dropped, and a client with a reconnect loop is back
     within seconds.
@@ -265,6 +289,11 @@ Fail2ban answers repeated failed logins. When a client is **logged in** and misb
     target are refused on every node while the hold lasts.
 - **Lifting:** active holds are listed on **Security → Held out**, with who made them and why. **Lift**
   ends a hold at once on the node you're on, and on the others within ten seconds.
+
+<Frame caption="Force disconnect: choose the target, then whether they may come straight back. The button says how many sessions it will drop, or Hold out when none are connected and a hold is chosen.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-security--force-disconnect-light.webp" alt="The Force disconnect dialog: drop every session from an address, an account or a login, and optionally keep it out." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-security--force-disconnect-dark.webp" alt="The Force disconnect dialog: drop every session from an address, an account or a login, and optionally keep it out." />
+</Frame>
 
 A refused bind from a held-out client is logged with `reason=heldOut`, which the fail2ban filter
 ignores — the hold is already the response, and a host-wide ban on top would outlast it. Holds are

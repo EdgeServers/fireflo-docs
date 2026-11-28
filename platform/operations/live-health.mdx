@@ -131,6 +131,58 @@ On a **listener** it usually means no customer is connected right now — which 
 broken. That is why a listener with nobody bound is not painted red the way a vendor with no session
 is.
 
+## In the control panel
+
+The **health pill** in the header of every panel page reads this endpoint: a dot, a word such as
+**Healthy**, and the outbound rate. Choose it to open **Health**, which is the same response laid out
+for reading. It is read from the running gateway's memory, not the database, and is gone when the
+process restarts.
+
+<Frame caption="Health: the router queue, receipts awaiting a match and records written or lost at the top, then the database the gateway writes to.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health-light.webp" alt="The Live health page: queue, receipt and record figures, and the database card beneath them." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health-dark.webp" alt="The Live health page: queue, receipt and record figures, and the database card beneath them." />
+</Frame>
+
+| Tile | Field |
+| :--- | :--- |
+| **Router queue** | `router_queue` |
+| **Awaiting receipt** | `awaiting_receipt`; the line beneath says whether the store survives a restart |
+| **Records written** | `cdr.written`, with the sink |
+| **Waiting on the broker** | the broker's depth, or that none is configured |
+| **Records lost** | `cdr.failed`; failed writes are not retried |
+
+Below the tiles, the **Database** card shows the gateway's connection, its writers and the latency
+that admits or refuses new submits. A **Routing tables** card appears only when a table has a problem
+worth saying, such as no rule that catches everything else. **Connections** lists every listener and
+vendor with its state, bound sessions (and how many can transmit, when that differs), queue, rate
+against its ceiling and messages submitted; a row with sessions opens to list them.
+
+<Frame caption="Health's Connections: one vendor bound five times and sending, the other accepting with no bind; listeners with nobody bound are quiet, not broken.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health--connections-light.webp" alt="Health's connections: each listener and vendor with its state, bound sessions and queue." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health--connections-dark.webp" alt="Health's connections: each listener and vendor with its state, bound sessions and queue." />
+</Frame>
+
+### The Connectivity map
+
+**Connectivity**, beside the health pill, draws the same live state as one map: bound customers at
+the top, then the listener ports they came in on, the gateway node and its database, and the vendors
+at the bottom, with traffic moving along each link. A link's width is its rate; a dashed red link is
+refusals at the door in the last minute, or a link that is down.
+
+- **All**, **Submits** and **Receipts** choose which flows are drawn.
+- **Counts** reads MT and DLR over the **Last hour**, or **Since bind** from each session's counters.
+- Search finds an account, login, IP or vendor on the map; zoom and **Fit** move it; **Expand all**
+  opens every group; **By IP** splits each customer into one box per address it connects from.
+- Choose a box for what you can do with it: open its account, listener or vendor, its health, queues
+  or routing table, or act on it from the same menu.
+
+Totals for MT, DLR and database writes sit under the map.
+
+<Frame caption="The map with Receipts chosen and every group open: three bound customers on one port, receipts flowing back up to them from one vendor while the other is unbound.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-connectivity--receipts-light.webp" alt="The Connectivity map opened out for receipts: each bound client, port and vendor with its submit and receipt counts." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-connectivity--receipts-dark.webp" alt="The Connectivity map opened out for receipts: each bound client, port and vendor with its submit and receipt counts." />
+</Frame>
+
 ## Related
 
 <CardGroup cols={2}>
