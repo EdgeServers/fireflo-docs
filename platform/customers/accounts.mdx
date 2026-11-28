@@ -7,6 +7,11 @@ An **account** is an id that a login, a rate scope, a balance row and a call rec
 Nothing has to create it: an account exists the moment a login names it or a message arrives carrying
 it, and the `app_account` row is a label bolted on afterwards.
 
+<Frame caption="The Accounts list, one row per login. Not named yet counts the account ids in use that have no name of their own.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-accounts-light.webp" alt="The Accounts list: one row per login, with its account, system ID, type, product and status." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-accounts-dark.webp" alt="The Accounts list: one row per login, with its account, system ID, type, product and status." />
+</Frame>
+
 ## Leave `accountId` blank and something else becomes the account
 
 `accountId` is optional on a credential, and what fills the gap **differs by protocol**.
@@ -24,6 +29,11 @@ Rotating the key afterwards splits that customer's history across two ids.
 
 Set `accountId` explicitly on every credential and neither fallback matters.
 </Warning>
+
+<Frame caption="A login open for editing. Account sits under Billing and tariff: rate scopes and prepaid balances are both keyed on it, and it is fixed once the login is created.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins--edit-login-light.webp" alt="A login open for editing: how it connects, whether it is on, its system ID, password, API key, account and product." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins--edit-login-dark.webp" alt="A login open for editing: how it connects, whether it is on, its system ID, password, API key, account and product." />
+</Frame>
 
 ## Why the account and not the login
 
@@ -49,28 +59,68 @@ Approvals are the one thing that can go either way: a sender ID or template row 
 
 ## What the catalogue row actually holds
 
-`app_account` is name, contact and hierarchy — nothing the message path reads.
+`app_account` is name, contact and hierarchy. When the gateway loads logins it reads only two things
+from it: whether the account is enabled, and whether it is archived.
 
 | Column | Meaning |
 | :--- | :--- |
 | `id` | The billing key. Trimmed and non-empty, and the primary key. |
-| `label`, `description` | For the people reading the panel. |
-| `email` | Stored for magic-link sign-in and notices. One account per address, ignoring case. |
-| `enabled` | Whether this panel lists it. |
-| `resells` | This account may hold others and move balance to them. |
-| `parent_account_id` | The reseller it sits under. |
+| `label`, `description` | For the people reading the panel (**Name** and **Notes**). |
+| `email` | The account's contact address and a portal login. One account per address, ignoring case. |
+| `enabled` | **Enabled**, under Settings → Advanced. Off pauses the account: its logins stop and nobody can sign in to the portal for it. |
+| `resells` | **Resells services**: this account may hold others and move balance to them. |
+| `parent_account_id` | **Belongs to**: the reseller it sits under. |
 
 The tree is exactly two levels deep, and the database enforces it: `app_account_two_levels` refuses a
 row that both names a parent and resells, so an account either holds others or belongs to one.
 
-<Warning>
-**Unlisting an account stops nothing.** The gateway never reads the account catalogue, so clearing
-`enabled` removes the row from this panel's lists and leaves its logins connecting, its traffic
-sending and its rate rules pricing exactly as before. It is the opposite of what `enabled` means on a
-vendor or a product, and far more expensive to get backwards.
+<Frame caption="An account's Settings tab. Organisation holds the name, email, notes and tags; Advanced holds Enabled, reselling and the parent; Archive sits below.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="An account's Settings: name, e-mail, notes and tags, and its portal sign-in." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="An account's Settings: name, e-mail, notes and tags, and its portal sign-in." />
+</Frame>
 
-To stop traffic, disable the **logins**. To stop spend, use the balance.
+<Warning>
+**Switching an account off stops its traffic.** The gateway stops serving the account's logins within
+one configuration poll (30 seconds by default), and nobody can sign in to the portal for it. Binds
+already open stay up until they drop.
+
+To stop one login rather than the whole account, disable that **login**. To stop spend, use the
+balance.
 </Warning>
+
+To retire an account for good, **Archive** it at the foot of the Settings tab. Its logins are switched
+off, live binds are dropped and portal sign-in is closed; its balance and history stay, and it leaves
+the account list. **Unarchive** switches back on exactly what the archive switched off, and customers
+reconnect their binds themselves.
+
+## Resellers and sub-accounts
+
+Switch **Resells services** on and the account becomes a reseller. Its people then run their own
+customers from the portal, under **Customers → Sub-accounts**. There are two levels, never more: a
+sub-account cannot resell.
+
+<Frame caption="A reseller's Sub-accounts list in the portal. Each sub-account's credit comes from the reseller's own balance.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers-light.webp" alt="A reseller's Sub-accounts list: each account with its balance, logins and last sent." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers-dark.webp" alt="A reseller's Sub-accounts list: each account with its balance, logins and last sent." />
+</Frame>
+
+**New sub-account** asks for an account id (fixed once created), a name and an opening credit, moved
+from the reseller's balance at once; leave it at 0 to recharge later. The sub-account gets one HTTP
+login straight away, and SMPP logins are added on its Logins tab.
+
+<Frame caption="New sub-account. The opening credit shows the reseller's balance after the move before anything is created.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--new-light.webp" alt="A reseller's New sub-account form: account id, name and opening credit from the reseller's balance." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--new-dark.webp" alt="A reseller's New sub-account form: account id, name and opening credit from the reseller's balance." />
+</Frame>
+
+A sub-account's page shows its balance, **Recharge** and **Withdraw** to move credit between it and
+the reseller, and its transfers, with tabs for its logins, messages, approvals, statement, credit terms
+and settings.
+
+<Frame caption="A sub-account in the reseller's portal. Withdraw frees credit reserved for messages being sent before it moves it back.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--sub-account-light.webp" alt="A sub-account's page in the reseller's portal: its balance, recharge and withdraw, transfers, and tabs for logins, messages, approvals, statement and credit terms." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--sub-account-dark.webp" alt="A sub-account's page in the reseller's portal: its balance, recharge and withdraw, transfers, and tabs for logins, messages, approvals, statement and credit terms." />
+</Frame>
 
 ## Creating a login does not create a balance
 
@@ -97,6 +147,15 @@ The account page paints that red rather than letting it be discovered in a margi
 before pricing either. `*` is reserved outright and cannot be used as an account or a vendor name.
 
 ## What is on the account page
+
+One tab at a time: **Overview**, **Settings**, **Logins**, **Approvals**, **Billing**, **Tariff** and
+**Statement**. A units account has no Tariff or Statement tab; its prices and statement are its
+parent's.
+
+<Frame caption="An account's Overview tab: its traffic by login and product, its SMPP ceiling, a delivery check and where its messages went.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account-light.webp" alt="An account's Overview tab: its traffic, where it went and the tabs along the top." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account-dark.webp" alt="An account's Overview tab: its traffic, where it went and the tabs along the top." />
+</Frame>
 
 <CardGroup cols={2}>
 <Card title="Logins" href="/platform/connections/credentials">

@@ -109,6 +109,11 @@ carries that tag. A message's price is then looked for in this order, and the fi
 The rate quote, the tester and an account's tariff page say which of the three priced it. Tags need
 configuration in the database. See [Account tags](/platform/routing/account-tags).
 
+<Frame caption="An account's Tariff tab. Which price applies lists the three levels in the order they are tried, and says which of them hold prices for this account.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--price-order-light.webp" alt="An account's Tariff tab: which price applies, from its own prices through its tags to the default, and its custom tariff by destination." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--price-order-dark.webp" alt="An account's Tariff tab: which price applies, from its own prices through its tags to the default, and its custom tariff by destination." />
+</Frame>
+
 ## When a change takes effect
 
 A saved price is picked up within thirty seconds, and applies to messages submitted from then on — a

@@ -6,6 +6,31 @@ description: "Why a closed period is never rewritten, why the BILL row moves no 
 A statement is a customer's usage for a period. **Closing** a period turns that from a live query into
 a recorded fact.
 
+## The Statement tab
+
+Open an account and choose **Statement**. Pick a **Month**, or a **Date range** of up to 92 days, and
+press **Show**: the period is read when you press it, not when you pick it. The tiles give the amount,
+what was sent and delivered, and the delivery rate; **Per day** draws messages per day by product,
+with a line for what was billed.
+
+<Frame caption="An account's Statement tab for a month in progress. The amount still moves as traffic arrives, so the month cannot be closed yet.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements-light.webp" alt="An account's Statement tab: totals for the period, a chart per day and the closed periods." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements-dark.webp" alt="An account's Statement tab: totals for the period, a chart per day and the closed periods." />
+</Frame>
+
+The table below splits the period by **Product** or by **Login**, with delivered, failed, expired,
+pending and not billed counted apart beside what was billed.
+
+<Frame caption="The statement by product. Not billed is traffic that went out with no price; it is sent all the same.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements--by-product-light.webp" alt="A statement's table by product: sent, delivered, failed, expired, pending and not billed counted apart, with the amount." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements--by-product-dark.webp" alt="A statement's table by product: sent, delivered, failed, expired, pending and not billed counted apart, with the amount." />
+</Frame>
+
+**Download CSV** prepares a file; it appears under **Prepared files** when it is ready. **Close this
+period** is offered for a period not yet closed, except the month in progress, and asks you to confirm
+the period and the amount.
+Closed periods are listed on the tab; click one to show it again.
+
 ## A closed period is immutable
 
 Closing writes one `BILL` row recording what was invoiced. **It is never rewritten.**

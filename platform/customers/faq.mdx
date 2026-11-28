@@ -169,13 +169,13 @@ the account, and applies itself the moment the row appears. Creating a login doe
 *Open for credit* on the account page does.
 </Accordion>
 
-<Accordion title="I unlisted an account and its traffic kept flowing">
-The gateway never reads the account catalogue. `enabled` on `app_account` decides whether this panel
-lists the account and nothing else — its logins keep connecting, its traffic keeps sending and its
-rate rules keep pricing.
+<Accordion title="I switched an account off and a bind is still up">
+Switching an account off (**Enabled**, under Settings → Advanced) stops the gateway serving its
+logins within one configuration poll, 30 seconds by default, and closes its portal sign-in. Binds
+already open stay up until they drop.
 
-It is the opposite of what `enabled` means on a vendor or a product. To stop traffic, disable the
-**logins**; to stop spend, use the balance.
+To retire the account for good, archive it instead: archiving also drops its live binds. See
+[Accounts](/platform/customers/accounts#what-the-catalogue-row-actually-holds).
 </Accordion>
 
 </AccordionGroup>

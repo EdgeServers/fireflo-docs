@@ -1,40 +1,45 @@
 ---
 title: "Giving a customer portal access"
-description: "Two settings on the account, one deployment requirement, and the reason the panel will never confirm that a customer's address was recognised."
+description: "The account's email and its portal logins, one deployment requirement, and the reason the panel will never confirm that a customer's address was recognised."
 ---
 
-Customers reach the portal by entering their email address and following a one-time link. There is no
-password to issue, no invitation to send, and nothing to revoke except the two settings below.
+Customers sign in to the portal with a **portal login**: an email address that signs in by a one-time
+emailed link, or with a password once one is set. An account's portal logins are on its **Settings**
+tab, in the **Portal access** card.
 
 ## What an operator sets
 
-Open the account, go to **Settings**, and set two things on the **Organisation** card.
-
 <Steps>
 <Step title="Set the email address">
-The **Email** field on the account. One account per address, ignoring case — a second account
-claiming the same address is refused rather than silently shadowing the first.
+The **Email** field on the **Organisation** card. One account per address, ignoring case — a second
+account claiming the same address is refused rather than silently shadowing the first.
 
 A malformed address is refused as you type it, so an address that saved is an address the portal can
-match.
+match. Saving it gives the account a portal login for that address. If that login is missing, the
+Portal access card offers **Create a login for** the address.
 </Step>
 
-<Step title="Leave the account listed">
-The **Listed** checkbox, under **Advanced**. A sign-in link is only ever issued for an account that
-is both matched by address **and** enabled.
+<Step title="Choose how it signs in">
+Each login on the Portal access card says how it signs in: **Emailed link only**, or **Password, or
+emailed link**. **Set password** or **Change password** sets one; **Remove password** goes back to
+links only. Without a password, the customer signs in by emailed link and can set a password from
+the portal.
+</Step>
+
+<Step title="Leave the account enabled">
+The **Enabled** switch, under **Advanced**. Nobody can sign in to the portal for an account that is
+switched off or archived.
 </Step>
 </Steps>
 
-<Warning>
-**Unlisting an account switches its portal access off, and the checkbox does not say so.**
+<Frame caption="An account's Settings tab. The portal login is on the right, with how it signs in and when it last did.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="An account's Settings: name, e-mail, notes and tags, and its portal sign-in." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="An account's Settings: name, e-mail, notes and tags, and its portal sign-in." />
+</Frame>
 
-Its own description talks about panel listings and correctly notes that traffic keeps flowing either
-way — unlisting stops nothing the gateway does. But it *does* stop the portal issuing a sign-in link,
-which makes it the closest thing to a portal on/off switch the account has. That behaviour is the
-current one; the wording beside the checkbox has not caught up with it.
-
-To stop traffic, disable the logins. To stop spend, use the balance. To stop portal access, unlist.
-</Warning>
+To stop one person signing in, press **Turn off** on their login; **Turn on** lets them back in.
+Switching the whole account off also stops its traffic — see
+[Accounts](/platform/customers/accounts#what-the-catalogue-row-actually-holds).
 
 ## What the deployment needs
 
@@ -68,6 +73,11 @@ answered with the same neutral sentence — the customer is not told they have b
 **The Logins tab is not portal access.** It holds SMPP and HTTP credentials, which are how a
 customer's *software* connects. Nothing on it grants or revokes a person's sign-in. An account can
 have a dozen logins and no portal access, or portal access and no logins at all.
+
+<Frame caption="The Logins tab: the SMPP and HTTP logins that bill to the account, whether each is connected, and its live sessions. None of them is a portal sign-in.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins-light.webp" alt="An account's Logins tab: each login with its type, connection state and actions." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins-dark.webp" alt="An account's Logins tab: each login with its type, connection state and actions." />
+</Frame>
 
 Once in, a customer sees their own traffic, statement, sender IDs, templates and API playground — and
 never your cost, your margin or which vendor carried anything. What they can do there is described

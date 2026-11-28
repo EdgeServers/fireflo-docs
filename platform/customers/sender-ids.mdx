@@ -57,6 +57,15 @@ list is merged **over** the account's any-product list — the two are unioned, 
 before the column existed, so an untouched deployment matches exactly as it did and no backfill was
 needed. Two logins on the same account may hold the same sender ID.
 
+On the account's **Approvals** tab, **Approve a sender ID** sets all of it: the sender ID, whether it
+is in service, the **Product** (or every product), the **Login** (or every login on the account) and
+the TLVs it stamps.
+
+<Frame caption="Approve a sender ID. Product and Login narrow the row; leaving them at Every product and Every login on the account is the widest scope.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--approve-sender-light.webp" alt="The Approve a sender ID dialog: the sender, whether it is in service, the product and login it covers, and TLVs to stamp." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--approve-sender-dark.webp" alt="The Approve a sender ID dialog: the sender, whether it is in service, the product and login it covers, and TLVs to stamp." />
+</Frame>
+
 <Warning>
 **A login with no rows of its own and no account-wide rows can send nothing once enforcement is on.**
 Binding an approval to one login does not merely add specificity — it removes that row from every
@@ -76,17 +85,24 @@ DLT, their registration reference. The gateway serves a row only when it is `ena
 `APPROVED`, so a request is stored, visible to both sides, and inert.
 </Step>
 <Step title="An operator decides">
-Approve or refuse, on the account page or on the cross-account list. A refusal keeps the row and
-carries a reason the customer is shown — which is why there is no bulk refuse, only bulk approve.
+Approve or refuse, on the account's Approvals tab or on the **Headers** page, which lists every
+account's sender IDs. A refusal keeps the row and carries a reason the customer is shown — which is why
+there is no bulk refuse, only bulk approve.
 </Step>
 <Step title="It goes into service on the next poll">
 No reconnect. See below.
 </Step>
 </Steps>
 
+<Frame caption="The Headers page narrowed to one account, one request opened: who asked, its scope, the stamps it would put on the wire and its history.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--requests-light.webp" alt="Sender ID requests narrowed to one account, one opened to show who asked, its scope and its history." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--requests-dark.webp" alt="Sender ID requests narrowed to one account, one opened to show who asked, its scope and its history." />
+</Frame>
+
 `status` and `enabled` are separate columns doing separate jobs. Approving writes `status` and records
-the reviewer. Unticking writes `enabled = false` and leaves `status` alone: **withdrawing something is
-not un-approving it**, and a withdrawn row put back into service should not need approving again.
+the reviewer. Switching **Approved** off on the row writes `enabled = false` and leaves `status` alone:
+**withdrawing something is not un-approving it**, and a withdrawn row put back into service should not
+need approving again.
 
 <Note>
 **A customer reading the API sees the withdrawal, from gateway 0.9.8.** Because the two columns are

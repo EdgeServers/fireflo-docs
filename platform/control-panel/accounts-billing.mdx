@@ -8,9 +8,14 @@ it with: on the left, what the account holds and the actions that change it; on 
 MT parts it has sent. Beneath it, **MT usage** over time beside **Does the credit add up?**, and the
 full ledger at the bottom.
 
+<Frame caption="An account's Billing tab. The left of the card is the money and the actions that change it; the right is what the account has sent.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account-light.webp" alt="An account's Billing tab: the balance card, the reconciliation check and the money in and out." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account-dark.webp" alt="An account's Billing tab: the balance card, the reconciliation check and the money in and out." />
+</Frame>
+
 <Warning>
-**Adding credit cannot be undone from the panel.** There is no "remove credit" and no reversal.
-Undoing a top-up would need a negative adjustment entry, and that does not exist.
+**Adding credit cannot be undone from the panel.** A top-up is never edited or reversed. A mistaken
+one is taken back with [**Debit**](#taking-credit-back), which writes a separate entry of its own.
 
 The form asks you to confirm the amount and the reference before it writes. Read the confirmation
 rather than clicking through it — it is the last point at which the number is still yours to change.
@@ -76,6 +81,11 @@ uncounted.
 
 Three fields: **Amount**, **Reference**, and an optional **Note**.
 
+<Frame caption="Add credit. The line under the fields is the honest promise: the gateway applies the top-up on its next poll, so the balance above does not move at once.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--add-credit-light.webp" alt="Add credit on an account's billing: amount, reference and note, applied on the gateway's next poll." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--add-credit-dark.webp" alt="Add credit on an account's billing: amount, reference and note, applied on the gateway's next poll." />
+</Frame>
+
 Once a valid amount is typed the form echoes back exactly what will be stored, because money is held
 to four decimal places and a misplaced decimal is the expensive mistake here.
 
@@ -94,9 +104,36 @@ After it saves, **the balance does not move immediately**. The panel writes a re
 gateway applies it on its next configuration poll, within about thirty seconds. A balance that has
 not changed yet is not a failure.
 
+## Taking credit back
+
+**Debit** takes prepaid credit off the account — a top-up made in error, for example. It is offered on
+prepaid accounts only; a postpaid account is billed, not debited. Three fields, all required:
+
+- **Amount** — taken from the balance at once. Credit held by running gateways is released first and
+  counts. More than the balance is refused.
+- **Reference** — your own id for this debit. Using it again answers "duplicate" and debits nothing.
+- **Reason** — shown in the account history and the audit log, and to a platform that manages the
+  account.
+
+<Frame caption="Debit. Review shows the balance before and after; nothing is taken until you press Debit there.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--debit-light.webp" alt="Debit on an account's billing: amount, your own reference and a reason, reviewed before it is taken." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--debit-dark.webp" alt="Debit on an account's billing: amount, your own reference and a reason, reviewed before it is taken." />
+</Frame>
+
+**Review** shows what will be taken and the balance it leaves. A debit cannot be undone from the panel
+either: a mistaken debit is corrected with a top-up.
+
 ## Switching between prepaid and postpaid
 
-The same card switches billing mode, and warns before saving either way:
+**Switch to postpaid** opens the billing terms: **Prepaid — spends a balance** or **Postpaid — billed
+in arrears**, and for postpaid a **Credit limit**. On a postpaid account the same button reads **Change limit or go
+prepaid**. The form warns before saving either way:
+
+<Frame caption="An account's billing terms opened. A postpaid account needs a credit limit; zero means no credit, not unlimited.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--postpaid-light.webp" alt="An account's billing terms opened: prepaid, spending a balance, or postpaid, billed in arrears." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--postpaid-dark.webp" alt="An account's billing terms opened: prepaid, spending a balance, or postpaid, billed in arrears." />
+</Frame>
+
 
 - **To postpaid** — the account stops spending its balance. Anything already reserved stays reserved
   until it is released.
@@ -122,6 +159,11 @@ It does not run on its own — press **Reconcile**. Two figures come back. **Une
 residual, and the one worth acting on. **Reserved, not yet spent** is normal on an account that is
 sending.
 
+<Frame caption="After Reconcile: nothing unexplained, a little reserved and not yet spent, and a plain-language note on each thing that is worth knowing.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account--reconcile-light.webp" alt="An account's billing after Reconcile: nothing unexplained, and what is reserved but not yet spent." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account--reconcile-dark.webp" alt="An account's billing after Reconcile: nothing unexplained, and what is reserved but not yet spent." />
+</Frame>
+
 Beneath them, a plain-language account of everything that did not balance. The distinctions that
 matter:
 
@@ -145,7 +187,13 @@ a month but not over the account's life has not held.
 
 ## Money in and out
 
-Every recharge and transfer, searchable by reference, note or type, sortable and paged.
+Every recharge, transfer and debit, searchable by reference, note or type, sortable and paged. The
+gateway applies a recharge or transfer on its next poll, and a debit at once.
+
+<Frame caption="Money in and out. Each top-up with its amount, reference and state; Applied means the gateway has credited it.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account--money-light.webp" alt="An account's money in and out: each top-up with its amount, reference and state." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account--money-dark.webp" alt="An account's money in and out: each top-up with its amount, reference and state." />
+</Frame>
 
 The ledger lists only entries a person or the billing system wrote. The gateway's own credit
 reservations are bookkeeping, not money — each moves credit between two columns of one row and nets

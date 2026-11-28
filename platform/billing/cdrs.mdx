@@ -17,6 +17,14 @@ They join on `(gateway_msg_id, part_no)`. The `cdr_pnl` view left-joins submit a
 with no outcome yet surface as `PENDING` — **in-flight exposure stays visible** rather than being
 silently excluded from your numbers.
 
+In the control panel these records are the **Messages** page: one row per message, filtered by period,
+outcome, account, vendor, product and more.
+
+<Frame caption="The Messages page filtered to one account. Billed is the customer's side; the vendor's cost is one of the columns you can add.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records-light.webp" alt="The Messages page: a filter bar over the call records, with the amount billed for each message." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records-dark.webp" alt="The Messages page: a filter bar over the call records, with the amount billed for each message." />
+</Frame>
+
 ## Why progress receipts live in their own table
 
 A vendor may send several receipts for one message: `ACCEPTD` when it takes it, `BUFFRED` while it
@@ -55,6 +63,15 @@ different unit counts for one message — a vendor bills per segment where you m
 | `margin`, `margin_pct` | Stored, so P&L sums a column |
 | `cost_currency`, `price_currency` | Per side; FireFlo never converts |
 | `cost_rule_id`, `price_rule_id` | Which rate rule matched, for audit |
+
+On the Messages page, **Columns** shows or hides them, grouped as message, route, money and outcome.
+The choice is for the screen only: a CSV export carries every column of the record whatever is
+chosen, so two people exporting the same filters get the same file.
+
+<Frame caption="The column chooser. The Money group holds both sides of the trade: billed, price rate and billed units, cost, cost rate and cost units, and the margin.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--columns-light.webp" alt="The Messages list with its column chooser open: message, route, money and outcome columns to show or hide." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--columns-dark.webp" alt="The Messages list with its column chooser open: message, route, money and outcome columns to show or hide." />
+</Frame>
 
 <Warning>
 **Unknown money is `NULL`, never `0`.** A rate that could not be determined stays distinguishable
@@ -109,6 +126,13 @@ Every attempt at a vendor now leaves its own `cdr_submit` row — not only the o
 succeeded or terminally failed. `vendor_attempt` numbers them, `submit_status` carries what the vendor
 actually said on each one, and `NULL` there means "not recorded", not "accepted". See
 [Call record tables](/reference/data/cdr-tables) for the exact shape.
+
+On the Messages page, switch from **Per message** to **Every attempt** to list one row per try.
+
+<Frame caption="Every attempt: one row for each try at a vendor, so a retried message shows each attempt rather than only the last.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--attempts-light.webp" alt="The Messages list switched to Every attempt: one row for each try, with its ingress, vendor, amount and outcome." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--attempts-dark.webp" alt="The Messages list switched to Every attempt: one row for each try, with its ingress, vendor, amount and outcome." />
+</Frame>
 
 <Tip>
 The control panel's per-message page reads these rows, plus `cdr_interim` and `cdr_final`, as one

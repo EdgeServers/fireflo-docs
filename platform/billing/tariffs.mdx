@@ -5,21 +5,26 @@ description: "Editing rates from the panel, per-account overrides, and the two i
 
 ## Editing rates from the panel
 
-Two operations on a product's page, and the difference between them matters:
+Prices are edited on the **Pricing** page. Down the left are the scopes: **Everyone** (the `*`
+default), **Accounts** (what they pay us), **Tag prices** and **Vendors** (what they charge us). The
+**Product** picker narrows the page to one product.
 
-| Action | Writes | Scope |
-| :--- | :--- | :--- |
-| **Set what everyone pays** | The `*` scope for that product | Every account with no rule of its own |
-| **Price one account** | A named account's scope | That account only |
+<Frame caption="The Pricing page. The tiles answer the questions that cost money: which vendors have no cost, how many accounts pay their own price, and what everyone else pays.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs-light.webp" alt="The Pricing page: the default prices per product, with account and tag prices listed beside them." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs-dark.webp" alt="The Pricing page: the default prices per product, with account and tag prices listed beside them." />
+</Frame>
 
-**Both save only the rules for the product you are looking at.** The rest of the scope is untouched, so
-setting `*` for `promo` cannot disturb `*` for anything else.
-
-The whole-scope editor on the *Pricing* page still replaces a scope wholesale — which is correct
-there, because it shows you all of it.
+Open a scope to see its prices, grouped by product. Edits, additions, moves and switching a price on or
+off are staged and saved together. **Add pricing** asks whose prices to add — an account, a vendor, a
+tag or everyone — and opens that scope. When a product has no default, its page and the Pricing
+overview offer **Set what everyone pays**.
 
 From 0.17.0 the *Pricing* page also lists **Tag prices**: a price list per [account tag](/platform/routing/account-tags),
 tried after an account's own prices and before the default, in the order of the Tags list.
+
+An account's **Tariff** tab shows the same prices for that one account, and which level would price
+it. When a managing platform has set a custom tariff for the account, the tab shows it above the
+rules: it is priced ahead of them, and it is changed only on that platform.
 
 <Warning>
 An account's own rules are tried first and **the first match wins**, so anything the account carries
@@ -29,6 +34,30 @@ That is what makes a negotiated tariff an override rather than a suggestion. It 
 account-level catch-all silently disables every default you set afterwards. The same holds for tag prices: an
 account's own catch-all beats them too.
 </Warning>
+
+## Exporting and importing pricing
+
+**Export** on the Pricing page downloads prices as a CSV, one row per price: **Everything**,
+**Accounts** (what customers pay, with tag prices and the default) or **Vendors** (what carriers
+charge us). Downloads are recorded in the access log.
+
+<Frame caption="Export pricing. Keep the rule_id column when you edit the file: it is how a row finds the price it changes.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--export-light.webp" alt="The Export pricing dialog: every price as a file to edit and import again." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--export-dark.webp" alt="The Export pricing dialog: every price as a file to edit and import again." />
+</Frame>
+
+Edit the file in a spreadsheet and bring it back with **Import** (up to 2 MB). A row with a blank
+`rule_id` adds a new price.
+
+<Warning>
+**Each account or vendor named in the file is replaced by the file's rows.** A price the file does not
+list for that scope is removed. Scopes the file does not name are left as they are.
+</Warning>
+
+Nothing changes until you have read the preview. It lists, per scope, what is added, changed and
+removed. Removals have to be switched on separately before **Apply** is offered, and applying asks
+once more. Each scope is saved on its own, so if one fails the ones before it are already applied. The
+gateway prices by the new rows from its next configuration poll.
 
 ## Two identities, not one
 

@@ -121,6 +121,23 @@ Its **Billing** tab shows units left and used per product, its logins, units use
 day, its speed limits and the unit ledger. The Tariff and Statement tabs are not shown: prices and the
 statement are the parent's. No money action is offered.
 
+<Frame caption="A units account's Billing tab. Units left per product on the left, the account that pays on the right, then units used and the account's own speed limits.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units-light.webp" alt="A units account's Billing tab: units left per product and the parent account they are charged to." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units-dark.webp" alt="A units account's Billing tab: units left per product and the parent account they are charged to." />
+</Frame>
+
+**Left** is what can still be sent: units not yet handed out, plus units gateway nodes hold and have
+not used. Used units are settled every few seconds, so on a busy account the figures move a little
+behind its traffic.
+
+The **Unit ledger** lists every give, take-back and move, with its product and reference. Units used
+are not listed there; they are under **Units used**.
+
+<Frame caption="The unit ledger. Every batch of units the managing platform gave or took back, each under its own reference.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units--ledger-light.webp" alt="A units account's ledger: each batch of units given to it by the managing platform, with product and reference." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units--ledger-dark.webp" alt="A units account's ledger: each batch of units given to it by the managing platform, with product and reference." />
+</Frame>
+
 A parent's **Billing** tab lists its sub-accounts, with units left per product and a "no units" state.
 If units accounts cannot be used yet, because a node is older than 0.16.0 or prepaid enforcement is
 off, the tab says which.

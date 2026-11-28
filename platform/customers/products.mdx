@@ -7,6 +7,11 @@ A **product** is a tag on a login. It is matchable in the routing table, it sele
 decides whether an account's sender IDs and content are checked. It is also optional, and the
 optional case is the expensive one.
 
+<Frame caption="A product's page: whether it is listed and checked, how many price rules and logins use it, its pricing summary, and the logins that select it.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products-light.webp" alt="A product's page: its description, the logins that select it and its pricing summary." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products-dark.webp" alt="A product's page: its description, the logins that select it and its pricing summary." />
+</Frame>
+
 ## An unset product is a supported state that sends for free
 
 Leaving `product` off a credential is legal configuration. It matches `product:isNull:` in the
@@ -76,10 +81,15 @@ not in it — a free route stays free and keeps sending.
 
 | Column | Meaning |
 | :--- | :--- |
-| `name` | The primary key. Trimmed, non-empty, and matched **exactly** — `OTP` and `otp` are two products. |
-| `label`, `description` | For the panel. |
-| `enabled` | Whether the gateway counts this as a product it sells. |
-| `whitelist_enabled` | Default `true`. `false` exempts this product's traffic from sender ID and content checks. |
+| `name` | **Code** in the panel. The primary key. Trimmed, non-empty, and matched **exactly** — `OTP` and `otp` are two products. Fixed once created. |
+| `label`, `description` | **Display name** and **What the customer is buying**. For the panel. |
+| `enabled` | **Listed**. Whether the gateway counts this as a product it sells. |
+| `whitelist_enabled` | **Check sender IDs and content**. Default `true`. `false` exempts this product's traffic from sender ID and content checks. |
+
+<Frame caption="A product open for editing. The code is fixed: to move to a different one, create it, re-point the rules, then delete this one.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products--edit-light.webp" alt="A product open for editing: its display name, fixed code, what the customer is buying, and whether it is listed and checked." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products--edit-dark.webp" alt="A product open for editing: its display name, fixed code, what the customer is buying, and whether it is listed and checked." />
+</Frame>
 
 ## Exempting a product from whitelisting
 
