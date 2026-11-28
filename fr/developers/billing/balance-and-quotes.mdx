@@ -51,6 +51,11 @@ curl -u "$SMS_LOGIN:$SMS_PASSWORD" \
 **Le coût est `unit_rate × submit_sm_count`.** `submit_sm_count` est le nombre de segments, et c'est
 donc aussi la manière de découvrir qu'un message que vous pensiez unique en fait trois.
 
+<Frame caption="Price a message dans la référence de l'API REST de votre portail client : les paramètres, un exemple pour votre login, la réponse, et les deux refus qui lui sont propres.">
+  <img className="block dark:hidden" src="/images/developers/billing/apis-rest--price-light.webp" alt="La partie Price a message de la référence de l'API REST du portail : to, content, coding, product et from, un exemple curl, la réponse avec unit_rate et submit_sm_count, et les 400 et 403 qu'elle peut renvoyer" />
+  <img className="hidden dark:block" src="/images/developers/billing/apis-rest--price-dark.webp" alt="La partie Price a message de la référence de l'API REST du portail : to, content, coding, product et from, un exemple curl, la réponse avec unit_rate et submit_sm_count, et les 400 et 403 qu'elle peut renvoyer" />
+</Frame>
+
 `/secure/rate` **n'envoie rien, ne débite rien et ne compte contre aucune limite de débit.** Il est
 donc sûr à appeler sur du contenu généré par les utilisateurs avant de valider un envoi. La seule
 vérification pré-envoi vraiment gratuite.

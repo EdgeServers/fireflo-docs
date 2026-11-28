@@ -5,6 +5,11 @@ description: "Ce qu'un produit sélectionne : le tarif, la route et si le trafic
 
 Un **product** est une étiquette sur un login. Il est utilisable dans la table de routage, il sélectionne le tarif, et il décide si les sender IDs et le contenu d'un compte sont vérifiés. Il est aussi optionnel, et le cas optionnel est le coûteux.
 
+<Frame caption="La page d'un product : s'il est listé et vérifié, combien de règles de prix et de logins l'utilisent, le résumé de ses tarifs, et les logins qui le sélectionnent.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products-light.webp" alt="La page d'un product : sa description, les logins qui le sélectionnent et le résumé de ses tarifs." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products-dark.webp" alt="La page d'un product : sa description, les logins qui le sélectionnent et le résumé de ses tarifs." />
+</Frame>
+
 ## Un produit non défini est un état supporté qui envoie gratuitement
 
 Laisser `product` hors d'un login est une configuration légale. Il correspond à `product:isNull:` dans la table de routage et il n'est tarifé que par des règles de tarification qui elles-mêmes n'ont aucun produit.
@@ -49,10 +54,15 @@ La page **Pricing** porte l'autre pré-vol : le trafic des 24 dernières heures 
 
 | Colonne | Signification |
 | :--- | :--- |
-| `name` | La clé primaire. Trimée, non vide, et comparée **exactement**. `OTP` et `otp` sont deux produits. |
-| `label`, `description` | Pour le panel. |
-| `enabled` | Si le gateway compte cela comme un produit qu'il vend. |
-| `whitelist_enabled` | Défaut `true`. `false` exempte le trafic de ce produit des contrôles de sender ID et de contenu. |
+| `name` | **Code** dans le panel. La clé primaire. Trimée, non vide, et comparée **exactement**. `OTP` et `otp` sont deux produits. Figée une fois créée. |
+| `label`, `description` | **Display name** et **What the customer is buying**. Pour le panel. |
+| `enabled` | **Listed**. Si le gateway compte cela comme un produit qu'il vend. |
+| `whitelist_enabled` | **Check sender IDs and content**. Défaut `true`. `false` exempte le trafic de ce produit des contrôles de sender ID et de contenu. |
+
+<Frame caption="Un product ouvert en édition. Le code est figé : pour passer à un autre, créez-le, re-pointez les règles, puis supprimez celui-ci.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products--edit-light.webp" alt="Un product ouvert en édition : son nom affiché, son code figé, ce que le client achète, et s'il est listé et vérifié." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products--edit-dark.webp" alt="Un product ouvert en édition : son nom affiché, son code figé, ce que le client achète, et s'il est listé et vérifié." />
+</Frame>
 
 ## Exempter un produit du whitelisting
 

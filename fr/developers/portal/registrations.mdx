@@ -31,20 +31,34 @@ La colonne du milieu est ce que [`/secure/senders`](/reference/api/senders) et
 quatre mêmes états plutôt que huit. **Seul `APPROVED` est utilisable** — les trois autres signifient
 tous qu'un message sera refusé, pour des raisons différentes.
 
-Chaque ligne indique aussi le produit auquel il s'applique et le login concerné, soit un login
-nommé, soit **tous vos logins**.
+Chaque ligne indique aussi le produit auquel elle s'applique. Dès que l'un de vos enregistrements est
+lié à un login, chaque ligne indique aussi le login qu'elle couvre, soit un login nommé, soit **tous
+vos logins**.
 
-<Frame caption="Sender IDs, tous approuvés et en usage. Le produit auquel chacun est rattaché figure à côté. Un expéditeur approuvé pour un produit ne l'est pas pour un autre.">
-  <img src="/images/developers/portal/senders.png" alt="The portal Sender IDs screen listing three approved sender IDs, each scoped to a product" />
+<Frame caption="Sender IDs, chacun avec son état et le produit auquel il est destiné. Ces trois-là attendent encore une approbation, et chacun le dit en toutes lettres : il n'est pas encore en usage.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations-light.webp" alt="La page Sender IDs du portail listant trois sender IDs, chacun marqué Waiting for approval, pour le produit india-ot, avec un bouton Edit et un bouton Request a sender ID au-dessus" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations-dark.webp" alt="La page Sender IDs du portail listant trois sender IDs, chacun marqué Waiting for approval, pour le produit india-ot, avec un bouton Edit et un bouton Request a sender ID au-dessus" />
 </Frame>
 
-<Frame caption="Templates, dont un en hindi. Les blancs {#var#} sont ce qui peut varier ; tout ce qui les entoure est mis en correspondance à l'identique.">
-  <img src="/images/developers/portal/templates.png" alt="The portal Templates screen listing four approved templates with placeholder syntax" />
+<Frame caption="Templates, sur le même modèle. Les blancs {#var#} sont ce qui peut varier ; tout ce qui les entoure est mis en correspondance à l'identique.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--templates-light.webp" alt="La page Templates du portail listant trois templates avec des placeholders {#var#}, chacun marqué Waiting for approval, pour le produit india-ot" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--templates-dark.webp" alt="La page Templates du portail listant trois templates avec des placeholders {#var#}, chacun marqué Waiting for approval, pour le produit india-ot" />
 </Frame>
 
 ## Demander un sender ID
 
-Un seul champ. Les refus valent la peine d'être connus avant de les rencontrer :
+**Request a sender ID** ouvre un court formulaire : le sender ID lui-même, une **note pour votre
+opérateur** et les [stamps à demander](#stamps).
+
+<Frame caption="Le formulaire de demande. Seul le sender ID est nécessaire ; la note est l'endroit où mettre la référence d'enregistrement d'un régulateur, et rien n'est utilisable tant que votre opérateur ne l'a pas approuvé.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--request-light.webp" alt="La boîte de dialogue Request a sender ID : un champ Sender ID, un champ Note for your operator, Stamps to ask for avec un bouton Add a stamp, et Send for approval" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--request-dark.webp" alt="La boîte de dialogue Request a sender ID : un champ Sender ID, un champ Note for your operator, Stamps to ask for avec un bouton Add a stamp, et Send for approval" />
+</Frame>
+
+> **Note for your operator** — si celui-ci est enregistré auprès d'un régulateur, mettez la référence
+> ici. Votre opérateur définit la valeur que le gateway envoie ; vous n'avez pas à le faire.
+
+C'est le sender ID qui est vérifié. Les refus valent la peine d'être connus avant de les rencontrer :
 
 - Un sender ID fait au plus 64 caractères, **mais SMPP en autorise 21**. Tout ce qui approche la
   borne supérieure pourrait être stocké ici et jamais livré.
@@ -55,7 +69,8 @@ Un seul champ. Les refus valent la peine d'être connus avant de les rencontrer 
 ## Demander un template
 
 Un **nom**, pour que vous et votre fournisseur le reconnaissiez, comparé contre rien. Puis le
-**libellé**, qui est comparé, à l'identique, en dehors des blancs que vous marquez.
+**libellé**, qui est comparé, à l'identique, en dehors des blancs que vous marquez. La note pour votre
+opérateur et les stamps suivent, comme pour un sender ID.
 
 > Placez `{#var#}` là où le message change — un nom, un code, un numéro de commande. Tout le reste
 > doit correspondre à l'identique.
@@ -96,8 +111,12 @@ pensiez, et cela vaut la peine d'être vérifié avec votre fournisseur.
 
 ## Stamps
 
-Sous **Stamps à demander**, vous pouvez proposer les valeurs que votre fournisseur attache à chaque
-message sur cet enregistrement — sous DLT, vos identifiants d'entité et de template.
+Sous **Stamps to ask for**, vous pouvez proposer les valeurs que votre fournisseur attache à chaque
+message sur cet enregistrement — sous DLT, vos identifiants d'entité et de template. **Add a stamp**
+vous donne un tag et une valeur par ligne.
+
+> Le tag est ce qui suit le dernier tiret bas, en décimal sauf s'il est écrit `0x` — donc `tlv_0100`
+> est le tag 100, pas 64.
 
 > **Demander est gratuit :** rien ici n'atteint un message tant que votre opérateur ne l'accepte
 > pas, donc un enregistrement approuvé continue de fonctionner en attendant.
@@ -107,13 +126,21 @@ fournisseur verra plutôt que d'empiler une seconde demande.
 
 ## Quel login
 
-Là où votre compte a plus d'un login API, vous pouvez lier un enregistrement à l'un d'eux.
+Là où votre compte a plus d'un login API, le formulaire propose aussi **Which login**, pour lier un
+enregistrement à l'un d'eux. Avec un seul login, ce choix n'est pas affiché.
 
 <Warning>
 **Laissez ceci sur "Tous mes logins" sauf si vous savez que vous voulez autrement.** Lié à un
 login, un enregistrement ne fait rien pour les autres, et un login sans rien d'approuvé pour lui ne
 peut rien envoyer du tout.
 </Warning>
+
+## Demander pour l'un de vos clients
+
+Si vous êtes revendeur, le formulaire demande aussi **Who this is for** : votre propre compte, ou l'un
+de vos clients. Choisissez un client et l'enregistrement est demandé sur son compte ; votre opérateur
+l'approuve avant que le client puisse envoyer avec. Un enregistrement demandé pour un client couvre
+tous ses logins.
 
 ## Éditer quelque chose qui est en usage
 

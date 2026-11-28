@@ -8,6 +8,11 @@ enregistrement d'appel s'accordent tous. Rien n'a besoin de le créer : un compt
 où un login le nomme ou qu'un message arrive en le portant, et la ligne `app_account` est une
 étiquette boulonnée par-dessus après coup.
 
+<Frame caption="La liste Accounts, une ligne par login. Not named yet compte les ids de compte en usage qui n'ont pas de nom propre.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-accounts-light.webp" alt="La liste Accounts : une ligne par login, avec son compte, son system ID, son type, son product et son statut." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-accounts-dark.webp" alt="La liste Accounts : une ligne par login, avec son compte, son system ID, son type, son product et son statut." />
+</Frame>
+
 ## Laissez `accountId` vide et autre chose devient le compte
 
 `accountId` est optionnel sur un credential, et ce qui comble le vide **diffère par protocole**.
@@ -26,6 +31,11 @@ clé ensuite scinde l'historique de ce client sur deux ids.
 
 Définissez `accountId` explicitement sur chaque credential et aucun repli n'a d'importance.
 </Warning>
+
+<Frame caption="Un login ouvert en édition. Account se trouve sous Billing and tariff : les scopes de tarif et les soldes prépayés sont tous deux indexés dessus, et il est figé une fois le login créé.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins--edit-login-light.webp" alt="Un login ouvert en édition : comment il se connecte, s'il est actif, son system ID, son mot de passe, sa clé API, son compte et son product." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins--edit-login-dark.webp" alt="Un login ouvert en édition : comment il se connecte, s'il est actif, son system ID, son mot de passe, sa clé API, son compte et son product." />
+</Frame>
 
 ## Pourquoi le compte et pas le login
 
@@ -51,29 +61,69 @@ les logins du compte. Voir [Sender IDs](/platform/customers/sender-ids).
 
 ## Ce que contient réellement la ligne du catalogue
 
-`app_account` est nom, contact et hiérarchie — rien que le chemin du message ne lise.
+`app_account` est nom, contact et hiérarchie. Quand le gateway charge les logins, il n'y lit que deux
+choses : si le compte est activé, et s'il est archivé.
 
 | Colonne | Signification |
 | :--- | :--- |
 | `id` | La clé de facturation. Trimé et non-vide, et la clé primaire. |
-| `label`, `description` | Pour les personnes lisant le panneau. |
-| `email` | Stocké pour la connexion par magic-link et les avis. Un compte par adresse, sans tenir compte de la casse. |
-| `enabled` | Si ce panneau le liste. |
-| `resells` | Ce compte peut en détenir d'autres et leur transférer du solde. |
-| `parent_account_id` | Le revendeur sous lequel il se trouve. |
+| `label`, `description` | Pour les personnes lisant le panneau (**Name** et **Notes**). |
+| `email` | L'adresse de contact du compte et un login du portail. Un compte par adresse, sans tenir compte de la casse. |
+| `enabled` | **Enabled**, sous Settings → Advanced. Désactivé, il met le compte en pause : ses logins s'arrêtent et personne ne peut se connecter au portail pour lui. |
+| `resells` | **Resells services** : ce compte peut en détenir d'autres et leur transférer du solde. |
+| `parent_account_id` | **Belongs to** : le revendeur sous lequel il se trouve. |
 
 L'arbre a exactement deux niveaux de profondeur, et la base l'applique :
 `app_account_two_levels` refuse une ligne qui à la fois nomme un parent et resells, donc un
 compte soit en détient d'autres soit appartient à un.
 
-<Warning>
-**Délister un compte n'arrête rien.** Le gateway ne lit jamais le catalogue de comptes, donc
-effacer `enabled` retire la ligne des listes de ce panneau et laisse ses logins se connecter, son
-trafic envoyer et ses règles de tarif tarifer exactement comme avant. C'est l'opposé de ce que
-`enabled` signifie sur un vendor ou un product, et bien plus coûteux à interpréter à l'envers.
+<Frame caption="L'onglet Settings d'un compte. Organisation contient le nom, l'email, les notes et les étiquettes ; Advanced contient Enabled, la revente et le parent ; Archive se trouve en dessous.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="Les Settings d'un compte : nom, email, notes et étiquettes, et sa connexion au portail." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="Les Settings d'un compte : nom, email, notes et étiquettes, et sa connexion au portail." />
+</Frame>
 
-Pour arrêter le trafic, désactivez les **logins**. Pour arrêter la dépense, utilisez le solde.
+<Warning>
+**Désactiver un compte arrête son trafic.** Le gateway cesse de servir les logins du compte en un
+sondage de configuration (30 secondes par défaut), et personne ne peut se connecter au portail pour
+lui. Les binds déjà ouverts restent en place jusqu'à ce qu'ils tombent.
+
+Pour arrêter un login plutôt que tout le compte, désactivez ce **login**. Pour arrêter la dépense,
+utilisez le solde.
 </Warning>
+
+Pour retirer un compte définitivement, **archivez-le** avec **Archive** au bas de l'onglet Settings.
+Ses logins sont désactivés, les binds vivants sont coupés et la connexion au portail est fermée ; son
+solde et son historique restent, et il quitte la liste des comptes. **Unarchive** réactive exactement
+ce que l'archivage a désactivé, et les clients reconnectent eux-mêmes leurs binds.
+
+## Revendeurs et sous-comptes
+
+Activez **Resells services** et le compte devient revendeur. Ses équipes gèrent alors leurs propres
+clients depuis le portail, sous **Customers → Sub-accounts**. Il y a deux niveaux, jamais plus : un
+sous-compte ne peut pas revendre.
+
+<Frame caption="La liste Sub-accounts d'un revendeur dans le portail. Le crédit de chaque sous-compte vient du propre solde du revendeur.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers-light.webp" alt="La liste Sub-accounts d'un revendeur : chaque compte avec son solde, ses logins et son dernier envoi." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers-dark.webp" alt="La liste Sub-accounts d'un revendeur : chaque compte avec son solde, ses logins et son dernier envoi." />
+</Frame>
+
+**New sub-account** demande un id de compte (figé une fois créé), un nom et un crédit d'ouverture,
+transféré immédiatement depuis le solde du revendeur ; laissez-le à 0 pour recharger plus tard. Le
+sous-compte reçoit tout de suite un login HTTP, et les logins SMPP s'ajoutent sur son onglet Logins.
+
+<Frame caption="New sub-account. Le crédit d'ouverture montre le solde du revendeur après le transfert, avant que quoi que ce soit ne soit créé.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--new-light.webp" alt="Le formulaire New sub-account d'un revendeur : id de compte, nom et crédit d'ouverture depuis le solde du revendeur." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--new-dark.webp" alt="Le formulaire New sub-account d'un revendeur : id de compte, nom et crédit d'ouverture depuis le solde du revendeur." />
+</Frame>
+
+La page d'un sous-compte montre son solde, **Recharge** et **Withdraw** pour déplacer du crédit entre
+lui et le revendeur, et ses transferts, avec des onglets pour ses logins, messages, approbations,
+relevé, conditions de crédit et paramètres.
+
+<Frame caption="Un sous-compte dans le portail du revendeur. Withdraw libère le crédit réservé pour les messages en cours d'envoi avant de le rapatrier.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--sub-account-light.webp" alt="La page d'un sous-compte dans le portail du revendeur : son solde, recharge et withdraw, les transferts, et des onglets pour logins, messages, approbations, relevé et conditions de crédit." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--sub-account-dark.webp" alt="La page d'un sous-compte dans le portail du revendeur : son solde, recharge et withdraw, les transferts, et des onglets pour logins, messages, approbations, relevé et conditions de crédit." />
+</Frame>
 
 ## Créer un login ne crée pas de solde
 
@@ -102,6 +152,15 @@ Renommez-en un avant de tarifer l'un ou l'autre. `*` est réservé d'emblée et 
 utilisé comme nom de compte ou de vendor.
 
 ## Ce qu'il y a sur la page du compte
+
+Un onglet à la fois : **Overview**, **Settings**, **Logins**, **Approvals**, **Billing**, **Tariff** et
+**Statement**. Un compte à unités n'a pas d'onglet Tariff ni Statement ; ses prix et son relevé sont
+ceux de son parent.
+
+<Frame caption="L'onglet Overview d'un compte : son trafic par login et product, son plafond SMPP, un contrôle de livraison et où sont allés ses messages.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account-light.webp" alt="L'onglet Overview d'un compte : son trafic, où il est allé et les onglets en haut." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account-dark.webp" alt="L'onglet Overview d'un compte : son trafic, où il est allé et les onglets en haut." />
+</Frame>
 
 <CardGroup cols={2}>
 <Card title="Logins" href="/platform/connections/credentials">

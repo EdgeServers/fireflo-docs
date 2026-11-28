@@ -127,6 +127,23 @@ unités utilisées ce mois-ci et par jour, ses limites de vitesse et le grand li
 Tariff et Statement ne sont pas affichés : les prix et le relevé sont ceux du parent. Aucune action
 sur l'argent n'est proposée.
 
+<Frame caption="L'onglet Billing d'un compte à unités. Les unités restantes par produit à gauche, le compte qui paie à droite, puis les unités utilisées et les limites de vitesse propres au compte.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units-light.webp" alt="L'onglet Billing d'un compte à unités : les unités restantes par produit et le compte parent auquel elles sont facturées." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units-dark.webp" alt="L'onglet Billing d'un compte à unités : les unités restantes par produit et le compte parent auquel elles sont facturées." />
+</Frame>
+
+**Left** est ce qui peut encore être envoyé : les unités pas encore distribuées, plus les unités que
+les nœuds du gateway détiennent et n'ont pas utilisées. Les unités utilisées sont réglées toutes les
+quelques secondes ; sur un compte chargé, les chiffres suivent donc son trafic avec un léger retard.
+
+Le **Unit ledger** liste chaque attribution, reprise et déplacement, avec son produit et sa référence.
+Les unités utilisées n'y figurent pas ; elles sont sous **Units used**.
+
+<Frame caption="Le grand livre d'unités. Chaque lot d'unités que la plateforme gestionnaire a attribué ou repris, chacun sous sa propre référence.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units--ledger-light.webp" alt="Le grand livre d'un compte à unités : chaque lot d'unités qui lui a été attribué par la plateforme gestionnaire, avec produit et référence." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units--ledger-dark.webp" alt="Le grand livre d'un compte à unités : chaque lot d'unités qui lui a été attribué par la plateforme gestionnaire, avec produit et référence." />
+</Frame>
+
 L'onglet **Billing** d'un parent liste ses sous-comptes, avec les unités restantes par produit et un
 état « no units ». Si les comptes à unités ne peuvent pas encore être utilisés, parce qu'un nœud est
 plus ancien que 0.16.0 ou que l'application du prépayé est désactivée, l'onglet dit lequel.

@@ -1,21 +1,21 @@
 ---
 title: "Refused"
-description: "Messages que le gateway n'a pas voulu envoyer et pourquoi — y compris les trois refus qui se produisent après que le client s'est vu dire oui, et qui portent donc un identifiant de message et un remboursement."
+description: "Messages que le gateway n'a pas voulu envoyer et pourquoi — y compris les refus qui se produisent après que le client s'est vu dire oui, et qui portent donc un remboursement."
 ---
 
 **Messages que le gateway n'a pas voulu envoyer, et pourquoi.** Le premier écran à ouvrir quand un
 client dit que rien n'arrive.
 
 La plupart des refus se sont produits à la porte : rien n'a été envoyé et rien n'a été débité.
-Trois non, et la différence est la chose la plus importante sur cette page.
+Quelques-uns non, et la différence est la chose la plus importante sur cette page.
 
 ## Refusé à la porte, ou refusé après acceptation
 
 <Warning>
-**Trois raisons se produisent après que le client s'est vu dire oui** — *never routed*, *vendor
-refused it* et *dropped by a filter*.
+**Quatre raisons se produisent après que le client s'est vu dire oui** — *never routed*, *vendor
+refused it*, *dropped by a filter* et *expired waiting for its vendor*.
 
-Ces messages ont été acceptés, débités et dans deux cas réellement envoyés. Ils portent un
+Ces messages ont été acceptés et débités, et dans le cas de *vendor refused it* réellement envoyés. Ils portent un
 **message id**, ils apparaissent dans les enregistrements d'appels, et **leur débit a été
 remboursé**. Tout le reste sur cette page a été refoulé avant de devenir du trafic tout court.
 
@@ -25,8 +25,25 @@ compte d'un client par rapport au vôtre.
 
 ## Les raisons
 
-Des cartes de résumé mènent la page — une par raison, avec un compte pour toute la fenêtre. Elles
-ne bougent pas quand vous paginez, et en cliquer une filtre dessus.
+**By reason** mène la page — une carte par raison, avec un compte pour toute la fenêtre et un bouton
+d'information qui l'explique. Les cartes ne bougent pas quand vous paginez, et en choisir une filtre
+dessus ; choisissez-la à nouveau pour effacer le filtre. À partir de 0.12.14, le résumé est pris sur les
+**50 000 derniers refus** et la page le dit : sur un gateway qui refuse davantage dans la fenêtre, les
+cartes décrivent la forme récente plutôt qu'un total exact, et la table en dessous reste complète.
+
+<Frame caption="Les refus d'un compte sur 7 jours : une carte par raison au-dessus des filtres et des refus les plus récents.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused-light.webp" alt="La page Refused : des cartes de raisons au-dessus d'une table de messages refusés." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused-dark.webp" alt="La page Refused : des cartes de raisons au-dessus d'une table de messages refusés." />
+</Frame>
+
+<Frame caption="La même page après avoir choisi la carte No units left : la carte est mise en évidence, Why est réglé sur elle, et le compte au-dessus de la table ne vaut que pour cette raison.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused--one-reason-light.webp" alt="La page Refused restreinte à une raison en choisissant sa carte : No units left." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused--one-reason-dark.webp" alt="La page Refused restreinte à une raison en choisissant sa carte : No units left." />
+</Frame>
+
+Les submits SMPP auxquels on a répondu par un throttle (`0x58`) ne sont pas des lignes ici. Ils sont
+conservés comme comptes par minute par compte, listener et login, et une ligne sous les cartes dit
+combien il y en a eu dans la fenêtre, ou qu'il n'y en a eu aucun.
 
 | Raison | Signifie habituellement |
 | :--- | :--- |
@@ -44,9 +61,15 @@ ne bougent pas quand vous paginez, et en cliquer une filtre dessus.
 | **Too many waiting for credit; resend** | À partir de 0.17.2 (`creditQueueFull`). 10 000 messages du compte, ou 100 000 sur le gateway, attendaient déjà du crédit. Même cause que la précédente, en volume |
 | **Queue full** | La file du routeur était à capacité et a refusé plutôt que faire grossir le tas. Avant 0.17.2, les envois REST et gRPC refusés pour un crédit non confirmé à temps étaient aussi comptés ici |
 | **Could not be queued** | Accepté par les vérifications, mais n'a pas pu être passé — habituellement le broker |
+| **Vendor backlog full** | À partir de 0.15.1. Chaque vendor vers lequel le message pouvait aller avait dépassé sa limite de backlog, et aucune autre route n'était utilisable. Rien de facturé |
+| **Vendor unavailable** | À partir de 0.15.1. Le vendor vers lequel il irait n'a pas eu de bind depuis plus longtemps que `smsg.vendor.unbound.refuse.after.seconds`, et aucune autre route n'était utilisable. Rien de facturé |
+| **Database not answering; try again** | À partir de 0.15.1. La base était trop lente pour prendre de nouveaux messages, donc les nouveaux submits ont été refusés avant que quoi que ce soit ne soit facturé. Les messages déjà acceptés continuent |
+| **Gateway stopping** | Le gateway était en cours d'arrêt et ne prenait plus de nouveaux messages. Rien de facturé ; une nouvelle tentative passe dès qu'un autre nœud ou le gateway redémarré la prend |
+| **Hand-off outcome unknown** | Accepté et passé au broker, et le passage s'est terminé sans réponse définitive : il a peut-être été envoyé. Non remboursé, pour qu'il ne puisse pas être facturé deux fois ; le gateway le règle dès que la réponse est connue |
 | **Never routed** | *Après acceptation.* Aucune règle activée n'a correspondu ; remboursé |
 | **Vendor refused it** | *Après acceptation.* L'opérateur a rejeté le submit ; remboursé |
 | **Dropped by a filter** | *Après acceptation.* Un filter de routage l'a arrêté ; remboursé |
+| **Expired waiting for its vendor** | *Après acceptation.* En file pour un vendor, il a attendu plus longtemps que `smsg.vendor.backlog.expire.seconds` (ou sa propre validité) et n'a pas été envoyé ; remboursé, avec un accusé d'échec là où un accusé a été demandé |
 
 <Note>
 **Les messages d'un compte approvisionné attendent leur crédit** après un redémarrage, ou chaque
@@ -67,19 +90,25 @@ whitelist non chargée autorise tout par conception**.
 
 ## En trouver un
 
-Le grand filet est **Anything**, qui regarde à l'intérieur de compte, expéditeur, destination,
-product, login, détail de refus et extrait de message à la fois. Des filtres plus étroits
-existent pour compte, destination, nom de bind, product, ingress, listener, from-number et
-message id.
+La ligne toujours visible est **Period**, **Why** (la raison), **Account** (exact), **To number**
+(commence par) et **Anything**. **Anything** est le grand filet : il regarde à l'intérieur de compte,
+expéditeur, destination, product, login, détail de refus et extrait de message à la fois. **More
+filters** ajoute **Bind name (system id)**, **Product**, **Came in via**, **Listener**, **From
+number**, **Message id**, **Carrier status** et **Stage**. **Clear** les vide tous.
 
 **Carrier status** prend le numéro de l'opérateur en décimal — 69 est le générique « refusé et ne
 dira pas pourquoi » — et seuls les refus vendor en portent un.
 
+**La page demande toujours une période, de 92 jours au plus.** Les refus ne peuvent pas être listés
+sur tout l'historique : des versions antérieures affichaient discrètement les refus d'une journée sous
+un titre **All time**, le genre d'erreur que l'on croit, donc à partir de 0.12.14 la page demande une
+période à la place.
+
 ## La table
 
-Neuf colonnes par défaut : refused, why, vendor said, account, product, from, to, via, message.
-Le sélecteur ajoute la raison en anglais, le détail du refus, s'il a été débité et remboursé, le
-nom de code vendor, et les ids de ligne et de message.
+Dix colonnes par défaut : refused, why, vendor said, account, product, from, to, via, ingress
+server, message. Le sélecteur ajoute la raison en anglais, le détail du refus, s'il a été débité et
+remboursé, ce qui a été dit au client, le nom de code vendor, et les ids de ligne et de message.
 
 L'**extrait du message** — les 160 premiers caractères — est conservé **inconditionnellement**,
 contrairement au corps sur un enregistrement d'appel. Un refus de contenu ne peut pas être

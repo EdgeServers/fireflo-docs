@@ -34,13 +34,21 @@ Chaque paramètre est à [Paramètres du vendor](/reference/smpp/client).
 scripts/fireflo test-bind vendor1
 ```
 
-Compose une fois et rapporte ce qui s'est passé. Le panneau a la même chose sous **Test
-connection**.
+Compose une fois et rapporte chaque étape : la résolution du nom, la connexion TCP, le bind, trois
+allers-retours `enquire_link` et l'unbind. Le panneau a la même chose sous **Test connection**, sur la
+page du vendor.
 
 <Warning>
-**C'est refusé pendant que le vendor est déjà bindé.** Un second bind sur le même `systemId` peut
-vous coûter la session vive. Beaucoup d'opérateurs n'en autorisent qu'un.
+**Il n'ouvre jamais de second bind pendant que le vendor est déjà bindé.** Un second bind sur le même
+`systemId` peut vous coûter la session vive. Beaucoup d'opérateurs n'en autorisent qu'un. À la place,
+il résout quand même l'adresse et ouvre une connexion TCP, puis envoie `enquire_link` sur chaque
+session vive et chronomètre la réponse.
 </Warning>
+
+<Frame caption="Un test de connexion sur un vendor déjà bindé : l'adresse résolue, la connexion TCP, et chaque session vive qui répond à enquire_link.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--test-connection-light.webp" alt="Le test de connexion d'un vendor : l'adresse résolue, la connexion TCP, et chaque session vive qui répond à enquire_link." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--test-connection-dark.webp" alt="Le test de connexion d'un vendor : l'adresse résolue, la connexion TCP, et chaque session vive qui répond à enquire_link." />
+</Frame>
 
 ## Bindé n'est pas la même chose que capable d'envoyer
 
@@ -55,11 +63,16 @@ cliente. Un vendor receiver-only se binde parfaitement et n'envoie rien.
 Lorsque ces deux nombres diffèrent, c'est la raison, et le panneau montre **Can send** comme un
 chiffre à part pour exactement ce cas.
 
+<Frame caption="L'onglet Status d'un vendor : ses binds par rapport à ceux configurés, ce qui est en file, ce qui a été envoyé sur ces binds et son débit par rapport à sa limite. Can send n'apparaît à côté de Binds que lorsque les deux diffèrent.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--vendor-light.webp" alt="L'onglet Status d'un vendor : connecté avec tous ses binds, ce qui est en file, ce qui a été envoyé sur ces binds et son débit par rapport à sa limite." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--vendor-dark.webp" alt="L'onglet Status d'un vendor : connecté avec tous ses binds, ce qui est en file, ce qui a été envoyé sur ces binds et son débit par rapport à sa limite." />
+</Frame>
+
 ## Les quatre états
 
 | Badge | Signifie | Couleur |
 | :--- | :--- | :--- |
-| **Connected** | Bindé et accepte | Vert |
+| **Connected** | Bindé et accepte ; le badge ajoute le nombre de binds, par exemple **Connected · 5 binds** | Vert |
 | **Not connected** | Aucune session — un vendor sans est cassé | Rouge |
 | **Not accepting** | Suspendu ; la file se vide vers le routeur donc le trafic re-route | Ambre |
 | **Holding** | Accepte mais n'envoie pas ; **la file grossit** | Ambre |
@@ -71,6 +84,11 @@ chiffre à part pour exactement ce cas.
 le vendor a été ajouté, ou il ne lit pas du tout les workers depuis la base. Le texte détaillé du
 badge dit lequel.
 </Note>
+
+<Frame caption="La page Vendors. Un vendor qui demande de l'attention est listé en premier : ici l'un affiche Not connected, l'autre Connected avec cinq binds.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors-light.webp" alt="La page Vendors : une carte par lien opérateur avec son état, ses sessions et son trafic sur la période." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors-dark.webp" alt="La page Vendors : une carte par lien opérateur avec son état, ses sessions et son trafic sur la période." />
+</Frame>
 
 ## Retentatives, et le nombre qui mentait
 
@@ -134,9 +152,24 @@ sens**, pas zéro.
 | `hold` | Vous voulez qu'il cesse d'envoyer mais garde sa file |
 | `disable` | Vous voulez qu'il disparaisse en un intervalle de sondage |
 
-Le panneau les expose comme **Stop sending**, **Hold** et **Disable**, formulés délibérément
-plutôt qu'iconographiques. Chacun re-route ou arrête le trafic de production au moment où il est
-pressé.
+Sur la page d'un vendor, ce sont **Stop sending** et **Disable**, formulés délibérément plutôt
+qu'iconographiques. Chacun re-route ou arrête le trafic de production au moment où il est pressé,
+donc chacun demande d'abord confirmation. **Restart**, à côté, ferme toutes les connexions du vendor
+et les rouvre ; les messages en vol sont réessayés. Hold n'a pas de bouton sur la page du vendor ; la
+vue **Connectivity** le propose sous le nom **Pause sending (queue kept)**.
+
+## Codes d'erreur
+
+**Error codes**, sur la page d'un vendor, fait correspondre un code envoyé par l'opérateur à celui que
+reçoit votre client. Un vendor utilise la liste **Every vendor** jusqu'à ce qu'il ait sa propre liste,
+qui la remplace. **Codes nobody mapped** choisit si un code qu'aucune correspondance ne couvre atteint
+le client tel qu'envoyé ou comme `018` ; **Inherit** suit la réponse de Every vendor. Les paramètres
+derrière sont à [Paramètres du vendor](/reference/smpp/client).
+
+<Frame caption="La liste propre d'un vendor : le code opérateur 444 atteint le client comme 016. En dessous, ce qui arrive à un code que personne n'a mis en correspondance.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--error-codes-light.webp" alt="Les codes d'erreur d'un vendor : un code envoyé par l'opérateur mis en correspondance avec celui que reçoit le client, et ce qui arrive à un code que personne n'a mis en correspondance." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--error-codes-dark.webp" alt="Les codes d'erreur d'un vendor : un code envoyé par l'opérateur mis en correspondance avec celui que reçoit le client, et ce qui arrive à un code que personne n'a mis en correspondance." />
+</Frame>
 
 ## Coût
 

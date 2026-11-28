@@ -53,7 +53,12 @@ Il ne s'applique qu'à SMPP. L'ingress HTTP n'a pas de listener à quoi l'accroc
 
 ## Rapporter avant d'appliquer
 
-Chacun de `header_mode` et `content_mode` est `OFF`, `REPORT` ou `ENFORCE`. **`REPORT` est la raison pour laquelle ceci n'est pas un booléen.**
+Chacun de `header_mode` et `content_mode` est `OFF`, `REPORT` ou `ENFORCE`. **`REPORT` est la raison pour laquelle ceci n'est pas un booléen.** Sur l'onglet **Approvals** du compte, chaque liste a son propre sélecteur : **Not checked**, **Report only** ou **Enforce**.
+
+<Frame caption="L'onglet Approvals d'un compte. Chaque liste a son propre sélecteur, et Enforce n'est pas proposé tant que rien n'est approuvé.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals-light.webp" alt="L'onglet Approvals d'un compte : les sender IDs approuvés et le contenu approuvé, chacun avec son sélecteur d'application." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals-dark.webp" alt="L'onglet Approvals d'un compte : les sender IDs approuvés et le contenu approuvé, chacun avec son sélecteur d'application." />
+</Frame>
 
 <Steps>
 <Step title="Approuver ce que vous connaissez déjà">

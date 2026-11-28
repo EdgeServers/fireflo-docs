@@ -48,6 +48,13 @@ dans une règle, si bien qu'un filtre peut représenter tous les comptes étique
 [Étiquettes de compte](/platform/routing/account-tags).
 </Tip>
 
+Dans le panneau de contrôle, **New filter** en construit un en trois étapes : ce qu'il faut faire correspondre, les valeurs, puis un nom. Chaque case que vous cochez à la première étape doit être vérifiée, donc chacune restreint encore le filtre.
+
+<Frame caption="New filter, première étape : cochez ce à quoi un message doit correspondre. Account tag est l'un des choix ; Something else ouvre l'éditeur avancé.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters--new-filter-light.webp" alt="La boîte de dialogue de nouveau filtre à sa première étape : ce à quoi un message doit correspondre, choisi parmi un ensemble de cartes." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters--new-filter-dark.webp" alt="La boîte de dialogue de nouveau filtre à sa première étape : ce à quoi un message doit correspondre, choisi parmi un ensemble de cartes." />
+</Frame>
+
 ## Un filtre vide compte comme désactivé
 
 Un filtre sans conditions s'enregistre et se charge, ce qui permet d'en construire un condition par condition. La réponse de la passerelle à ce cas n'est pas non plus l'intuitive : un filtre vide est ajouté à l'ensemble des filtres *désactivés*, donc toute règle qui le référence est ignorée.
@@ -70,7 +77,7 @@ Pour la même raison, un filtre référencé ne peut pas être supprimé tant qu
 
 <Steps>
   <Step title="Lire le compteur">
-    **Filtres** dans le panneau indique combien de règles de tarification et combien de règles de routage référencent chaque filtre. Désactiver un filtre utilisé par quatre règles de routage supprime quatre règles du snapshot en cours d'exécution.
+    **Filters** dans le panneau indique sur chaque filtre combien de règles de routage (**Routing · 4**) et combien de règles de prix (**Pricing · 2**) l'utilisent ; pressez le compteur pour les lister. Un filtre que rien n'utilise affiche **Unused**. Désactiver un filtre utilisé par quatre règles de routage supprime quatre règles du snapshot en cours d'exécution.
   </Step>
   <Step title="Regarder ce qui capte le trafic à la place">
     Pour chaque règle qui serait ignorée, trouvez la règle suivante dans la même table à laquelle le trafic correspondrait. C'est vers ce fournisseur que va le trafic.
@@ -79,6 +86,11 @@ Pour la même raison, un filtre référencé ne peut pas être supprimé tant qu
     Après l'enregistrement, vérifiez `routing_warnings` sur `/ops/health` et le journal pour `Error parsing new routing table`. Un rechargement rejeté conserve la table précédente et donne l'impression que rien ne s'est passé.
   </Step>
 </Steps>
+
+<Frame caption="La page Filters regroupe les filtres selon ce sur quoi ils portent. Sous Status, Off or empty liste les filtres dont la passerelle ignore les règles.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters-light.webp" alt="La page Filters : des cartes de filtres regroupées selon ce sur quoi elles portent, chacune avec les règles qui l'utilisent." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters-dark.webp" alt="La page Filters : des cartes de filtres regroupées selon ce sur quoi elles portent, chacune avec les règles qui l'utilisent." />
+</Frame>
 
 ## Les workers de filtrage sont une autre chose
 

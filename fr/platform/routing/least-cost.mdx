@@ -19,6 +19,16 @@ pas mettre le routage hors service. Vérifiez le nom caractère par caractère, 
 Il existe exactement deux fonctions, `NORMAL` et `LCR`. Une table qui ne déclare aucune fonction est
 `NORMAL`.
 
+Dans le panneau de contrôle, la fonction est **How it chooses**, définie quand vous ajoutez une table
+avec **New table** et modifiée depuis le bouton **Table** de la table : **In order** est `NORMAL`,
+**Cheapest vendor** est `LCR`. Le panneau ne propose que ces deux-là, donc elle ne peut pas y être mal
+orthographiée, et la page d'une table indique laquelle c'est à côté de son nom.
+
+<Frame caption="New table avec How it chooses réglé sur Cheapest vendor : chaque fournisseur correspondant est candidat, et le tarif le moins cher gagne.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--new-table-light.webp" alt="Le formulaire de nouvelle table de routage avec How it chooses réglé sur Cheapest vendor." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--new-table-dark.webp" alt="Le formulaire de nouvelle table de routage avec How it chooses réglé sur Cheapest vendor." />
+</Frame>
+
 <Note>
 Une troisième fonction, `RC`, a été supprimée dans `V1.28.0`. Elle figurait dans l'énumération, elle
 était autorisée par la contrainte de base de données, et elle était décrite dans le panneau. Or aucun
@@ -76,6 +86,14 @@ les tarifs de coût qui décident.
     d'autre ne correspond, en journalisant `No candidate in least-cost table … has a rate`.
   </Step>
 </Steps>
+
+Les tarifs de coût d'un fournisseur se trouvent sur son onglet **Cost rates** dans le panneau de
+contrôle : ce que le fournisseur vous facture, règle par règle, la première correspondance gagne.
+
+<Frame caption="L'onglet Cost rates d'un fournisseur : ce qu'il facture, règle par règle. Une table Cheapest vendor compare ces tarifs.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--cost-rates-light.webp" alt="L'onglet Cost rates d'un fournisseur : ce qu'il facture, règle par règle, que la table cheapest-vendor compare." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--cost-rates-dark.webp" alt="L'onglet Cost rates d'un fournisseur : ce qu'il facture, règle par règle, que la table cheapest-vendor compare." />
+</Frame>
 
 <Note>
 **Une ligne de tarif manquante dégrade plutôt qu'elle ne bloque.** Refuser de router un message non

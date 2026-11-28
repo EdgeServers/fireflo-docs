@@ -18,6 +18,14 @@ submit et final, donc les enregistrements sans résultat pour l'instant apparais
 `PENDING`. **L'exposition en cours reste visible** plutôt que d'être silencieusement exclue de vos
 chiffres.
 
+Dans le panneau de contrôle, ces enregistrements sont la page **Messages** : une ligne par message,
+filtrée par période, issue, compte, vendor, produit et plus encore.
+
+<Frame caption="La page Messages filtrée sur un compte. Billed est le côté client ; le coût du vendor est l'une des colonnes que vous pouvez ajouter.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records-light.webp" alt="La page Messages : une barre de filtres au-dessus des enregistrements d'appels, avec le montant facturé pour chaque message." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records-dark.webp" alt="La page Messages : une barre de filtres au-dessus des enregistrements d'appels, avec le montant facturé pour chaque message." />
+</Frame>
+
 ## Pourquoi les accusés de progression vivent dans leur propre table
 
 Un vendor peut envoyer plusieurs accusés pour un message : `ACCEPTD` lorsqu'il l'accepte, `BUFFRED`
@@ -59,6 +67,15 @@ segment là où vous pouvez facturer par message.
 | `margin`, `margin_pct` | Stockés, pour que le P&L somme une colonne |
 | `cost_currency`, `price_currency` | Par côté ; FireFlo ne convertit jamais |
 | `cost_rule_id`, `price_rule_id` | Quelle règle de tarif a correspondu, pour l'audit |
+
+Sur la page Messages, **Columns** les affiche ou les masque, regroupées en message, route, argent et
+issue. Le choix ne vaut que pour l'écran : un export CSV emporte chaque colonne de l'enregistrement
+quel que soit le choix, donc deux personnes qui exportent les mêmes filtres obtiennent le même fichier.
+
+<Frame caption="Le sélecteur de colonnes. Le groupe Money contient les deux côtés de l'échange : facturé, tarif au prix et unités facturées, coût, tarif de coût et unités de coût, et la marge.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--columns-light.webp" alt="La liste Messages avec son sélecteur de colonnes ouvert : des colonnes message, route, argent et issue à afficher ou masquer." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--columns-dark.webp" alt="La liste Messages avec son sélecteur de colonnes ouvert : des colonnes message, route, argent et issue à afficher ou masquer." />
+</Frame>
 
 <Warning>
 **L'argent inconnu est `NULL`, jamais `0`.** Un taux qui n'a pas pu être déterminé reste
@@ -115,6 +132,13 @@ celle qui a finalement réussi ou échoué de manière terminale. `vendor_attemp
 `submit_status` porte ce que le vendor a réellement répondu à chacune, et `NULL` à cet endroit
 signifie "non enregistré", pas "accepté". Voir
 [Tables d'enregistrement d'appels](/reference/data/cdr-tables) pour la forme exacte.
+
+Sur la page Messages, passez de **Per message** à **Every attempt** pour lister une ligne par essai.
+
+<Frame caption="Every attempt : une ligne pour chaque essai auprès d'un vendor, donc un message réessayé montre chaque tentative plutôt que la dernière seulement.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-records--attempts-light.webp" alt="La liste Messages basculée sur Every attempt : une ligne pour chaque essai, avec son entrée, son vendor, son montant et son issue." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-records--attempts-dark.webp" alt="La liste Messages basculée sur Every attempt : une ligne pour chaque essai, avec son entrée, son vendor, son montant et son issue." />
+</Frame>
 
 <Tip>
 La page par message du panneau de contrôle lit ces lignes, plus `cdr_interim` et `cdr_final`, comme

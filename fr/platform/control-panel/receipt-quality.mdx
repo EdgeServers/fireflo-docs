@@ -12,7 +12,22 @@ messages sur cinq peut y afficher 95 % alors que trois sur cinq de tout ce que v
 envoyé n'ont aucun résultat du tout. Le taux n'est pas faux. Il répond à une question plus
 étroite qu'il n'y paraît.
 
-Cette page élargit le dénominateur.
+Cette page élargit le dénominateur. C'est **Receipts** sous Reports, lue sur **1 heure**,
+**24 heures**, **7 jours** ou **30 jours** ; elle s'ouvre sur la dernière heure, puis ensuite sur la
+plage que vous avez choisie en dernier dans ce navigateur.
+
+## Les graphiques
+
+**How attempts ended, by vendor** répartit tout ce qui a été envoyé à chaque vendor en cinq parts qui
+font toujours la barre entière : livré, échoué, abandonné, encore ouvert, et refusé (une tentative que
+le vendor a refoulée ne reçoit jamais d'accusé). **Time to receipt** place la médiane de chaque vendor
+à côté de son 90e percentile. Les deux sont tirés des lignes de la table ci-dessous, donc ils sont
+toujours d'accord avec elle.
+
+<Frame caption="Receipts sur 7 jours. La barre d'un vendor est surtout verte, et son 90e percentile se situe bien à droite de sa médiane.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts-light.webp" alt="La page Receipts : une table des vendors avec leur taux de reporting et leurs temps d'accusé." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts-dark.webp" alt="La page Receipts : une table des vendors avec leur taux de reporting et leurs temps d'accusé." />
+</Frame>
 
 ## La table
 
@@ -34,6 +49,11 @@ au-dessus, neutre à partir de 70 %, rouge en-dessous. Un vendor sous 70 % vous 
 propre vue de ce qui est arrivé à du trafic que vous avez déjà payé.
 
 Un vendor sans nom enregistré apparaît comme **no vendor**.
+
+Sur une longue plage, les temps et les accusés de progression sont lus sur un **échantillon** des
+messages, et une ligne sous la table dit combien sur combien. L'échantillon est fait des mêmes messages
+à chaque chargement, et les comptes de progression sont extrapolés à partir de lui. Sent, reported,
+gave up on, still open et delivered sont toujours exacts.
 
 ## Les quatre choses qu'il vaut la peine de lire deux fois
 
@@ -68,9 +88,16 @@ pas commencé à ne pas livrer. Il a commencé à ne pas *vous le dire*, et les 
 indistinguables depuis la seule page Vendors. Le trafic sort toujours, les clients sont toujours
 débités, et vos preuves cessent silencieusement de s'accumuler.
 
-Les mêmes chiffres apparaissent sous forme de ligne compacte sur la propre carte de chaque
-vendor, étiquetés **Reports outcomes**, **Median to outcome**, **90th percentile** et **Never
-reported**.
+Les mêmes chiffres apparaissent pour un vendor sur sa propre page, dans l'onglet **Traffic** sous
+**Delivery receipts** : **Reports outcomes**, **Sent**, **Reported**, **Still open**, **Median to first
+sign**, **Median to outcome**, **90th percentile** et **Never reported**. **Median to first sign** est
+le temps jusqu'au premier signe de vie du vendor ; mis à côté de **Median to outcome**, il distingue
+un vendor qui accuse réception tout de suite et règle tard d'un vendor qui ne dit rien jusqu'à la fin.
+
+<Frame caption="L'onglet Traffic d'un vendor sur 24 heures. Delivery receipts donne son taux de reporting avec les comptes dont il est le rapport.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-receipts--vendor-traffic-light.webp" alt="L'onglet Traffic d'un vendor sur 24 heures : messages, livraison, coût, et ses chiffres d'accusés — rapportés, encore ouverts et le temps médian jusqu'à un résultat." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-receipts--vendor-traffic-dark.webp" alt="L'onglet Traffic d'un vendor sur 24 heures : messages, livraison, coût, et ses chiffres d'accusés — rapportés, encore ouverts et le temps médian jusqu'à un résultat." />
+</Frame>
 
 ## Ce dont elle a besoin pour dire quoi que ce soit
 

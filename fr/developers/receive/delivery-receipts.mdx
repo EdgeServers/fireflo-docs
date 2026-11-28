@@ -40,6 +40,11 @@ Un `POST` avec `Content-Type: application/json` :
 `id` est le `messageId` renvoyé par votre envoi. **C'est ainsi que vous corrélez** — il n'y a rien
 d'autre.
 
+<Frame caption="Les accusés de livraison dans la référence de l'API REST de votre portail client : comment les demander, dlr_level, et chaque champ que porte un accusé — à commencer par l'id renvoyé par votre envoi.">
+  <img className="block dark:hidden" src="/images/developers/receive/apis-receipts--receipt-docs-light.webp" alt="La partie Delivery receipts de la référence de l'API REST du portail : dlr, dlr_url et dlr_level expliqués, et un tableau des champs d'un accusé, de id et stat jusqu'à system_id et parts" />
+  <img className="hidden dark:block" src="/images/developers/receive/apis-receipts--receipt-docs-dark.webp" alt="La partie Delivery receipts de la référence de l'API REST du portail : dlr, dlr_url et dlr_level expliqués, et un tableau des champs d'un accusé, de id et stat jusqu'à system_id et parts" />
+</Frame>
+
 Les noms de champs suivent ceux de Jasmin, donc un récepteur écrit pour Jasmin lit ceci sans
 changement. Les champs à null sont omis plutôt qu'envoyés comme null, donc un accusé pour un
 message qui n'a jamais atteint un vendor n'arrive pas rempli de clés vides.

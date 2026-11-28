@@ -84,30 +84,60 @@ Donc la profondeur est rapportée et le dump le dit. **Un broker qui ne répond 
 ## Nettoyer une file : archiver, puis terminer
 
 <Warning>
-**Suspendez ou retenez d'abord.** Si vous avez seulement besoin que le trafic s'arrête, suspendez le
-vendeur ou retenez le listener : rien n'est perdu. Ne nettoyez une file que pour des messages qui ne
-partiront jamais.
+**Stop sending ou Hold d'abord.** Si vous avez besoin que le trafic s'arrête, suspendez le vendor ou
+retenez le listener ([Contrôle des workers](/platform/operations/worker-control)) : rien n'est perdu,
+et la reprise continue là où elle s'était arrêtée. Ne nettoyez une file que pour des messages qui ne
+partiront jamais : un vendor qui n'existe plus, une réserve de routage que personne ne corrigera, des
+accusés pour un login qui ne se bindera plus jamais.
 </Warning>
 
-Depuis 0.12.19 une file peut être nettoyée, en ligne de commande ou depuis le panneau ; les deux
-utilisent le même endpoint de la passerelle avec le jeton admin :
+À partir de 0.12.19, une file peut être nettoyée, en ligne de commande ou depuis le panneau de
+contrôle ; les deux appellent le même endpoint du gateway, avec le token admin :
 
 ```bash
-./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held
+./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held   # dry run: counts, refund total, sample
 FIREFLO_QUEUE_ARCHIVE=true ./scripts/fireflo queue archive worker --worker smppclient.vendor1 --sub held \
       --note "vendor withdrawn" --yes
 ```
 
-Chaque message est retiré de la file de façon atomique, **archivé** dans une transaction validée (si
-l'archive échoue, tout est remis en file) puis **terminé** : remboursé s'il a été facturé, un accusé
-d'échec s'il a été demandé, et enregistré `REJECTED` avec le motif `operatorPurge`. Les accusés et les
-nouvelles tentatives de webhook ne portent pas d'argent : ils sont archivés et supprimés. **Rien
-d'archivé ne peut être remis.** Une file sur le broker ne peut pas être nettoyée (`broker-backed`).
+Ce qui arrive à chaque message correspondant, dans cet ordre :
+
+1. **Retiré de la file** — de façon atomique : un message est pris par la session du vendor ou par le
+   nettoyage, jamais les deux. Le gateway continue de tourner ; rien n'a besoin d'être suspendu
+   d'abord.
+2. **Archivé**, dans une seule transaction de base de données validée, avec qui l'a fait, pourquoi
+   (la note) et le lot auquel il appartient. Si l'archive ne peut pas être écrite, chaque message est
+   remis en file et la commande répond qu'elle n'a pas pu — rien n'est perdu.
+3. **Terminé**, exactement comme un message que le gateway abandonne lui-même : **remboursé** s'il a
+   été facturé, un **accusé d'échec** envoyé là où le client en a demandé un, et enregistré comme
+   `REJECTED` avec le motif `operatorPurge` — ce que montrent la chronologie du message et la page
+   Refused.
+
+Les accusés qui attendent un login et les retries de callback webhook ne portent pas d'argent : ils
+sont archivés et supprimés. **Rien d'archivé ne peut être remis** — nettoyer termine un message, cela
+ne le met pas de côté.
+
+| Store | Contient | Sous-stores |
+| :--- | :--- | :--- |
+| `worker` | Les files d'un vendor ou d'un listener | `pending`, `retry`, `held` (pendant l'arrêt), `parked` (l'entrant d'un listener pendant l'arrêt) |
+| `routing` | Les files à l'échelle du gateway avant qu'un vendor soit choisi | `router`, `retry`, `failed` (réserve des échecs de routage) |
+| `receipts` | Les accusés qui attendent qu'un login SMPP se binde | par login ou compte |
+| `callbacks` | Les callbacks webhook qui attendent d'être réessayés | par compte |
+
+Un nettoyage d'un store worker ou routing sans vendor, listener, compte ni login nommé est refusé à
+moins que vous ne disiez `--all`. Chaque appel archive au plus 10 000 messages ; la commande et le
+panneau travaillent par lots jusqu'à ce que plus rien ne corresponde.
 
 <Note>
-Traduction en attente : le détail complet est
-[en anglais](/platform/operations/queues#cleaning-a-queue-archive-then-end).
+**Une file tenue sur le broker de messages ne peut pas être nettoyée.** AMQP ne peut pas lire un
+message sans le prendre, et un nettoyage doit voir un message pour l'archiver — donc une file sur le
+broker est refusée avec `broker-backed`, et l'outillage propre au broker est le moyen de s'en occuper.
 </Note>
+
+L'archive se lit dans **Reports → Archives → Queue housekeeping** dans le panneau, ou avec
+`fireflo queue archived` et `fireflo queue archive summary` ; elle est conservée en partitions
+mensuelles à côté d'un résumé par jour qui n'est jamais supprimé. Voir
+[la référence des commandes](/reference/cli/fireflo#queues).
 
 ## Accès
 

@@ -109,10 +109,10 @@ Vérifiez si le compte a une ligne `account_balance`. Un compte sans ligne n'est
 Un `RECHARGE` écrit pour un compte sans ligne ne crédite rien. Il reste en attente, journalise un WARN nommant le compte, et s'applique au moment où la ligne apparaît. Créer un login ne crée pas de solde ; *Open for credit* sur la page du compte le fait.
 </Accordion>
 
-<Accordion title="J'ai retiré un compte de la liste et son trafic a continué">
-Le gateway ne lit jamais le catalogue de comptes. `enabled` sur `app_account` décide si ce panel liste le compte et rien d'autre. Ses logins continuent de se connecter, son trafic continue d'envoyer et ses règles de tarification continuent de tarifer.
+<Accordion title="J'ai désactivé un compte et un bind est toujours en place">
+Désactiver un compte (**Enabled**, sous Settings → Advanced) fait cesser au gateway de servir ses logins en un sondage de configuration, 30 secondes par défaut, et ferme sa connexion au portail. Les binds déjà ouverts restent en place jusqu'à ce qu'ils tombent.
 
-C'est l'opposé de ce que `enabled` signifie sur un vendeur ou un produit. Pour arrêter le trafic, désactivez les **logins** ; pour arrêter la dépense, utilisez le solde.
+Pour retirer le compte définitivement, archivez-le plutôt : l'archivage coupe aussi ses binds vivants. Voir [Comptes](/platform/customers/accounts#ce-que-contient-réellement-la-ligne-du-catalogue).
 </Accordion>
 
 </AccordionGroup>

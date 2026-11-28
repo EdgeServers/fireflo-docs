@@ -12,13 +12,28 @@ Les filtres s'appliquent quand vous appuyez sur **Search**, pas à la frappe, et
 la barre d'adresse — donc une vue filtrée peut être marquée ou collée à un collègue et il verra
 ce que vous avez vu.
 
-La ligne toujours visible : **Period**, **Outcome**, **To number** (correspond depuis le début),
-**Message id** (exact), et **Message text** (contient). **More filters** ajoute compte, nom de
-bind, vendor, product, ingress, et from-number.
+La ligne toujours visible : **Period** (un préréglage, ou une plage de dates), **Outcome**, et
+**Find**, un seul champ qui prend un numéro de destination (correspondance depuis le début) ou un
+message id (exact) et les distingue tout seul. **Filters** ouvre le reste en trois groupes, et son
+badge compte combien d'entre eux sont définis :
 
-À partir de 0.17.0, il propose aussi **Tag** : les messages des comptes qui portent eux-mêmes
-cette [étiquette de compte](/platform/routing/account-tags) maintenant. Un message n'enregistre pas les
+| Groupe | Filtres |
+| :--- | :--- |
+| **Route** | Ingress server, Vendor, Came in via |
+| **Sender** | Account, Tag, Bind name (system id), Product |
+| **Message** | From number (starts with), Message text (contains) |
+
+**Tag** (à partir de 0.17.0) trouve les messages des comptes qui portent eux-mêmes cette
+[étiquette de compte](/platform/routing/account-tags) maintenant. Un message n'enregistre pas les
 étiquettes de son compte, et le filtre demande une période autre que tout l'historique.
+
+Chaque filtre appliqué s'affiche comme une puce sous la barre ; retirez-en un avec sa croix, ou tous
+avec **Clear all**.
+
+<Frame caption="Les messages d'un compte sur 7 jours, avec Filters ouvert. La puce du compte sous la barre est le filtre appliqué.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages-light.webp" alt="La page Messages : la barre de filtres et un tableau de messages avec leurs résultats." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages-dark.webp" alt="La page Messages : la barre de filtres et un tableau de messages avec leurs résultats." />
+</Frame>
 
 **Awaiting a receipt** est listé en premier parmi les résultats plutôt qu'alphabétiquement. Sur un
 gateway actif en bonne santé, c'est le plus grand groupe, et c'est ce que les gens cherchent
@@ -33,12 +48,13 @@ pas conservé plutôt que rien n'a correspondu. Voir `smsg.cdr.body` dans
 
 ### Une ligne par message, ou une par tentative
 
-Le contrôle **Rows** décide de la granularité, et cela change ce que les nombres signifient :
+Le sélecteur **Per message** / **Every attempt** à côté des filtres décide de la granularité, et cela
+change ce que les nombres signifient :
 
 | Réglage | Une ligne est |
 | :--- | :--- |
-| **One row per message** *(défaut)* | Ce que le client a envoyé |
-| **Every attempt and segment** | Ce que le gateway a fait — y compris retentatives et segments de message long |
+| **Per message** *(défaut)* | Ce que le client a envoyé |
+| **Every attempt** | Ce que le gateway a fait — une ligne par tentative chez un vendor, y compris retentatives et segments de message long |
 
 Un message long qui s'est découpé en trois, retenté deux fois chez le vendor, est une ligne sur
 le premier réglage et plusieurs sur le second. Si un compte semble trop élevé, vérifiez ce
@@ -46,7 +62,7 @@ contrôle avant de conclure quoi que ce soit.
 
 ## Colonnes
 
-Sept par défaut : submitted, to, from, account, vendor, billed, outcome. Le sélecteur regroupe
+Huit par défaut : submitted, to, from, account, ingress server, vendor, billed, outcome. Le sélecteur regroupe
 environ trente autres sous **Message**, **Route**, **Money** et **Outcome** — y compris coût,
 marge, les deux règles de tarif, état d'accusé et code d'erreur.
 
@@ -94,6 +110,15 @@ expliquent des résultats qui autrement ressemblent à des défauts :
 Chaque accusé montre le mnémonique SMPP avec sa signification en anglais simple, puis la partie
 dont les gens ont besoin : s'il a **clos le message**, était **un résultat ultérieur, pas celui
 qui a été facturé**, ou était **un progrès** qui a laissé le message ouvert.
+
+<Frame caption="Les accusés d'un message long. La ligne au-dessus du tableau dit ce que le client a demandé ; Sent on dit si chaque accusé lui a été transmis.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages--receipts-light.webp" alt="La page d'un message long à ses accusés : l'échange client, puis chaque accusé revenu avec son état et l'id propre au vendor." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages--receipts-dark.webp" alt="La page d'un message long à ses accusés : l'échange client, puis chaque accusé revenu avec son état et l'id propre au vendor." />
+</Frame>
+
+Sous l'erreur, le code propre à l'opérateur est affiché, marqué **mapped** là où vos codes d'erreur
+l'ont traduit. **Sent on** affiche **Held — not asked for** quand le client n'a pas demandé d'accusés,
+de sorte que rien ne lui a été envoyé.
 
 Là où le gateway a enregistré ce que le client a demandé, cela est affiché à côté. Là où il ne
 l'a pas fait, la page le dit explicitement — ce n'est pas la même chose que le client ne

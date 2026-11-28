@@ -16,6 +16,11 @@ Ou directement l'en-tête, si votre client ne le construit pas pour vous :
 Authorization: Basic <base64 of login:password>
 ```
 
+<Frame caption="La partie Authentication de la référence de l'API REST dans votre portail client : votre URL de base et votre login, et l'en-tête Authorization déjà construit pour ce login.">
+  <img className="block dark:hidden" src="/images/developers/api/apis-rest-light.webp" alt="La référence de l'API REST du portail à Authentication : URL de base et login, une note indiquant que seuls les logins HTTP peuvent utiliser l'API, l'en-tête Authorization rempli et une commande pour renouveler un identifiant" />
+  <img className="hidden dark:block" src="/images/developers/api/apis-rest-dark.webp" alt="La référence de l'API REST du portail à Authentication : URL de base et login, une note indiquant que seuls les logins HTTP peuvent utiliser l'API, l'en-tête Authorization rempli et une commande pour renouveler un identifiant" />
+</Frame>
+
 ## Les identifiants vont dans l'en-tête, nulle part ailleurs
 
 `username` et `password` en tant que champs du corps ne sont **pas ignorés**. Ils reviennent en

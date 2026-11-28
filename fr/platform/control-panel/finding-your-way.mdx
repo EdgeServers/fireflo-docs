@@ -1,6 +1,6 @@
 ---
 title: "Se repérer"
-description: "Une carte de la barre latérale opérateur, à quoi sert chaque groupe, et les six écrans qui n'ont aucune entrée de menu."
+description: "Une carte de la barre latérale opérateur, à quoi sert chaque groupe, et les écrans qui n'ont aucune entrée de menu."
 ---
 
 Le panneau de contrôle est la moitié opérateur de FireFlo. Vos clients ne le voient jamais — ils
@@ -17,8 +17,8 @@ entièrement éteint. Ce que le panneau vous donne est un moyen de changer cette
 <AccordionGroup>
 
 <Accordion title="Overview — le premier écran">
-Trafic, livraison et échecs sur tout le gateway, sur 24 heures, 7 jours ou 30 jours. Commencez ici
-lors d'un incident ; c'est le seul écran qui répond à « quelque chose ne va-t-il pas » sans que
+Trafic, livraison et échecs sur tout le gateway, sur 1 heure, 24 heures, 7 jours ou 30 jours.
+Commencez ici lors d'un incident ; c'est le seul écran qui répond à « quelque chose ne va-t-il pas » sans que
 vous ayez à nommer la chose que vous soupçonnez.
 
 Voir [le tableau de bord](/platform/control-panel/dashboard).
@@ -32,16 +32,20 @@ Voir [le tableau de bord](/platform/control-panel/dashboard).
 | **Servers** | Listeners entrants — comment les clients se connectent à vous |
 | **Accounts** | Vos clients, et tout ce qui y est rattaché |
 | **Pricing** | Tarifs, à la fois ce que vous facturez et ce qui vous est facturé |
-| **Diagnostics** | Logs et configuration lus depuis la machine du gateway |
+| **Logs** | Logs et configuration lus depuis la machine du gateway — voir [Diagnostics](/platform/control-panel/diagnostics) |
 
 **Vendor** et **server** sont les deux moitiés de la même idée, et les confondre est l'erreur
 initiale la plus courante — voir [connexions](/platform/connections/vendors).
 </Accordion>
 
 <Accordion title="Configuration — règles que le gateway applique">
-**Filters** sont des conditions réutilisables sur lesquelles les règles de routage et les tarifs
-s'appuient. **TLVs** est le catalogue des paramètres optionnels SMPP, y compris ceux que vos
-clients ont proposés et que vous n'avez pas encore approuvés.
+**Gateway** contient les paramètres dont hérite chaque vendor et chaque listener, sauf s'il définit
+les siens. **Error codes** fait correspondre les codes d'accusé de chaque vendor à ceux que reçoivent
+vos clients. **Filters** sont des conditions réutilisables sur lesquelles les règles de routage et les
+tarifs s'appuient ; **Tags** sont ce qu'un filtre, une règle de routage ou un prix peut tester sur un
+compte ; **Preprocessors** sont des programmes auxquels une règle de routage peut confier des messages.
+**TLVs** est le catalogue des paramètres optionnels SMPP, y compris ceux que vos clients ont proposés
+et que vous n'avez pas encore approuvés.
 </Accordion>
 
 <Accordion title="Assets — ce que les clients peuvent envoyer">
@@ -54,8 +58,10 @@ appliqués que là où vous avez activé l'application.
 | Entrée de menu | Répond |
 | :--- | :--- |
 | **Refused** | Ce qui a été refoulé avant de devenir du trafic |
+| **Access log** | Qui s'est connecté au portail ou au panneau, qui a été refusé, et ce qu'ils ont modifié |
+| **Security** | Binds et connexions refusés par adresse, qui est bloqué, et Force disconnect |
 | **Queues** | Ce qui attend en ce moment, et nettoyer ce qui ne partira jamais |
-| **Archives** | Ce qu'un nettoyage de files a archivé, et chaque exécution |
+| **Archives** | Où vivent les enregistrements d'appels, et ce qu'un nettoyage de files a archivé, avec chaque exécution |
 | **Receipts** | À quel point chaque vendor rapporte bien les résultats |
 | **Usage** | Volume et livraison, par compte |
 | **Revenue** | Facturé, coût et marge |
@@ -65,15 +71,17 @@ appliqués que là où vous avez activé l'application.
 
 ## Les écrans sans entrée de menu
 
-Six écrans existent que la barre latérale ne liste jamais. Ils sont atteints depuis d'autres
+Huit écrans existent que la barre latérale ne liste jamais. Ils sont atteints depuis d'autres
 écrans, ce qui va bien une fois que vous savez et est déroutant jusqu'à ce que vous sachiez.
 
 | Écran | Atteint depuis | Ce que c'est |
 | :--- | :--- | :--- |
-| **Live health** | L'icône cœur dans l'en-tête | Binds, profondeur de file et accusés en vol, maintenant |
+| **Live health** | La pastille de santé dans l'en-tête : un point, un mot comme **Healthy**, et le débit sortant | Binds, profondeur de file et accusés en vol, maintenant |
+| **Connectivity** | **Connectivity**, à côté de la pastille de santé | Une carte en direct de qui est connecté, par quel port, vers quel vendor |
+| **Kafka** | **Open Kafka topics** sur la carte Kafka backbone de la page Queues | Chaque topic du broker, son groupe de consommateurs, son lag et sa rétention |
 | **Runtime** | « Runtime detail » sur le ruban santé de l'Overview | Mémoire, processeur et capacité de connexions |
 | **Routing** | L'écran Vendors | Tables de routage, règles et groupes de vendors |
-| **Products** | L'écran Servers | Le catalogue de products, et les tarifs par-product |
+| **Products** | L'écran Servers | Le catalogue de products : chaque product, un résumé de ses tarifs, et les logins qui le sélectionnent. Ses prix s'ouvrent sur **Pricing**, restreint à ce product |
 | **Message detail** | Toute ligne sur Messages | Un message de bout en bout, y compris ses TLV |
 | **Sign-in** | Se déconnecter, ou une session expirée | Le formulaire de connexion opérateur |
 
@@ -116,10 +124,11 @@ de l'utiliser.
   <img src="/images/platform/control-panel/operator-sign-in.png" alt="The FireFlo operator sign-in card with username and password fields" />
 </Frame>
 
-La connexion opérateur est un nom d'utilisateur et un mot de passe détenus dans la configuration
-propre au panneau — il n'y a pas de table utilisateur, et pas de moyen d'ajouter un second
-opérateur depuis l'intérieur du panneau. Voir
-[la configuration du panneau de contrôle](/reference/config/control-panel).
+Les opérateurs et les admins sont des utilisateurs détenus dans la base de données du gateway ; un
+admin les ajoute et les réinitialise depuis la page **Users**, et le premier est créé sur le gateway
+avec `fireflo user add`. Voir [Installer le panneau de contrôle](/platform/install/control-panel).
 
 Les sessions sont par navigateur. Se connecter sur un ordinateur portable ne vous connecte pas
-sur un téléphone, et se déconnecter met fin seulement à la session que vous utilisez.
+sur un téléphone, et se déconnecter met fin seulement à la session que vous utilisez. Changer votre
+mot de passe est l'exception, à partir de 0.12.15 : le navigateur dans lequel vous l'avez changé reste
+connecté et tous les autres sont déconnectés à leur prochaine requête.

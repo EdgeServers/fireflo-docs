@@ -104,6 +104,19 @@ correspondance gagne :
 Le devis, le testeur et la page de tarif d'un compte disent lequel des trois l'a tarifé. Les étiquettes
 demandent la configuration en base de données. Voir [Étiquettes de compte](/platform/routing/account-tags).
 
+<Frame caption="L'onglet Tariff d'un compte. Which price applies liste les trois niveaux dans l'ordre où ils sont essayés, et indique lesquels contiennent des prix pour ce compte.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--price-order-light.webp" alt="L'onglet Tariff d'un compte : quel prix s'applique, de ses propres prix à ceux de ses étiquettes puis au défaut, et son tarif personnalisé par destination." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--price-order-dark.webp" alt="L'onglet Tariff d'un compte : quel prix s'applique, de ses propres prix à ceux de ses étiquettes puis au défaut, et son tarif personnalisé par destination." />
+</Frame>
+
+## Quand un changement prend effet
+
+Un prix enregistré est pris en compte en moins de trente secondes, et s'applique aux messages soumis à
+partir de ce moment — un message déjà enregistré garde le prix qui lui a été donné. **Apply now** sur la
+page Pricing, et sous un scope que vous venez d'enregistrer, fait lire le changement au gateway
+immédiatement ; sur un gateway dont la licence n'est pas à jour, il indique à la place que les
+changements sont gelés.
+
 ## Inconnu n'est pas zéro
 
 **Une règle qui ne correspond à rien laisse le montant inconnu, jamais zéro.** Zéro est un vrai

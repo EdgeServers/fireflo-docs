@@ -1,33 +1,34 @@
 ---
 title: "Donner un accès au portail à un client"
-description: "Deux paramètres sur le compte, une exigence de déploiement, et la raison pour laquelle le panel ne confirmera jamais que l'adresse d'un client a été reconnue."
+description: "L'e-mail du compte et ses logins du portail, une exigence de déploiement, et la raison pour laquelle le panel ne confirmera jamais que l'adresse d'un client a été reconnue."
 ---
 
-Les clients accèdent au portail en saisissant leur adresse e-mail et en suivant un lien à usage unique. Il n'y a pas de mot de passe à émettre, pas d'invitation à envoyer, et rien à révoquer sauf les deux paramètres ci-dessous.
+Les clients se connectent au portail avec un **login du portail** : une adresse e-mail qui se connecte par un lien à usage unique envoyé par e-mail, ou avec un mot de passe une fois qu'un mot de passe est défini. Les logins du portail d'un compte se trouvent sur son onglet **Settings**, dans la carte **Portal access**.
 
 ## Ce qu'un opérateur définit
 
-Ouvrez le compte, allez dans **Settings**, et définissez deux choses sur la carte **Organisation**.
-
 <Steps>
 <Step title="Définir l'adresse e-mail">
-Le champ **Email** sur le compte. Un compte par adresse, en ignorant la casse. Un second compte revendiquant la même adresse est refusé plutôt que de masquer silencieusement le premier.
+Le champ **Email** sur la carte **Organisation**. Un compte par adresse, en ignorant la casse. Un second compte revendiquant la même adresse est refusé plutôt que de masquer silencieusement le premier.
 
-Une adresse mal formée est refusée à la saisie, donc une adresse enregistrée est une adresse que le portail peut faire correspondre.
+Une adresse mal formée est refusée à la saisie, donc une adresse enregistrée est une adresse que le portail peut faire correspondre. L'enregistrer donne au compte un login du portail pour cette adresse. Si ce login manque, la carte Portal access propose **Create a login for** l'adresse.
 </Step>
 
-<Step title="Laisser le compte listé">
-La case **Listed**, sous **Advanced**. Un lien de connexion n'est émis que pour un compte à la fois correspondant à l'adresse **et** activé.
+<Step title="Choisir comment il se connecte">
+Chaque login de la carte Portal access indique comment il se connecte : **Emailed link only**, ou **Password, or emailed link**. **Set password** ou **Change password** en définit un ; **Remove password** revient aux liens seuls. Sans mot de passe, le client se connecte par lien envoyé par e-mail et peut définir un mot de passe depuis le portail.
+</Step>
+
+<Step title="Laisser le compte activé">
+L'interrupteur **Enabled**, sous **Advanced**. Personne ne peut se connecter au portail pour un compte désactivé ou archivé.
 </Step>
 </Steps>
 
-<Warning>
-**Retirer un compte de la liste désactive son accès au portail, et la case ne le dit pas.**
+<Frame caption="L'onglet Settings d'un compte. Le login du portail est à droite, avec la façon dont il se connecte et la dernière fois qu'il l'a fait.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="Les Settings d'un compte : nom, e-mail, notes et étiquettes, et sa connexion au portail." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="Les Settings d'un compte : nom, e-mail, notes et étiquettes, et sa connexion au portail." />
+</Frame>
 
-Sa propre description parle des listes du panel et note correctement que le trafic continue de couler dans les deux cas. Retirer de la liste n'arrête rien de ce que fait le gateway. Mais cela *arrête bien* le portail d'émettre un lien de connexion, ce qui en fait la chose la plus proche d'un interrupteur portail on/off que le compte a. Ce comportement est l'actuel ; le libellé à côté de la case n'a pas suivi.
-
-Pour arrêter le trafic, désactivez les logins. Pour arrêter la dépense, utilisez le solde. Pour arrêter l'accès au portail, retirez de la liste.
-</Warning>
+Pour empêcher une personne de se connecter, pressez **Turn off** sur son login ; **Turn on** la laisse revenir. Désactiver tout le compte arrête aussi son trafic — voir [Comptes](/platform/customers/accounts#ce-que-contient-réellement-la-ligne-du-catalogue).
 
 ## Ce dont le déploiement a besoin
 
@@ -50,5 +51,10 @@ Les liens fonctionnent une fois et expirent après quinze minutes. Un lien utili
 ## Ce que l'accès au portail n'est pas
 
 **L'onglet Logins n'est pas l'accès au portail.** Il contient les identifiants SMPP et HTTP, qui sont la façon dont le *logiciel* d'un client se connecte. Rien dedans n'accorde ni ne révoque la connexion d'une personne. Un compte peut avoir une douzaine de logins et aucun accès au portail, ou un accès au portail et aucun login du tout.
+
+<Frame caption="L'onglet Logins : les logins SMPP et HTTP qui facturent au compte, si chacun est connecté, et ses sessions vivantes. Aucun d'eux n'est une connexion au portail.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins-light.webp" alt="L'onglet Logins d'un compte : chaque login avec son type, son état de connexion et ses actions." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins-dark.webp" alt="L'onglet Logins d'un compte : chaque login avec son type, son état de connexion et ses actions." />
+</Frame>
 
 Une fois entré, un client voit son propre trafic, son relevé, ses sender IDs, ses templates et son API playground. Et jamais votre coût, votre marge ou quel vendeur a porté quoi. Ce qu'il peut y faire est décrit pour lui sous [le portail](/developers/portal/signing-in).

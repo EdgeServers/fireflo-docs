@@ -47,6 +47,13 @@ Une règle dont la cible nomme une autre table s'enchaîne vers elle, donc `defa
 
 Une table atteinte deux fois par des chemins différents n'est pas un cycle : `default → a → c` en parallèle de `default → b → c` se charge normalement.
 
+Dans le panneau de contrôle, **Start here** sur la page Routing dessine le trajet d'un message depuis `default` à travers les tables, et vérifie les règles de routage par défaut : une par listener pour ses accusés, et une par type de message sortant dans la table d'entrée.
+
+<Frame caption="Start here : chaque message commence à default et suit les règles qui l'envoient dans une autre table. En dessous, les règles dont la passerelle a besoin pour fonctionner tout court.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost-light.webp" alt="Le Start here de la page Routing : comment un message va de default vers MESSAGE, et les règles de routage par défaut vérifiées par rapport aux tables." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost-dark.webp" alt="Le Start here de la page Routing : comment un message va de default vers MESSAGE, et les règles de routage par défaut vérifiées par rapport aux tables." />
+</Frame>
+
 ## Les deux choses qui se chargent puis dysfonctionnent en silence
 
 Les deux apparaissent sur `/ops/health` sous `routing_warnings`, et chacune est consignée une seule fois lors de sa première apparition, plutôt qu'à chaque publication.

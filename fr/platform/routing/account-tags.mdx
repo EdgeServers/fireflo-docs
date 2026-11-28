@@ -73,8 +73,13 @@ défaut.
 
 ## Filtrer les listes et les rapports par étiquette
 
-La liste des comptes a une colonne **Tags** et un filtre par étiquette. **Usage** et **Messages** ont un
-filtre **Tag**.
+La liste des comptes a une colonne **Tags** (activez-la sous **Columns**) et un filtre par étiquette.
+**Usage** et **Messages** ont un filtre **Tag**.
+
+<Frame caption="La liste Accounts filtrée sur les comptes qui portent l'étiquette priority.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--by-tag-light.webp" alt="La liste Accounts filtrée sur les comptes qui portent l'étiquette priority." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--by-tag-dark.webp" alt="La liste Accounts filtrée sur les comptes qui portent l'étiquette priority." />
+</Frame>
 
 <Note>
 **Le filtre lit les étiquettes que les comptes ont maintenant.** Un message n'enregistre pas les
@@ -113,6 +118,15 @@ des étiquettes compris.
 - **Une étiquette désactivée ne correspond à rien et ne tarife rien**, mais reste sur ses comptes. Une
   fois rallumée, elle s'applique de nouveau.
 - Supprimer une étiquette que rien ne nomme la retire de tous les comptes.
+
+**Add a tag** demande le nom, un libellé et une description optionnels, et une couleur. Une nouvelle
+étiquette est activée, et va à la fin de l'ordre. La couleur et la description ne servent qu'aux
+personnes ; le routage et les prix ne les lisent pas.
+
+<Frame caption="Add a tag : le nom est figé une fois ajouté, parce que les règles et les prix le nomment.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--add-tag-light.webp" alt="La boîte de dialogue Add a tag : son nom, son libellé, sa description et sa couleur." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--add-tag-dark.webp" alt="La boîte de dialogue Add a tag : son nom, son libellé, sa description et sa couleur." />
+</Frame>
 
 Les étiquettes se posent sur un compte dans son onglet **Settings**. Un compte à unités y affiche les
 étiquettes de son parent, en lecture seule.

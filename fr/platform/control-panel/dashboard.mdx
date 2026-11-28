@@ -9,9 +9,80 @@ mémoire et les connexions pour continuer à fonctionner est une question diffé
 [Runtime](/platform/control-panel/runtime-metrics), et les deux sont séparées parce qu'un opérateur
 scrutant un problème de livraison ne veut pas lire sur la taille du tas.
 
-Tout sur la page obéit à un contrôle de plage — **24 heures**, **7 jours** ou **30 jours**, par
-défaut 24 heures. Les chiffres se rafraîchissent toutes les soixante secondes, et cessent de se
-rafraîchir pendant que l'onglet du navigateur est en arrière-plan.
+Tout sur la page obéit à un contrôle de plage — **1 heure**, **24 heures**, **7 jours** ou
+**30 jours**. La page s'ouvre sur la dernière heure, puis ensuite sur la plage que vous avez choisie
+en dernier dans ce navigateur. Elle demande des chiffres frais toutes les trente secondes, et cesse
+de demander pendant que l'onglet du navigateur est en arrière-plan.
+
+<Frame caption="L'Overview sur 7 jours. Un avertissement vendor se place au-dessus des chiffres seulement tant que quelque chose ne va pas ; la fin ombrée du graphique est encore en train de se stabiliser.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-dashboard-light.webp" alt="L'Overview : quatre cartes de chiffres, un graphique de trafic et la répartition des raisons d'échec des messages." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-dashboard-dark.webp" alt="L'Overview : quatre cartes de chiffres, un graphique de trafic et la répartition des raisons d'échec des messages." />
+</Frame>
+
+**Vendor backlogs** apparaît au-dessus des chiffres quand un vendor a dépassé sa limite de backlog,
+n'a pas eu de bind depuis plus longtemps que son délai de grâce, ou a un message en attente arrivé à
+mi-chemin de la rétention de son topic. Chaque ligne indique où va le trafic de ce vendor à la place,
+ou que les submits sans autre route sont refusés. Sur une plateforme en bonne santé, la carte n'est
+pas là du tout.
+
+## Quand les chiffres ont été lus
+
+À partir de 0.12.16, les chiffres sont un **instantané que le panneau construit en arrière-plan**, pas
+une requête lancée pour votre onglet. Une ligne au-dessus des chiffres dit quand : **as of 10:42:17
+UTC** signifie que le panneau a lu la base de données pour la dernière fois à cette seconde, dans le
+fuseau horaire choisi dans l'en-tête. À côté, **from the database** ou **live from the gateway** dit
+d'où les chiffres ont été lus. Ouvrez la page dans trois onglets, ou laissez trois opérateurs
+l'ouvrir, et la base fait le même travail que pour un seul.
+
+L'instantané est reconstruit une fois par minute. L'essentiel de la reconstruction d'une minute est
+léger : les trois dernières heures et l'heure courante sont relues, ainsi qu'aujourd'hui ; tout ce
+qui est plus ancien est conservé depuis une reconstruction complète, qui a lieu toutes les quinze
+minutes. La répartition des échecs est relue toutes les cinq minutes. Un message soumis à l'instant
+apparaît donc en moins d'une minute, et un accusé qui change l'issue d'un message d'il y a six heures
+est pris en compte en moins d'un quart d'heure. Sur un gateway qui tient le résumé d'usage horaire
+(0.12.16, voir plus bas), toute la vue 24 heures est relue chaque minute, parce que là c'est peu
+coûteux.
+
+Deux mots peuvent apparaître à côté de l'heure :
+
+- **stale** — la dernière lecture de la section nommée a échoué (la base était injoignable, ou une
+  requête a expiré) et ce que vous voyez est la lecture d'avant. L'heure continue d'avancer, parce
+  qu'elle indique quand le panneau a *essayé* pour la dernière fois. Un badge stale qui persiste est
+  un problème de base de données, pas de trafic.
+- **Settling** — dans la légende du graphique de trafic, avec la partie la plus récente du graphique
+  ombrée. Les messages des heures ou jours ombrés peuvent encore recevoir un accusé, donc leurs
+  comptes delivered et failed ne sont pas définitifs. L'ombrage couvre l'échéance d'accusé du gateway
+  (`smsg.cdr.deadline.hours`, 48 heures par défaut) ; sur la vue 24 heures, c'est donc tout le
+  graphique, ce qui est la vérité : rien sur cette vue n'est encore stabilisé.
+
+La première requête après le démarrage du panneau n'a rien à servir et construit l'instantané pendant
+que vous attendez ; si cela prend plus de huit secondes, la page dit qu'elle est en train de chauffer
+et redemande à son prochain sondage.
+
+La cadence est un réglage du panneau, `OVERVIEW_REFRESH_SECONDS` dans l'environnement du panneau :
+60 par défaut, jamais en dessous de 15, et `0` désactive l'instantané et construit les chiffres à
+chaque requête — ce qu'utilise le banc de tests automatisés, et pas un réglage pour une plateforme
+chargée.
+
+### D'où viennent les chiffres
+
+Les vues 7 et 30 jours sont construites à partir du **résumé d'usage quotidien** du gateway pour
+chaque jour entier qu'il a résumé, avec seulement aujourd'hui lu depuis les enregistrements d'appels
+— voir [Usage et rétention](/platform/billing/usage-and-retention). À partir de 0.12.16, le gateway
+tient aussi un **résumé d'usage horaire**, mis à jour chaque minute au fil du trafic, et un panneau
+sur un tel gateway lit la vue 24 heures et la partie d'aujourd'hui des vues plus longues depuis ce
+résumé plutôt que depuis les enregistrements : 24 petites lignes plus la dernière minute ou deux de
+trafic, quel que soit le volume. Les deux résumés sont le travail du gateway, activés par défaut et
+réglés sur la page des paramètres du gateway sous **Usage summaries** ; le quotidien est désormais
+écrit par le gateway lui-même chaque nuit plutôt que par une commande que quelqu'un doit lancer.
+
+Trois conséquences à connaître. Sur un jour résumé, **In flight** affiche zéro, parce que le résumé
+quotidien n'enregistre pas ce qui était encore en attente ; le chiffre d'aujourd'hui est le chiffre en
+direct. Un message que le gateway a réessayé à cheval sur une limite de minute peut être compté deux
+fois dans le résumé horaire jusqu'à ce que le recomptage par quart d'heure des heures récentes le
+corrige — les retries sont une petite fraction du trafic et le recomptage fait foi. Et un gateway
+sans aucun des deux résumés lit tout en direct et ralentit à mesure que la plage s'allonge, comme
+avant.
 
 ## Les quatre chiffres
 
@@ -37,12 +108,22 @@ simplement pas encore été rapporté. Un message qui n'obtient jamais d'accusé
 
 Trois séries — submitted, delivered, failed — sur la plage choisie. Sans rien dans la fenêtre, le
 graphique est remplacé par **No traffic in this period**, ce qui est une déclaration sur la plage
-que vous avez choisie autant que sur la plateforme.
+que vous avez choisie autant que sur la plateforme. Les heures de la vue 24 heures sont des heures
+d'horloge en UTC ; les jours des vues plus longues sont des jours de facturation, découpés dans le
+fuseau de facturation de la plateforme. La partie ombrée du graphique est encore en train de se
+stabiliser (voir plus haut).
 
 ## Pourquoi les messages ont échoué
 
-Une répartition de chaque résultat qui n'était pas une livraison, chacun nommé en langage clair
-plutôt que par son code d'accusé :
+Deux cartes se tiennent côte à côte sous le graphique. **Why messages failed** dessine les échecs de
+la période en anneaux : compte, puis vendor, issue, code d'erreur et code propre à l'opérateur.
+**Sent by vendor** dessine de la même façon ce que chaque vendor a transporté : vendor, puis compte,
+issue et code d'erreur. Choisissez un anneau pour zoomer dessus ; le centre nomme ce qui est sous le
+pointeur, avec son compte et sa part.
+
+**Show table** sur l'une ou l'autre carte liste les mêmes chiffres en lignes. Sur **Why messages
+failed**, il ouvre aussi la liste des types d'échec, chaque résultat qui n'était pas une livraison,
+chacun nommé en langage clair plutôt que par son code d'accusé :
 
 - Failed at the vendor
 - Rejected on submission

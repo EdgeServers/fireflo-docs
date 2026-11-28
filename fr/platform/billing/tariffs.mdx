@@ -5,22 +5,29 @@ description: "Éditer les tarifs depuis le panneau, overrides par compte, et les
 
 ## Éditer les tarifs depuis le panneau
 
-Deux opérations sur la page d'un product, et la différence entre elles compte :
+Les prix s'éditent sur la page **Pricing**. Sur la gauche figurent les scopes : **Everyone** (le
+défaut `*`), **Accounts** (ce qu'ils nous paient), **Tag prices** et **Vendors** (ce qu'ils nous
+facturent). Le sélecteur **Product** restreint la page à un seul product.
 
-| Action | Écrit | Portée |
-| :--- | :--- | :--- |
-| **Définir ce que tout le monde paie** | Le scope `*` pour ce product | Tout compte n'ayant pas sa propre règle |
-| **Tarifer un compte** | Le scope d'un compte nommé | Ce compte uniquement |
+<Frame caption="La page Pricing. Les tuiles répondent aux questions qui coûtent de l'argent : quels vendors n'ont pas de coût, combien de comptes paient leur propre prix, et ce que paient tous les autres.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs-light.webp" alt="La page Pricing : les prix par défaut par product, avec les prix par compte et par étiquette listés à côté." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs-dark.webp" alt="La page Pricing : les prix par défaut par product, avec les prix par compte et par étiquette listés à côté." />
+</Frame>
 
-**Les deux ne sauvent que les règles du product que vous consultez.** Le reste du scope reste
-intact, donc définir `*` pour `promo` ne peut pas déranger `*` pour autre chose.
-
-L'éditeur de scope complet sur la page *Pricing* remplace toujours un scope en entier — ce qui est
-correct là, parce qu'il vous en montre la totalité.
+Ouvrez un scope pour voir ses prix, regroupés par product. Les modifications, ajouts, déplacements et
+l'activation ou la désactivation d'un prix sont mis en attente et enregistrés ensemble. **Add pricing**
+demande de qui ajouter les prix — un compte, un vendor, une étiquette ou tout le monde — et ouvre ce
+scope. Quand un product n'a pas de défaut, sa page et la vue d'ensemble Pricing proposent **Set what
+everyone pays**.
 
 À partir de 0.17.0, la page *Pricing* liste aussi **Tag prices** : une liste de prix par
 [étiquette de compte](/platform/routing/account-tags), essayée après les prix propres d'un compte et
 avant le défaut, dans l'ordre de la liste Tags.
+
+L'onglet **Tariff** d'un compte montre les mêmes prix pour ce seul compte, et quel niveau le
+tarifierait. Quand une plateforme gestionnaire a défini un tarif personnalisé pour le compte, l'onglet
+l'affiche au-dessus des règles : il est appliqué avant elles, et il ne se change que sur cette
+plateforme.
 
 <Warning>
 Les règles propres à un compte sont essayées en premier et **la première qui correspond gagne**,
@@ -31,6 +38,32 @@ aussi qu'un attrape-tout au niveau du compte désactive silencieusement chaque d
 définissez ensuite.
 Il en va de même pour les prix par étiquette : l'attrape-tout propre d'un compte les bat aussi.
 </Warning>
+
+## Exporter et importer les prix
+
+**Export** sur la page Pricing télécharge les prix en CSV, une ligne par prix : **Everything**,
+**Accounts** (ce que paient les clients, avec les prix par étiquette et le défaut) ou **Vendors** (ce
+que les opérateurs nous facturent). Les téléchargements sont enregistrés dans le log d'accès.
+
+<Frame caption="Export pricing. Gardez la colonne rule_id quand vous éditez le fichier : c'est ainsi qu'une ligne retrouve le prix qu'elle modifie.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--export-light.webp" alt="La boîte de dialogue Export pricing : tous les prix sous forme de fichier à éditer et réimporter." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--export-dark.webp" alt="La boîte de dialogue Export pricing : tous les prix sous forme de fichier à éditer et réimporter." />
+</Frame>
+
+Éditez le fichier dans un tableur et ramenez-le avec **Import** (jusqu'à 2 MB). Une ligne avec un
+`rule_id` vide ajoute un nouveau prix.
+
+<Warning>
+**Chaque compte ou vendor nommé dans le fichier est remplacé par les lignes du fichier.** Un prix que
+le fichier ne liste pas pour ce scope est supprimé. Les scopes que le fichier ne nomme pas restent tels
+quels.
+</Warning>
+
+Rien ne change tant que vous n'avez pas lu l'aperçu. Il liste, par scope, ce qui est ajouté, modifié
+et supprimé. Les suppressions doivent être activées séparément avant que **Apply** soit proposé, et
+appliquer demande confirmation une fois de plus. Chaque scope est enregistré séparément : si l'un
+échoue, ceux d'avant sont déjà appliqués. Le gateway tarifie selon les nouvelles lignes dès son
+prochain relevé de configuration.
 
 ## Deux identités, pas une
 

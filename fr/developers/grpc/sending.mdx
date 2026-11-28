@@ -136,6 +136,11 @@ est peut-être en route. **Ne réessayez celle-ci qu'avec le même `client_ref`.
 Pour un volume élevé et soutenu. Vous écrivez des `SendStreamRequest` et lisez des `SendStreamResult`
 sur un seul flux bidirectionnel.
 
+<Frame caption="SendStream et le flux d'accusés dans la partie gRPC de la référence de l'API REST de votre portail client. Les résultats reviennent dans n'importe quel ordre, associés par correlation_id.">
+  <img className="block dark:hidden" src="/images/developers/grpc/apis-grpc--stream-light.webp" alt="La référence gRPC du portail à SendStream et Receipts : les champs de ErrorDetail, comment un flux associe correlation_id et résultats, et Subscribe, Pull et Ack" />
+  <img className="hidden dark:block" src="/images/developers/grpc/apis-grpc--stream-dark.webp" alt="La référence gRPC du portail à SendStream et Receipts : les champs de ErrorDetail, comment un flux associe correlation_id et résultats, et Subscribe, Pull et Ack" />
+</Frame>
+
 **Chaque requête** est un `correlation_id` de votre choix et un `SendRequest` — exactement le message
 que vous passeriez à `Send`.
 

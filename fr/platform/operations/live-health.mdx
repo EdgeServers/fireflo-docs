@@ -103,6 +103,46 @@ Sur un **vendeur** cela signifie que rien n'est connecté et rien ne peut être 
 
 Sur un **listener** cela signifie généralement qu'aucun client n'est connecté maintenant. Ce qui est calme plutôt que cassé. C'est pourquoi un listener sans personne bindé n'est pas peint en rouge comme un vendeur sans session.
 
+## Dans le control panel
+
+La **pastille de santé** dans l'en-tête de chaque page du panel lit cet endpoint : un point, un mot comme **Healthy**, et le débit sortant. Choisissez-la pour ouvrir **Health**, qui est la même réponse mise en page pour être lue. Elle est lue dans la mémoire du gateway en marche, pas dans la base de données, et disparaît quand le processus redémarre.
+
+<Frame caption="Health : la file du routeur, les accusés en attente de correspondance et les enregistrements écrits ou perdus en haut, puis la base de données dans laquelle le gateway écrit.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health-light.webp" alt="La page Live health : les chiffres de file, d'accusés et d'enregistrements, et la carte de la base de données en dessous." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health-dark.webp" alt="La page Live health : les chiffres de file, d'accusés et d'enregistrements, et la carte de la base de données en dessous." />
+</Frame>
+
+| Tuile | Champ |
+| :--- | :--- |
+| **Router queue** | `router_queue` |
+| **Awaiting receipt** | `awaiting_receipt` ; la ligne en dessous dit si le magasin survit à un redémarrage |
+| **Records written** | `cdr.written`, avec le sink |
+| **Waiting on the broker** | la profondeur du broker, ou le fait qu'aucun n'est configuré |
+| **Records lost** | `cdr.failed` ; les écritures échouées ne sont pas réessayées |
+
+Sous les tuiles, la carte **Database** montre la connexion du gateway, ses writers et la latence qui admet ou refuse les nouveaux submits. Une carte **Routing tables** n'apparaît que lorsqu'une table a un problème qui mérite d'être signalé, comme l'absence d'une règle qui attrape tout le reste. **Connections** liste chaque listener et chaque vendeur avec son état, ses sessions bindées (et combien peuvent transmettre, quand cela diffère), sa file, son débit par rapport à son plafond et les messages soumis ; une ligne avec des sessions s'ouvre pour les lister.
+
+<Frame caption="Les Connections de Health : un vendeur bindé cinq fois et qui envoie, l'autre qui accepte sans bind ; les listeners sans personne de bindé sont calmes, pas cassés.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-health--connections-light.webp" alt="Les connexions de Health : chaque listener et vendeur avec son état, ses sessions bindées et sa file." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-health--connections-dark.webp" alt="Les connexions de Health : chaque listener et vendeur avec son état, ses sessions bindées et sa file." />
+</Frame>
+
+### La carte Connectivity
+
+**Connectivity**, à côté de la pastille de santé, dessine le même état en direct sous forme d'une seule carte : les clients bindés en haut, puis les ports de listener par lesquels ils sont entrés, le nœud du gateway et sa base de données, et les vendeurs en bas, avec le trafic qui circule le long de chaque lien. La largeur d'un lien est son débit ; un lien rouge en pointillés signale des refus à la porte dans la dernière minute, ou un lien coupé.
+
+- **All**, **Submits** et **Receipts** choisissent quels flux sont dessinés.
+- **Counts** lit MT et DLR sur la **Last hour**, ou **Since bind** depuis les compteurs de chaque session.
+- La recherche trouve un compte, un login, une IP ou un vendeur sur la carte ; le zoom et **Fit** la déplacent ; **Expand all** ouvre chaque groupe ; **By IP** divise chaque client en une boîte par adresse depuis laquelle il se connecte.
+- Choisissez une boîte pour ce que vous pouvez en faire : ouvrir son compte, son listener ou son vendeur, sa santé, ses files ou sa table de routage, ou agir dessus depuis le même menu.
+
+Les totaux de MT, de DLR et d'écritures en base se trouvent sous la carte.
+
+<Frame caption="La carte avec Receipts choisi et chaque groupe ouvert : trois clients bindés sur un port, des accusés qui remontent vers eux depuis un vendeur pendant que l'autre n'est pas bindé.">
+  <img className="block dark:hidden" src="/images/platform/operations/operations-connectivity--receipts-light.webp" alt="La carte Connectivity dépliée pour les accusés : chaque client bindé, port et vendeur avec ses comptes de submits et d'accusés." />
+  <img className="hidden dark:block" src="/images/platform/operations/operations-connectivity--receipts-dark.webp" alt="La carte Connectivity dépliée pour les accusés : chaque client bindé, port et vendeur avec ses comptes de submits et d'accusés." />
+</Frame>
+
 ## Connexes
 
 <CardGroup cols={2}>

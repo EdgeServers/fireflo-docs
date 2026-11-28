@@ -6,6 +6,31 @@ description: "Pourquoi une période clôturée n'est jamais réécrite, pourquoi
 Un relevé est l'usage d'un client sur une période. **Clôturer** une période transforme cela d'une
 requête vive en un fait enregistré.
 
+## L'onglet Statement
+
+Ouvrez un compte et choisissez **Statement**. Choisissez un **Month**, ou une **Date range** de
+92 jours au plus, et pressez **Show** : la période est lue quand vous pressez le bouton, pas quand vous
+la choisissez. Les tuiles donnent le montant, ce qui a été envoyé et livré, et le taux de livraison ;
+**Per day** trace les messages par jour et par produit, avec une ligne pour ce qui a été facturé.
+
+<Frame caption="L'onglet Statement d'un compte pour un mois en cours. Le montant bouge encore à mesure que le trafic arrive, donc le mois ne peut pas encore être clôturé.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements-light.webp" alt="L'onglet Statement d'un compte : les totaux de la période, un graphique par jour et les périodes clôturées." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements-dark.webp" alt="L'onglet Statement d'un compte : les totaux de la période, un graphique par jour et les périodes clôturées." />
+</Frame>
+
+Le tableau en dessous ventile la période par **Product** ou par **Login**, avec livrés, échecs,
+expirés, en attente et non facturés comptés à part, à côté de ce qui a été facturé.
+
+<Frame caption="Le relevé par produit. Not billed est le trafic parti sans prix ; il est envoyé quand même.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements--by-product-light.webp" alt="Le tableau d'un relevé par produit : envoyés, livrés, échecs, expirés, en attente et non facturés comptés à part, avec le montant." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements--by-product-dark.webp" alt="Le tableau d'un relevé par produit : envoyés, livrés, échecs, expirés, en attente et non facturés comptés à part, avec le montant." />
+</Frame>
+
+**Download CSV** prépare un fichier ; il apparaît sous **Prepared files** quand il est prêt. **Close
+this period** est proposé pour une période pas encore clôturée, sauf le mois en cours, et vous demande
+de confirmer la période et le montant.
+Les périodes clôturées sont listées sur l'onglet ; cliquez sur l'une pour l'afficher à nouveau.
+
 ## Une période clôturée est immuable
 
 La clôture écrit une ligne `BILL` enregistrant ce qui a été facturé. **Elle n'est jamais

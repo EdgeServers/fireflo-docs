@@ -17,6 +17,11 @@ description: "Plusieurs messages en un appel, planification, et la réponse qui 
 Chaque élément prend les mêmes champs qu'un envoi unique. Le `to` d'un message peut lui-même être
 un tableau, ce qui multiplie.
 
+<Frame caption="Send a batch dans la référence de l'API REST de votre portail client, avec un exemple construit pour votre login. Deux numéros dans un même to donnent un messageCount de 3 — et la réponse confirme l'acceptation, rien de plus.">
+  <img className="block dark:hidden" src="/images/developers/send/apis-rest--batch-light.webp" alt="La partie Send a batch de la référence de l'API REST du portail : les champs messages, globals et batch_config, un exemple curl avec un tableau de numéros dans to, et la réponse 200 avec batchId, messageCount et scheduled" />
+  <img className="hidden dark:block" src="/images/developers/send/apis-rest--batch-dark.webp" alt="La partie Send a batch de la référence de l'API REST du portail : les champs messages, globals et batch_config, un exemple curl avec un tableau de numéros dans to, et la réponse 200 avec batchId, messageCount et scheduled" />
+</Frame>
+
 ## La réponse ne confirme que l'acceptation
 
 ```json

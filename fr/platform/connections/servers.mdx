@@ -24,6 +24,11 @@ outSms.instance.smpp.enable   = true
 
 Chaque paramètre est à [Paramètres du listener](/reference/smpp/server).
 
+<Frame caption="Le formulaire d'édition d'un listener. Le nom ne peut plus être changé une fois le listener ajouté ; supprimez-le et ajoutez-le à nouveau à la place.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers--edit-light.webp" alt="Le formulaire d'édition d'un listener : son port, s'il est actif, son system ID annoncé, le nombre maximal de binds qu'il accepte et les TLVs qu'il envoie." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers--edit-dark.webp" alt="Le formulaire d'édition d'un listener : son port, s'il est actif, son system ID annoncé, le nombre maximal de binds qu'il accepte et les TLVs qu'il envoie." />
+</Frame>
+
 <Warning>
 **Un listener qui ne peut pas prendre son port n'arrête pas le gateway.** Il journalise et tout le
 reste continue de tourner — approprié pour un déploiement multi-listeners, et surprenant la
@@ -79,17 +84,40 @@ le listener.
 | `mandatory.tlvs.submit` | Tags qu'un message doit porter, sinon `0xC3` |
 | `inQueue.capacity` | Messages retenus en attente du magasin de messages |
 
+Les **overrides par compte**, sur l'onglet **Listener settings** du listener, donnent à un compte son
+propre plafond de débit ou son propre nombre de binds sur ce listener, à la place du défaut du
+listener. Le plafond est partagé par tous les logins du compte. Une valeur vide supprime l'override ;
+`0` signifie illimité.
+
+<Frame caption="Le plafond de débit ou le nombre de binds d'un compte à la place du défaut du listener. Les défauts qu'il remplace sont affichés sous le formulaire.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--overrides-light.webp" alt="Les paramètres d'un listener avec ses overrides par compte : le plafond de débit ou le nombre de binds d'un compte à la place du défaut du listener." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--overrides-dark.webp" alt="Les paramètres d'un listener avec ses overrides par compte : le plafond de débit ou le nombre de binds d'un compte à la place du défaut du listener." />
+</Frame>
+
 ## Les états dans lesquels un listener peut se trouver
 
 | Verbe | Effet |
 | :--- | :--- |
 | `enable` / `disable` | Chargé, ou non |
-| `suspend` / `resume` | Cesse d'accepter ; la file se vide vers le routeur |
-| `hold` / `release` | Continue d'accepter, cesse d'envoyer ; **la file grossit** |
+| `suspend` / `resume` | Continue d'accepter, ne route rien : les submits sont mis de côté et routés à la reprise, les plus anciens d'abord ; une fois la réserve pleine, les submits sont refusés avec une erreur réessayable. Les accusés continuent d'aller aux clients |
+| `hold` / `release` | Refuse chaque submit avec une erreur réessayable (`ESME_RMSGQFUL`) et **retient les accusés**. Personne n'est déconnecté |
+
+Dans le panneau de contrôle, suspend est **Stop sending** et hold est **Stop accepting** (aussi
+**Hold**, au bas de la page du listener). Chacun demande confirmation avant d'agir.
+
+<Frame caption="Stop accepting demande d'abord : les clients bindés voient leurs submits refusés avec une erreur réessayable et leurs accusés retenus jusqu'à la reprise. Personne n'est déconnecté.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--stop-accepting-light.webp" alt="La question posée avant qu'un listener cesse d'accepter : les clients bindés voient leurs submits refusés avec une erreur réessayable et personne n'est déconnecté." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--stop-accepting-dark.webp" alt="La question posée avant qu'un listener cesse d'accepter : les clients bindés voient leurs submits refusés avec une erreur réessayable et personne n'est déconnecté." />
+</Frame>
 
 Le panneau les montre comme un badge par carte. `Listening` sans personne de bindé n'est **pas** un
 défaut. Un listener sans clients connectés est calme, pas cassé, c'est pourquoi il n'est pas peint
 en rouge comme un vendor sans session.
+
+<Frame caption="La page Servers. Un listener a trois clients bindés ; l'autre affiche Listening, ce qui veut seulement dire que personne n'est bindé.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers-light.webp" alt="La page Servers : une carte par listener avec son état et ses sessions en direct." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers-dark.webp" alt="La page Servers : une carte par listener avec son état et ses sessions en direct." />
+</Frame>
 
 ## Couper le bind d'un client
 
@@ -99,6 +127,16 @@ scripts/fireflo disconnect smpp 7
 
 Les ids de session viennent de `fireflo health`. Ce sont les compteurs propres au listener, donc
 ils entrent en collision entre listeners et redémarrent avec le gateway.
+
+Dans le panneau de contrôle, ouvrez l'onglet **Connections** du listener, dépliez le compte et pressez
+**Disconnect** sur la session. Cochez **Also disable this login** pour le tenir dehors aussi.
+**Force disconnect**, au bas de la page du listener, coupe toutes les sessions d'une adresse, d'un
+compte ou d'un login sur ce listener.
+
+<Frame caption="L'onglet Connections : chaque compte bindé avec ses binds, son system type, sa durée de connexion et les messages reçus. Dépliez un compte pour atteindre ses sessions.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--connections-light.webp" alt="L'onglet Connections d'un listener : chaque compte bindé avec ses binds, son system type, sa durée de connexion et les messages reçus." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--connections-dark.webp" alt="L'onglet Connections d'un listener : chaque compte bindé avec ses binds, son system type, sa durée de connexion et les messages reçus." />
+</Frame>
 
 <Note>
 **Cela met fin à une connexion ; cela ne retire pas la permission.** Un client en bonne santé se

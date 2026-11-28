@@ -39,6 +39,13 @@ Une ligne est par `(account, product)`, avec un produit vide signifiant chaque p
 
 `system_id` restreint davantage. **NULL signifie chaque login du compte**, ce que chaque ligne signifiait avant que la colonne existe. Un déploiement non touché correspond exactement comme avant et aucune rétro-remplissage n'a été nécessaire. Deux logins sur le même compte peuvent détenir le même sender ID.
 
+Sur l'onglet **Approvals** du compte, **Approve a sender ID** règle tout cela : le sender ID, s'il est en service, le **Product** (ou chaque product), le **Login** (ou chaque login du compte) et les TLV qu'il estampille.
+
+<Frame caption="Approve a sender ID. Product et Login restreignent la ligne ; les laisser sur Every product et Every login on the account est la portée la plus large.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--approve-sender-light.webp" alt="La boîte de dialogue Approve a sender ID : l'expéditeur, s'il est en service, le product et le login qu'il couvre, et les TLV à estampiller." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--approve-sender-dark.webp" alt="La boîte de dialogue Approve a sender ID : l'expéditeur, s'il est en service, le product et le login qu'il couvre, et les TLV à estampiller." />
+</Frame>
+
 <Warning>
 **Un login sans ses propres lignes et sans lignes à portée du compte ne peut rien envoyer une fois l'application activée.** Lier une approbation à un login n'ajoute pas seulement de la spécificité. Elle retire cette ligne de tous les autres logins du compte.
 
@@ -52,14 +59,19 @@ La page du compte avertit quand toutes les approbations d'un compte sont liées 
 Depuis le portail. Tout ce qu'un client écrit atterrit en `PENDING`, avec sa propre note attachée. Sous DLT, sa référence d'enregistrement. Le gateway ne sert une ligne que quand elle est `enabled` **et** `APPROVED`, donc une demande est stockée, visible des deux côtés, et inerte.
 </Step>
 <Step title="Un opérateur décide">
-Approuver ou refuser, sur la page du compte ou sur la liste inter-comptes. Un refus garde la ligne et porte une raison montrée au client. C'est pourquoi il n'y a pas de refus en masse, seulement d'approbation en masse.
+Approuver ou refuser, sur l'onglet Approvals du compte ou sur la page **Headers**, qui liste les sender IDs de tous les comptes. Un refus garde la ligne et porte une raison montrée au client. C'est pourquoi il n'y a pas de refus en masse, seulement d'approbation en masse.
 </Step>
 <Step title="Il entre en service au prochain sondage">
 Pas de reconnexion. Voir ci-dessous.
 </Step>
 </Steps>
 
-`status` et `enabled` sont des colonnes séparées faisant des travaux séparés. Approuver écrit `status` et enregistre le relecteur. Décocher écrit `enabled = false` et laisse `status` tranquille : **retirer quelque chose n'est pas le désapprouver**, et une ligne retirée remise en service ne devrait pas avoir besoin d'être approuvée à nouveau.
+<Frame caption="La page Headers restreinte à un compte, une demande ouverte : qui l'a faite, sa portée, les stamps qu'elle mettrait sur le fil et son historique.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--requests-light.webp" alt="Les demandes de sender ID restreintes à un compte, l'une ouverte pour montrer qui l'a faite, sa portée et son historique." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--requests-dark.webp" alt="Les demandes de sender ID restreintes à un compte, l'une ouverte pour montrer qui l'a faite, sa portée et son historique." />
+</Frame>
+
+`status` et `enabled` sont des colonnes séparées faisant des travaux séparés. Approuver écrit `status` et enregistre le relecteur. Désactiver **Approved** sur la ligne écrit `enabled = false` et laisse `status` tranquille : **retirer quelque chose n'est pas le désapprouver**, et une ligne retirée remise en service ne devrait pas avoir besoin d'être approuvée à nouveau.
 
 <Note>
 **Un client lisant l'API voit le retrait, à partir du gateway 0.9.8.** Parce que les deux colonnes sont séparées, l'API d'inscription rapportait auparavant une ligne retirée comme `APPROVED`. Elle lit la décision d'approbation, et celle-ci n'avait pas changé. Un client qui la sondait pour décider depuis quoi envoyer se voyait dire que l'expéditeur était approuvé alors que le gateway refusait chacun de ses messages.

@@ -3,13 +3,20 @@ title: "L'onglet Billing"
 description: "Le seul endroit dans FireFlo où du crédit est créé, et la seule écriture du panneau qui ne peut pas être annulée — plus le grand livre, et une réconciliation qui refuse délibérément de tout corriger."
 ---
 
-Ouvrez un compte et choisissez **Billing**. Quatre cartes : ce que le compte détient, comment y
-ajouter, si le crédit s'additionne, et chaque mouvement.
+Ouvrez un compte et choisissez **Billing**. En haut, une carte répond aux deux questions pour
+lesquelles vous l'ouvrez : à gauche, ce que le compte détient et les actions qui le modifient ; à
+droite, combien de parts MT il a envoyées. En dessous, **MT usage** dans le temps à côté de **Does the
+credit add up?**, et le grand livre complet en bas.
+
+<Frame caption="L'onglet Billing d'un compte. La gauche de la carte, c'est l'argent et les actions qui le modifient ; la droite, ce que le compte a envoyé.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account-light.webp" alt="L'onglet Billing d'un compte : la carte du solde, la vérification de réconciliation et l'argent entrant et sortant." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account-dark.webp" alt="L'onglet Billing d'un compte : la carte du solde, la vérification de réconciliation et l'argent entrant et sortant." />
+</Frame>
 
 <Warning>
-**Ajouter du crédit ne peut pas être annulé depuis le panneau.** Il n'y a pas de « retirer du
-crédit » et pas d'annulation. Défaire un rechargement nécessiterait une entrée d'ajustement
-négative, et cela n'existe pas.
+**Ajouter du crédit ne peut pas être annulé depuis le panneau.** Un rechargement n'est jamais modifié
+ni annulé. Un rechargement erroné se reprend avec [**Debit**](#reprendre-du-crédit), qui écrit une
+entrée distincte qui lui est propre.
 
 Le formulaire vous demande de confirmer le montant et la référence avant d'écrire. Lisez la
 confirmation plutôt que de cliquer au travers. C'est le dernier point auquel le nombre vous
@@ -52,6 +59,11 @@ plateforme.
 
 Trois champs : **Amount**, **Reference**, et une **Note** optionnelle.
 
+<Frame caption="Add credit. La ligne sous les champs est la promesse honnête : le gateway applique le rechargement à son prochain sondage, donc le solde au-dessus ne bouge pas tout de suite.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--add-credit-light.webp" alt="Add credit dans la facturation d'un compte : montant, référence et note, appliqués au prochain sondage du gateway." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--add-credit-dark.webp" alt="Add credit dans la facturation d'un compte : montant, référence et note, appliqués au prochain sondage du gateway." />
+</Frame>
+
 Une fois qu'un montant valide est tapé, le formulaire renvoie exactement ce qui sera stocké, parce
 que l'argent est tenu à quatre décimales et un décimal mal placé est l'erreur coûteuse ici.
 
@@ -72,9 +84,38 @@ Après qu'il sauvegarde, **le solde ne bouge pas immédiatement**. Le panneau é
 rechargement et le gateway l'applique lors de son prochain sondage de configuration, dans environ
 trente secondes. Un solde qui n'a pas encore changé n'est pas un échec.
 
+## Reprendre du crédit
+
+**Debit** retire du crédit prépayé du compte — un rechargement fait par erreur, par exemple. Il n'est
+proposé que sur les comptes prépayés ; un compte postpayé est facturé, pas débité. Trois champs, tous
+requis :
+
+- **Amount** — retiré du solde immédiatement. Le crédit détenu par les gateways en marche est libéré
+  d'abord et compte. Un montant supérieur au solde est refusé.
+- **Reference** — votre propre identifiant pour ce débit. Le réutiliser répond « duplicate » et ne
+  débite rien.
+- **Reason** — affichée dans l'historique du compte et le journal d'audit, et à une plateforme qui
+  gère le compte.
+
+<Frame caption="Debit. Review montre le solde avant et après ; rien n'est retiré tant que vous n'y avez pas pressé Debit.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--debit-light.webp" alt="Debit dans la facturation d'un compte : montant, votre propre référence et une raison, vérifiés avant d'être retirés." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--debit-dark.webp" alt="Debit dans la facturation d'un compte : montant, votre propre référence et une raison, vérifiés avant d'être retirés." />
+</Frame>
+
+**Review** montre ce qui sera retiré et le solde qui restera. Un débit ne peut pas non plus être annulé
+depuis le panneau : un débit erroné se corrige par un rechargement.
+
 ## Basculer entre prépayé et postpayé
 
-La même carte bascule le mode de facturation, et avertit avant de sauvegarder dans les deux sens :
+**Switch to postpaid** ouvre les conditions de facturation : **Prepaid — spends a balance** ou
+**Postpaid — billed in arrears**, et pour le postpayé une **Credit limit**. Sur un compte postpayé, le
+même bouton s'intitule **Change limit or go prepaid**. Le formulaire avertit avant de sauvegarder dans
+les deux sens :
+
+<Frame caption="Les conditions de facturation d'un compte, ouvertes. Un compte postpayé a besoin d'une limite de crédit ; zéro signifie pas de crédit, pas illimité.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-credit--postpaid-light.webp" alt="Les conditions de facturation d'un compte, ouvertes : prépayé, qui dépense un solde, ou postpayé, facturé à terme échu." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-credit--postpaid-dark.webp" alt="Les conditions de facturation d'un compte, ouvertes : prépayé, qui dépense un solde, ou postpayé, facturé à terme échu." />
+</Frame>
 
 - **Vers postpayé** — le compte cesse de dépenser son solde. Tout ce qui est déjà réservé reste
   réservé jusqu'à ce qu'il soit libéré.
@@ -98,6 +139,11 @@ réservée contre lui, et ce qui a été réservé couvre ce qui a été dépens
 Cela ne tourne pas tout seul — appuyez sur **Reconcile**. Deux chiffres reviennent.
 **Unexplained** est le résidu, et celui sur lequel il vaut la peine d'agir. **Reserved, not yet
 spent** est normal sur un compte qui envoie.
+
+<Frame caption="Après Reconcile : rien d'inexpliqué, un peu de réservé pas encore dépensé, et une note en langage clair sur chaque chose qui vaut la peine d'être sue.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account--reconcile-light.webp" alt="La facturation d'un compte après Reconcile : rien d'inexpliqué, et ce qui est réservé mais pas encore dépensé." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account--reconcile-dark.webp" alt="La facturation d'un compte après Reconcile : rien d'inexpliqué, et ce qui est réservé mais pas encore dépensé." />
+</Frame>
 
 En-dessous, un récit en langage clair de tout ce qui ne s'est pas équilibré. Les distinctions qui
 comptent :
@@ -123,7 +169,13 @@ une période — une identité qui tient sur un mois mais pas sur la vie du comp
 
 ## Argent entrant et sortant
 
-Chaque rechargement et transfert, cherchable par référence, note ou type, triable et paginé.
+Chaque rechargement, transfert et débit, cherchable par référence, note ou type, triable et paginé.
+Le gateway applique un rechargement ou un transfert à son prochain sondage, et un débit immédiatement.
+
+<Frame caption="Argent entrant et sortant. Chaque rechargement avec son montant, sa référence et son état ; Applied signifie que le gateway l'a crédité.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/billing-account--money-light.webp" alt="L'argent entrant et sortant d'un compte : chaque rechargement avec son montant, sa référence et son état." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/billing-account--money-dark.webp" alt="L'argent entrant et sortant d'un compte : chaque rechargement avec son montant, sa référence et son état." />
+</Frame>
 
 Par défaut le grand livre ne liste que les entrées écrites par une personne ou le système de
 facturation. Les réservations de crédit propres au gateway sont cachées et comptées à la place —

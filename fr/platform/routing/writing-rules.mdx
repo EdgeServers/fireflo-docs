@@ -50,9 +50,12 @@ sur laquelle enchaîner (`MESSAGE`).
 
 <Tabs>
   <Tab title="Panneau de contrôle">
-    **Routing** liste chaque table avec ses règles dans l'ordre. L'éditeur valide l'opérateur par
-    rapport au champ avant l'enregistrement, refuse un opérateur numérique sur un champ texte, et
-    avertit à propos d'une expression régulière écrite dans un opérateur littéral.
+    **Routing** liste chaque table avec ses règles dans l'ordre, chacune avec sa cible, un
+    interrupteur et le nombre de messages qu'elle a fait correspondre depuis le dernier démarrage de la
+    passerelle. **Add a rule** ouvre l'éditeur ; les modifications d'une table attendent **Save**.
+    L'éditeur valide l'opérateur par rapport au champ avant l'enregistrement, refuse un opérateur
+    numérique sur un champ texte, et avertit à propos d'une expression régulière écrite dans un
+    opérateur littéral.
   </Tab>
   <Tab title="routingTable.conf">
 ```ini
@@ -65,6 +68,11 @@ vendor1::default:                  # l'attrape-tout, EN DERNIER
   </Tab>
 </Tabs>
 
+<Frame caption="Une table de routage : ses règles dans l'ordre, chacune avec sa cible, son interrupteur et son nombre de correspondances. L'avertissement signale qu'une règle nomme une cible que la passerelle ne connaît pas.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables-light.webp" alt="Une table de routage : ses règles dans l'ordre, chacune avec ses conditions, sa cible et son nombre de correspondances." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables-dark.webp" alt="Une table de routage : ses règles dans l'ordre, chacune avec ses conditions, sa cible et son nombre de correspondances." />
+</Frame>
+
 <Warning>
 **L'attrape-tout se met à la fin.** Au-dessus des autres règles, il rend toutes les règles qui le
 suivent inaccessibles, et rien ne vous avertit dans le fichier — elles parsent bien, elles ne
@@ -74,14 +82,67 @@ s'exécutent tout simplement jamais. Le panneau le signale ; la passerelle l'enr
 
 ## Opérateurs
 
-Tout opérateur peut être nié avec un `!` en tête.
+Tout opérateur peut être nié avec un `!` en tête. Dans l'éditeur de règles, c'est **Except this**
+(**Except these** pour une liste de préfixes) sous une condition.
 
 | Type | Opérateurs |
 | :--- | :--- |
 | Toujours vrai | `default` — attribut et valeur laissés vides |
-| Texte | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
+| Texte | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `startsWithAny`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
 | Booléen | `isTrue`, `isFalse` |
 | Numérique | `==`, `>`, `>=`, `<`, `<=` |
+
+`startsWithAny` prend une liste de préfixes littéraux séparés par des virgules, sans espaces :
+`91,+91,0091`. Chacun est comparé exactement tel qu'écrit — `91` ne correspond pas à `+919812345678` —
+et une longue liste ne coûte pas plus par message qu'une courte. Une liste vide, ou une entrée contenant
+un espace, est refusée au chargement de la règle.
+
+## Quand un changement prend effet
+
+La passerelle prend en compte une table enregistrée en moins de trente secondes. **Apply now**, sur les
+pages Routing, Pricing et Filters et sous une table que vous venez d'enregistrer, lui fait lire le
+changement immédiatement. Sur une passerelle dont la licence n'est pas à jour, le bouton le dit : les
+changements de configuration sont gelés jusqu'à ce que la licence le soit, et rien de ce que vous
+enregistrez n'atteint la passerelle en marche.
+
+## Tester un message avant qu'il soit envoyé
+
+**Test a message**, sur les pages Routing, Pricing et Filters, prend une destination, un sender ID, un
+product et un compte, et demande à la passerelle en marche ce qu'elle en ferait — rien n'est envoyé ni
+facturé. Laissez le product vide et le test s'exécute comme le login du compte l'enverrait : un vrai
+message porte toujours le product de son login (ou le `system_type` avec lequel il s'est bindé), et
+une règle de prix enregistrée sous un product ne tarifie que les messages qui le portent. Le testeur
+indique sur chaque onglet sous quel product il s'est exécuté. Trois onglets répondent à partir des
+mêmes comparateurs que ceux du chemin du message :
+
+- **Routing** parcourt les tables de `default` jusqu'au fournisseur, et montre chaque règle essayée
+  avec la condition qui a échoué, face au texte exact comparé.
+- **Pricing** montre la règle qui fixe le prix du compte, le coût du fournisseur, et la marge.
+- **Filters** montre chaque filtre nommé, correspondant ou non, et les règles qui l'utilisent.
+
+Quand rien ne correspond, il propose de créer la règle, ouverte dans l'éditeur avec l'indicatif pays de
+la destination pré-rempli, à vous de le corriger.
+
+**Test and check**, dans le rail de la page Routing, place un testeur de routage seul à côté de
+**Delivery check**. Le testeur prend la table de départ, le type de message, le listener sur lequel il
+est arrivé, un expéditeur, une destination et un product, et lit les tables vivantes de la passerelle,
+que le routage soit configuré depuis un fichier ou depuis la base de données. **Delivery check**
+parcourt tout le chemin d'un message, pas seulement le routage : un échantillon de ce qui a été refusé
+dans les dernières 24 heures, puis les approbations, les TLV, la tarification, le crédit, le routage et
+les fournisseurs. Là où il trouve un défaut, il dit comment le corriger.
+
+<Frame caption="Test and check : le testeur de message à gauche, le delivery check à droite. Aucun des deux n'envoie quoi que ce soit.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test-light.webp" alt="Test and check : un message de test à gauche, et le delivery check à droite." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test-dark.webp" alt="Test and check : un message de test à gauche, et le delivery check à droite." />
+</Frame>
+
+La réponse du testeur liste les règles de la table dans l'ordre : celle sur laquelle tombe le message,
+et pour chaque règle qui n'a pas correspondu, la condition qui a échoué et ce que contenait le message.
+
+<Frame caption="Le verdict d'un test : la règle 1 a correspondu et envoie ici ; pour les autres, le type que chacune voulait et le type qu'avait le message.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test--verdict-light.webp" alt="Un message de test avec sa réponse : la règle sur laquelle il tombe, et pour chaque règle qui n'a pas correspondu, pourquoi." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test--verdict-dark.webp" alt="Un message de test avec sa réponse : la règle sur laquelle il tombe, et pour chaque règle qui n'a pas correspondu, pourquoi." />
+</Frame>
 
 Les quatre comparaisons texte sont lexicographiques, pas numériques : `greaterThan` sur un numéro de
 téléphone compare des chaînes.
@@ -125,7 +186,13 @@ soumission, après que le message est parti, donc une condition de routage sur l
 ## Copier et continuer
 
 Un `+` sur la cible copie le message vers cette cible et **continue à parcourir**, au lieu de router et
-d'arrêter. Dans la base de données, c'est la colonne `copied`.
+d'arrêter. Dans la base de données, c'est la colonne `copied`. Dans l'éditeur de règles, c'est **After
+a match → Copy and keep going** ; **Stop here** est la règle ordinaire.
+
+<Frame caption="Une nouvelle règle : où elle envoie, ses conditions (destination commençant par 91, étiquette de compte priority), ses filtres, et si elle s'arrête là.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables--edit-rule-light.webp" alt="Une nouvelle règle de routage en cours d'écriture : où elle envoie, ses conditions (destination commençant par 91, étiquette de compte priority) et si elle s'arrête là." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables--edit-rule-dark.webp" alt="Une nouvelle règle de routage en cours d'écriture : où elle envoie, ses conditions (destination commençant par 91, étiquette de compte priority) et si elle s'arrête là." />
+</Frame>
 
 ## Groupes de fournisseurs
 
