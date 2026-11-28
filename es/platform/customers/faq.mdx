@@ -172,13 +172,13 @@ WARN nombrando la cuenta, y se aplica en el momento en que aparece la fila. Crea
 crea un saldo; *Open for credit* en la página de la cuenta sí.
 </Accordion>
 
-<Accordion title="Deslisté una cuenta y su tráfico siguió fluyendo">
-La pasarela nunca lee el catálogo de cuentas. `enabled` en `app_account` decide si este panel lista
-la cuenta y nada más: sus logins siguen conectándose, su tráfico sigue enviándose y sus reglas de
-tasa siguen tarificando.
+<Accordion title="Desactivé una cuenta y un bind sigue activo">
+Desactivar una cuenta (**Enabled**, bajo Settings → Advanced) hace que la pasarela deje de servir sus
+logins en un sondeo de configuración, 30 segundos por defecto, y cierra su inicio de sesión en el
+portal. Los binds ya abiertos siguen activos hasta que se caen.
 
-Es lo contrario de lo que significa `enabled` en un vendor o un producto. Para detener el tráfico,
-desactive los **logins**; para detener el gasto, use el saldo.
+Para retirar la cuenta para siempre, archívela en su lugar: archivar también corta sus binds vivos.
+Consulte [Cuentas](/platform/customers/accounts#what-the-catalogue-row-actually-holds).
 </Accordion>
 
 </AccordionGroup>

@@ -7,6 +7,11 @@ Una **cuenta** es un id sobre el que coinciden un login, un ámbito de tasa, una
 registro de llamada. Nada tiene que crearla: una cuenta existe en el momento en que un login la
 nombra o llega un mensaje llevándola, y la fila `app_account` es una etiqueta atornillada después.
 
+<Frame caption="La lista Accounts, una fila por login. Not named yet cuenta los ids de cuenta en uso que no tienen nombre propio.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-accounts-light.webp" alt="La lista Accounts: una fila por login, con su cuenta, system ID, tipo, producto y estado." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-accounts-dark.webp" alt="La lista Accounts: una fila por login, con su cuenta, system ID, tipo, producto y estado." />
+</Frame>
+
 ## Deje `accountId` en blanco y otra cosa se convierte en la cuenta
 
 `accountId` es opcional en una credencial, y lo que llena el hueco **difiere por protocolo**.
@@ -24,6 +29,11 @@ hojas de cálculo. Rotar la clave después divide la historia de ese cliente ent
 
 Establezca `accountId` explícitamente en cada credencial y ninguno de los fallbacks importa.
 </Warning>
+
+<Frame caption="Un login abierto para editar. Account está bajo Billing and tariff: los ámbitos de tasa y los saldos prepago se asocian a ella, y queda fija una vez creado el login.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins--edit-login-light.webp" alt="Un login abierto para editar: cómo se conecta, si está activo, su system ID, contraseña, API key, cuenta y producto." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins--edit-login-dark.webp" alt="Un login abierto para editar: cómo se conecta, si está activo, su system ID, contraseña, API key, cuenta y producto." />
+</Frame>
 
 ## Por qué la cuenta y no el login
 
@@ -49,29 +59,69 @@ logins de la cuenta. Consulte [Sender IDs](/platform/customers/sender-ids).
 
 ## Qué contiene realmente la fila del catálogo
 
-`app_account` es nombre, contacto y jerarquía: nada que la ruta del mensaje lea.
+`app_account` es nombre, contacto y jerarquía. Cuando la pasarela carga los logins solo lee dos cosas
+de ella: si la cuenta está activada y si está archivada.
 
 | Columna | Significado |
 | :--- | :--- |
 | `id` | La clave de facturación. Recortada y no vacía, y la clave primaria. |
-| `label`, `description` | Para las personas que leen el panel. |
-| `email` | Almacenado para el sign-in por magic-link y notificaciones. Una cuenta por dirección, ignorando mayúsculas y minúsculas. |
-| `enabled` | Si este panel la lista. |
-| `resells` | Esta cuenta puede tener otras y moverles saldo. |
-| `parent_account_id` | El reseller bajo el que se sitúa. |
+| `label`, `description` | Para las personas que leen el panel (**Name** y **Notes**). |
+| `email` | La dirección de contacto de la cuenta y un login del portal. Una cuenta por dirección, ignorando mayúsculas y minúsculas. |
+| `enabled` | **Enabled**, bajo Settings → Advanced. Desactivado, pausa la cuenta: sus logins se detienen y nadie puede iniciar sesión en el portal por ella. |
+| `resells` | **Resells services**: esta cuenta puede tener otras y moverles saldo. |
+| `parent_account_id` | **Belongs to**: el reseller bajo el que se sitúa. |
 
 El árbol tiene exactamente dos niveles de profundidad, y la base de datos lo hace cumplir:
 `app_account_two_levels` rechaza una fila que a la vez nombra un padre y revende, por lo que una
 cuenta o bien tiene otras o pertenece a una.
 
-<Warning>
-**Deslistar una cuenta no detiene nada.** La pasarela nunca lee el catálogo de cuentas, así que
-limpiar `enabled` elimina la fila de las listas de este panel y deja sus logins conectándose, su
-tráfico enviándose y sus reglas de tasa tarificando exactamente como antes. Es lo contrario de lo
-que significa `enabled` en un vendor o en un producto, y mucho más caro de equivocarse.
+<Frame caption="La pestaña Settings de una cuenta. Organisation contiene el nombre, el email, las notas y las etiquetas; Advanced contiene Enabled, la reventa y el padre; Archive está debajo.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="Los ajustes de una cuenta: nombre, email, notas y etiquetas, y su inicio de sesión en el portal." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="Los ajustes de una cuenta: nombre, email, notas y etiquetas, y su inicio de sesión en el portal." />
+</Frame>
 
-Para detener el tráfico, desactive los **logins**. Para detener el gasto, use el saldo.
+<Warning>
+**Desactivar una cuenta detiene su tráfico.** La pasarela deja de servir los logins de la cuenta en un
+sondeo de configuración (30 segundos por defecto), y nadie puede iniciar sesión en el portal por ella.
+Los binds ya abiertos siguen activos hasta que se caen.
+
+Para detener un login en lugar de toda la cuenta, desactive ese **login**. Para detener el gasto, use
+el saldo.
 </Warning>
+
+Para retirar una cuenta para siempre, use **Archive** al pie de la pestaña Settings. Sus logins se
+desactivan, los binds vivos se cortan y el inicio de sesión en el portal se cierra; su saldo y su
+historial se conservan, y sale de la lista de cuentas. **Unarchive** vuelve a activar exactamente lo
+que el archivo desactivó, y los clientes vuelven a hacer bind por su cuenta.
+
+## Resellers y subcuentas
+
+Active **Resells services** y la cuenta se convierte en reseller. Su gente gestiona entonces sus
+propios clientes desde el portal, en **Customers → Sub-accounts**. Hay dos niveles, nunca más: una
+subcuenta no puede revender.
+
+<Frame caption="La lista Sub-accounts de un reseller en el portal. El crédito de cada subcuenta sale del propio saldo del reseller.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers-light.webp" alt="La lista Sub-accounts de un reseller: cada cuenta con su saldo, logins y último envío." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers-dark.webp" alt="La lista Sub-accounts de un reseller: cada cuenta con su saldo, logins y último envío." />
+</Frame>
+
+**New sub-account** pide un id de cuenta (fijo una vez creado), un nombre y un crédito inicial, movido
+desde el saldo del reseller en el acto; déjelo en 0 para recargar más tarde. La subcuenta recibe un
+login HTTP de inmediato, y los logins SMPP se añaden en su pestaña Logins.
+
+<Frame caption="New sub-account. El crédito inicial muestra el saldo del reseller tras el movimiento antes de crear nada.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--new-light.webp" alt="El formulario New sub-account de un reseller: id de cuenta, nombre y crédito inicial desde el saldo del reseller." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--new-dark.webp" alt="El formulario New sub-account de un reseller: id de cuenta, nombre y crédito inicial desde el saldo del reseller." />
+</Frame>
+
+La página de una subcuenta muestra su saldo, **Recharge** y **Withdraw** para mover crédito entre ella
+y el reseller, y sus transferencias, con pestañas para sus logins, mensajes, aprobaciones, extracto,
+condiciones de crédito y ajustes.
+
+<Frame caption="Una subcuenta en el portal del reseller. Withdraw libera el crédito reservado para mensajes que se están enviando antes de devolverlo.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-resellers--sub-account-light.webp" alt="La página de una subcuenta en el portal del reseller: su saldo, recarga y retirada, transferencias, y pestañas para logins, mensajes, aprobaciones, extracto y condiciones de crédito." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-resellers--sub-account-dark.webp" alt="La página de una subcuenta en el portal del reseller: su saldo, recarga y retirada, transferencias, y pestañas para logins, mensajes, aprobaciones, extracto y condiciones de crédito." />
+</Frame>
 
 ## Crear un login no crea un saldo
 
@@ -100,6 +150,15 @@ márgenes. Renombre uno antes de tarificar cualquiera. `*` está reservado direc
 usarse como nombre de cuenta o de vendor.
 
 ## Qué hay en la página de la cuenta
+
+Una pestaña a la vez: **Overview**, **Settings**, **Logins**, **Approvals**, **Billing**, **Tariff** y
+**Statement**. Una cuenta de unidades no tiene pestañas Tariff ni Statement; sus precios y su extracto
+son los de su cuenta padre.
+
+<Frame caption="La pestaña Overview de una cuenta: su tráfico por login y producto, su techo SMPP, una comprobación de entrega y adónde fueron sus mensajes.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account-light.webp" alt="La pestaña Overview de una cuenta: su tráfico, adónde fue y las pestañas en la parte superior." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account-dark.webp" alt="La pestaña Overview de una cuenta: su tráfico, adónde fue y las pestañas en la parte superior." />
+</Frame>
 
 <CardGroup cols={2}>
 <Card title="Logins" href="/platform/connections/credentials">

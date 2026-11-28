@@ -6,6 +6,31 @@ description: "Por qué un periodo cerrado nunca se reescribe, por qué la fila B
 Un extracto es el uso de un cliente durante un periodo. **Cerrar** un periodo lo convierte de una
 consulta en vivo en un hecho registrado.
 
+## La pestaña Statement
+
+Abra una cuenta y elija **Statement**. Elija un **Month**, o un **Date range** de hasta 92 días, y
+pulse **Show**: el periodo se lee cuando lo pulsa, no cuando lo elige. Las tarjetas dan el importe, lo
+enviado y lo entregado, y la tasa de entrega; **Per day** dibuja los mensajes por día por producto,
+con una línea para lo facturado.
+
+<Frame caption="La pestaña Statement de una cuenta para un mes en curso. El importe sigue moviéndose a medida que llega tráfico, así que el mes todavía no puede cerrarse.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements-light.webp" alt="La pestaña Statement de una cuenta: totales del periodo, un gráfico por día y los periodos cerrados." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements-dark.webp" alt="La pestaña Statement de una cuenta: totales del periodo, un gráfico por día y los periodos cerrados." />
+</Frame>
+
+La tabla de debajo divide el periodo por **Product** o por **Login**, con entregados, fallidos,
+expirados, pendientes y no facturados contados por separado junto a lo facturado.
+
+<Frame caption="El extracto por producto. Not billed es tráfico que salió sin precio; se envía igualmente.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-statements--by-product-light.webp" alt="La tabla por producto de un extracto: enviados, entregados, fallidos, expirados, pendientes y no facturados contados por separado, con el importe." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-statements--by-product-dark.webp" alt="La tabla por producto de un extracto: enviados, entregados, fallidos, expirados, pendientes y no facturados contados por separado, con el importe." />
+</Frame>
+
+**Download CSV** prepara un archivo; aparece bajo **Prepared files** cuando está listo. **Close this
+period** se ofrece para un periodo aún no cerrado, salvo el mes en curso, y le pide confirmar el
+periodo y el importe.
+Los periodos cerrados se listan en la pestaña; haga clic en uno para mostrarlo de nuevo.
+
 ## Un periodo cerrado es inmutable
 
 Al cerrar se escribe una fila `BILL` registrando lo facturado. **Nunca se reescribe.**

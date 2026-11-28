@@ -17,6 +17,11 @@ description: "Muchos mensajes en una sola llamada, programación, y la respuesta
 Cada elemento toma los mismos campos que un envío único. El `to` de un mensaje puede ser a su vez
 un array, que se multiplica.
 
+<Frame caption="Send a batch en la referencia de la API REST de su portal de cliente, con un ejemplo construido para su login. Dos números en un solo to dan un messageCount de 3, y la respuesta confirma la aceptación, nada más.">
+  <img className="block dark:hidden" src="/images/developers/send/apis-rest--batch-light.webp" alt="La parte Send a batch de la referencia de la API REST del portal: los campos messages, globals y batch_config, un ejemplo curl con un array de números en to, y la respuesta 200 con batchId, messageCount y scheduled" />
+  <img className="hidden dark:block" src="/images/developers/send/apis-rest--batch-dark.webp" alt="La parte Send a batch de la referencia de la API REST del portal: los campos messages, globals y batch_config, un ejemplo curl con un array de números en to, y la respuesta 200 con batchId, messageCount y scheduled" />
+</Frame>
+
 ## La respuesta confirma solo la aceptación
 
 ```json

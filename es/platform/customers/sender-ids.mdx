@@ -57,6 +57,15 @@ producto se combina **sobre** la lista de cualquier-producto de la cuenta. Las d
 antes de que existiera la columna, así que un despliegue sin tocar coincide exactamente como lo hacía y no se
 necesitó ningún backfill. Dos logins de la misma cuenta pueden mantener el mismo sender ID.
 
+En la pestaña **Approvals** de la cuenta, **Approve a sender ID** lo establece todo: el sender ID, si
+está en servicio, el **Product** (o todos los productos), el **Login** (o todos los logins de la
+cuenta) y los TLVs que sella.
+
+<Frame caption="Approve a sender ID. Product y Login acotan la fila; dejarlos en Every product y Every login on the account es el ámbito más amplio.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--approve-sender-light.webp" alt="El diálogo Approve a sender ID: el remitente, si está en servicio, el producto y el login que cubre, y los TLVs que sellar." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--approve-sender-dark.webp" alt="El diálogo Approve a sender ID: el remitente, si está en servicio, el producto y el login que cubre, y los TLVs que sellar." />
+</Frame>
+
 <Warning>
 **Un login sin filas propias y sin filas a nivel de cuenta no puede enviar nada una vez activado el enforcement.**
 Vincular una aprobación a un login no se limita a añadir especificidad. Elimina esa fila de cada
@@ -76,16 +85,22 @@ DLT, su referencia de registro. El gateway sirve una fila solo cuando está `ena
 `APPROVED`, así que una solicitud se almacena, es visible para ambas partes, y es inerte.
 </Step>
 <Step title="Un operador decide">
-Aprobar o rechazar, en la página de la cuenta o en la lista entre cuentas. Un rechazo mantiene la fila y
-lleva una razón que se muestra al cliente. Por eso no hay rechazo en bloque, solo aprobación en bloque.
+Aprobar o rechazar, en la pestaña Approvals de la cuenta o en la página **Headers**, que lista los
+sender IDs de todas las cuentas. Un rechazo mantiene la fila y lleva una razón que se muestra al
+cliente. Por eso no hay rechazo en bloque, solo aprobación en bloque.
 </Step>
 <Step title="Entra en servicio en el siguiente sondeo">
 Sin reconectar. Ver abajo.
 </Step>
 </Steps>
 
+<Frame caption="La página Headers acotada a una cuenta, con una solicitud abierta: quién la pidió, su ámbito, los sellos que pondría en el cable y su historial.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-approvals--requests-light.webp" alt="Solicitudes de sender ID acotadas a una cuenta, una abierta para mostrar quién la pidió, su ámbito y su historial." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-approvals--requests-dark.webp" alt="Solicitudes de sender ID acotadas a una cuenta, una abierta para mostrar quién la pidió, su ámbito y su historial." />
+</Frame>
+
 `status` y `enabled` son columnas separadas que hacen trabajos separados. Aprobar escribe `status` y registra
-al revisor. Desmarcar escribe `enabled = false` y deja `status` en paz: **retirar algo no es
+al revisor. Desactivar **Approved** en la fila escribe `enabled = false` y deja `status` en paz: **retirar algo no es
 des-aprobarlo**, y una fila retirada vuelta al servicio no debería necesitar aprobarse de nuevo.
 
 <Note>

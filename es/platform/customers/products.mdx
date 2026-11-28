@@ -7,6 +7,11 @@ Un **producto** es una etiqueta en un login. Es coincidente en la tabla de enrut
 decide si se comprueban los sender IDs y el contenido de una cuenta. También es opcional, y el
 caso opcional es el caro.
 
+<Frame caption="La página de un producto: si está listado y comprobado, cuántas reglas de precio y logins lo usan, su resumen de precios y los logins que lo seleccionan.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products-light.webp" alt="La página de un producto: su descripción, los logins que lo seleccionan y su resumen de precios." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products-dark.webp" alt="La página de un producto: su descripción, los logins que lo seleccionan y su resumen de precios." />
+</Frame>
+
 ## Un producto sin definir es un estado soportado que envía gratis
 
 Dejar `product` fuera de una credencial es configuración legal. Coincide con `product:isNull:` en la
@@ -71,10 +76,15 @@ no aparece. Una ruta gratuita sigue siendo gratuita y sigue enviando.
 
 | Columna | Significado |
 | :--- | :--- |
-| `name` | La clave primaria. Recortada, no vacía y emparejada **exactamente**. `OTP` y `otp` son dos productos. |
-| `label`, `description` | Para el panel. |
-| `enabled` | Si el gateway cuenta esto como un producto que vende. |
-| `whitelist_enabled` | Por defecto `true`. `false` exime al tráfico de este producto de las comprobaciones de sender ID y contenido. |
+| `name` | **Code** en el panel. La clave primaria. Recortada, no vacía y emparejada **exactamente**. `OTP` y `otp` son dos productos. Fija una vez creada. |
+| `label`, `description` | **Display name** y **What the customer is buying**. Para el panel. |
+| `enabled` | **Listed**. Si el gateway cuenta esto como un producto que vende. |
+| `whitelist_enabled` | **Check sender IDs and content**. Por defecto `true`. `false` exime al tráfico de este producto de las comprobaciones de sender ID y contenido. |
+
+<Frame caption="Un producto abierto para editar. El código es fijo: para pasar a otro, créalo, vuelve a apuntar las reglas y después borra este.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-products--edit-light.webp" alt="Un producto abierto para editar: su nombre visible, su código fijo, lo que compra el cliente y si está listado y comprobado." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-products--edit-dark.webp" alt="Un producto abierto para editar: su nombre visible, su código fijo, lo que compra el cliente y si está listado y comprobado." />
+</Frame>
 
 ## Eximir un producto del whitelisting
 

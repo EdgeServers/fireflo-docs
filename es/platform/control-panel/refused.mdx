@@ -1,21 +1,21 @@
 ---
 title: "Rechazados"
-description: "Mensajes que la pasarela no envió y por qué. Incluidos los tres rechazos que ocurren después de haberle dicho sí al cliente, y que por tanto llevan un id de mensaje y un reembolso."
+description: "Mensajes que la pasarela no envió y por qué. Incluidos los rechazos que ocurren después de haberle dicho sí al cliente, y que por tanto llevan un reembolso."
 ---
 
 **Mensajes que la pasarela no envió, y por qué.** La primera pantalla a abrir cuando un cliente
 dice que no llega nada.
 
-La mayoría de rechazos ocurrieron en la puerta: no se envió nada y no se cobró nada. Tres no, y la
+La mayoría de rechazos ocurrieron en la puerta: no se envió nada y no se cobró nada. Unos pocos no, y la
 diferencia es lo más importante en esta página.
 
 ## Rechazados en la puerta, o rechazados tras la aceptación
 
 <Warning>
-**Tres motivos ocurren después de haberle dicho sí al cliente**: *never routed*, *vendor refused
-it* y *dropped by a filter*.
+**Cuatro motivos ocurren después de haberle dicho sí al cliente**: *never routed*, *vendor refused
+it*, *dropped by a filter* y *expired waiting for its vendor*.
 
-Esos mensajes fueron aceptados, cargados y en dos casos realmente enviados. Llevan un **message
+Esos mensajes fueron aceptados y cargados, y en *vendor refused it* realmente enviados. Llevan un **message
 id**, aparecen en los registros de llamada, y **su cargo se reembolsó**. Todo lo demás en esta
 página se rechazó antes de convertirse en tráfico en absoluto.
 
@@ -25,8 +25,25 @@ cliente contra el suyo.
 
 ## Los motivos
 
-Tarjetas de resumen encabezan la página, una por motivo, con un conteo para toda la ventana. No se
-desplazan al paginar, y hacer clic en una filtra a ella.
+**By reason** encabeza la página: una tarjeta por motivo, con un conteo para toda la ventana y un botón
+de información que lo explica. Las tarjetas no se desplazan al paginar, y elegir una filtra a ella;
+elíjala de nuevo para quitar el filtro. Desde 0.12.14 el resumen se toma sobre los **últimos 50 000
+rechazos** y la página lo dice: en una pasarela que rechaza más que eso en la ventana, las tarjetas
+describen la forma reciente en lugar de un total exacto, y la tabla de debajo sigue completa.
+
+<Frame caption="Rechazos de una cuenta durante 7 días: una tarjeta por motivo encima de los filtros y los rechazos más recientes.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused-light.webp" alt="La página Refused: tarjetas de motivo encima de una tabla de mensajes rechazados." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused-dark.webp" alt="La página Refused: tarjetas de motivo encima de una tabla de mensajes rechazados." />
+</Frame>
+
+<Frame caption="La misma página tras elegir la tarjeta No units left: la tarjeta queda resaltada, Why se fija en ella y el conteo sobre la tabla es solo de ese motivo.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-refused--one-reason-light.webp" alt="La página Refused acotada a un motivo al elegir su tarjeta: No units left." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-refused--one-reason-dark.webp" alt="La página Refused acotada a un motivo al elegir su tarjeta: No units left." />
+</Frame>
+
+Los submits SMPP respondidos con un throttle (`0x58`) no son filas aquí. Se guardan como recuentos por
+minuto por cuenta, listener y login, y una línea bajo las tarjetas dice cuántos hubo en la ventana, o
+que no hubo ninguno.
 
 | Motivo | Normalmente significa |
 | :--- | :--- |
@@ -44,9 +61,15 @@ desplazan al paginar, y hacer clic en una filtra a ella.
 | **Too many waiting for credit; resend** | Desde 0.17.2 (`creditQueueFull`). Ya esperaban crédito 10 000 mensajes de la cuenta, o 100 000 en la pasarela. La misma causa que el anterior, a volumen |
 | **Queue full** | La cola del enrutador estaba a capacidad y rechazó en lugar de crecer el heap. Antes de 0.17.2, los envíos REST y gRPC rechazados por crédito no confirmado a tiempo también se contaban aquí |
 | **Could not be queued** | Aceptado por las comprobaciones, pero no se pudo entregar: normalmente el broker |
+| **Vendor backlog full** | Desde 0.15.1. Cada vendor al que podía ir el mensaje había superado su límite de backlog, y ninguna otra ruta era utilizable. Nada cobrado |
+| **Vendor unavailable** | Desde 0.15.1. El vendor al que iría lleva sin bind más tiempo que `smsg.vendor.unbound.refuse.after.seconds`, y ninguna otra ruta era utilizable. Nada cobrado |
+| **Database not answering; try again** | Desde 0.15.1. La base de datos iba demasiado lenta para aceptar mensajes nuevos, así que los submits nuevos se rechazaron antes de cobrar nada. Los mensajes ya aceptados siguen adelante |
+| **Gateway stopping** | La pasarela se estaba apagando y no aceptó mensajes nuevos. Nada cobrado; un reintento pasa en cuanto otro nodo o la pasarela reiniciada lo toma |
+| **Hand-off outcome unknown** | Aceptado y entregado al broker, y la entrega terminó sin una respuesta definitiva: puede que se haya enviado. No se reembolsa, para que no pueda facturarse dos veces; la pasarela lo liquida en cuanto se conoce la respuesta |
 | **Never routed** | *Tras aceptación.* Ninguna regla activada coincidió; reembolsado |
 | **Vendor refused it** | *Tras aceptación.* El operador rechazó el submit; reembolsado |
 | **Dropped by a filter** | *Tras aceptación.* Un filtro de enrutamiento lo detuvo; reembolsado |
+| **Expired waiting for its vendor** | *Tras aceptación.* Encolado para un vendor, esperó más de `smsg.vendor.backlog.expire.seconds` (o su propia validez) y no se envió; reembolsado, con un acuse fallido donde se pidió |
 
 <Note>
 **Los mensajes de una cuenta con fondos esperan a su crédito** tras un reinicio, o siempre que se
@@ -66,18 +89,25 @@ whitelist no cargada permite todo por diseño**.
 
 ## Encontrar uno
 
-La red amplia es **Anything**, que busca dentro de cuenta, remitente, destino, producto, login,
-detalle del rechazo y extracto del mensaje a la vez. Existen filtros más estrechos para cuenta,
-destino, nombre de bind, producto, ingreso, listener, número de origen e id de mensaje.
+La fila siempre visible es **Period**, **Why** (el motivo), **Account** (exacto), **To number**
+(empieza por) y **Anything**. **Anything** es la red amplia: busca dentro de cuenta, remitente,
+destino, producto, login, detalle del rechazo y extracto del mensaje a la vez. **More filters** añade
+**Bind name (system id)**, **Product**, **Came in via**, **Listener**, **From number**, **Message id**,
+**Carrier status** y **Stage**. **Clear** los vacía todos.
 
 **Carrier status** toma el número del operador en decimal. 69 es el genérico "rechazado y no dirá
 por qué", y solo los rechazos de vendor llevan uno.
 
+**La página siempre necesita un periodo, de 92 días como máximo.** Los rechazos no se pueden listar
+sobre todo el historial: versiones anteriores mostraban en silencio los rechazos de un día bajo un
+encabezado **All time**, que es el tipo de error que la gente se cree, así que desde 0.12.14 la página
+pide un periodo en su lugar.
+
 ## La tabla
 
-Nueve columnas por defecto: refused, why, vendor said, account, product, from, to, via, message. El
-selector añade el motivo en inglés, el detalle del rechazo, si se cobró y reembolsó, el nombre en
-código del vendor y los ids de fila y mensaje.
+Diez columnas por defecto: refused, why, vendor said, account, product, from, to, via, ingress
+server, message. El selector añade el motivo en inglés, el detalle del rechazo, si se cobró y
+reembolsó, lo que se le dijo al cliente, el nombre en código del vendor y los ids de fila y mensaje.
 
 El **extracto del mensaje** (los primeros 160 caracteres) se guarda **incondicionalmente**, a
 diferencia del cuerpo en un registro de llamada. Un rechazo de contenido no se puede diagnosticar

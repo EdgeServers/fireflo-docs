@@ -13,6 +13,16 @@ Registra `routing.table.unknown-function` y sigue funcionando. La caída a `NORM
 
 Hay exactamente dos funciones, `NORMAL` y `LCR`. Una tabla que no declara función es `NORMAL`.
 
+En el panel de control la función es **How it chooses**, que se establece al añadir una tabla con
+**New table** y se cambia desde el botón **Table** de la tabla: **In order** es `NORMAL` y **Cheapest
+vendor** es `LCR`. El panel solo ofrece esas dos, así que ahí no se puede escribir mal, y la página de
+una tabla muestra cuál es junto a su nombre.
+
+<Frame caption="New table con How it chooses en Cheapest vendor: cada proveedor que coincide es candidato, y gana la tarifa más barata.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--new-table-light.webp" alt="El formulario de nueva tabla de enrutamiento con How it chooses en Cheapest vendor." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--new-table-dark.webp" alt="El formulario de nueva tabla de enrutamiento con How it chooses en Cheapest vendor." />
+</Frame>
+
 <Note>
 Una tercera función, `RC`, se eliminó en `V1.28.0`. Estaba en el enum, permitida por la restricción de la base de datos y descrita en el panel, y nada en ningún sitio hacía bifurcación por ella, así que una tabla configurada como `RC` se enrutaba como `NORMAL` mientras cada superficie que un operador podía consultar decía lo contrario. Las filas existentes se reescriben a `NORMAL`, que es lo que ya estaban haciendo.
 </Note>
@@ -55,6 +65,14 @@ Una tabla `NORMAL` se detiene en la primera regla coincidente, lo que hace que e
     Un proveedor sin una tarifa de coste coincidente se guarda aparte y se usa solo si nada más coincidió, registrando `No candidate in least-cost table … has a rate`.
   </Step>
 </Steps>
+
+Las tarifas de coste de un proveedor están en su pestaña **Cost rates** en el panel de control: lo que
+el proveedor te cobra, regla a regla, y gana la primera coincidencia.
+
+<Frame caption="La pestaña Cost rates de un proveedor: lo que cobra el proveedor, regla a regla. Una tabla Cheapest vendor compara estas.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost--cost-rates-light.webp" alt="La pestaña Cost rates de un proveedor: lo que cobra el proveedor, regla a regla, que compara la tabla de proveedor más barato." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost--cost-rates-dark.webp" alt="La pestaña Cost rates de un proveedor: lo que cobra el proveedor, regla a regla, que compara la tabla de proveedor más barato." />
+</Frame>
 
 <Note>
 **Una línea de tarifa faltante degrada en lugar de bloquear.** Rechazar el enrutamiento de un mensaje sin tarifa convertiría una línea olvidada en `rates.conf` en una caída del servicio; preferirla enviaría todo por el proveedor menos configurado. El último recurso es la única respuesta que no es ninguna de las dos.

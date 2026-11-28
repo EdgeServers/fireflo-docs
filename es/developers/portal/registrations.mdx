@@ -31,20 +31,33 @@ La columna del medio es lo que devuelven [`/secure/senders`](/reference/api/send
 cuatro estados en lugar de ocho. **Solo `APPROVED` es utilizable**: los otros tres significan que un
 mensaje será rechazado, por motivos distintos.
 
-Cada fila indica también a qué producto se aplica y a qué login: uno concreto o **todos sus
-logins**.
+Cada fila indica también a qué producto se aplica. En cuanto alguno de sus registros está vinculado
+a un login, cada fila dice también qué login cubre: uno concreto o **todos sus logins**.
 
-<Frame caption="Sender IDs, todos aprobados y en uso. El producto al que se limita cada uno aparece junto a él. Un remitente aprobado para un producto no lo está para otro.">
-  <img src="/images/developers/portal/senders.png" alt="La pantalla Sender IDs del portal listando tres sender IDs aprobados, cada uno limitado a un producto" />
+<Frame caption="Sender IDs, cada uno con su estado y el producto al que corresponde. Estos tres siguen esperando aprobación, y cada uno lo dice con palabras: todavía no está en uso.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations-light.webp" alt="La página Sender IDs del portal listando tres sender IDs, cada uno marcado Waiting for approval, para el producto india-ot, con un botón Edit y un botón Request a sender ID encima" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations-dark.webp" alt="La página Sender IDs del portal listando tres sender IDs, cada uno marcado Waiting for approval, para el producto india-ot, con un botón Edit y un botón Request a sender ID encima" />
 </Frame>
 
-<Frame caption="Templates, incluyendo una en hindi. Los huecos {#var#} son lo que puede cambiar; todo lo demás alrededor se compara exactamente.">
-  <img src="/images/developers/portal/templates.png" alt="La pantalla Templates del portal listando cuatro plantillas aprobadas con sintaxis de marcador" />
+<Frame caption="Templates, con el mismo patrón. Los huecos {#var#} son lo que puede cambiar; todo lo demás alrededor se compara exactamente.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--templates-light.webp" alt="La página Templates del portal listando tres plantillas con marcadores {#var#}, cada una marcada Waiting for approval, para el producto india-ot" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--templates-dark.webp" alt="La página Templates del portal listando tres plantillas con marcadores {#var#}, cada una marcada Waiting for approval, para el producto india-ot" />
 </Frame>
 
 ## Solicitar un sender ID
 
-Un solo campo. Los rechazos merecen conocerse antes de tropezar con ellos:
+**Request a sender ID** abre un formulario corto: el propio sender ID, una **nota para su operador** y
+los [stamps que pedir](#stamps).
+
+<Frame caption="El formulario de solicitud. Solo hace falta el sender ID; la nota es donde va la referencia de registro de un regulador, y nada es utilizable hasta que su operador lo aprueba.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-registrations--request-light.webp" alt="El diálogo Request a sender ID: un campo Sender ID, un campo Note for your operator, Stamps to ask for con un botón Add a stamp, y Send for approval" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-registrations--request-dark.webp" alt="El diálogo Request a sender ID: un campo Sender ID, un campo Note for your operator, Stamps to ask for con un botón Add a stamp, y Send for approval" />
+</Frame>
+
+> **Note for your operator**: si está registrado ante un regulador, ponga aquí la referencia. Su
+> operador establece el valor que envía la pasarela; usted no necesita hacerlo.
+
+El sender ID es el campo que se comprueba. Los rechazos merecen conocerse antes de tropezar con ellos:
 
 - Un sender ID tiene un máximo de 64 caracteres, **pero SMPP permite 21**. Cualquier valor cerca
   del límite superior podría almacenarse aquí y no entregarse nunca.
@@ -55,7 +68,8 @@ Un solo campo. Los rechazos merecen conocerse antes de tropezar con ellos:
 ## Solicitar una plantilla
 
 Un **nombre**, para que usted y su proveedor la reconozcan, no comparado con nada. Luego la
-**redacción**, que sí se compara. Exactamente, salvo los huecos que marque.
+**redacción**, que sí se compara. Exactamente, salvo los huecos que marque. Después vienen la nota
+para su operador y los stamps, como para un sender ID.
 
 > Ponga `{#var#}` donde el mensaje cambie: un nombre, un código, un número de pedido. Todo lo
 > demás debe coincidir exactamente.
@@ -96,7 +110,11 @@ pena comentarlo con su proveedor.
 ## Stamps
 
 Bajo **Stamps to ask for** puede proponer los valores que su proveedor asocia a cada mensaje en
-este registro: bajo DLT, sus identificadores de entidad y plantilla.
+este registro: bajo DLT, sus identificadores de entidad y plantilla. **Add a stamp** le da una
+etiqueta y un valor por fila.
+
+> La etiqueta es lo que sigue al último guion bajo, en decimal salvo que se escriba `0x`; así que
+> `tlv_0100` es la etiqueta 100, no 64.
 
 > **Preguntar es gratis:** nada aquí llega a un mensaje hasta que su operador lo acepte, así que
 > un registro aprobado sigue funcionando entretanto.
@@ -106,13 +124,20 @@ encolar una segunda solicitud.
 
 ## Qué login
 
-Cuando su cuenta tiene más de un login de API, puede vincular un registro a uno de ellos.
+Cuando su cuenta tiene más de un login de API, el formulario ofrece también **Which login**, para
+vincular un registro a uno de ellos. Con un único login no se muestra la opción.
 
 <Warning>
 **Deje esto en "All my logins" a menos que sepa que quiere lo contrario.** Vinculado a un solo
 login, un registro no hace nada por los demás, y un login sin nada aprobado no puede enviar nada
 en absoluto.
 </Warning>
+
+## Pedir uno para uno de sus clientes
+
+Si usted revende, el formulario pregunta también **Who this is for**: su propia cuenta o uno de sus
+clientes. Elija un cliente y el registro se solicita contra su cuenta, y su operador lo aprueba antes
+de que pueda enviar con él. Un registro pedido para un cliente cubre todos sus logins.
 
 ## Editar algo que está en uso
 

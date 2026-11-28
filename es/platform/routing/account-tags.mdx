@@ -71,8 +71,13 @@ por defecto.
 
 ## Filtrar listas e informes por etiqueta
 
-La lista de cuentas tiene una columna **Tags** y un filtro por etiqueta. **Usage** y **Messages** tienen
-un filtro **Tag**.
+La lista de cuentas tiene una columna **Tags** (actívala en **Columns**) y un filtro por etiqueta.
+**Usage** y **Messages** tienen un filtro **Tag**.
+
+<Frame caption="La lista Accounts filtrada a las cuentas que llevan la etiqueta priority.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--by-tag-light.webp" alt="La lista Accounts filtrada a las cuentas que llevan la etiqueta priority." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--by-tag-dark.webp" alt="La lista Accounts filtrada a las cuentas que llevan la etiqueta priority." />
+</Frame>
 
 <Note>
 **El filtro lee las etiquetas que las cuentas tienen ahora.** Un mensaje no guarda las etiquetas que
@@ -111,6 +116,15 @@ los de etiquetas.
 - **Una etiqueta deshabilitada no coincide con nada ni tarifica nada**, pero sigue en sus cuentas. Al
   volver a encenderla se aplica de nuevo.
 - Borrar una etiqueta que nada nombra la quita de todas las cuentas.
+
+**Add a tag** pide el nombre, una etiqueta visible y una descripción opcionales, y un color. Una
+etiqueta nueva está encendida y va al final del orden. El color y la descripción son solo para las
+personas; el enrutamiento y los precios no los leen.
+
+<Frame caption="Add a tag: el nombre queda fijo una vez añadida, porque las reglas y los precios la nombran.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tags--add-tag-light.webp" alt="El diálogo Add a tag: su nombre, etiqueta visible, descripción y color." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tags--add-tag-dark.webp" alt="El diálogo Add a tag: su nombre, etiqueta visible, descripción y color." />
+</Frame>
 
 Las etiquetas se ponen a una cuenta en su pestaña **Settings**. Una cuenta de unidades muestra ahí las
 etiquetas de su cuenta padre, solo para leer.

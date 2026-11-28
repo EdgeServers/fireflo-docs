@@ -63,6 +63,15 @@ regla, así que un filter puede representar a todas las cuentas con la etiqueta 
 [Etiquetas de cuenta](/platform/routing/account-tags).
 </Tip>
 
+En el panel de control, **New filter** construye uno en tres pasos: qué emparejar, los valores y
+después un nombre. Cada casilla que marques en el primer paso tiene que cumplirse, así que cada una
+estrecha más el filter.
+
+<Frame caption="New filter, primer paso: marca lo que un mensaje debe emparejar. Account tag es una de las opciones; Something else abre el editor avanzado.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters--new-filter-light.webp" alt="El diálogo de nuevo filter en su primer paso: lo que un mensaje debe emparejar, elegido entre un conjunto de tarjetas." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters--new-filter-dark.webp" alt="El diálogo de nuevo filter en su primer paso: lo que un mensaje debe emparejar, elegido entre un conjunto de tarjetas." />
+</Frame>
+
 ## Un filter vacío cuenta como deshabilitado
 
 Un filter sin condiciones guarda y carga, que es lo que permite construir uno una condición a la vez.
@@ -94,8 +103,10 @@ tarifican diferentemente".
 
 <Steps>
   <Step title="Lee el conteo">
-    **Filters** en el panel lista cuántas reglas de tarifa y cuántas reglas de enrutamiento referencian cada
-    filter. Deshabilitar un filter usado por cuatro reglas de enrutamiento elimina cuatro reglas del snapshot en ejecución.
+    **Filters** en el panel muestra en cada filter cuántas reglas de enrutamiento (**Routing · 4**) y
+    cuántas reglas de precio (**Pricing · 2**) lo usan; pulsa el conteo para listarlas. Un filter que
+    nada usa muestra **Unused**. Deshabilitar un filter usado por cuatro reglas de enrutamiento elimina
+    cuatro reglas del snapshot en ejecución.
   </Step>
   <Step title="Mira qué atrapa el tráfico en su lugar">
     Para cada regla que se saltaría, encuentra la siguiente regla en la misma tabla que el tráfico
@@ -107,6 +118,11 @@ tarifican diferentemente".
     no pasó nada.
   </Step>
 </Steps>
+
+<Frame caption="La página Filters agrupa los filters por lo que emparejan. Bajo Status, Off or empty lista los filters cuyas reglas se salta el gateway.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-filters-light.webp" alt="La página Filters: tarjetas de filter agrupadas por lo que emparejan, cada una con las reglas que la usan." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-filters-dark.webp" alt="La página Filters: tarjetas de filter agrupadas por lo que emparejan, cada una con las reglas que la usan." />
+</Frame>
 
 ## Los filter workers son algo diferente
 

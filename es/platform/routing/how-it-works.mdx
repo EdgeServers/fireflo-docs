@@ -47,6 +47,15 @@ Una regla cuyo objetivo nombra otra tabla se encadena a ella, así que `default 
 
 Una tabla alcanzada dos veces por rutas diferentes no es un ciclo: `default → a → c` junto a `default → b → c` se carga con normalidad.
 
+En el panel de control, **Start here** en la página Routing dibuja cómo viaja un mensaje desde
+`default` a través de las tablas, y comprueba las reglas de enrutamiento por defecto: una por listener
+para sus recibos, y una por tipo de mensaje saliente en la tabla de entrada.
+
+<Frame caption="Start here: cada mensaje empieza en default y sigue las reglas que lo envían a otra tabla. Debajo, las reglas que el gateway necesita para funcionar siquiera.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-least-cost-light.webp" alt="El Start here de la página Routing: cómo viaja un mensaje desde default hasta MESSAGE, y las reglas de enrutamiento por defecto comprobadas contra las tablas." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-least-cost-dark.webp" alt="El Start here de la página Routing: cómo viaja un mensaje desde default hasta MESSAGE, y las reglas de enrutamiento por defecto comprobadas contra las tablas." />
+</Frame>
+
 ## Las dos cosas que se cargan y luego se portan mal en silencio
 
 Ambas aparecen en `/ops/health` bajo `routing_warnings`, y cada una se registra una sola vez cuando aparece por primera vez, no en cada publicación.

@@ -24,6 +24,11 @@ outSms.instance.smpp.enable   = true
 
 Todos los ajustes están en [Ajustes de listener](/reference/smpp/server).
 
+<Frame caption="El formulario de edición de un listener. El nombre no se puede cambiar una vez añadido el listener; en su lugar, bórrelo y añádalo de nuevo.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers--edit-light.webp" alt="El formulario de edición de un listener: su puerto, si está activo, su system ID anunciado, el máximo de binds que acepta y las TLV que envía." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers--edit-dark.webp" alt="El formulario de edición de un listener: su puerto, si está activo, su system ID anunciado, el máximo de binds que acepta y las TLV que envía." />
+</Frame>
+
 <Warning>
 **Un listener que no puede tomar su puerto no detiene la pasarela.** Registra y todo lo demás sigue
 funcionando: correcto para un despliegue con varios listeners, y sorprendente la primera vez.
@@ -77,17 +82,40 @@ registra una vez por carga de configuración nombrando el listener.
 | `mandatory.tlvs.submit` | Tags que un mensaje debe llevar, si no `0xC3` |
 | `inQueue.capacity` | Mensajes retenidos esperando al almacén de mensajes |
 
+Los **overrides por cuenta**, en la pestaña **Listener settings** del listener, dan a una cuenta su
+propio techo de tasa o número de binds en este listener, en lugar del valor por defecto del listener.
+El techo lo comparten todos los logins de la cuenta. Un valor vacío elimina el override; `0` es
+ilimitado.
+
+<Frame caption="El techo de tasa o el número de binds de una cuenta en lugar del valor por defecto del listener. Los valores por defecto que sustituye se muestran bajo el formulario.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--overrides-light.webp" alt="Los ajustes de un listener con sus overrides por cuenta: el techo de tasa o el número de binds de una cuenta en lugar del valor por defecto del listener." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--overrides-dark.webp" alt="Los ajustes de un listener con sus overrides por cuenta: el techo de tasa o el número de binds de una cuenta en lugar del valor por defecto del listener." />
+</Frame>
+
 ## Los estados en los que puede estar un listener
 
 | Verbo | Efecto |
 | :--- | :--- |
 | `enable` / `disable` | Cargado, o no |
-| `suspend` / `resume` | Deja de aceptar; la cola drena de vuelta al enrutador |
-| `hold` / `release` | Sigue aceptando, deja de enviar; **la cola crece** |
+| `suspend` / `resume` | Sigue aceptando, no enruta nada: los submits se aparcan y se enrutan al reanudar, los más antiguos primero; cuando el aparcamiento se llena, los submits se rechazan con un error reintentable. Los acuses siguen llegando a los clientes |
+| `hold` / `release` | Rechaza cada submit con un error reintentable (`ESME_RMSGQFUL`) y **retiene los acuses**. No se desconecta a nadie |
+
+En el panel de control, suspend es **Stop sending** y hold es **Stop accepting** (también **Hold**,
+al pie de la página del listener). Cada uno pregunta antes de actuar.
+
+<Frame caption="Stop accepting pregunta primero: a los clientes con bind se les rechazan los submits con un error reintentable y se les retienen los acuses hasta que reanude. No se desconecta a nadie.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--stop-accepting-light.webp" alt="La pregunta antes de que un listener deje de aceptar: a los clientes con bind se les rechazan los submits con un error reintentable y no se desconecta a nadie." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--stop-accepting-dark.webp" alt="La pregunta antes de que un listener deje de aceptar: a los clientes con bind se les rechazan los submits con un error reintentable y no se desconecta a nadie." />
+</Frame>
 
 El panel los muestra como un badge por tarjeta. `Listening` con nadie bound **no** es un fallo: un
 listener sin clientes conectados es silencioso, no roto, y por eso no se pinta en rojo como un
 vendor sin sesión.
+
+<Frame caption="La página Servers. Un listener tiene tres clientes con bind; el otro muestra Listening, lo que solo significa que nadie tiene bind.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-servers-light.webp" alt="La página Servers: una tarjeta por listener con su estado y sus sesiones en vivo." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-servers-dark.webp" alt="La página Servers: una tarjeta por listener con su estado y sus sesiones en vivo." />
+</Frame>
 
 ## Cortar el bind de un cliente
 
@@ -97,6 +125,16 @@ scripts/fireflo disconnect smpp 7
 
 Los ids de sesión vienen de `fireflo health`. Son el contador propio del listener, así que
 colisionan entre listeners y se reinician con la pasarela.
+
+En el panel de control, abra la pestaña **Connections** del listener, despliegue la cuenta y pulse
+**Disconnect** en la sesión. Marque **Also disable this login** para mantenerlo fuera también.
+**Force disconnect**, al pie de la página del listener, corta todas las sesiones de una dirección,
+una cuenta o un login en ese listener.
+
+<Frame caption="La pestaña Connections: cada cuenta con bind, con sus binds, system type, tiempo activo y mensajes recibidos. Despliegue una cuenta para llegar a sus sesiones.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-sessions--connections-light.webp" alt="La pestaña Connections de un listener: cada cuenta con bind, con sus binds, system type, tiempo activo y mensajes recibidos." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-sessions--connections-dark.webp" alt="La pestaña Connections de un listener: cada cuenta con bind, con sus binds, system type, tiempo activo y mensajes recibidos." />
+</Frame>
 
 <Note>
 **Esto termina una conexión; no retira el permiso.** Un cliente sano vuelve a hacer bind en segundos

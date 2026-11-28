@@ -129,6 +129,23 @@ unidades usadas este mes y por día, sus límites de velocidad y el libro de uni
 y Statement no se muestran: los precios y el extracto son los de la cuenta padre. No se ofrece ninguna
 acción con dinero.
 
+<Frame caption="La pestaña Billing de una cuenta de unidades. Las unidades restantes por producto a la izquierda, la cuenta que paga a la derecha, y después las unidades usadas y los propios límites de velocidad de la cuenta.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units-light.webp" alt="La pestaña Billing de una cuenta de unidades: unidades restantes por producto y la cuenta padre a la que se cargan." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units-dark.webp" alt="La pestaña Billing de una cuenta de unidades: unidades restantes por producto y la cuenta padre a la que se cargan." />
+</Frame>
+
+**Left** es lo que todavía se puede enviar: las unidades aún no repartidas, más las unidades que los
+nodos de la pasarela tienen reservadas y no han usado. Las unidades usadas se liquidan cada pocos
+segundos, así que en una cuenta con mucho tráfico las cifras van un poco por detrás de su tráfico.
+
+El **Unit ledger** lista cada entrega, retirada y movimiento, con su producto y referencia. Las
+unidades usadas no se listan ahí; están en **Units used**.
+
+<Frame caption="El libro de unidades. Cada lote de unidades que la plataforma gestora dio o retiró, cada uno con su propia referencia.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-units--ledger-light.webp" alt="El libro de una cuenta de unidades: cada lote de unidades que le dio la plataforma gestora, con producto y referencia." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-units--ledger-dark.webp" alt="El libro de una cuenta de unidades: cada lote de unidades que le dio la plataforma gestora, con producto y referencia." />
+</Frame>
+
 La pestaña **Billing** de una cuenta padre lista sus subcuentas, con las unidades restantes por producto
 y un estado "no units". Si las cuentas de unidades aún no se pueden usar, porque un nodo es anterior a
 0.16.0 o la aplicación del prepago está desactivada, la pestaña indica cuál es el motivo.

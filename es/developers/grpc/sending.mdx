@@ -136,6 +136,11 @@ mensaje puede estar en camino. **Reinténtela solo con el mismo `client_ref`.** 
 Para un volumen alto y sostenido. Usted escribe `SendStreamRequest` y lee `SendStreamResult` en un solo
 stream bidireccional.
 
+<Frame caption="SendStream y el flujo de acuses en la parte gRPC de la referencia de la API REST de su portal de cliente. Los resultados vuelven en cualquier orden, emparejados por correlation_id.">
+  <img className="block dark:hidden" src="/images/developers/grpc/apis-grpc--stream-light.webp" alt="La referencia gRPC del portal en SendStream y Receipts: los campos de ErrorDetail, cómo un stream empareja correlation_id con los resultados, y Subscribe, Pull y Ack" />
+  <img className="hidden dark:block" src="/images/developers/grpc/apis-grpc--stream-dark.webp" alt="La referencia gRPC del portal en SendStream y Receipts: los campos de ErrorDetail, cómo un stream empareja correlation_id con los resultados, y Subscribe, Pull y Ack" />
+</Frame>
+
 **Cada petición** es un `correlation_id` elegido por usted y un `SendRequest`: exactamente el mensaje
 que pasaría a `Send`.
 

@@ -12,32 +12,66 @@ Los filtros se aplican cuando pulsa **Search**, no a medida que teclea, y viajan
 dirección, así que una vista filtrada se puede marcar o pegar a un compañero y verá lo que usted
 vio.
 
-La fila siempre visible: **Period**, **Outcome**, **To number** (coincide desde el inicio),
-**Message id** (exacto) y **Message text** (contiene). **More filters** añade cuenta, nombre de
-bind, vendor, producto, ingreso y número de origen.
+La fila siempre visible: **Period** (un preajuste o un rango de fechas), **Outcome** y **Find**, una
+única casilla que acepta un número de destino (coincide desde el inicio) o un message id (exacto) y
+los distingue por sí sola. **Filters** abre el resto en tres grupos, y su distintivo cuenta cuántos
+están establecidos:
 
-Desde 0.17.0 también ofrece **Tag**: mensajes de cuentas que llevan esa
+| Grupo | Filtros |
+| :--- | :--- |
+| **Route** | Ingress server, Vendor, Came in via |
+| **Sender** | Account, Tag, Bind name (system id), Product |
+| **Message** | From number (starts with), Message text (contains) |
+
+**Tag** (desde 0.17.0) encuentra mensajes de cuentas que llevan esa
 [etiqueta de cuenta](/platform/routing/account-tags) ellas mismas ahora. Un mensaje no guarda las
 etiquetas de su cuenta, y el filtro necesita un periodo distinto de todo el historial.
+
+Cada filtro aplicado aparece como una etiqueta bajo la barra; quite uno con su aspa, o todos con
+**Clear all**.
+
+<Frame caption="Messages de una cuenta durante 7 días, con Filters abierto. La etiqueta de cuenta bajo la barra es el filtro aplicado.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages-light.webp" alt="La página Messages: la barra de filtros y una tabla de mensajes con sus resultados." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages-dark.webp" alt="La página Messages: la barra de filtros y una tabla de mensajes con sus resultados." />
+</Frame>
 
 **Awaiting a receipt** se lista primero entre los resultados en lugar de alfabéticamente. En una
 pasarela ocupada y sana es el grupo más grande, y es lo que la gente suele estar buscando.
 
+**Un filtro de texto, de número o de resultado necesita un periodo**, de 92 días como máximo. Esos
+tres son búsquedas entre filas en lugar de un recorrido desde lo más nuevo, y sobre todos los mensajes
+enviados alguna vez tardarían minutos; desde 0.12.14 la página le pide que elija un periodo en lugar
+de intentarlo. Un message id exacto, o una cuenta sola, sigue funcionando sobre todo el historial.
+
+### Un acuse que no es un resultado
+
+Los operadores suelen responder dos veces: primero un **acuse de progreso** (*Accepted by the carrier*,
+`ACCEPTD`, o *Held, still being attempted*, `BUFFRED`) y más tarde el resultado. Un acuse de progreso
+no cierra el mensaje, así que hasta que llega el resultado la fila no tiene resultado, y su distintivo
+nombra en su lugar el acuse de progreso: **Accepted by the carrier** en lugar de **Awaiting receipt**.
+Solo un mensaje al que el operador no ha respondido en absoluto muestra **Awaiting receipt**.
+
+El filtro **Awaiting a receipt** cubre ambos, y la línea sobre la tabla dice cuántos de los mensajes
+abiertos ha confirmado el operador. La lista no se refresca sola; **Refresh** vuelve a leer la misma
+página, que es como aparece un acuse que llegó después de cargar la página.
+
 <Note>
 **La búsqueda por texto del mensaje no encuentra nada a menos que la pasarela esté grabando el
 contenido del mensaje**, que está desactivado por defecto. Un resultado vacío puede significar que
-el texto no se conserva más que nada haya coincidido. Consulte `smsg.cdr.body` en
-[la referencia de configuración](/reference/config/paths).
+el texto no se conserva más que nada haya coincidido. Actívelo en **Gateway settings → Call records →
+Keep message text** (desde 0.12.17; la clave es `smsg.cdr.body`, consulte
+[la referencia de configuración](/reference/config/paths)).
 </Note>
 
 ### Una fila por mensaje, o una por intento
 
-El control **Rows** decide el grano, y cambia lo que significan los números:
+El selector **Per message** / **Every attempt** junto a los filtros decide el grano, y cambia lo que
+significan los números:
 
 | Ajuste | Una fila es |
 | :--- | :--- |
-| **One row per message** *(por defecto)* | Lo que el cliente envió |
-| **Every attempt and segment** | Lo que la pasarela hizo: incluyendo reintentos y segmentos de mensajes largos |
+| **Per message** *(por defecto)* | Lo que el cliente envió |
+| **Every attempt** | Lo que la pasarela hizo: una fila por intento con un vendor, incluyendo reintentos y segmentos de mensajes largos |
 
 Un mensaje largo que se dividió en tres, reintentado dos veces en el vendor, es una fila en el
 primer ajuste y varias en el segundo. Si un conteo parece demasiado alto, compruebe este control
@@ -45,7 +79,7 @@ antes de concluir nada.
 
 ## Columnas
 
-Siete por defecto: submitted, to, from, account, vendor, billed, outcome. El selector agrupa
+Ocho por defecto: submitted, to, from, account, ingress server, vendor, billed, outcome. El selector agrupa
 aproximadamente treinta más bajo **Message**, **Route**, **Money** y **Outcome**: incluyendo coste,
 margen, ambas reglas de tasa, estado de acuse y código de error.
 
@@ -57,6 +91,11 @@ TLV.**
 as empty* significa que se preguntó al vendor y no llevó ninguno. Leer el primero como el segundo
 le manda a buscar un fallo de sellado que nunca ocurrió.
 </Warning>
+
+**Ingress server** nombra el listener por el que entró un mensaje, con su puerto: `smppserver.smpp :2790`.
+El puerto es el del listener tal como está configurado ahora, no uno registrado con el mensaje, así
+que tras cambiar el puerto de un listener sus mensajes más antiguos muestran el nuevo. El tráfico REST
+no tiene listener y no muestra ninguno.
 
 Las elecciones de columna se guardan en su navegador. Un enlace que comparta lleva sus filtros,
 nunca sus columnas.
@@ -91,6 +130,15 @@ otro modo parecen fallos:
 Cada acuse muestra el mnemónico SMPP con su significado en inglés llano, y luego la parte que la
 gente necesita: si **cerró el mensaje**, fue **un resultado posterior, no el que se facturó**, o
 fue **progreso** que dejó el mensaje abierto.
+
+<Frame caption="Los acuses de un mensaje largo. La línea sobre la tabla dice lo que pidió el cliente; Sent on dice si cada acuse se le pasó.">
+  <img className="block dark:hidden" src="/images/platform/control-panel/reports-messages--receipts-light.webp" alt="La página de un mensaje largo en sus acuses: el intercambio con el cliente y después cada acuse que volvió, con su estado y el id propio del vendor." />
+  <img className="hidden dark:block" src="/images/platform/control-panel/reports-messages--receipts-dark.webp" alt="La página de un mensaje largo en sus acuses: el intercambio con el cliente y después cada acuse que volvió, con su estado y el id propio del vendor." />
+</Frame>
+
+Bajo el error se muestra el código propio del operador, marcado **mapped** donde sus códigos de error
+lo tradujeron. **Sent on** muestra **Held — not asked for** cuando el cliente no pidió acuses, así que
+no se le envió nada.
 
 Donde la pasarela registró lo que el cliente pidió, se muestra al lado. Donde no, la página lo dice
 explícitamente: eso no es lo mismo que el cliente no pidiendo nada.

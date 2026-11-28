@@ -1,40 +1,47 @@
 ---
 title: "Dar acceso al portal a un cliente"
-description: "Dos ajustes en la cuenta, un requisito de despliegue, y la razón por la que el panel nunca confirmará que se ha reconocido la dirección de un cliente."
+description: "El correo de la cuenta y sus logins del portal, un requisito de despliegue, y la razón por la que el panel nunca confirmará que se ha reconocido la dirección de un cliente."
 ---
 
-Los clientes acceden al portal introduciendo su dirección de correo electrónico y siguiendo un enlace de un solo uso. No hay
-contraseña que emitir, ni invitación que enviar, y nada que revocar salvo los dos ajustes de abajo.
+Los clientes inician sesión en el portal con un **login del portal**: una dirección de correo que
+inicia sesión con un enlace de un solo uso enviado por correo, o con una contraseña una vez
+establecida. Los logins del portal de una cuenta están en su pestaña **Settings**, en la tarjeta
+**Portal access**.
 
 ## Lo que configura un operador
 
-Abre la cuenta, ve a **Settings** y ajusta dos cosas en la tarjeta **Organisation**.
-
 <Steps>
 <Step title="Establecer la dirección de correo">
-El campo **Email** en la cuenta. Una cuenta por dirección, sin distinguir mayúsculas. Una segunda cuenta que
-reclame la misma dirección es rechazada en lugar de ocultar silenciosamente la primera.
+El campo **Email** en la tarjeta **Organisation**. Una cuenta por dirección, sin distinguir
+mayúsculas. Una segunda cuenta que reclame la misma dirección es rechazada en lugar de ocultar
+silenciosamente la primera.
 
-Una dirección mal formada se rechaza mientras la escribes, así que una dirección que se guardó es una dirección que el portal puede
-emparejar.
+Una dirección mal formada se rechaza mientras la escribes, así que una dirección que se guardó es una
+dirección que el portal puede emparejar. Guardarla da a la cuenta un login del portal para esa
+dirección. Si ese login falta, la tarjeta Portal access ofrece **Create a login for** la dirección.
 </Step>
 
-<Step title="Dejar la cuenta listada">
-La casilla **Listed**, en **Advanced**. Solo se emite un enlace de inicio de sesión para una cuenta que
-esté a la vez emparejada por dirección **y** habilitada.
+<Step title="Elegir cómo inicia sesión">
+Cada login de la tarjeta Portal access dice cómo inicia sesión: **Emailed link only** o **Password, or
+emailed link**. **Set password** o **Change password** establece una; **Remove password** vuelve a
+solo enlaces. Sin contraseña, el cliente inicia sesión con un enlace por correo y puede establecer una
+contraseña desde el portal.
+</Step>
+
+<Step title="Dejar la cuenta activada">
+El interruptor **Enabled**, en **Advanced**. Nadie puede iniciar sesión en el portal por una cuenta
+desactivada o archivada.
 </Step>
 </Steps>
 
-<Warning>
-**Desmarcar una cuenta desactiva su acceso al portal, y la casilla no lo indica.**
+<Frame caption="La pestaña Settings de una cuenta. El login del portal está a la derecha, con cómo inicia sesión y cuándo lo hizo por última vez.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-account--settings-light.webp" alt="Los ajustes de una cuenta: nombre, email, notas y etiquetas, y su inicio de sesión en el portal." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-account--settings-dark.webp" alt="Los ajustes de una cuenta: nombre, email, notas y etiquetas, y su inicio de sesión en el portal." />
+</Frame>
 
-Su propia descripción habla de listados en el panel y correctamente señala que el tráfico sigue fluyendo de cualquier
-manera. Desmarcarla no detiene nada de lo que hace el gateway. Pero *sí* impide que el portal emita un enlace de inicio de sesión,
-lo que la convierte en lo más parecido a un interruptor de encendido/apagado del portal que tiene la cuenta. Ese comportamiento es el
-actual; la redacción junto a la casilla no se ha puesto al día.
-
-Para detener el tráfico, desactiva los logins. Para detener el gasto, usa el saldo. Para detener el acceso al portal, desmarca.
-</Warning>
+Para que una persona deje de iniciar sesión, pulsa **Turn off** en su login; **Turn on** le deja
+entrar de nuevo. Desactivar toda la cuenta también detiene su tráfico: consulta
+[Cuentas](/platform/customers/accounts#what-the-catalogue-row-actually-holds).
 
 ## Lo que necesita el despliegue
 
@@ -68,6 +75,11 @@ responde con la misma frase neutral. No se le dice al cliente que se le ha limit
 **La pestaña Logins no es acceso al portal.** Contiene credenciales SMPP y HTTP, que son la forma en que se conecta el
 *software* de un cliente. Nada en ella otorga ni revoca el inicio de sesión de una persona. Una cuenta puede
 tener una docena de logins y ningún acceso al portal, o acceso al portal y ningún login en absoluto.
+
+<Frame caption="La pestaña Logins: los logins SMPP y HTTP que facturan a la cuenta, si cada uno está conectado y sus sesiones vivas. Ninguno de ellos es un inicio de sesión en el portal.">
+  <img className="block dark:hidden" src="/images/platform/customers/customers-logins-light.webp" alt="La pestaña Logins de una cuenta: cada login con su tipo, estado de conexión y acciones." />
+  <img className="hidden dark:block" src="/images/platform/customers/customers-logins-dark.webp" alt="La pestaña Logins de una cuenta: cada login con su tipo, estado de conexión y acciones." />
+</Frame>
 
 Una vez dentro, un cliente ve su propio tráfico, extracto, sender IDs, plantillas y API playground. Y
 nunca tu coste, tu margen o qué proveedor cursó nada. Lo que puede hacer allí se describe

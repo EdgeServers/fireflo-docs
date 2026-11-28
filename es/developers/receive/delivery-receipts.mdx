@@ -39,6 +39,11 @@ Un `POST` con `Content-Type: application/json`:
 
 `id` es el `messageId` que devolvió su envío. **Así es como correlaciona:** no hay nada más.
 
+<Frame caption="Delivery receipts en la referencia de la API REST de su portal de cliente: cómo pedirlos, dlr_level y cada campo que lleva un acuse, empezando por el id que devolvió su envío.">
+  <img className="block dark:hidden" src="/images/developers/receive/apis-receipts--receipt-docs-light.webp" alt="La parte Delivery receipts de la referencia de la API REST del portal: dlr, dlr_url y dlr_level explicados, y una tabla de campos del acuse desde id y stat hasta system_id y parts" />
+  <img className="hidden dark:block" src="/images/developers/receive/apis-receipts--receipt-docs-dark.webp" alt="La parte Delivery receipts de la referencia de la API REST del portal: dlr, dlr_url y dlr_level explicados, y una tabla de campos del acuse desde id y stat hasta system_id y parts" />
+</Frame>
+
 Los nombres de campo siguen los de Jasmin, así que un receptor escrito para Jasmin lee esto sin
 cambios. Los campos nulos se omiten en lugar de enviarse como nulls, así que un acuse de un mensaje
 que nunca llegó a un vendor no llega lleno de claves vacías.

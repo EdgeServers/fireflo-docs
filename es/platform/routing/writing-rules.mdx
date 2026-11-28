@@ -46,9 +46,11 @@ de worker (`vendor1`, `smppserver.smpp`), un **grupo**, u otra tabla en la que e
 
 <Tabs>
   <Tab title="Panel de control">
-    **Routing** lista cada tabla con sus reglas en orden. El editor valida el operador contra
-    el campo antes de guardar, rechaza un operador numérico en un campo de texto, y avisa sobre una expresión
-    regular escrita en un operador literal.
+    **Routing** lista cada tabla con sus reglas en orden, cada una con su objetivo, un interruptor de
+    encendido y apagado, y cuántos mensajes ha emparejado desde el último arranque del gateway. **Add a
+    rule** abre el editor; los cambios a una tabla esperan a **Save**. El editor valida el operador
+    contra el campo antes de guardar, rechaza un operador numérico en un campo de texto, y avisa sobre
+    una expresión regular escrita en un operador literal.
   </Tab>
   <Tab title="routingTable.conf">
 ```ini
@@ -61,6 +63,11 @@ vendor1::default:                  # el catch-all, ÚLTIMO
   </Tab>
 </Tabs>
 
+<Frame caption="Una tabla de enrutamiento: sus reglas en orden, cada una con su objetivo, su interruptor y su conteo de coincidencias. El aviso dice que una regla nombra un objetivo que el gateway no conoce.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables-light.webp" alt="Una tabla de enrutamiento: sus reglas en orden, cada una con sus condiciones, su objetivo y su conteo de coincidencias." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables-dark.webp" alt="Una tabla de enrutamiento: sus reglas en orden, cada una con sus condiciones, su objetivo y su conteo de coincidencias." />
+</Frame>
+
 <Warning>
 **El catch-all va al final.** Por encima de otras reglas hace que toda regla debajo sea inalcanzable, y
 nada te avisa en el archivo. Parsean bien, simplemente nunca se ejecutan. El panel lo reporta; la
@@ -69,14 +76,66 @@ pasarela lo registra como `unreachable-rules` en `/ops/health` y continúa.
 
 ## Operadores
 
-Cualquier operador puede negarse con un `!` inicial.
+Cualquier operador puede negarse con un `!` inicial. En el editor de reglas, eso es **Except this**
+(**Except these** para una lista de prefijos) bajo una condición.
 
 | Tipo | Operadores |
 | :--- | :--- |
 | Siempre verdadero | `default`: atributo y valor dejados en blanco |
-| Texto | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
+| Texto | `equals`, `equalsIgnoreCase`, `matches`, `startsWith`, `startsWithAny`, `endsWith`, `greaterThan`, `greaterEqual`, `lessThan`, `lessEqual`, `isNull` |
 | Booleano | `isTrue`, `isFalse` |
 | Numérico | `==`, `>`, `>=`, `<`, `<=` |
+
+`startsWithAny` toma una lista de prefijos literales separados por comas, sin espacios: `91,+91,0091`.
+Cada uno se compara exactamente como está escrito (`91` no coincide con `+919812345678`) y una lista
+larga no cuesta más por mensaje que una corta. Una lista vacía, o una entrada con un espacio, se
+rechaza cuando la regla se carga.
+
+## Cuándo surte efecto un cambio
+
+El gateway recoge una tabla guardada en treinta segundos. **Apply now**, en las páginas Routing,
+Pricing y Filters y bajo una tabla que acabas de guardar, hace que lea el cambio en el acto. En un
+gateway cuya licencia no está al día el botón lo dice: los cambios de configuración quedan congelados
+hasta que lo esté, y nada de lo que guardes llega al gateway en ejecución.
+
+## Probar un mensaje antes de enviarlo
+
+**Test a message**, en las páginas Routing, Pricing y Filters, toma un destino, un sender ID, un
+producto y una cuenta, y pregunta al gateway en ejecución qué haría con ellos: no se envía ni se cobra
+nada. Deja el producto vacío y la prueba se ejecuta como lo enviaría el login de la cuenta: un mensaje
+real siempre lleva el producto de su login (o el `system_type` con el que hizo bind), y una regla de
+precio guardada bajo un producto solo tarifica los mensajes que lo llevan. El probador dice en cada
+pestaña con qué producto se ejecutó. Tres pestañas responden con los mismos comparadores que usa la
+ruta del mensaje:
+
+- **Routing** recorre las tablas desde `default` hasta el proveedor, y muestra cada regla que probó con
+  la condición que falló, frente al texto exacto comparado.
+- **Pricing** muestra la regla que fija el precio de la cuenta, el coste del proveedor y el margen.
+- **Filters** muestra cada filtro con nombre, coincida o no, y las reglas que lo usan.
+
+Cuando nada coincide, ofrece crear la regla, abierta en el editor con el código de país del destino
+rellenado para que lo corrijas.
+
+**Test and check**, en el carril de la página Routing, pone un probador solo de enrutamiento junto a
+**Delivery check**. El probador toma la tabla desde la que empezar, el tipo de mensaje, el listener por
+el que llegó, un remitente, un destino y un producto, y lee las tablas en vivo del gateway tanto si el
+enrutamiento se configura desde un archivo como desde la base de datos. **Delivery check** recorre todo
+el camino que sigue un mensaje, no solo el enrutamiento: una muestra de lo rechazado en las últimas 24
+horas, y después aprobaciones, TLVs, precios, crédito, enrutamiento y proveedores. Donde encuentra un
+fallo, dice cómo arreglarlo.
+
+<Frame caption="Test and check: el probador de mensajes a la izquierda, la comprobación de entrega a la derecha. Ninguno envía nada.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test-light.webp" alt="Test and check: un mensaje de prueba a la izquierda y la comprobación de entrega a la derecha." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test-dark.webp" alt="Test and check: un mensaje de prueba a la izquierda y la comprobación de entrega a la derecha." />
+</Frame>
+
+La respuesta del probador lista las reglas de la tabla en orden: la que el mensaje alcanza y, para cada
+regla que no coincidió, la condición que falló y lo que llevaba el mensaje.
+
+<Frame caption="El veredicto de una prueba: la regla 1 coincidió y envía aquí; para las demás, el tipo que pedía cada una y el tipo que tenía el mensaje.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-test--verdict-light.webp" alt="Un mensaje de prueba con su respuesta: la regla que alcanza y, para cada regla que no coincidió, por qué." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-test--verdict-dark.webp" alt="Un mensaje de prueba con su respuesta: la regla que alcanza y, para cada regla que no coincidió, por qué." />
+</Frame>
 
 Las cuatro comparaciones de texto son lexicográficas, no numéricas. `greaterThan` sobre un número de teléfono compara
 cadenas.
@@ -118,7 +177,13 @@ así que una condición de enrutamiento en cualquiera de ellos lee `NOT_CALCULAT
 ## Copiar y continuar
 
 Un `+` en el objetivo copia el mensaje a ese objetivo y **sigue escaneando**, en lugar de enrutar
-y detenerse. En la base de datos es la columna `copied`.
+y detenerse. En la base de datos es la columna `copied`. En el editor de reglas es **After a match →
+Copy and keep going**; **Stop here** es la regla ordinaria.
+
+<Frame caption="Una regla nueva: adónde envía, sus condiciones (destino que empieza por 91, etiqueta de cuenta priority), sus filtros y si se detiene ahí.">
+  <img className="block dark:hidden" src="/images/platform/routing/routing-tables--edit-rule-light.webp" alt="Una regla de enrutamiento nueva en edición: adónde envía, sus condiciones (destino que empieza por 91, etiqueta de cuenta priority) y si se detiene ahí." />
+  <img className="hidden dark:block" src="/images/platform/routing/routing-tables--edit-rule-dark.webp" alt="Una regla de enrutamiento nueva en edición: adónde envía, sus condiciones (destino que empieza por 91, etiqueta de cuenta priority) y si se detiene ahí." />
+</Frame>
 
 ## Grupos de proveedores
 

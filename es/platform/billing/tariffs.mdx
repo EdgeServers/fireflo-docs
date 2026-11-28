@@ -5,22 +5,29 @@ description: "Edición de tasas desde el panel, overrides por cuenta y las dos i
 
 ## Edición de tasas desde el panel
 
-Dos operaciones en la página de un producto, y la diferencia entre ellas importa:
+Los precios se editan en la página **Pricing**. A la izquierda están los ámbitos: **Everyone** (el
+valor por defecto `*`), **Accounts** (lo que nos pagan), **Tag prices** y **Vendors** (lo que nos
+cobran). El selector **Product** acota la página a un producto.
 
-| Acción | Escribe | Ámbito |
-| :--- | :--- | :--- |
-| **Establecer lo que paga todo el mundo** | El ámbito `*` para ese producto | Toda cuenta sin regla propia |
-| **Tarificar una cuenta** | El ámbito de una cuenta con nombre | Solo esa cuenta |
+<Frame caption="La página Pricing. Las tarjetas responden a las preguntas que cuestan dinero: qué vendors no tienen coste, cuántas cuentas pagan su propio precio y qué paga todo el mundo.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs-light.webp" alt="La página Pricing: los precios por defecto por producto, con los precios de cuenta y de etiqueta listados al lado." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs-dark.webp" alt="La página Pricing: los precios por defecto por producto, con los precios de cuenta y de etiqueta listados al lado." />
+</Frame>
 
-**Ambas guardan únicamente las reglas del producto que está mirando.** El resto del ámbito queda
-intacto, así que establecer `*` para `promo` no puede perturbar `*` para nada más.
+Abra un ámbito para ver sus precios, agrupados por producto. Las ediciones, adiciones, movimientos y
+la activación o desactivación de un precio se preparan y se guardan juntos. **Add pricing** pregunta
+de quién son los precios que se añaden (una cuenta, un vendor, una etiqueta o todo el mundo) y abre ese
+ámbito. Cuando un producto no tiene valor por defecto, su página y el resumen de Pricing ofrecen
+**Set what everyone pays**.
 
-El editor de ámbito completo en la página *Precios* sigue reemplazando un ámbito por completo, lo
-cual es correcto ahí, porque le muestra todo.
-
-Desde 0.17.0 la página *Precios* también muestra **Tag prices**: una lista de precios por
+Desde 0.17.0 la página *Pricing* también muestra **Tag prices**: una lista de precios por
 [etiqueta de cuenta](/platform/routing/account-tags), probada después de los precios propios de una
 cuenta y antes del valor por defecto, en el orden de la lista Tags.
+
+La pestaña **Tariff** de una cuenta muestra los mismos precios para esa cuenta, y qué nivel la
+tarificaría. Cuando una plataforma gestora ha establecido una tarifa personalizada para la cuenta, la
+pestaña la muestra encima de las reglas: se tarifica antes que ellas, y solo se cambia en esa
+plataforma.
 
 <Warning>
 Las reglas propias de una cuenta se prueban primero y **gana la primera coincidencia**, por lo que
@@ -31,6 +38,32 @@ que un catch-all a nivel de cuenta desactiva silenciosamente todos los valores p
 establezca después.
 Lo mismo vale para los precios por etiqueta: el catch-all propio de una cuenta también los vence.
 </Warning>
+
+## Exportar e importar precios
+
+**Export** en la página Pricing descarga los precios como CSV, una fila por precio: **Everything**,
+**Accounts** (lo que pagan los clientes, con los precios por etiqueta y el valor por defecto) o
+**Vendors** (lo que nos cobran los operadores). Las descargas quedan registradas en el log de acceso.
+
+<Frame caption="Export pricing. Conserve la columna rule_id cuando edite el archivo: es como una fila encuentra el precio que cambia.">
+  <img className="block dark:hidden" src="/images/platform/billing/billing-tariffs--export-light.webp" alt="El diálogo Export pricing: todos los precios como un archivo para editar e importar de nuevo." />
+  <img className="hidden dark:block" src="/images/platform/billing/billing-tariffs--export-dark.webp" alt="El diálogo Export pricing: todos los precios como un archivo para editar e importar de nuevo." />
+</Frame>
+
+Edite el archivo en una hoja de cálculo y tráigalo de vuelta con **Import** (hasta 2 MB). Una fila con
+`rule_id` en blanco añade un precio nuevo.
+
+<Warning>
+**Cada cuenta o vendor nombrado en el archivo se sustituye por las filas del archivo.** Un precio que
+el archivo no lista para ese ámbito se elimina. Los ámbitos que el archivo no nombra se quedan como
+están.
+</Warning>
+
+Nada cambia hasta que haya leído la vista previa. Lista, por ámbito, lo que se añade, se cambia y se
+elimina. Las eliminaciones tienen que activarse aparte antes de que se ofrezca **Apply**, y aplicar
+pide confirmación una vez más. Cada ámbito se guarda por separado, así que si uno falla, los
+anteriores ya están aplicados. La pasarela tarifica con las filas nuevas desde su siguiente consulta
+de configuración.
 
 ## Dos identidades, no una
 

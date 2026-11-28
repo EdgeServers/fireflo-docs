@@ -115,6 +115,10 @@ fallido si se pidió, y registrado como `REJECTED` con motivo `operatorPurge`. L
 reintentos de webhook no llevan dinero: se archivan y se eliminan. **Nada archivado se puede devolver.**
 Una cola en el broker no se puede limpiar (`broker-backed`).
 
+El archivo se lee en **Reports → Archives → Queue housekeeping** en el panel, o con
+`fireflo queue archived` y `fireflo queue archive summary`; se guarda en particiones mensuales junto a
+un resumen por día que nunca se borra. Consulta [la referencia de comandos](/reference/cli/fireflo#queues).
+
 <Note>
 Traducción pendiente: el detalle completo está
 [en inglés](/platform/operations/queues#cleaning-a-queue-archive-then-end).

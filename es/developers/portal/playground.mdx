@@ -20,8 +20,9 @@ Tarificar un mensaje es la única llamada que no envía nada, no cobra nada y no
 ningún límite de tasa. Úsela libremente.
 </Warning>
 
-<Frame caption="El playground, con la petición construida en el lenguaje que elija, desde su propia URL base y login. La contraseña vive en la pestaña y en ningún otro sitio.">
-  <img src="/images/developers/portal/playground.png" alt="El playground de API del portal mostrando el formulario de envío junto a una petición curl generada" />
+<Frame caption="El playground en Send one message: elija un login y compruebe su contraseña arriba, rellene el formulario, y la petición se construye al lado desde su propia URL base y login. La contraseña vive en la pestaña y en ningún otro sitio.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground-light.webp" alt="El playground de API del portal: una barra de login y contraseña, pestañas para los cinco endpoints, el formulario Send one message con to, content, from, coding y priority, y la petición curl generada al lado" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground-dark.webp" alt="El playground de API del portal: una barra de login y contraseña, pestañas para los cinco endpoints, el formulario Send one message con to, content, from, coding y priority, y la petición curl generada al lado" />
 </Frame>
 
 ## Conectar
@@ -51,9 +52,11 @@ una nota de una línea. Varias de esas notas existen por un error concreto:
 
 - `to` — **entrecomíllelo.** Un número sin comillas pierde sus ceros iniciales.
 - `content` — dé este o `hex_content`, nunca ambos.
-- `from` — debe ser uno aprobado para su cuenta, o el envío se rechaza. El selector ofrece solo
-  sender IDs **aprobados**; los pendientes se omiten deliberadamente, porque ofrecer uno que
-  todavía no puede usar produciría un rechazo que el formulario podría haber previsto.
+- `from` — debe ser uno aprobado para su cuenta, o el envío se rechaza con `403`. Si se deja vacío,
+  toma por defecto su nombre de login. La casilla sugiere solo sender IDs **aprobados**; los
+  pendientes se omiten deliberadamente, porque ofrecer uno que todavía no puede usar produciría un
+  rechazo que el formulario podría haber previsto. Aun así puede escribir uno, ya que una
+  aprobación puede llegar después de que la página se haya cargado.
 - `coding` — use 8 para cualquier cosa fuera de GSM-7, que reduce a la mitad la longitud del
   segmento.
 - `validity_period` — minutos enteros, no una cadena de duración.
@@ -80,13 +83,24 @@ aparecerá en el acuse de entrega y en su
 Al lado, un panel **Request** muestra la misma llamada como curl, Node, PHP o Python, rellenada
 con su propia URL base y login. Cópielo directamente a su código.
 
+<Frame caption="Price a message, con su petición mostrada en Python. Tarificar no envía nada ni cobra nada, así que esta es la pestaña que conviene probar primero.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--price-python-light.webp" alt="La pestaña Price a message del playground: campos to, content y coding, un botón Call y la petición mostrada como fragmento de Python" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--price-python-dark.webp" alt="La pestaña Price a message del playground: campos to, content y coding, un botón Call y la petición mostrada como fragmento de Python" />
+</Frame>
+
 Las últimas llamadas se guardan en un pequeño historial que puede recargar en el formulario. Vive
 en la pestaña y muere con ella.
 
 ## Lotes
 
-El endpoint de lotes toma una lista JSON, y el textarea se niega a enviar JSON malformado en lugar
-de dejar que la pasarela lo rechace.
+El endpoint de lotes toma una lista JSON: un objeto por mensaje, cada uno con los mismos campos que
+un envío único, y un `to` que puede ser a su vez una lista. El textarea se niega a enviar JSON
+malformado en lugar de dejar que la pasarela lo rechace.
+
+<Frame caption="Send a batch. La línea bajo las pestañas lo dice antes de enviar: la respuesta solo confirma la aceptación, y los resultados por mensaje llegan a su URL de errback.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-playground--batch-light.webp" alt="La pestaña Send a batch del playground: un campo messages que toma una lista JSON, una sección plegada para acuses, validez y parámetros personalizados, y la petición curl al lado" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-playground--batch-dark.webp" alt="La pestaña Send a batch del playground: un campo messages que toma una lista JSON, una sección plegada para acuses, validez y parámetros personalizados, y la petición curl al lado" />
+</Frame>
 
 <Warning>
 **Una respuesta de lote confirma la aceptación, no la entrega, ni siquiera la aceptación por
@@ -100,10 +114,15 @@ ha configurado una, esos rechazos son invisibles para usted.
 ## La referencia junto al playground
 
 La **referencia de la API REST** en la misma sección documenta cada endpoint, rellenado con los
-valores de su cuenta, más acuses de entrega, callbacks de lote, la tabla de errores compartida y
-la gramática de las TLV personalizadas. También gestiona la **rotación de credenciales**:
-sustituir una contraseña o una API key usted mismo, con el nuevo valor mostrado exactamente una
-vez.
+valores de su cuenta, más acuses de entrega, callbacks de lote, la tabla de errores compartida, la
+gramática de las TLV personalizadas y la API gRPC. Si usted revende, añade las llamadas para
+gestionar sus propias cuentas. También gestiona la **rotación de credenciales**: sustituir una
+contraseña o una API key usted mismo, con el nuevo valor mostrado exactamente una vez.
+
+<Frame caption="La referencia de la API REST, escrita con su propia URL base y login: incluso la cabecera Authorization viene rellenada. El control de rotación está bajo Authentication; el índice recorre el lado derecho.">
+  <img className="block dark:hidden" src="/images/developers/portal/portal-api-docs-light.webp" alt="La referencia de la API REST del portal: URL base y login, la sección Authentication con una cabecera Authorization rellenada y un control Rotate, el comienzo de Send one message y una lista On this page" />
+  <img className="hidden dark:block" src="/images/developers/portal/portal-api-docs-dark.webp" alt="La referencia de la API REST del portal: URL base y login, la sección Authentication con una cabecera Authorization rellenada y un control Rotate, el comienzo de Send one message y una lista On this page" />
+</Frame>
 
 <Note>
 Tras rotar, la pasarela recarga credenciales según un temporizador. Durante aproximadamente el

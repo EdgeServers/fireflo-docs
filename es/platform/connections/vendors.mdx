@@ -33,12 +33,21 @@ Todos los ajustes están en [Ajustes de vendor](/reference/smpp/client).
 scripts/fireflo test-bind vendor1
 ```
 
-Marca una vez e informa lo que pasó. El panel tiene lo mismo como **Test connection**.
+Marca una vez e informa de cada paso: la resolución del nombre, la conexión TCP, el bind, tres idas y
+vueltas de `enquire_link` y el unbind. El panel tiene lo mismo como **Test connection**, en la página
+del vendor.
 
 <Warning>
-**Se rechaza mientras el vendor ya está bound.** Un segundo bind sobre el mismo `systemId` puede
-costarle la sesión viva. Muchos operadores permiten uno.
+**Nunca abre un segundo bind mientras el vendor ya está bound.** Un segundo bind sobre el mismo
+`systemId` puede costarle la sesión viva. Muchos operadores permiten uno. En su lugar, sigue
+resolviendo la dirección y abriendo una conexión TCP, y después envía `enquire_link` en cada sesión
+viva y cronometra la respuesta.
 </Warning>
+
+<Frame caption="Una prueba de conexión sobre un vendor que ya está bound: la dirección resuelta, la conexión TCP y cada sesión viva respondiendo a enquire_link.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--test-connection-light.webp" alt="La prueba de conexión de un vendor: la dirección resuelta, la conexión TCP y cada sesión viva respondiendo a enquire_link." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--test-connection-dark.webp" alt="La prueba de conexión de un vendor: la dirección resuelta, la conexión TCP y cada sesión viva respondiendo a enquire_link." />
+</Frame>
 
 ## Bound no es lo mismo que capaz de enviar
 
@@ -53,11 +62,16 @@ solo receiver hace bind perfectamente y no envía nada.
 Cuando esos dos números difieren, esa es la razón, y el panel muestra **Can send** como cifra
 propia exactamente para este caso.
 
+<Frame caption="La pestaña Status de un vendor: sus binds frente a los configurados, lo que está en cola, lo enviado en estos binds y su throughput frente a su límite. Can send aparece junto a Binds solo cuando los dos difieren.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--vendor-light.webp" alt="La pestaña Status de un vendor: conectado con todos sus binds, lo que está en cola, lo enviado en estos binds y su throughput frente a su límite." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--vendor-dark.webp" alt="La pestaña Status de un vendor: conectado con todos sus binds, lo que está en cola, lo enviado en estos binds y su throughput frente a su límite." />
+</Frame>
+
 ## Los cuatro estados
 
 | Badge | Significa | Color |
 | :--- | :--- | :--- |
-| **Connected** | Bound y aceptando | Verde |
+| **Connected** | Bound y aceptando; el badge añade el número de binds, como **Connected · 5 binds** | Verde |
 | **Not connected** | Sin sesión: un vendor sin ninguna está roto | Rojo |
 | **Not accepting** | Suspendido; la cola drena de vuelta al enrutador y el tráfico se reenruta | Ámbar |
 | **Holding** | Aceptando pero no enviando; **la cola crece** | Ámbar |
@@ -69,6 +83,11 @@ propia exactamente para este caso.
 añadió el vendor, o no está leyendo trabajadores de la base de datos en absoluto. El texto de
 detalle del badge indica cuál.
 </Note>
+
+<Frame caption="La página Vendors. Un vendor que necesita atención aparece primero: aquí uno muestra Not connected y el otro Connected con cinco binds.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors-light.webp" alt="La página Vendors: una tarjeta por enlace de operador con su estado, sesiones y tráfico del periodo." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors-dark.webp" alt="La página Vendors: una tarjeta por enlace de operador con su estado, sesiones y tráfico del periodo." />
+</Frame>
 
 ## Reintentos, y el número que solía mentir
 
@@ -130,8 +149,24 @@ cero.
 | `hold` | Quiere que deje de enviar pero conserve su cola |
 | `disable` | Quiere que se vaya en un intervalo de sondeo |
 
-El panel los expone como **Stop sending**, **Hold** y **Disable**, formulados a propósito en lugar
-de con iconos: cada uno reenruta o detiene tráfico productivo en el momento en que se pulsa.
+En la página de un vendor son **Stop sending** y **Disable**, formulados a propósito en lugar de con
+iconos: cada uno reenruta o detiene tráfico productivo en el momento en que se pulsa, así que cada uno
+pregunta antes. **Restart**, a su lado, cierra todas las conexiones del vendor y las abre de nuevo;
+los mensajes en vuelo se reintentan. Hold no tiene botón en la página del vendor; la vista
+**Connectivity** lo ofrece como **Pause sending (queue kept)**.
+
+## Códigos de error
+
+**Error codes**, en la página de un vendor, asigna un código que envía el operador al que recibe su
+cliente. Un vendor usa la lista **Every vendor** hasta que tiene una lista propia, que la sustituye.
+**Codes nobody mapped** elige si un código que ninguna asignación cubre llega al cliente tal como se
+envió o como `018`; **Inherit** sigue la respuesta de Every vendor. Los ajustes que hay detrás están
+en [Códigos de error de los acuses de entrega](/reference/smpp/client#delivery-receipt-error-codes).
+
+<Frame caption="La lista propia de un vendor: el código 444 del operador llega al cliente como 016. Debajo, lo que pasa con un código que nadie asignó.">
+  <img className="block dark:hidden" src="/images/platform/connections/connections-vendors--error-codes-light.webp" alt="Los códigos de error de un vendor: un código que envía el operador asignado al que recibe el cliente, y lo que pasa con un código que nadie asignó." />
+  <img className="hidden dark:block" src="/images/platform/connections/connections-vendors--error-codes-dark.webp" alt="Los códigos de error de un vendor: un código que envía el operador asignado al que recibe el cliente, y lo que pasa con un código que nadie asignó." />
+</Frame>
 
 ## Coste
 

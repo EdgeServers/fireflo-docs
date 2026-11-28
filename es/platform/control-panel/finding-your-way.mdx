@@ -1,6 +1,6 @@
 ---
 title: "Cómo orientarse"
-description: "Un mapa de la barra lateral del operador, para qué es cada grupo y las seis pantallas que no tienen entrada en el menú en absoluto."
+description: "Un mapa de la barra lateral del operador, para qué es cada grupo y las pantallas que no tienen entrada en el menú en absoluto."
 ---
 
 El panel de control es la mitad del operador en FireFlo. Sus clientes nunca lo ven: ellos obtienen
@@ -16,7 +16,7 @@ ver lo que ocurrió sin escribir SQL.
 <AccordionGroup>
 
 <Accordion title="Overview — la primera pantalla">
-Tráfico, entrega y fallos a lo largo de toda la pasarela, sobre 24 horas, 7 días o 30 días. Empiece
+Tráfico, entrega y fallos a lo largo de toda la pasarela, sobre 1 hora, 24 horas, 7 días o 30 días. Empiece
 aquí en un incidente; es la única pantalla que responde a "¿va algo mal?" sin que tenga que nombrar
 la cosa que sospecha.
 
@@ -31,16 +31,20 @@ Consulte [el dashboard](/platform/control-panel/dashboard).
 | **Servers** | Listeners entrantes: cómo se le conectan los clientes |
 | **Accounts** | Sus clientes, y todo lo que cuelga de ellos |
 | **Pricing** | Tarifas, tanto lo que cobra como lo que le cobran |
-| **Diagnostics** | Logs y configuración leídos de la máquina propia de la pasarela |
+| **Logs** | Logs y configuración leídos de la máquina propia de la pasarela. Consulte [Diagnósticos](/platform/control-panel/diagnostics) |
 
 **Vendor** y **server** son las dos mitades de la misma idea, y confundirlas es el error temprano
 más común. Consulte [conexiones](/platform/connections/vendors).
 </Accordion>
 
 <Accordion title="Configuration — reglas que la pasarela aplica">
+**Gateway** contiene los ajustes que hereda cada vendor y cada listener salvo que establezca los
+suyos. **Error codes** asigna los códigos de acuse de cada vendor a los que reciben sus clientes.
 **Filters** son condiciones reutilizables sobre las que se apoyan tanto las reglas de enrutamiento
-como las tarifas. **TLVs** es el catálogo de parámetros opcionales SMPP, incluyendo los que sus
-clientes han propuesto y usted aún no ha aprobado.
+como las tarifas; **Tags** son lo que un filtro, una regla de enrutamiento o un precio pueden comprobar
+sobre una cuenta; **Preprocessors** son programas a los que una regla de enrutamiento puede pasar
+mensajes. **TLVs** es el catálogo de parámetros opcionales SMPP, incluyendo los que sus clientes han
+propuesto y usted aún no ha aprobado.
 </Accordion>
 
 <Accordion title="Assets — lo que los clientes pueden enviar">
@@ -53,8 +57,10 @@ aplicación.
 | Elemento del menú | Responde |
 | :--- | :--- |
 | **Refused** | Qué se rechazó antes de convertirse en tráfico |
+| **Access log** | Quién inició sesión en el portal o en el panel, a quién se rechazó y qué cambiaron |
+| **Security** | Binds e inicios de sesión rechazados por dirección, quién está bloqueado, y Force disconnect |
 | **Queues** | Qué está esperando ahora mismo, y limpiar lo que nunca se enviará |
-| **Archives** | Lo que archivó una limpieza de colas, y cada ejecución |
+| **Archives** | Dónde viven los registros de llamada y lo que archivó una limpieza de colas, con cada ejecución |
 | **Receipts** | Cómo de bien informa cada vendor los resultados |
 | **Usage** | Volumen y entrega, por cuenta |
 | **Revenue** | Facturado, coste y margen |
@@ -64,15 +70,17 @@ aplicación.
 
 ## Las pantallas sin entrada en el menú
 
-Existen seis pantallas que la barra lateral no lista nunca. Se alcanzan desde otras pantallas, lo
+Existen ocho pantallas que la barra lateral no lista nunca. Se alcanzan desde otras pantallas, lo
 cual está bien una vez lo sabe y es desconcertante hasta que lo sabe.
 
 | Pantalla | Alcanzada desde | Qué es |
 | :--- | :--- | :--- |
-| **Live health** | El icono de corazón en la cabecera | Binds, profundidad de cola y acuses en vuelo, ahora mismo |
+| **Live health** | La píldora de salud en la cabecera: un punto, una palabra como **Healthy** y la tasa saliente | Binds, profundidad de cola y acuses en vuelo, ahora mismo |
+| **Connectivity** | **Connectivity**, junto a la píldora de salud | Un mapa en vivo de quién está conectado, por qué puerto y a qué vendor |
+| **Kafka** | **Open Kafka topics** en la tarjeta Kafka backbone de la página Queues | Cada topic del broker, su grupo de consumidores, su lag y su retención |
 | **Runtime** | "Runtime detail" en la franja de salud del Overview | Memoria, procesador y capacidad de conexión |
 | **Routing** | La pantalla Vendors | Tablas de enrutamiento, reglas y grupos de vendor |
-| **Products** | La pantalla Servers | El catálogo de productos y las tasas por producto |
+| **Products** | La pantalla Servers | El catálogo de productos: cada producto, un resumen de sus precios y los logins que lo seleccionan. Sus precios se abren en **Pricing**, acotados a ese producto |
 | **Message detail** | Cualquier fila en Messages | Un mensaje de extremo a extremo, incluidos sus TLVs |
 | **Sign-in** | Cerrar sesión, o una sesión expirada | El formulario de inicio de sesión de operador |
 
@@ -110,12 +118,15 @@ deshacer.** Lea [la pestaña Billing](/platform/control-panel/accounts-billing) 
 ## Iniciar sesión
 
 <Frame caption="Sign-in de operador. La versión junto al wordmark es la del panel, y sus tres primeros números son la release de pasarela con la que se empareja.">
-  <img src="/images/platform/control-panel/operator-sign-in.png" alt="The FireFlo operator sign-in card with username and password fields" />
+  <img src="/images/platform/control-panel/operator-sign-in.png" alt="La tarjeta de inicio de sesión de operador de FireFlo con campos de nombre de usuario y contraseña" />
 </Frame>
 
-El sign-in de operador es un nombre de usuario y contraseña guardados en la configuración propia del
-panel: no hay tabla de usuarios, y no hay forma de añadir un segundo operador desde dentro del
-panel. Consulte [la configuración del panel de control](/reference/config/control-panel).
+Los operadores y administradores son usuarios guardados en la base de datos de la pasarela; un
+administrador los añade y restablece desde la página **Users**, y el primero se crea en la pasarela con
+`fireflo user add`. Consulte
+[Instalar el panel de control](/platform/install/control-panel#operators-and-admins).
 
 Las sesiones son por navegador. Iniciar sesión en un portátil no le inicia sesión en un móvil, y
-cerrar sesión termina solo la sesión que está usando.
+cerrar sesión termina solo la sesión que está usando. Cambiar su contraseña es la excepción, desde
+0.12.15: el navegador en el que la cambió sigue con la sesión iniciada y todos los demás se cierran en
+su siguiente petición.
